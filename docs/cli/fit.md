@@ -1,3 +1,35 @@
+---
+description: Fit ODME maximum-entropy model parameters from edge tables.
+---
+
 # `odme fit`
 
-Planned command for model fitting workflows.
+## TL;DR
+
+Use `odme fit` to infer model multipliers from an observed weighted edge table.
+Data goes to stdout unless `--output` is set.
+
+## Commands
+
+| Command | Model | Output columns |
+|---------|-------|----------------|
+| `strengths` | Fixed-strength multi-edge | `node,x,y` |
+| `degrees` | Fixed-degree binary | `node,x,y` |
+| `strength-degree-zip` | Strength-degree ZIP | `node,degree_x,degree_y,excess_x,excess_y` |
+
+## Examples
+
+```bash
+odme fit strengths edges.csv --output strength-fit.csv
+odme fit degrees edges.csv --json
+odme fit strength-degree-zip edges.csv --output zip-fit.csv
+```
+
+## Options
+
+| Option | Applies to | Meaning |
+|--------|------------|---------|
+| `--output`, `-o` | all | Write data to a file instead of stdout |
+| `--json` | all | Emit JSON instead of CSV |
+| `--quiet` | all | Suppress progress messages |
+| `--self-loops/--no-self-loops` | `degrees`, `strength-degree-zip` | Include or exclude diagonal constraints |
