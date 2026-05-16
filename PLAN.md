@@ -306,12 +306,12 @@ Every branch with an architectural consequence should add or update a decision d
 | 5. Fixed-strength | ✅ Complete | 13 (fitting, generation, ensemble) |
 | 6. Remaining models | 🚧 In progress | 14 (thesis cases 1, 3, 4, 5) |
 | 7. Additional kernels | ❌ Not started | — |
-| 7b. Ensemble equivalence | ❌ Not started | — |
+| 7b. Ensemble equivalence | ✅ Complete | 3 (convergence, microcanonical, canonical) |
 | 8. CLI | ✅ Initial | 10 (analyze, fit, generate with --json/--quiet/--output) |
 | 9. Docs site | ✅ Builds | — |
 | 10. Benchmarks | ❌ Not started | — |
 
-**Totals: 100 Python tests, 15 Rust tests, all passing. All linters green.**
+**Totals: 103 Python tests, 16 Rust tests, all passing. All linters green.**
 
 **Architecture:** All computation in Rust (`odme-core`). Python is thin wrappers + CLI + I/O. No Polars. numpy + pyarrow + rustworkx only.
 

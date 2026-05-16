@@ -13,6 +13,7 @@ use odme_core::generation::{
     sample_custom_pij_events_multinomial as core_sample_custom_pij_events_multinomial,
     sample_custom_pij_events_poisson as core_sample_custom_pij_events_poisson,
     sample_fixed_degree_events_me as core_sample_fixed_degree_events_me,
+    sample_microcanonical as core_sample_microcanonical,
     sample_multinomial as core_sample_multinomial, sample_poisson as core_sample_poisson,
     sample_poisson_multinomial as core_sample_poisson_multinomial,
     sample_strength_degree_me as core_sample_strength_degree_me,
@@ -331,6 +332,28 @@ fn fit_balance_no_self_loops(
 }
 
 #[pyfunction]
+fn sample_microcanonical(
+    strength_out: Vec<u64>,
+    strength_in: Vec<u64>,
+    seed: u64,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    if strength_out.len() != strength_in.len() {
+        return Err(PyValueError::new_err(
+            "strength_out and strength_in must have same length",
+        ));
+    }
+    let total_out: u64 = strength_out.iter().sum();
+    let total_in: u64 = strength_in.iter().sum();
+    if total_out != total_in {
+        return Err(PyValueError::new_err(
+            "microcanonical requires balanced strengths",
+        ));
+    }
+    let sample = core_sample_microcanonical(&strength_out, &strength_in, seed);
+    Ok((sample.sources, sample.targets, sample.weights))
+}
+
+#[pyfunction]
 fn sample_custom_pij_events_poisson(
     sources: Vec<u64>,
     targets: Vec<u64>,
@@ -501,6 +524,7 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(fit_strength_degree_me, module)?)?;
     module.add_function(wrap_pyfunction!(fit_weighted_factors, module)?)?;
     module.add_function(wrap_pyfunction!(fit_balance_no_self_loops, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_microcanonical, module)?)?;
     module.add_function(wrap_pyfunction!(sample_custom_pij_events_poisson, module)?)?;
     module.add_function(wrap_pyfunction!(
         sample_custom_pij_events_multinomial,

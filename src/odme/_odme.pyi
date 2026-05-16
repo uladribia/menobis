@@ -108,6 +108,13 @@ def fit_balance_no_self_loops(
 ) -> tuple[list[float], list[float], bool, int]: ...
 
 
+def sample_microcanonical(
+    strength_out: list[int],
+    strength_in: list[int],
+    seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
+
+
 def sample_custom_pij_events_poisson(
     sources: list[int],
     targets: list[int],
