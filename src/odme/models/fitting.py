@@ -1,5 +1,6 @@
 """Lagrange multiplier fitting for ODME maximum-entropy models."""
 
+import warnings
 from dataclasses import dataclass
 
 import numpy as np
@@ -17,6 +18,8 @@ class StrengthEdgesMeFit:
     y: NDArray[np.float64]
     lam: float
     self_loops: bool
+    converged: bool
+    iterations: int
 
 
 @dataclass(frozen=True)
@@ -29,6 +32,8 @@ class StrengthDegreeMeFit:
     z: NDArray[np.float64]
     w: NDArray[np.float64]
     self_loops: bool
+    converged: bool
+    iterations: int
 
 
 @dataclass(frozen=True)
@@ -38,6 +43,8 @@ class FitResult:
     node: NDArray[np.uint64]
     x: NDArray[np.float64]
     y: NDArray[np.float64]
+    converged: bool = True
+    iterations: int = 0
 
 
 def _validate_balanced_sequences(
@@ -110,7 +117,7 @@ def fit_strength_edges_me(
     if target_edges <= 0.0 or target_edges > s_out.sum():
         msg = "target_edges must be positive and no larger than total strength"
         raise ValueError(msg)
-    x_list, y_list, lam, _converged, _iters = _odme.fit_strength_edges_me(
+    x_list, y_list, lam, converged, iters = _odme.fit_strength_edges_me(
         s_out.tolist(),
         s_in.tolist(),
         target_edges,
@@ -118,13 +125,21 @@ def fit_strength_edges_me(
         tolerance,
         max_iterations,
     )
-    return StrengthEdgesMeFit(
+    result = StrengthEdgesMeFit(
         node=np.arange(len(s_out), dtype=np.uint64),
         x=np.asarray(x_list, dtype=np.float64),
         y=np.asarray(y_list, dtype=np.float64),
         lam=float(lam),
         self_loops=self_loops,
+        converged=converged,
+        iterations=iters,
     )
+    if not converged:
+        warnings.warn(
+            f"fit_strength_edges_me did not converge after {iters} iterations",
+            stacklevel=2,
+        )
+    return result
 
 
 def fit_strength_degree_me(
@@ -161,7 +176,7 @@ def fit_strength_degree_me(
     k_in = np.asarray(degree_in, dtype=np.float64)
     validate_strength_degree_constraints(s_out, s_in, k_out, k_in)
 
-    x_list, y_list, z_list, w_list, _converged, _iters = _odme.fit_strength_degree_me(
+    x_list, y_list, z_list, w_list, converged, iters = _odme.fit_strength_degree_me(
         s_out.tolist(),
         s_in.tolist(),
         k_out.tolist(),
@@ -171,14 +186,22 @@ def fit_strength_degree_me(
         max_iterations,
     )
     n = len(s_out)
-    return StrengthDegreeMeFit(
+    result = StrengthDegreeMeFit(
         node=np.arange(n, dtype=np.uint64),
         x=np.asarray(x_list, dtype=np.float64),
         y=np.asarray(y_list, dtype=np.float64),
         z=np.asarray(z_list, dtype=np.float64),
         w=np.asarray(w_list, dtype=np.float64),
         self_loops=self_loops,
+        converged=converged,
+        iterations=iters,
     )
+    if not converged:
+        warnings.warn(
+            f"fit_strength_degree_me did not converge after {iters} iterations",
+            stacklevel=2,
+        )
+    return result
 
 
 def fit_fixed_strength_me(
@@ -220,16 +243,23 @@ def fit_fixed_strength_me(
         x = s_out / sqrt_t
         y = s_in / sqrt_t
     else:
-        x_list, y_list, _converged, _iters = _odme.fit_balance_no_self_loops(
+        x_list, y_list, converged, iters = _odme.fit_balance_no_self_loops(
             s_out.tolist(), s_in.tolist(), tolerance, max_iterations
         )
         x = np.array(x_list)
         y = np.array(y_list)
+        if not converged:
+            warnings.warn(
+                f"fit_fixed_strength_me did not converge after {iters} iterations",
+                stacklevel=2,
+            )
 
     return FitResult(
         node=np.arange(n, dtype=np.uint64),
         x=x,
         y=y,
+        converged=converged if not self_loops else True,
+        iterations=iters if not self_loops else 0,
     )
 
 
@@ -273,14 +303,22 @@ def fit_fixed_degree_binary(
             y=np.zeros(n),
         )
 
-    x_list, y_list, _converged, _iters = _odme.fit_binary_degrees(
+    x_list, y_list, converged, iters = _odme.fit_binary_degrees(
         k_out.tolist(), k_in.tolist(), self_loops, tolerance, max_iterations
     )
-    return FitResult(
+    result = FitResult(
         node=np.arange(n, dtype=np.uint64),
         x=np.asarray(x_list, dtype=np.float64),
         y=np.asarray(y_list, dtype=np.float64),
+        converged=converged,
+        iterations=iters,
     )
+    if not converged:
+        warnings.warn(
+            f"fit_fixed_degree_binary did not converge after {iters} iterations",
+            stacklevel=2,
+        )
+    return result
 
 
 __all__ = [

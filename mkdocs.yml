@@ -20,6 +20,7 @@ nav:
   - Concepts:
       - Multi-edge Networks: concepts/multi-edge-networks.md
       - Maximum Entropy Models: concepts/maximum-entropy-models.md
+      - Thesis Cases: concepts/thesis-cases.md
       - Spatial Costs: concepts/spatial-costs.md
       - Ensembles: concepts/ensembles.md
   - API:
