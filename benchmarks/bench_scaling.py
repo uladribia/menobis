@@ -89,20 +89,60 @@ def benchmark_fitting(edges: EdgeTable) -> dict[str, float]:
     )
     # Only run expensive fitters for small N.
     n = int(max(edges.source.max(), edges.target.max())) + 1
-    if n <= 1000:
+    if n <= 5000:
         results["fit_strength_edges_me"] = _time_fn(
             fit_strength_edges_me,
             s.out.astype(float),
             s.incoming.astype(float),
             float(edges.num_edges),
         )
-    if n <= 200:
+    if n <= 500:
         results["fit_strength_degree_me"] = _time_fn(
             fit_strength_degree_me,
             s.out.astype(float),
             s.incoming.astype(float),
             k.out.astype(float),
             k.incoming.astype(float),
+        )
+    if n <= 2000:
+        # Build cost matrix for strength-cost benchmark.
+        rng = np.random.default_rng(99)
+        positions = rng.uniform(0.0, 10.0, size=(n, 2))
+        c_src: list[int] = []
+        c_tgt: list[int] = []
+        c_val: list[float] = []
+        for ii in range(n):
+            for jj in range(n):
+                if ii == jj:
+                    continue
+                c_src.append(ii)
+                c_tgt.append(jj)
+                c_val.append(
+                    float(np.linalg.norm(positions[ii] - positions[jj]))
+                )
+        cost_src = np.array(c_src)
+        cost_tgt = np.array(c_tgt)
+        cost_val = np.array(c_val)
+        cost_map = {
+            (int(cs), int(ct)): float(cv)
+            for cs, ct, cv in zip(cost_src, cost_tgt, cost_val, strict=True)
+        }
+        target_cost = sum(
+            float(w) * cost_map.get((int(sv), int(tv)), 0.0)
+            for sv, tv, w in zip(
+                edges.source, edges.target, edges.weight, strict=True
+            )
+        )
+        from odme.models import fit_strength_cost_me
+
+        results["fit_strength_cost_me"] = _time_fn(
+            fit_strength_cost_me,
+            s.out.astype(float),
+            s.incoming.astype(float),
+            cost_src,
+            cost_tgt,
+            cost_val,
+            target_cost,
         )
     return results
 
