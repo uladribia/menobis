@@ -201,13 +201,13 @@ def _plot_per_node_vs_strength() -> None:
         if col == 0:
             ax.legend(fontsize=7)
 
-        # s_nn vs p_s
+        # s_nn / T vs p_s
         ax = axes[1, col]
         for idx, name in enumerate(ensemble_names):
             ax.errorbar(
                 p_out,
-                per_node[name]["snn_out"],
-                yerr=per_node[name]["snn_out_std"] / np.sqrt(REPETITIONS),
+                per_node[name]["snn_out"] / total,
+                yerr=per_node[name]["snn_out_std"] / total / np.sqrt(REPETITIONS),
                 fmt=markers[idx],
                 color=colors[idx],
                 label=ensemble_labels[idx],
@@ -217,7 +217,7 @@ def _plot_per_node_vs_strength() -> None:
             )
         ax.set_xlabel("$p_s = s^{out} / T$")
         if col == 0:
-            ax.set_ylabel("$\\langle s^{w,out}_{nn} \\rangle$")
+            ax.set_ylabel("$\\langle s^{w,out}_{nn} \\rangle / T$")
         ax.grid(True, alpha=0.3)
 
     fig.suptitle(
