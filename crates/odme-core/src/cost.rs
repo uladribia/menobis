@@ -1,12 +1,12 @@
-//! Gravity model fitting: fixed strength + fixed total cost.
+//! Strength-cost model fitting: fixed strength + fixed total cost.
 //!
 //! E[t_ij] = x_i y_j exp(-gamma d_ij).
 
 use crate::fitting::FitResult;
 
-/// Result of gravity model fitting.
+/// Result of strength-cost model fitting.
 #[derive(Clone, Debug)]
-pub struct GravityFitResult {
+pub struct StrengthCostFitResult {
     pub x: Vec<f64>,
     pub y: Vec<f64>,
     pub gamma: f64,
@@ -14,7 +14,7 @@ pub struct GravityFitResult {
     pub iterations: usize,
 }
 
-/// Sparse cost matrix for gravity models.
+/// Sparse cost matrix for strength-cost models.
 pub struct CostMatrix<'a> {
     pub sources: &'a [usize],
     pub targets: &'a [usize],
@@ -22,7 +22,7 @@ pub struct CostMatrix<'a> {
 }
 
 /// Balance x,y for a fixed gamma and sparse cost matrix.
-fn balance_xy_gravity(
+fn balance_xy_cost(
     strength_out: &[f64],
     strength_in: &[f64],
     costs: &CostMatrix<'_>,
@@ -151,24 +151,24 @@ fn expected_cost(
     total
 }
 
-/// Gravity model solver options.
-pub struct GravityOptions {
+/// Strength-cost solver options.
+pub struct CostFitOptions {
     pub self_loops: bool,
     pub tolerance: f64,
     pub max_iterations: usize,
 }
 
-/// Fit the gravity model: fixed strengths + fixed total cost.
+/// Fit the strength-cost model: fixed strengths + fixed total cost.
 #[must_use]
-pub fn fit_gravity(
+pub fn fit_strength_cost(
     strength_out: &[f64],
     strength_in: &[f64],
     cost_sources: &[usize],
     cost_targets: &[usize],
     cost_values: &[f64],
     target_cost: f64,
-    opts: &GravityOptions,
-) -> GravityFitResult {
+    opts: &CostFitOptions,
+) -> StrengthCostFitResult {
     let costs = CostMatrix {
         sources: cost_sources,
         targets: cost_targets,
@@ -191,7 +191,7 @@ pub fn fit_gravity(
     let mut delta = gamma_init * 0.5;
     let mut direction = 1.0_f64;
 
-    let mut best_fit = balance_xy_gravity(
+    let mut best_fit = balance_xy_cost(
         strength_out,
         strength_in,
         &costs,
@@ -207,7 +207,7 @@ pub fn fit_gravity(
 
     for iter in 0..max_iterations {
         if best_delta_c.abs() < tolerance {
-            return GravityFitResult {
+            return StrengthCostFitResult {
                 x: best_fit.x,
                 y: best_fit.y,
                 gamma,
@@ -223,7 +223,7 @@ pub fn fit_gravity(
             continue;
         }
 
-        let fit = balance_xy_gravity(
+        let fit = balance_xy_cost(
             strength_out,
             strength_in,
             &costs,
@@ -254,7 +254,7 @@ pub fn fit_gravity(
         }
     }
 
-    GravityFitResult {
+    StrengthCostFitResult {
         x: best_fit.x,
         y: best_fit.y,
         gamma,
@@ -287,14 +287,14 @@ mod tests {
             // With gamma=0, total cost = T * 1 = 60
             60.0 * 0.8 // target something reasonable
         };
-        let result = fit_gravity(
+        let result = fit_strength_cost(
             &s_out,
             &s_in,
             &sources,
             &targets,
             &costs,
             total_cost,
-            &GravityOptions {
+            &CostFitOptions {
                 self_loops: true,
                 tolerance: 1e-6,
                 max_iterations: 5000,

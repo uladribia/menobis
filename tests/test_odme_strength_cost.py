@@ -1,10 +1,10 @@
-"""Property tests for gravity ME model: fixed strength + fixed total cost."""
+"""Property tests for strength-cost ME model: fixed strength + fixed total cost."""
 
 import numpy as np
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from odme.models import fit_gravity_me, sample_gravity_me
+from odme.models import fit_strength_cost_me, sample_strength_cost_me
 
 
 def _build_cost_entries(n: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -48,7 +48,7 @@ def _expectations(
     ),
 )
 @settings(deadline=None, max_examples=10)
-def test_gravity_fit_recovers_strengths_and_cost(
+def test_strength_cost_fit_recovers_strengths_and_cost(
     gamma_val: float, scale: float
 ) -> None:
     n = 4
@@ -62,7 +62,7 @@ def test_gravity_fit_recovers_strengths_and_cost(
     s_out = expected.sum(axis=1)
     s_in = expected.sum(axis=0)
 
-    fit = fit_gravity_me(s_out, s_in, cost_src, cost_tgt, cost_val, target_cost)
+    fit = fit_strength_cost_me(s_out, s_in, cost_src, cost_tgt, cost_val, target_cost)
     fitted_expected, fitted_cost = _expectations(
         fit.x, fit.y, fit.gamma, cost_src, cost_tgt, cost_val, n
     )
@@ -71,17 +71,29 @@ def test_gravity_fit_recovers_strengths_and_cost(
     np.testing.assert_allclose(fitted_expected.sum(axis=0), s_in, atol=0.5, rtol=0.05)
     np.testing.assert_allclose(fitted_cost, target_cost, atol=0.5, rtol=0.05)
 
+    # Verify per-pair equation: E[t_ij] = x_i y_j exp(-gamma d_ij)
+    for idx in range(len(cost_src)):
+        i, j = int(cost_src[idx]), int(cost_tgt[idx])
+        d = cost_val[idx]
+        analytical = fit.x[i] * fit.y[j] * np.exp(-fit.gamma * d)
+        np.testing.assert_allclose(
+            fitted_expected[i, j],
+            analytical,
+            rtol=1e-10,
+            err_msg=f"equation mismatch at ({i},{j})",
+        )
 
-def test_gravity_sample_is_reproducible() -> None:
+
+def test_strength_cost_sample_is_reproducible() -> None:
     n = 4
     s_out = np.array([20.0, 15.0, 10.0, 5.0])
     s_in = np.array([12.0, 13.0, 12.0, 13.0])
     cost_src, cost_tgt, cost_val = _build_cost_entries(n)
     target_cost = 80.0
 
-    fit = fit_gravity_me(s_out, s_in, cost_src, cost_tgt, cost_val, target_cost)
-    first = sample_gravity_me(fit, cost_src, cost_tgt, cost_val, seed=42)
-    second = sample_gravity_me(fit, cost_src, cost_tgt, cost_val, seed=42)
+    fit = fit_strength_cost_me(s_out, s_in, cost_src, cost_tgt, cost_val, target_cost)
+    first = sample_strength_cost_me(fit, cost_src, cost_tgt, cost_val, seed=42)
+    second = sample_strength_cost_me(fit, cost_src, cost_tgt, cost_val, seed=42)
 
     np.testing.assert_array_equal(first.source, second.source)
     np.testing.assert_array_equal(first.target, second.target)
@@ -89,19 +101,19 @@ def test_gravity_sample_is_reproducible() -> None:
     assert np.all(first.weight >= 1)
 
 
-def test_gravity_ensemble_recovers_strengths() -> None:
+def test_strength_cost_ensemble_recovers_strengths() -> None:
     n = 4
     s_out = np.array([30.0, 20.0, 15.0, 10.0])
     s_in = np.array([18.0, 20.0, 18.0, 19.0])
     cost_src, cost_tgt, cost_val = _build_cost_entries(n)
     target_cost = 120.0
 
-    fit = fit_gravity_me(s_out, s_in, cost_src, cost_tgt, cost_val, target_cost)
+    fit = fit_strength_cost_me(s_out, s_in, cost_src, cost_tgt, cost_val, target_cost)
 
     repetitions = 300
     sampled_out: list[np.ndarray] = []
     for seed in range(repetitions):
-        sample = sample_gravity_me(fit, cost_src, cost_tgt, cost_val, seed=seed)
+        sample = sample_strength_cost_me(fit, cost_src, cost_tgt, cost_val, seed=seed)
         from odme.analysis import directed_strengths
 
         sampled_out.append(directed_strengths(sample).out.astype(float))

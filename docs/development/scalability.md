@@ -69,17 +69,17 @@ Peak memory per row is O(N); total stored output is O(E).
 | Fixed strength (W/AB/AW) | ✓ | Same structure, different link function |
 | Fixed degree | ✓ | E[p_ij] = z_i * w_j / (1 + z_i * w_j) |
 | Fixed strength + degree | ✓ | Four multipliers per node |
-| Gravity / distance | ✓ | E[t_ij] = x_i * y_j * f(d_ij); metric avoids NxN storage |
+| Strength-cost / distance | ✓ | E[t_ij] = x_i * y_j * f(d_ij); metric avoids NxN storage |
 | Custom p_ij | ✗ | Requires full NxN probability matrix |
 
 All models except custom p_ij are node-factorized and scale to large N
-without materializing dense matrices. The gravity model with a metric
+without materializing dense matrices. The strength-cost model with a metric
 function (e.g., Euclidean distance) is also scalable: `f(d_ij)` is evaluated
 on-the-fly per row at O(N) peak memory, never storing the full NxN cost matrix.
 
-## The gravity / distance-constrained model
+## The strength-cost / distance-constrained model
 
-The most general node-factorized model in the thesis is the gravity model:
+The most general node-factorized model in the thesis is the strength-cost model:
 
 ```
 p_ij = x_i * y_j * f(d_ij)

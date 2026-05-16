@@ -91,7 +91,7 @@ The refactor should replace these with a single coherent ODME project. The legac
 │   │       │   ├── fixed_strength.rs
 │   │       │   ├── fixed_degree.rs
 │   │       │   ├── fixed_strength_degree.rs
-│   │       │   ├── gravity.rs
+│   │       │   ├── cost.rs
 │   │       │   ├── radiation.rs
 │   │       │   └── custom_pij.rs
 │   │       └── errors.rs
@@ -311,11 +311,11 @@ Every branch with an architectural consequence should add or update a decision d
 | 9. Docs site | ✅ Builds | — |
 | 10. Benchmarks | ❌ Not started | — |
 
-**Totals: 99 Python tests, 15 Rust tests, all passing. All linters green.**
+**Totals: 100 Python tests, 15 Rust tests, all passing. All linters green.**
 
 **Architecture:** All computation in Rust (`odme-core`). Python is thin wrappers + CLI + I/O. No Polars. numpy + pyarrow + rustworkx only.
 
-**Next steps:** Continue Milestone 6 with gravity/distance-constrained models.
+**Next steps:** Continue Milestone 6 with strength-cost/distance-constrained models.
 
 ## Proposed implementation milestones
 
@@ -373,8 +373,8 @@ Every branch with an architectural consequence should add or update a decision d
 - ✅ Implement fixed-strength-and-total-edges thesis Case 3 fitting.
 - ✅ Implement exact fixed-strength-and-degree thesis Case 4 fitting/generation.
 - ✅ Implement fixed-degree thesis Case 5 weighted generation.
-- ✅ Implement gravity/distance-constrained thesis Case 2 fitting and generation.
-- The gravity model `E[t_ij] = x_i * y_j * f(d_ij)` should accept a metric function (e.g., Euclidean) and evaluate `f(d_ij)` on-the-fly per source row, avoiding NxN distance matrix storage. A pre-computed distance matrix should only be needed when the cost is non-metric or loaded from a file, and even then sparse or streaming access should be preferred.
+- ✅ Implement strength-cost/distance-constrained thesis Case 2 fitting and generation.
+- The strength-cost model `E[t_ij] = x_i * y_j * f(d_ij)` should accept a metric function (e.g., Euclidean) and evaluate `f(d_ij)` on-the-fly per source row, avoiding NxN distance matrix storage. A pre-computed distance matrix should only be needed when the cost is non-metric or loaded from a file, and even then sparse or streaming access should be preferred.
 - Keep each model in its own small branch and expose both Rust and Python endpoints.
 - TDD: expected degree, strength, probability, and cost constraints hold within documented tolerances.
 

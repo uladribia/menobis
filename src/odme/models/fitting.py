@@ -10,8 +10,8 @@ import odme._odme as _odme
 
 
 @dataclass(frozen=True)
-class GravityMeFit:
-    """Fitted gravity ME model: E[t_ij] = x_i y_j exp(-gamma d_ij)."""
+class StrengthCostMEFit:
+    """Fitted strength-cost ME model: E[t_ij] = x_i y_j exp(-gamma d_ij)."""
 
     node: NDArray[np.uint64]
     x: NDArray[np.float64]
@@ -23,7 +23,7 @@ class GravityMeFit:
 
 
 @dataclass(frozen=True)
-class StrengthEdgesMeFit:
+class StrengthEdgesMEFit:
     """Fitted exact ME fixed-strength-and-edge-count ME model."""
 
     node: NDArray[np.uint64]
@@ -36,7 +36,7 @@ class StrengthEdgesMeFit:
 
 
 @dataclass(frozen=True)
-class StrengthDegreeMeFit:
+class StrengthDegreeMEFit:
     """Fitted exact ME fixed-strength-degree ME model."""
 
     node: NDArray[np.uint64]
@@ -114,7 +114,7 @@ def validate_strength_degree_constraints(
         raise ValueError(msg)
 
 
-def fit_gravity_me(
+def fit_strength_cost_me(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     cost_sources: NDArray[np.integer],
@@ -125,8 +125,8 @@ def fit_gravity_me(
     self_loops: bool = True,
     tolerance: float = 1e-6,
     max_iterations: int = 5000,
-) -> GravityMeFit:
-    """Fit the gravity ME model: fixed strength + fixed total cost.
+) -> StrengthCostMEFit:
+    """Fit the strength-cost ME model: fixed strength + fixed total cost.
 
     The fitted expectation is ``E[t_ij] = x_i y_j exp(-gamma d_ij)``.
 
@@ -142,7 +142,7 @@ def fit_gravity_me(
         max_iterations: Maximum solver iterations.
 
     Returns:
-        GravityMeFit with x, y multipliers and gamma.
+        StrengthCostMEFit with x, y multipliers and gamma.
     """
     s_out = np.asarray(strength_out, dtype=np.float64)
     s_in = np.asarray(strength_in, dtype=np.float64)
@@ -155,7 +155,7 @@ def fit_gravity_me(
     c_tgt = np.asarray(cost_targets, dtype=np.int64).tolist()
     c_val = np.asarray(cost_values, dtype=np.float64).tolist()
 
-    x_list, y_list, gamma, converged, iters = _odme.fit_gravity(
+    x_list, y_list, gamma, converged, iters = _odme.fit_strength_cost(
         s_out.tolist(),
         s_in.tolist(),
         c_src,
@@ -167,7 +167,7 @@ def fit_gravity_me(
         max_iterations,
     )
     n = len(s_out)
-    result = GravityMeFit(
+    result = StrengthCostMEFit(
         node=np.arange(n, dtype=np.uint64),
         x=np.asarray(x_list, dtype=np.float64),
         y=np.asarray(y_list, dtype=np.float64),
@@ -178,7 +178,7 @@ def fit_gravity_me(
     )
     if not converged:
         warnings.warn(
-            f"fit_gravity_me did not converge after {iters} iterations",
+            f"fit_strength_cost_me did not converge after {iters} iterations",
             stacklevel=2,
         )
     return result
@@ -192,7 +192,7 @@ def fit_strength_edges_me(
     self_loops: bool = True,
     tolerance: float = 1e-10,
     max_iterations: int = 50000,
-) -> StrengthEdgesMeFit:
+) -> StrengthEdgesMEFit:
     """Fit exact ME fixed-strength and total-edge-count constraints."""
     s_out = np.asarray(strength_out, dtype=np.float64)
     s_in = np.asarray(strength_in, dtype=np.float64)
@@ -208,7 +208,7 @@ def fit_strength_edges_me(
         tolerance,
         max_iterations,
     )
-    result = StrengthEdgesMeFit(
+    result = StrengthEdgesMEFit(
         node=np.arange(len(s_out), dtype=np.uint64),
         x=np.asarray(x_list, dtype=np.float64),
         y=np.asarray(y_list, dtype=np.float64),
@@ -234,7 +234,7 @@ def fit_strength_degree_me(
     self_loops: bool = True,
     tolerance: float = 1e-10,
     max_iterations: int = 50000,
-) -> StrengthDegreeMeFit:
+) -> StrengthDegreeMEFit:
     """Fit exact grand-canonical ME fixed-strength-degree constraints.
 
     The fitted expectation is the thesis Case 4 ME equation:
@@ -251,7 +251,7 @@ def fit_strength_degree_me(
         max_iterations: Maximum solver iterations.
 
     Returns:
-        StrengthDegreeMeFit with thesis multipliers x, y, z, and w.
+        StrengthDegreeMEFit with thesis multipliers x, y, z, and w.
     """
     s_out = np.asarray(strength_out, dtype=np.float64)
     s_in = np.asarray(strength_in, dtype=np.float64)
@@ -269,7 +269,7 @@ def fit_strength_degree_me(
         max_iterations,
     )
     n = len(s_out)
-    result = StrengthDegreeMeFit(
+    result = StrengthDegreeMEFit(
         node=np.arange(n, dtype=np.uint64),
         x=np.asarray(x_list, dtype=np.float64),
         y=np.asarray(y_list, dtype=np.float64),
@@ -406,12 +406,12 @@ def fit_fixed_degree_binary(
 
 __all__ = [
     "FitResult",
-    "GravityMeFit",
-    "StrengthDegreeMeFit",
-    "StrengthEdgesMeFit",
+    "StrengthCostMEFit",
+    "StrengthDegreeMEFit",
+    "StrengthEdgesMEFit",
     "fit_fixed_degree_binary",
     "fit_fixed_strength_me",
-    "fit_gravity_me",
+    "fit_strength_cost_me",
     "fit_strength_degree_me",
     "fit_strength_edges_me",
     "validate_strength_degree_constraints",

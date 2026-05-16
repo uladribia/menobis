@@ -7,9 +7,9 @@ import odme._odme as _odme
 from odme.data.frames import EdgeTable, ProbabilityTable
 from odme.models.fitting import (
     FitResult,
-    GravityMeFit,
-    StrengthDegreeMeFit,
-    StrengthEdgesMeFit,
+    StrengthCostMEFit,
+    StrengthDegreeMEFit,
+    StrengthEdgesMEFit,
 )
 
 
@@ -23,15 +23,15 @@ def _edge_table_from_lists(
     )
 
 
-def sample_gravity_me(
-    fit: GravityMeFit,
+def sample_strength_cost_me(
+    fit: StrengthCostMEFit,
     cost_sources: NDArray[np.integer],
     cost_targets: NDArray[np.integer],
     cost_values: NDArray[np.floating],
     *,
     seed: int = 0,
 ) -> EdgeTable:
-    """Sample from the gravity ME model: E[t_ij] = x_i y_j exp(-gamma d_ij)."""
+    """Sample from the strength-cost ME model: E[t_ij] = x_i y_j exp(-gamma d_ij)."""
     n = len(fit.x)
     gamma = fit.gamma
     c_src = np.asarray(cost_sources, dtype=np.int64)
@@ -127,7 +127,7 @@ def sample_poisson_multinomial(
 
 
 def sample_strength_edges_me(
-    fit: StrengthEdgesMeFit,
+    fit: StrengthEdgesMEFit,
     *,
     seed: int = 0,
 ) -> EdgeTable:
@@ -167,7 +167,7 @@ def sample_fixed_degree_events_me(
 
 
 def sample_strength_degree_me(
-    fit: StrengthDegreeMeFit,
+    fit: StrengthDegreeMEFit,
     *,
     seed: int = 0,
 ) -> EdgeTable:
@@ -202,10 +202,10 @@ __all__ = [
     "sample_custom_pij_events_multinomial",
     "sample_custom_pij_events_poisson",
     "sample_fixed_degree_events_me",
-    "sample_gravity_me",
     "sample_multinomial",
     "sample_poisson",
     "sample_poisson_multinomial",
+    "sample_strength_cost_me",
     "sample_strength_degree_me",
     "sample_strength_edges_me",
 ]

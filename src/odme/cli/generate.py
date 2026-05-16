@@ -15,16 +15,16 @@ from odme.data.io import read_edges, read_probabilities
 from odme.models import (
     fit_fixed_degree_binary,
     fit_fixed_strength_me,
-    fit_gravity_me,
+    fit_strength_cost_me,
     fit_strength_degree_me,
     fit_strength_edges_me,
     sample_custom_pij_events_multinomial,
     sample_custom_pij_events_poisson,
     sample_fixed_degree_events_me,
-    sample_gravity_me,
     sample_multinomial,
     sample_poisson,
     sample_poisson_multinomial,
+    sample_strength_cost_me,
     sample_strength_degree_me,
     sample_strength_edges_me,
 )
@@ -249,8 +249,8 @@ def custom_pij(
     _progress("Wrote custom p_ij ME sample", output, quiet, output_json)
 
 
-@app.command("gravity-me")
-def gravity_me_cmd(
+@app.command("strength-cost-me")
+def strength_cost_me_cmd(
     input_path: Path,
     cost_path: Annotated[
         Path, Option("--costs", help="Cost matrix CSV with source,target,cost columns.")
@@ -272,7 +272,7 @@ def gravity_me_cmd(
         Option("--self-loops/--no-self-loops", help="Whether model self loops."),
     ] = True,
 ) -> None:
-    """Generate from the gravity ME model: fixed strength + total cost."""
+    """Generate from the strength-cost ME model: fixed strength + total cost."""
     import pyarrow.csv as pa_csv
 
     edges = read_edges(input_path)
@@ -291,7 +291,7 @@ def gravity_me_cmd(
                 edges.source, edges.target, edges.weight, strict=True
             )
         )
-    fit = fit_gravity_me(
+    fit = fit_strength_cost_me(
         s.out.astype(np.float64),
         s.incoming.astype(np.float64),
         c_src,
@@ -301,9 +301,11 @@ def gravity_me_cmd(
         self_loops=self_loops,
     )
     _emit_edges(
-        sample_gravity_me(fit, c_src, c_tgt, c_val, seed=seed), output, output_json
+        sample_strength_cost_me(fit, c_src, c_tgt, c_val, seed=seed),
+        output,
+        output_json,
     )
-    _progress("Wrote gravity ME sample", output, quiet, output_json)
+    _progress("Wrote strength-cost ME sample", output, quiet, output_json)
 
 
 def _write_output(content: str, path: Path | None) -> None:

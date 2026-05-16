@@ -4,6 +4,7 @@ use odme_core::clustering::{
     clustering_coefficients as core_clustering,
     weighted_clustering_coefficients as core_weighted_clustering,
 };
+use odme_core::cost::{fit_strength_cost as core_fit_strength_cost, CostFitOptions};
 use odme_core::fitting::{
     balance_binary_degrees, balance_no_self_loops, balance_strength_degree_me,
     balance_strength_edges_me, balance_weighted_factors,
@@ -21,7 +22,6 @@ use odme_core::graph::{
     directed_degrees as core_directed_degrees, directed_strengths as core_directed_strengths,
     WeightedEdge,
 };
-use odme_core::gravity::{fit_gravity as core_fit_gravity, GravityOptions};
 use odme_core::stats::{
     compute_all_node_stats as core_compute_all_stats,
     weight_distribution as core_weight_distribution,
@@ -33,7 +33,7 @@ type FitPair = (Vec<f64>, Vec<f64>, bool, usize);
 type FitStrengthEdges = (Vec<f64>, Vec<f64>, f64, bool, usize);
 type FitStrengthDegree = (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, bool, usize);
 
-type FitGravity = (Vec<f64>, Vec<f64>, f64, bool, usize);
+type FitStrengthCost = (Vec<f64>, Vec<f64>, f64, bool, usize);
 
 /// Return the version of the Rust core exposed through Python.
 #[pyfunction]
@@ -152,7 +152,7 @@ fn weight_distribution(
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-fn fit_gravity(
+fn fit_strength_cost(
     strength_out: Vec<f64>,
     strength_in: Vec<f64>,
     cost_sources: Vec<usize>,
@@ -162,7 +162,7 @@ fn fit_gravity(
     self_loops: bool,
     tolerance: f64,
     max_iterations: usize,
-) -> PyResult<FitGravity> {
+) -> PyResult<FitStrengthCost> {
     if strength_out.len() != strength_in.len() {
         return Err(PyValueError::new_err(
             "strength arrays must have same length",
@@ -171,14 +171,14 @@ fn fit_gravity(
     if cost_sources.len() != cost_targets.len() || cost_sources.len() != cost_values.len() {
         return Err(PyValueError::new_err("cost arrays must have same length"));
     }
-    let result = core_fit_gravity(
+    let result = core_fit_strength_cost(
         &strength_out,
         &strength_in,
         &cost_sources,
         &cost_targets,
         &cost_values,
         target_cost,
-        &GravityOptions {
+        &CostFitOptions {
             self_loops,
             tolerance,
             max_iterations,
@@ -495,7 +495,7 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(directed_degrees, module)?)?;
     module.add_function(wrap_pyfunction!(compute_all_node_stats, module)?)?;
     module.add_function(wrap_pyfunction!(weight_distribution, module)?)?;
-    module.add_function(wrap_pyfunction!(fit_gravity, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_strength_cost, module)?)?;
     module.add_function(wrap_pyfunction!(fit_binary_degrees, module)?)?;
     module.add_function(wrap_pyfunction!(fit_strength_edges_me, module)?)?;
     module.add_function(wrap_pyfunction!(fit_strength_degree_me, module)?)?;

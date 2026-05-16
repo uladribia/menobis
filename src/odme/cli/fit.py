@@ -14,7 +14,7 @@ from odme.data.io import read_edges
 from odme.models import (
     fit_fixed_degree_binary,
     fit_fixed_strength_me,
-    fit_gravity_me,
+    fit_strength_cost_me,
     fit_strength_degree_me,
     fit_strength_edges_me,
 )
@@ -210,8 +210,8 @@ def strength_edges_me(
         typer.echo(f"Wrote strength-edges ME multipliers to {dest}", err=True)
 
 
-@app.command("gravity-me")
-def gravity_me(
+@app.command("strength-cost-me")
+def strength_cost_me(
     input_path: Path,
     cost_path: Annotated[
         Path, Option("--costs", help="Cost matrix CSV with source,target,cost columns.")
@@ -232,7 +232,7 @@ def gravity_me(
         Option("--self-loops/--no-self-loops", help="Whether model self loops."),
     ] = True,
 ) -> None:
-    """Fit the gravity ME model: fixed strength + fixed total cost."""
+    """Fit the strength-cost ME model: fixed strength + fixed total cost."""
     effective_quiet = quiet or output_json
     edges = read_edges(input_path)
     s = directed_strengths(edges)
@@ -252,7 +252,7 @@ def gravity_me(
                 edges.source, edges.target, edges.weight, strict=True
             )
         )
-    result = fit_gravity_me(
+    result = fit_strength_cost_me(
         s.out.astype(np.float64),
         s.incoming.astype(np.float64),
         c_src,
@@ -276,7 +276,7 @@ def gravity_me(
 
     if not effective_quiet:
         dest = str(output) if output else "stdout"
-        typer.echo(f"Wrote gravity ME multipliers to {dest}", err=True)
+        typer.echo(f"Wrote strength-cost ME multipliers to {dest}", err=True)
 
 
 def _write_output(content: str, path: Path | None) -> None:

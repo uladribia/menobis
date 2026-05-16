@@ -46,7 +46,7 @@ def weight_distribution(
 ) -> tuple[list[int], list[int]]: ...
 
 
-def fit_gravity(
+def fit_strength_cost(
     strength_out: list[float],
     strength_in: list[float],
     cost_sources: list[int],
