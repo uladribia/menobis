@@ -311,7 +311,7 @@ Every branch with an architectural consequence should add or update a decision d
 | 9. Docs site | ✅ Builds | — |
 | 10. Benchmarks | ❌ Not started | — |
 
-**Totals: 71 Python tests, 14 Rust tests, all passing. All linters green.**
+**Totals: 75 Python tests, 14 Rust tests, all passing. All linters green.**
 
 **Architecture:** All computation in Rust (`odme-core`). Python is thin wrappers + CLI + I/O. No Polars. numpy + pyarrow + rustworkx only.
 
