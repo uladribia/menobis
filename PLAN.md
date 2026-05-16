@@ -433,12 +433,12 @@ TDD:
 Given an observed weighted network and a chosen ME null model, the filtering
 module identifies edges that are statistically incompatible with the null model.
 
-**Procedure**:
+#### Procedure
 
 1. Extract constraints from the observed network.
 2. Fit the chosen ME null model (any of the implemented cases).
 3. For each pair `(i,j)`, compute the expected rate `E[t_ij]` and the
-   null-model distribution of `t_ij`.
+   exact null-model distribution of `t_ij`.
 4. For each observed `t_ij`, compute upper and lower p-values:
    - Upper: `P(T >= t_ij | null)` — is the edge unexpectedly heavy?
    - Lower: `P(T <= t_ij | null)` — is the edge unexpectedly light?
@@ -446,40 +446,98 @@ module identifies edges that are statistically incompatible with the null model.
 6. Since distributions are discrete, support both "lower included" and
    "upper included" rounding conventions for the boundary.
 
-**Output**: three edge tables:
+#### Output
+
+Three edge tables:
 - **Upper significant**: edges heavier than expected (over-represented flows).
 - **Lower significant**: edges lighter than expected (under-represented,
   including absent edges that should be present under the null).
 - **Compatible**: edges consistent with the null model (the "erased" middle).
 
-**Absent-edge detection**: pairs with `t_ij = 0` but large `E[t_ij]` should
-also be flagged as lower-significant. To avoid iterating over all N^2 pairs,
-only consider pairs where `E[t_ij] > min_rate` (configurable threshold).
+#### Absent-edge detection
 
-**Distribution per model**:
-- Fixed-strength ME: `Poisson(x_i y_j)` per pair.
-- Models with edge-presence probability (Cases 3, 4, 5): zero-inflated
-  distribution with `P(t=0) = 1 - p_ij`, `P(t=k|t>0)` from truncated
-  Poisson with rate from the model equation.
-- Fixed-degree binary: Bernoulli(`p_ij`) for presence; conditional weight
-  distribution depends on the generation model used.
+Pairs with `t_ij = 0` but large `E[t_ij]` should be flagged as
+lower-significant. This is triggered by a dedicated option
+`--detect-absent` / `detect_absent=True` with a configurable minimum
+expected rate threshold (default `min_rate=1.0`). When enabled, the filter
+iterates over all node pairs where `E[t_ij] >= min_rate` and `t_ij = 0`,
+computing the lower p-value `P(T = 0 | null)` for each.
 
-**Validation test**: applying the filter to samples from the null model itself,
-roughly `alpha` fraction of edges should survive (be flagged). This is a
-statistical ensemble test averaged over many samples.
+#### Exact distributions per model
 
-**Architecture**:
-- Rust kernel: `compute_pvalues(sources, targets, weights, rates, ...)` returns
-  upper and lower p-values per edge.
-- Python module `odme.filtering`: thin wrappers that fit the model, compute
-  rates, call Rust, split edges by threshold.
-- CLI: `odme filter INPUT --model strength --alpha 0.05 [--output-upper ...]
-  [--output-lower ...] [--output-compatible ...]`.
+The filter uses the exact discrete distribution implied by each model,
+not approximations:
 
-TDD:
-- Property test: filter applied to null model samples flags ~alpha fraction.
-- Exact test: known Poisson rate, known t_ij, verify p-value against scipy.
-- Edge cases: zero-rate pairs, self-loops, single-node networks.
+| Model | Distribution of `t_ij` |
+|-------|------------------------|
+| Fixed-strength ME | `Poisson(x_i y_j)` |
+| Strength + cost ME | `Poisson(x_i y_j exp(-gamma d_ij))` |
+| Strength + edges ME (Case 3) | Zero-inflated: `P(t=0) = 1 - p_ij`, `P(t=k\|t>0)` = truncated Poisson. `p_ij = lambda(exp(x_i y_j)-1) / (1 + lambda(exp(x_i y_j)-1))`, rate `= x_i y_j`. |
+| Strength + degree ME (Case 4) | Zero-inflated: `P(t=0) = 1 - p_ij`, `P(t=k\|t>0)` = truncated Poisson. `p_ij = z_i w_j(exp(x_i y_j)-1) / (1 + z_i w_j(exp(x_i y_j)-1))`, rate `= x_i y_j`. |
+| Fixed-degree ME (Case 5) | Zero-inflated: `P(t=0) = 1 - p_ij`, conditional weight from the generation model. `p_ij = x_i y_j / (1 + x_i y_j)`. |
+
+For Poisson models, `P(T >= t) = 1 - CDF(t-1)` and `P(T <= t) = CDF(t)`
+where CDF is the Poisson cumulative distribution function.
+
+For zero-inflated models, `P(T = 0) = 1 - p_ij + p_ij * P_trunc(0)` and
+for `t > 0`, `P(T = t) = p_ij * P_trunc(t)` where `P_trunc` is the
+zero-truncated Poisson PMF.
+
+#### Architecture
+
+**Rust** (`crates/odme-core/src/filter.rs`):
+- `compute_poisson_pvalues(weights, rates) -> (upper_pvals, lower_pvals)`
+- `compute_zip_pvalues(weights, p_ij, rates) -> (upper_pvals, lower_pvals)`
+- `detect_absent_edges(n, mask, rates, min_rate) -> (sources, targets, lower_pvals)`
+  where mask marks observed edges to skip.
+
+**PyO3** (`crates/odme-python/src/lib.rs`):
+- Expose the Rust kernels as `_odme.compute_poisson_pvalues`, etc.
+
+**Python** (`src/odme/filtering.py`):
+- `FilterResult` dataclass with `upper`, `lower`, `compatible` EdgeTables
+  and `upper_pvalues`, `lower_pvalues` arrays.
+- `filter_network(edges, model, alpha, ...)` — top-level function that:
+  1. Fits the chosen model.
+  2. Computes rates from fitted multipliers.
+  3. Calls the appropriate Rust p-value kernel.
+  4. Splits edges by threshold.
+  5. Optionally detects absent edges.
+- Convenience wrappers: `filter_strength_me(edges, alpha, ...)`, etc.
+
+**CLI** (`src/odme/cli/filter.py`):
+- `odme filter INPUT --model strength --alpha 0.05`
+- Options:
+  - `--output-upper PATH` — write over-represented edges.
+  - `--output-lower PATH` — write under-represented edges.
+  - `--output-compatible PATH` — write null-compatible edges.
+  - `--detect-absent` — enable absent-edge detection.
+  - `--min-rate FLOAT` — minimum expected rate for absent detection (default 1.0).
+  - `--json`, `--quiet`, `--self-loops/--no-self-loops` as usual.
+
+#### Testing strategy
+
+**1. Exact analytical p-value test** (numerical correctness):
+- For a single known Poisson rate (e.g., lambda=5.0), compute p-values
+  for specific `t_ij` values (0, 1, 5, 10, 20) in Rust.
+- Compare against `scipy.stats.poisson.cdf` / `.sf` to machine precision.
+- Same for zero-inflated distributions.
+
+**2. Ensemble calibration test** (end-to-end scientific correctness):
+- Generate the Pareto-like synthetic network.
+- Fit the fixed-strength ME null model.
+- Generate 200 null-model samples.
+- Apply the filter at alpha=0.05 to each sample.
+- Assert: mean fraction of flagged edges is within `[0.03, 0.08]` (centered
+  around alpha=0.05, with tolerance for discrete-distribution effects).
+- Assert: the fraction decreases toward alpha as T increases.
+
+**3. Edge cases**:
+- Zero-rate pairs produce p-value = 1.0 (always compatible).
+- Self-loops excluded when `self_loops=False`.
+- Network with a single node: no edges, no filtering.
+- All edges flagged when alpha=1.0.
+- No edges flagged when alpha=0.0.
 
 ## Replacement plan
 
