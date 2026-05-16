@@ -1,12 +1,45 @@
 """Lagrange multiplier fitting for ODME maximum-entropy models."""
 
+import time
 import warnings
 from dataclasses import dataclass
 
 import numpy as np
+from loguru import logger
 from numpy.typing import NDArray
 
 import odme._odme as _odme
+
+
+def _log_fit_result(
+    name: str,
+    converged: bool,
+    iterations: int,
+    elapsed: float,
+    verbose: int,
+) -> None:
+    """Log fitting diagnostics at the requested verbosity level."""
+    if verbose >= 2:
+        status = "converged" if converged else "NOT converged"
+        logger.info(
+            "{name} {status} in {iters} iterations ({elapsed:.4f}s)",
+            name=name,
+            status=status,
+            iters=iterations,
+            elapsed=elapsed,
+        )
+    elif verbose >= 1 and not converged:
+        logger.warning(
+            "{name} did not converge after {iters} iterations ({elapsed:.4f}s)",
+            name=name,
+            iters=iterations,
+            elapsed=elapsed,
+        )
+    if not converged:
+        warnings.warn(
+            f"{name} did not converge after {iterations} iterations",
+            stacklevel=3,
+        )
 
 
 @dataclass(frozen=True)
@@ -124,6 +157,7 @@ def fit_strength_cost_me(
     *,
     self_loops: bool = True,
     tolerance: float = 1e-6,
+    verbose: int = 0,
     max_iterations: int = 5000,
 ) -> StrengthCostMEFit:
     """Fit the strength-cost ME model: fixed strength + fixed total cost.
@@ -139,6 +173,7 @@ def fit_strength_cost_me(
         target_cost: Observed total cost C = sum t_ij d_ij.
         self_loops: Whether self loops are allowed.
         tolerance: Solver tolerance.
+        verbose: Logging level (0=silent, 1=warnings, 2=info).
         max_iterations: Maximum solver iterations.
 
     Returns:
@@ -155,6 +190,7 @@ def fit_strength_cost_me(
     c_tgt = np.asarray(cost_targets, dtype=np.int64).tolist()
     c_val = np.asarray(cost_values, dtype=np.float64).tolist()
 
+    t0 = time.perf_counter()
     x_list, y_list, gamma, converged, iters = _odme.fit_strength_cost(
         s_out.tolist(),
         s_in.tolist(),
@@ -176,11 +212,9 @@ def fit_strength_cost_me(
         converged=converged,
         iterations=iters,
     )
-    if not converged:
-        warnings.warn(
-            f"fit_strength_cost_me did not converge after {iters} iterations",
-            stacklevel=2,
-        )
+    _log_fit_result(
+        "fit_strength_cost_me", converged, iters, time.perf_counter() - t0, verbose
+    )
     return result
 
 
@@ -191,6 +225,7 @@ def fit_strength_edges_me(
     *,
     self_loops: bool = True,
     tolerance: float = 1e-10,
+    verbose: int = 0,
     max_iterations: int = 50000,
 ) -> StrengthEdgesMEFit:
     """Fit exact ME fixed-strength and total-edge-count constraints."""
@@ -200,6 +235,7 @@ def fit_strength_edges_me(
     if target_edges <= 0.0 or target_edges > s_out.sum():
         msg = "target_edges must be positive and no larger than total strength"
         raise ValueError(msg)
+    t0 = time.perf_counter()
     x_list, y_list, lam, converged, iters = _odme.fit_strength_edges_me(
         s_out.tolist(),
         s_in.tolist(),
@@ -217,11 +253,9 @@ def fit_strength_edges_me(
         converged=converged,
         iterations=iters,
     )
-    if not converged:
-        warnings.warn(
-            f"fit_strength_edges_me did not converge after {iters} iterations",
-            stacklevel=2,
-        )
+    _log_fit_result(
+        "fit_strength_edges_me", converged, iters, time.perf_counter() - t0, verbose
+    )
     return result
 
 
@@ -233,6 +267,7 @@ def fit_strength_degree_me(
     *,
     self_loops: bool = True,
     tolerance: float = 1e-10,
+    verbose: int = 0,
     max_iterations: int = 50000,
 ) -> StrengthDegreeMEFit:
     """Fit exact grand-canonical ME fixed-strength-degree constraints.
@@ -248,6 +283,7 @@ def fit_strength_degree_me(
         degree_in: Expected incoming binary degree per node.
         self_loops: Whether self loops are allowed.
         tolerance: Solver tolerance.
+        verbose: Logging level (0=silent, 1=warnings, 2=info).
         max_iterations: Maximum solver iterations.
 
     Returns:
@@ -259,6 +295,7 @@ def fit_strength_degree_me(
     k_in = np.asarray(degree_in, dtype=np.float64)
     validate_strength_degree_constraints(s_out, s_in, k_out, k_in)
 
+    t0 = time.perf_counter()
     x_list, y_list, z_list, w_list, converged, iters = _odme.fit_strength_degree_me(
         s_out.tolist(),
         s_in.tolist(),
@@ -279,11 +316,9 @@ def fit_strength_degree_me(
         converged=converged,
         iterations=iters,
     )
-    if not converged:
-        warnings.warn(
-            f"fit_strength_degree_me did not converge after {iters} iterations",
-            stacklevel=2,
-        )
+    _log_fit_result(
+        "fit_strength_degree_me", converged, iters, time.perf_counter() - t0, verbose
+    )
     return result
 
 
@@ -293,6 +328,7 @@ def fit_fixed_strength_me(
     *,
     self_loops: bool = True,
     tolerance: float = 1e-8,
+    verbose: int = 0,
     max_iterations: int = 10000,
 ) -> FitResult:
     """Fit Lagrange multipliers for the directed ME fixed-strength model.
@@ -302,6 +338,7 @@ def fit_fixed_strength_me(
         strength_in: Incoming strength per node.
         self_loops: Whether self loops are allowed.
         tolerance: Convergence tolerance for iterative balancing.
+        verbose: Logging level (0=silent, 1=warnings, 2=info).
         max_iterations: Maximum iterations for iterative balancing.
 
     Returns:
@@ -326,16 +363,19 @@ def fit_fixed_strength_me(
         x = s_out / sqrt_t
         y = s_in / sqrt_t
     else:
+        t0 = time.perf_counter()
         x_list, y_list, converged, iters = _odme.fit_balance_no_self_loops(
             s_out.tolist(), s_in.tolist(), tolerance, max_iterations
         )
         x = np.array(x_list)
         y = np.array(y_list)
-        if not converged:
-            warnings.warn(
-                f"fit_fixed_strength_me did not converge after {iters} iterations",
-                stacklevel=2,
-            )
+        _log_fit_result(
+            "fit_fixed_strength_me",
+            converged,
+            iters,
+            time.perf_counter() - t0,
+            verbose,
+        )
 
     return FitResult(
         node=np.arange(n, dtype=np.uint64),
@@ -352,6 +392,7 @@ def fit_fixed_degree_binary(
     *,
     self_loops: bool = True,
     tolerance: float = 1e-10,
+    verbose: int = 0,
     max_iterations: int = 50000,
 ) -> FitResult:
     """Fit multipliers for the directed binary fixed-degree model.
@@ -364,6 +405,7 @@ def fit_fixed_degree_binary(
         degree_in: Expected incoming degree per node.
         self_loops: Whether self loops are allowed.
         tolerance: Convergence tolerance for alternating coordinate updates.
+        verbose: Logging level (0=silent, 1=warnings, 2=info).
         max_iterations: Maximum iterations.
 
     Returns:
@@ -386,6 +428,7 @@ def fit_fixed_degree_binary(
             y=np.zeros(n),
         )
 
+    t0 = time.perf_counter()
     x_list, y_list, converged, iters = _odme.fit_binary_degrees(
         k_out.tolist(), k_in.tolist(), self_loops, tolerance, max_iterations
     )
@@ -396,11 +439,9 @@ def fit_fixed_degree_binary(
         converged=converged,
         iterations=iters,
     )
-    if not converged:
-        warnings.warn(
-            f"fit_fixed_degree_binary did not converge after {iters} iterations",
-            stacklevel=2,
-        )
+    _log_fit_result(
+        "fit_fixed_degree_binary", converged, iters, time.perf_counter() - t0, verbose
+    )
     return result
 
 

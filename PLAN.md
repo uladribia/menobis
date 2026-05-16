@@ -310,6 +310,7 @@ Every branch with an architectural consequence should add or update a decision d
 | 8. CLI | ✅ Complete | All models exposed: analyze, fit, generate |
 | 9. Docs site | ✅ Complete | Full LaTeX math, all models, partial constraints, ensembles |
 | 10. Benchmarks | ✅ Complete | Scaling to N=10000, regression tests, figures |
+| 11. Statistical filtering | ❌ Not started | Flag edges incompatible with null model |
 
 **Totals: 114 Python tests, 16 Rust tests, all passing. All linters green.**
 
@@ -426,6 +427,59 @@ TDD:
 - Add Criterion and pytest benchmark suites.
 - Benchmark against legacy C/Python temporarily where useful, then against ODME's own tracked baseline.
 - Optimize only after correctness is established.
+
+### Milestone 11: Statistical filtering module — ❌ NOT STARTED
+
+Given an observed weighted network and a chosen ME null model, the filtering
+module identifies edges that are statistically incompatible with the null model.
+
+**Procedure**:
+
+1. Extract constraints from the observed network.
+2. Fit the chosen ME null model (any of the implemented cases).
+3. For each pair `(i,j)`, compute the expected rate `E[t_ij]` and the
+   null-model distribution of `t_ij`.
+4. For each observed `t_ij`, compute upper and lower p-values:
+   - Upper: `P(T >= t_ij | null)` — is the edge unexpectedly heavy?
+   - Lower: `P(T <= t_ij | null)` — is the edge unexpectedly light?
+5. Flag edges where p-value < alpha (one-sided) or alpha/2 (two-sided).
+6. Since distributions are discrete, support both "lower included" and
+   "upper included" rounding conventions for the boundary.
+
+**Output**: three edge tables:
+- **Upper significant**: edges heavier than expected (over-represented flows).
+- **Lower significant**: edges lighter than expected (under-represented,
+  including absent edges that should be present under the null).
+- **Compatible**: edges consistent with the null model (the "erased" middle).
+
+**Absent-edge detection**: pairs with `t_ij = 0` but large `E[t_ij]` should
+also be flagged as lower-significant. To avoid iterating over all N^2 pairs,
+only consider pairs where `E[t_ij] > min_rate` (configurable threshold).
+
+**Distribution per model**:
+- Fixed-strength ME: `Poisson(x_i y_j)` per pair.
+- Models with edge-presence probability (Cases 3, 4, 5): zero-inflated
+  distribution with `P(t=0) = 1 - p_ij`, `P(t=k|t>0)` from truncated
+  Poisson with rate from the model equation.
+- Fixed-degree binary: Bernoulli(`p_ij`) for presence; conditional weight
+  distribution depends on the generation model used.
+
+**Validation test**: applying the filter to samples from the null model itself,
+roughly `alpha` fraction of edges should survive (be flagged). This is a
+statistical ensemble test averaged over many samples.
+
+**Architecture**:
+- Rust kernel: `compute_pvalues(sources, targets, weights, rates, ...)` returns
+  upper and lower p-values per edge.
+- Python module `odme.filtering`: thin wrappers that fit the model, compute
+  rates, call Rust, split edges by threshold.
+- CLI: `odme filter INPUT --model strength --alpha 0.05 [--output-upper ...]
+  [--output-lower ...] [--output-compatible ...]`.
+
+TDD:
+- Property test: filter applied to null model samples flags ~alpha fraction.
+- Exact test: known Poisson rate, known t_ij, verify p-value against scipy.
+- Edge cases: zero-rate pairs, self-loops, single-node networks.
 
 ## Replacement plan
 
