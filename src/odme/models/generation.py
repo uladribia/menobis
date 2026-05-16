@@ -78,6 +78,35 @@ def sample_strength_cost_me(
     return _edge_table_from_lists(result_sources, result_targets, result_weights)
 
 
+def sample_microcanonical(
+    strength_out: NDArray[np.integer],
+    strength_in: NDArray[np.integer],
+    *,
+    seed: int = 0,
+) -> EdgeTable:
+    """Microcanonical stub-matching sampler for fixed-strength ME.
+
+    Produces an unbiased uniform sample from the space of all integer-weight
+    directed graphs with the exact given strength sequence. Self-loops are
+    always allowed because uniform sampling without self-loops requires
+    more sophisticated algorithms to avoid bias.
+
+    Args:
+        strength_out: Exact outgoing strength per node (positive integers).
+        strength_in: Exact incoming strength per node (positive integers).
+        seed: Random seed.
+
+    Returns:
+        EdgeTable with exact strength preservation.
+    """
+    s_out = np.asarray(strength_out, dtype=np.uint64)
+    s_in = np.asarray(strength_in, dtype=np.uint64)
+    sources, targets, weights = _odme.sample_microcanonical(
+        s_out.tolist(), s_in.tolist(), seed
+    )
+    return _edge_table_from_lists(sources, targets, weights)
+
+
 def sample_custom_pij_events_poisson(
     probabilities: ProbabilityTable,
     *,
@@ -202,6 +231,7 @@ __all__ = [
     "sample_custom_pij_events_multinomial",
     "sample_custom_pij_events_poisson",
     "sample_fixed_degree_events_me",
+    "sample_microcanonical",
     "sample_multinomial",
     "sample_poisson",
     "sample_poisson_multinomial",

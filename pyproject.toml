@@ -19,6 +19,7 @@ odme = "odme.cli.main:app"
 
 [dependency-groups]
 dev = [
+  "matplotlib>=3.10.9",
   "maturin>=1.8,<2",
 ]
 docs = [

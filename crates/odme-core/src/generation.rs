@@ -70,6 +70,66 @@ pub fn sample_custom_pij_events_multinomial(
     result
 }
 
+/// Microcanonical stub-matching sampler for fixed-strength ME with self-loops.
+///
+/// Creates `s_out[i]` outgoing stubs for each node `i` and `s_in[j]` incoming
+/// stubs for each node `j`, then pairs them by random shuffle. This produces
+/// an unbiased uniform sample from the space of all integer-weight directed
+/// graphs with the exact given strength sequence and self-loops allowed.
+///
+/// **Important**: this uniform sampling property only holds when self-loops are
+/// allowed. Without self-loops the rejection/constraint introduces bias that
+/// requires more sophisticated algorithms (e.g., MCMC) to correct.
+#[must_use]
+pub fn sample_microcanonical(strength_out: &[u64], strength_in: &[u64], seed: u64) -> SampledEdges {
+    let n = strength_out.len();
+    let total_out: u64 = strength_out.iter().sum();
+    let total_in: u64 = strength_in.iter().sum();
+    assert_eq!(
+        total_out, total_in,
+        "microcanonical requires balanced strengths"
+    );
+    let t = total_out as usize;
+
+    // Build outgoing stubs: node i appears s_out[i] times.
+    let mut out_stubs: Vec<u64> = Vec::with_capacity(t);
+    for (i, &s) in strength_out.iter().enumerate() {
+        for _ in 0..s {
+            out_stubs.push(i as u64);
+        }
+    }
+
+    // Build incoming stubs: node j appears s_in[j] times.
+    let mut in_stubs: Vec<u64> = Vec::with_capacity(t);
+    for (j, &s) in strength_in.iter().enumerate() {
+        for _ in 0..s {
+            in_stubs.push(j as u64);
+        }
+    }
+
+    // Shuffle incoming stubs.
+    let mut rng = StdRng::seed_from_u64(seed);
+    use rand::seq::SliceRandom;
+    in_stubs.shuffle(&mut rng);
+
+    // Count edge weights from stub pairings.
+    let mut weight_map = std::collections::HashMap::new();
+    for (&src, &tgt) in out_stubs.iter().zip(in_stubs.iter()) {
+        *weight_map.entry((src, tgt)).or_insert(0u64) += 1;
+    }
+
+    let mut result = SampledEdges::default();
+    let mut pairs: Vec<_> = weight_map.into_iter().collect();
+    pairs.sort_unstable();
+    for ((src, tgt), w) in pairs {
+        result.sources.push(src);
+        result.targets.push(tgt);
+        result.weights.push(w);
+    }
+    let _ = n; // used only in assert context
+    result
+}
+
 /// Sample from independent Poisson(x_i * y_j) for all (i, j).
 #[must_use]
 pub fn sample_poisson(x: &[f64], y: &[f64], self_loops: bool, seed: u64) -> SampledEdges {
@@ -420,7 +480,9 @@ fn multinomial_sample(rates: &[f64], total: u64, rng: &mut StdRng) -> Vec<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{sample_multinomial, sample_poisson, sample_strength_degree_me};
+    use super::{
+        sample_microcanonical, sample_multinomial, sample_poisson, sample_strength_degree_me,
+    };
 
     #[test]
     fn poisson_is_reproducible() {
@@ -455,6 +517,28 @@ mod tests {
         assert_eq!(a.targets, b.targets);
         assert_eq!(a.weights, b.weights);
         assert!(a.weights.iter().all(|&w| w > 0));
+    }
+
+    #[test]
+    fn microcanonical_preserves_exact_strengths() {
+        let s_out = vec![10, 20, 30];
+        let s_in = vec![15, 25, 20];
+        let edges = sample_microcanonical(&s_out, &s_in, 42);
+        let total: u64 = edges.weights.iter().sum();
+        assert_eq!(total, 60);
+        let mut actual_out = vec![0u64; 3];
+        let mut actual_in = vec![0u64; 3];
+        for ((&src, &tgt), &w) in edges
+            .sources
+            .iter()
+            .zip(edges.targets.iter())
+            .zip(edges.weights.iter())
+        {
+            actual_out[src as usize] += w;
+            actual_in[tgt as usize] += w;
+        }
+        assert_eq!(actual_out, s_out);
+        assert_eq!(actual_in, s_in);
     }
 
     #[test]
