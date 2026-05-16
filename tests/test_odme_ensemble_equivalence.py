@@ -116,6 +116,120 @@ def _run_convergence() -> dict[str, dict[int, tuple[np.ndarray, np.ndarray]]]:
     return results
 
 
+def _collect_per_node_stats(
+    total: int, repetitions: int
+) -> dict[str, dict[str, np.ndarray]]:
+    """Collect per-node ensemble-averaged Y2_out and s_nn_out for each ensemble."""
+    s_out, s_in = _balanced_integer_strengths(P_OUT, P_IN, total)
+    fit = fit_fixed_strength_me(s_out, s_in)
+
+    ensemble_y2: dict[str, list[np.ndarray]] = {
+        "microcanonical": [],
+        "canonical": [],
+        "grand_canonical": [],
+    }
+    ensemble_snn: dict[str, list[np.ndarray]] = {
+        "microcanonical": [],
+        "canonical": [],
+        "grand_canonical": [],
+    }
+
+    samplers: dict[str, Callable[[int], EdgeTable]] = {
+        "microcanonical": lambda seed, so=s_out, si=s_in: sample_microcanonical(
+            so, si, seed=seed
+        ),
+        "canonical": lambda seed, f=fit, t=total: sample_multinomial(
+            f.x, f.y, total_events=t, seed=seed
+        ),
+        "grand_canonical": lambda seed, f=fit: sample_poisson(f.x, f.y, seed=seed),
+    }
+
+    for name, sampler in samplers.items():
+        for seed in range(repetitions):
+            sample = sampler(seed)
+            stats = compute_all_stats(sample)
+            ensemble_y2[name].append(stats.y2_out)
+            ensemble_snn[name].append(stats.s_nn_out)
+
+    result: dict[str, dict[str, np.ndarray]] = {}
+    for name in ensemble_y2:
+        result[name] = {
+            "y2_out": np.vstack(ensemble_y2[name]).mean(axis=0),
+            "y2_out_std": np.vstack(ensemble_y2[name]).std(axis=0, ddof=1),
+            "snn_out": np.vstack(ensemble_snn[name]).mean(axis=0),
+            "snn_out_std": np.vstack(ensemble_snn[name]).std(axis=0, ddof=1),
+        }
+    return result
+
+
+def _plot_per_node_vs_strength() -> None:
+    """Plot Y2 and s_nn vs relative strength p_s for each ensemble and T."""
+    ensemble_names = ["microcanonical", "canonical", "grand_canonical"]
+    ensemble_labels = ["microcanonical", "canonical", "grand-canonical"]
+    markers = ["o", "s", "^"]
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c"]
+
+    fig, axes = plt.subplots(
+        2, len(T_VALUES), figsize=(4 * len(T_VALUES), 8), sharey="row"
+    )
+    if len(T_VALUES) == 1:
+        axes = axes.reshape(2, 1)
+
+    for col, total in enumerate(T_VALUES):
+        per_node = _collect_per_node_stats(total, REPETITIONS)
+        p_out = P_OUT
+
+        # Y2 vs p_s
+        ax = axes[0, col]
+        for idx, name in enumerate(ensemble_names):
+            ax.errorbar(
+                p_out,
+                per_node[name]["y2_out"],
+                yerr=per_node[name]["y2_out_std"] / np.sqrt(REPETITIONS),
+                fmt=markers[idx],
+                color=colors[idx],
+                label=ensemble_labels[idx],
+                markersize=6,
+                capsize=3,
+                alpha=0.8,
+            )
+        ax.set_xlabel("$p_s = s^{out} / T$")
+        if col == 0:
+            ax.set_ylabel("$\\langle Y_2^{out} \\rangle$")
+        ax.set_title(f"T = {total}")
+        ax.grid(True, alpha=0.3)
+        if col == 0:
+            ax.legend(fontsize=7)
+
+        # s_nn vs p_s
+        ax = axes[1, col]
+        for idx, name in enumerate(ensemble_names):
+            ax.errorbar(
+                p_out,
+                per_node[name]["snn_out"],
+                yerr=per_node[name]["snn_out_std"] / np.sqrt(REPETITIONS),
+                fmt=markers[idx],
+                color=colors[idx],
+                label=ensemble_labels[idx],
+                markersize=6,
+                capsize=3,
+                alpha=0.8,
+            )
+        ax.set_xlabel("$p_s = s^{out} / T$")
+        if col == 0:
+            ax.set_ylabel("$\\langle s^{w,out}_{nn} \\rangle$")
+        ax.grid(True, alpha=0.3)
+
+    fig.suptitle(
+        "Higher-order statistics vs relative strength across ensembles",
+        fontsize=13,
+        y=1.02,
+    )
+    plt.tight_layout()
+    fig.savefig(FIGURES_DIR / "ensemble_y2_snn_vs_ps.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
 def _plot_convergence(
     results: dict[str, dict[int, tuple[np.ndarray, np.ndarray]]],
 ) -> None:
@@ -213,6 +327,7 @@ def test_ensemble_equivalence_convergence() -> None:
     """Three ensembles converge at large T for all higher-order statistics."""
     results = _run_convergence()
     _plot_convergence(results)
+    _plot_per_node_vs_strength()
 
     # At largest T, assert convergence.
     largest_t = T_VALUES[-1]

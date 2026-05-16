@@ -71,6 +71,17 @@ means for every computed graph statistic:
 
 ![Per-statistic ensemble means](../figures/ensemble_per_statistic.png)
 
+### Per-node higher-order statistics vs relative strength
+
+Y2 disparity and weighted nearest-neighbor strength plotted against the
+relative outgoing strength `p_s = s^out / T` for each node, ensemble, and
+increasing T. Error bars show standard error of the ensemble mean.
+
+At small T the ensembles differ (especially for low-strength nodes). At large T
+they overlap completely:
+
+![Y2 and s_nn vs p_s](../figures/ensemble_y2_snn_vs_ps.png)
+
 ## Running the validation
 
 ```bash
