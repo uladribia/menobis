@@ -6,8 +6,8 @@ use odme_core::clustering::{
 };
 use odme_core::cost::{fit_strength_cost as core_fit_strength_cost, CostFitOptions};
 use odme_core::fitting::{
-    balance_binary_degrees, balance_no_self_loops, balance_strength_degree_me,
-    balance_strength_edges_me, balance_weighted_factors,
+    balance_binary_degrees, balance_masked_strength, balance_no_self_loops,
+    balance_strength_degree_me, balance_strength_edges_me, balance_weighted_factors,
 };
 use odme_core::generation::{
     sample_custom_pij_events_multinomial as core_sample_custom_pij_events_multinomial,
@@ -149,6 +149,33 @@ fn weight_distribution(
     let edges = build_edges(max_node, sources, targets, weights)?;
     let dist = core_weight_distribution(&edges);
     Ok((dist.weights, dist.counts))
+}
+
+#[pyfunction]
+fn fit_masked_strength(
+    strength_out: Vec<f64>,
+    strength_in: Vec<f64>,
+    mask: Vec<bool>,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<FitPair> {
+    if strength_out.len() != strength_in.len() {
+        return Err(PyValueError::new_err(
+            "strength arrays must have same length",
+        ));
+    }
+    let n = strength_out.len();
+    if mask.len() != n * n {
+        return Err(PyValueError::new_err("mask must have length n*n"));
+    }
+    let result = balance_masked_strength(
+        &strength_out,
+        &strength_in,
+        &mask,
+        tolerance,
+        max_iterations,
+    );
+    Ok((result.x, result.y, result.converged, result.iterations))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -518,6 +545,7 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(directed_degrees, module)?)?;
     module.add_function(wrap_pyfunction!(compute_all_node_stats, module)?)?;
     module.add_function(wrap_pyfunction!(weight_distribution, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_masked_strength, module)?)?;
     module.add_function(wrap_pyfunction!(fit_strength_cost, module)?)?;
     module.add_function(wrap_pyfunction!(fit_binary_degrees, module)?)?;
     module.add_function(wrap_pyfunction!(fit_strength_edges_me, module)?)?;

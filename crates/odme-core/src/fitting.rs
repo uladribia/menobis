@@ -577,6 +577,81 @@ pub fn balance_weighted_factors(
     }
 }
 
+/// IPF balancing for fixed-strength ME with a pair mask.
+///
+/// Pairs where `mask[i * n + j]` is true are skipped in summations.
+/// This supports partial-constraint fitting where some p_ij are known.
+#[must_use]
+pub fn balance_masked_strength(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    mask: &[bool],
+    tolerance: f64,
+    max_iterations: usize,
+) -> FitResult {
+    let n = strength_out.len();
+    let total: f64 = strength_out.iter().sum();
+    let sqrt_t = total.sqrt().max(1.0);
+    let mut x: Vec<f64> = strength_out
+        .iter()
+        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .collect();
+    let mut y: Vec<f64> = strength_in
+        .iter()
+        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .collect();
+
+    for iter in 0..max_iterations {
+        let old_x = x.clone();
+        let old_y = y.clone();
+
+        for j in 0..n {
+            if strength_in[j] <= 0.0 {
+                continue;
+            }
+            let denom: f64 = (0..n).filter(|&i| !mask[i * n + j]).map(|i| x[i]).sum();
+            y[j] = if denom > 0.0 {
+                strength_in[j] / denom
+            } else {
+                0.0
+            };
+        }
+        for i in 0..n {
+            if strength_out[i] <= 0.0 {
+                continue;
+            }
+            let denom: f64 = (0..n).filter(|&j| !mask[i * n + j]).map(|j| y[j]).sum();
+            x[i] = if denom > 0.0 {
+                strength_out[i] / denom
+            } else {
+                0.0
+            };
+        }
+
+        let delta = x
+            .iter()
+            .zip(old_x.iter())
+            .chain(y.iter().zip(old_y.iter()))
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0_f64, f64::max);
+        if delta < tolerance {
+            return FitResult {
+                x,
+                y,
+                converged: true,
+                iterations: iter + 1,
+            };
+        }
+    }
+
+    FitResult {
+        x,
+        y,
+        converged: false,
+        iterations: max_iterations,
+    }
+}
+
 /// Iterative proportional fitting for ME fixed-strength without self-loops.
 ///
 /// Solves: s_out_i = sum_{j != i} x_i * y_j  and  s_in_j = sum_{i != j} x_i * y_j
