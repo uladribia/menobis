@@ -16,7 +16,9 @@ from odme.models.generation import (
     sample_fixed_degree_zip,
     sample_multinomial,
     sample_poisson,
+    sample_poisson_multinomial,
     sample_strength_degree_zip,
+    sample_strength_edges_zip,
 )
 
 __all__ = [
@@ -32,6 +34,8 @@ __all__ = [
     "sample_fixed_degree_zip",
     "sample_multinomial",
     "sample_poisson",
+    "sample_poisson_multinomial",
     "sample_strength_degree_zip",
+    "sample_strength_edges_zip",
     "validate_strength_degree_constraints",
 ]

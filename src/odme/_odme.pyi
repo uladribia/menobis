@@ -113,6 +113,23 @@ def sample_custom_pij_multinomial(
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
+def sample_poisson_multinomial(
+    x: list[float],
+    y: list[float],
+    self_loops: bool,
+    seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
+
+
+def sample_strength_edges_zip(
+    x: list[float],
+    y: list[float],
+    lam: float,
+    self_loops: bool,
+    seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
+
+
 def sample_poisson(
     x: list[float],
     y: list[float],

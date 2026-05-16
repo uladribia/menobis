@@ -107,3 +107,12 @@ probabilities = normalize_probabilities(source, target, p)
 sample = sample_custom_pij_multinomial(probabilities, total_events=T, seed=42)
 sample = sample_custom_pij_poisson(probabilities, total_events=T, seed=42)
 ```
+
+## Sampler variants
+
+| Constraint | Canonical | Grand-canonical | Alternative GC |
+|------------|-----------|-----------------|----------------|
+| Fixed strength ME | `sample_multinomial` | `sample_poisson` | `sample_poisson_multinomial` |
+| Strength + edges ME | — | `sample_strength_edges_zip` | — |
+| Strength + degree ME | — | `sample_strength_degree_zip` | — |
+| Fixed degree ME | — | `sample_fixed_degree_zip` | — |

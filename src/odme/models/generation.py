@@ -5,7 +5,7 @@ from numpy.typing import NDArray
 
 import odme._odme as _odme
 from odme.data.frames import EdgeTable, ProbabilityTable
-from odme.models.fitting import FitResult, StrengthDegreeZipFit
+from odme.models.fitting import FitResult, StrengthDegreeZipFit, StrengthEdgesZipFit
 
 
 def _edge_table_from_lists(
@@ -48,6 +48,32 @@ def sample_custom_pij_multinomial(
         probabilities.probability.tolist(),
         total_events,
         seed,
+    )
+    return _edge_table_from_lists(sources, targets, weights)
+
+
+def sample_poisson_multinomial(
+    x: NDArray[np.floating],
+    y: NDArray[np.floating],
+    *,
+    self_loops: bool = True,
+    seed: int = 0,
+) -> EdgeTable:
+    """Poisson-total multinomial sampling for fixed-strength ME."""
+    sources, targets, weights = _odme.sample_poisson_multinomial(
+        x.tolist(), y.tolist(), self_loops, seed
+    )
+    return _edge_table_from_lists(sources, targets, weights)
+
+
+def sample_strength_edges_zip(
+    fit: StrengthEdgesZipFit,
+    *,
+    seed: int = 0,
+) -> EdgeTable:
+    """Sample exact ME fixed-strength-and-edge-count ZIP model."""
+    sources, targets, weights = _odme.sample_strength_edges_zip(
+        fit.x.tolist(), fit.y.tolist(), fit.lam, fit.self_loops, seed
     )
     return _edge_table_from_lists(sources, targets, weights)
 
@@ -118,5 +144,7 @@ __all__ = [
     "sample_fixed_degree_zip",
     "sample_multinomial",
     "sample_poisson",
+    "sample_poisson_multinomial",
     "sample_strength_degree_zip",
+    "sample_strength_edges_zip",
 ]

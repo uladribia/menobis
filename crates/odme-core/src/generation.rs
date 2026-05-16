@@ -248,6 +248,77 @@ pub fn sample_strength_degree_zip(
     result
 }
 
+/// Poisson-total multinomial sampling with node-factorized probabilities.
+#[must_use]
+pub fn sample_poisson_multinomial(
+    x: &[f64],
+    y: &[f64],
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    let mut total_rate = 0.0;
+    for (i, &xi) in x.iter().enumerate() {
+        for (j, &yj) in y.iter().enumerate() {
+            if !self_loops && i == j {
+                continue;
+            }
+            total_rate += xi * yj;
+        }
+    }
+    if total_rate <= 0.0 {
+        return SampledEdges::default();
+    }
+    let mut rng = StdRng::seed_from_u64(seed);
+    let total_events = match Poisson::new(total_rate) {
+        Ok(dist) => dist.sample(&mut rng) as u64,
+        Err(_) => 0,
+    };
+    sample_multinomial(x, y, total_events, self_loops, seed.wrapping_add(1))
+}
+
+/// Sample exact ME fixed-strength-and-edge-count ZIP model.
+#[must_use]
+pub fn sample_strength_edges_zip(
+    x: &[f64],
+    y: &[f64],
+    lam: f64,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    let mut rng = StdRng::seed_from_u64(seed);
+    let mut result = SampledEdges::default();
+    for (i, &xi) in x.iter().enumerate() {
+        for (j, &yj) in y.iter().enumerate() {
+            if !self_loops && i == j {
+                continue;
+            }
+            let u = xi * yj;
+            let exp_u = u.exp();
+            let den = 1.0 + lam * (exp_u - 1.0);
+            let p = if den > 0.0 {
+                lam * (exp_u - 1.0) / den
+            } else {
+                0.0
+            };
+            if p <= 0.0 {
+                continue;
+            }
+            let present = match Bernoulli::new(p.min(1.0)) {
+                Ok(dist) => dist.sample(&mut rng),
+                Err(_) => false,
+            };
+            if present {
+                result.sources.push(i as u64);
+                result.targets.push(j as u64);
+                result
+                    .weights
+                    .push(sample_zero_truncated_poisson(u, &mut rng));
+            }
+        }
+    }
+    result
+}
+
 /// Multinomial sampling with node-factorized probabilities.
 #[must_use]
 pub fn sample_multinomial(
