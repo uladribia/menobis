@@ -9,8 +9,8 @@ import odme._odme as _odme
 
 
 @dataclass(frozen=True)
-class StrengthEdgesZipFit:
-    """Fitted exact ME fixed-strength-and-edge-count ZIP model."""
+class StrengthEdgesMeFit:
+    """Fitted exact ME fixed-strength-and-edge-count ME model."""
 
     node: NDArray[np.uint64]
     x: NDArray[np.float64]
@@ -20,8 +20,8 @@ class StrengthEdgesZipFit:
 
 
 @dataclass(frozen=True)
-class StrengthDegreeZipFit:
-    """Fitted exact ME fixed-strength-degree ZIP model."""
+class StrengthDegreeMeFit:
+    """Fitted exact ME fixed-strength-degree ME model."""
 
     node: NDArray[np.uint64]
     x: NDArray[np.float64]
@@ -94,7 +94,7 @@ def validate_strength_degree_constraints(
         raise ValueError(msg)
 
 
-def fit_strength_edges_zip(
+def fit_strength_edges_me(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     target_edges: float,
@@ -102,7 +102,7 @@ def fit_strength_edges_zip(
     self_loops: bool = True,
     tolerance: float = 1e-10,
     max_iterations: int = 50000,
-) -> StrengthEdgesZipFit:
+) -> StrengthEdgesMeFit:
     """Fit exact ME fixed-strength and total-edge-count constraints."""
     s_out = np.asarray(strength_out, dtype=np.float64)
     s_in = np.asarray(strength_in, dtype=np.float64)
@@ -118,7 +118,7 @@ def fit_strength_edges_zip(
         tolerance,
         max_iterations,
     )
-    return StrengthEdgesZipFit(
+    return StrengthEdgesMeFit(
         node=np.arange(len(s_out), dtype=np.uint64),
         x=np.asarray(x_list, dtype=np.float64),
         y=np.asarray(y_list, dtype=np.float64),
@@ -127,7 +127,7 @@ def fit_strength_edges_zip(
     )
 
 
-def fit_strength_degree_zip(
+def fit_strength_degree_me(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     degree_out: NDArray[np.floating],
@@ -136,7 +136,7 @@ def fit_strength_degree_zip(
     self_loops: bool = True,
     tolerance: float = 1e-10,
     max_iterations: int = 50000,
-) -> StrengthDegreeZipFit:
+) -> StrengthDegreeMeFit:
     """Fit exact grand-canonical ME fixed-strength-degree constraints.
 
     The fitted expectation is the thesis Case 4 ME equation:
@@ -153,7 +153,7 @@ def fit_strength_degree_zip(
         max_iterations: Maximum solver iterations.
 
     Returns:
-        StrengthDegreeZipFit with degree and excess multipliers.
+        StrengthDegreeMeFit with thesis multipliers x, y, z, and w.
     """
     s_out = np.asarray(strength_out, dtype=np.float64)
     s_in = np.asarray(strength_in, dtype=np.float64)
@@ -171,7 +171,7 @@ def fit_strength_degree_zip(
         max_iterations,
     )
     n = len(s_out)
-    return StrengthDegreeZipFit(
+    return StrengthDegreeMeFit(
         node=np.arange(n, dtype=np.uint64),
         x=np.asarray(x_list, dtype=np.float64),
         y=np.asarray(y_list, dtype=np.float64),
@@ -285,11 +285,11 @@ def fit_fixed_degree_binary(
 
 __all__ = [
     "FitResult",
-    "StrengthDegreeZipFit",
-    "StrengthEdgesZipFit",
+    "StrengthDegreeMeFit",
+    "StrengthEdgesMeFit",
     "fit_fixed_degree_binary",
     "fit_fixed_strength_me",
-    "fit_strength_degree_zip",
-    "fit_strength_edges_zip",
+    "fit_strength_degree_me",
+    "fit_strength_edges_me",
     "validate_strength_degree_constraints",
 ]

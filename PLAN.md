@@ -311,7 +311,7 @@ Every branch with an architectural consequence should add or update a decision d
 | 9. Docs site | ✅ Builds | — |
 | 10. Benchmarks | ❌ Not started | — |
 
-**Totals: 75 Python tests, 14 Rust tests, all passing. All linters green.**
+**Totals: 81 Python tests, 14 Rust tests, all passing. All linters green.**
 
 **Architecture:** All computation in Rust (`odme-core`). Python is thin wrappers + CLI + I/O. No Polars. numpy + pyarrow + rustworkx only.
 
@@ -410,7 +410,7 @@ TDD:
 
 ### Milestone 8: Modern CLI — ✅ COMPLETE (initial)
 
-- Implemented: `odme analyze strengths`, `odme fit strengths`, `odme fit degrees`, `odme fit strength-degree-zip`, `odme generate poisson`, `odme generate strength-degree-zip`.
+- Implemented: `odme analyze strengths`, `odme fit strengths`, `odme fit degrees`, `odme fit strength-degree-me`, `odme fit strength-edges-me`, `odme generate poisson`, `odme generate multinomial`, `odme generate poisson-multinomial`, `odme generate degree-events-me`, `odme generate strength-degree-me`, `odme generate strength-edges-me`, `odme generate custom-pij`.
 - Standard universal arguments: `--output`/`-o`, `--json`, `--quiet`, `--seed`/`-s`.
 - stdout for data, stderr for progress.
 - Remaining: `odme convert`, additional subcommands as models are added.

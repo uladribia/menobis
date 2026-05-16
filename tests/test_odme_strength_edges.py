@@ -4,7 +4,7 @@ import numpy as np
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from odme.models import fit_strength_edges_zip
+from odme.models import fit_strength_edges_me
 
 
 def _expectations(
@@ -32,7 +32,7 @@ def test_fixed_strength_edges_equations_hold(values: list[float]) -> None:
     y = arr[3:6]
     lam = float(arr[6])
     p, expected = _expectations(x, y, lam)
-    fit = fit_strength_edges_zip(
+    fit = fit_strength_edges_me(
         expected.sum(axis=1), expected.sum(axis=0), float(p.sum())
     )
     p_fit, expected_fit = _expectations(fit.x, fit.y, fit.lam)

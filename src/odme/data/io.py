@@ -11,7 +11,12 @@ import pyarrow as pa
 import pyarrow.csv as pa_csv
 import pyarrow.parquet as pq
 
-from odme.data.frames import EdgeTable, normalize_edges
+from odme.data.frames import (
+    EdgeTable,
+    ProbabilityTable,
+    normalize_edges,
+    normalize_probabilities,
+)
 
 CSV_SUFFIXES = {".csv"}
 TSV_SUFFIXES = {".tsv", ".tab"}
@@ -50,6 +55,31 @@ def read_edges(path: Path | str) -> EdgeTable:
         return _read_pajek(edge_path)
     msg = f"unsupported edge file format: {suffix or '<none>'}"
     raise ValueError(msg)
+
+
+def read_probabilities(path: Path | str) -> ProbabilityTable:
+    """Read a sparse custom p_ij table with source, target, probability columns."""
+    probability_path = Path(path)
+    suffix = probability_path.suffix.lower()
+    if suffix in CSV_SUFFIXES:
+        table = pa_csv.read_csv(probability_path)
+    elif suffix in TSV_SUFFIXES:
+        table = pa_csv.read_csv(
+            probability_path, parse_options=pa_csv.ParseOptions(delimiter="\t")
+        )
+    elif suffix in PARQUET_SUFFIXES:
+        table = pq.read_table(probability_path)
+    elif suffix in IPC_SUFFIXES:
+        with pa.OSFile(str(probability_path), "rb") as f:
+            table = pa.ipc.open_file(f).read_all()
+    else:
+        msg = f"unsupported probability file format: {suffix or '<none>'}"
+        raise ValueError(msg)
+    return normalize_probabilities(
+        source=table.column("source").to_numpy(),
+        target=table.column("target").to_numpy(),
+        probability=table.column("probability").to_numpy(),
+    )
 
 
 def write_edges(edges: EdgeTable, path: Path | str) -> None:
@@ -208,4 +238,4 @@ def _parse_positive_integer(value: str) -> int:
     return int(stripped)
 
 
-__all__ = ["read_edges", "write_edges"]
+__all__ = ["read_edges", "read_probabilities", "write_edges"]

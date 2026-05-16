@@ -6,7 +6,7 @@ from odme.data.frames import (
     normalize_edges,
     normalize_probabilities,
 )
-from odme.data.io import read_edges, write_edges
+from odme.data.io import read_edges, read_probabilities, write_edges
 
 __all__ = [
     "EdgeTable",
@@ -14,5 +14,6 @@ __all__ = [
     "normalize_edges",
     "normalize_probabilities",
     "read_edges",
+    "read_probabilities",
     "write_edges",
 ]

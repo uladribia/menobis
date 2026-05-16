@@ -14,15 +14,17 @@ Data goes to stdout unless `--output` is set.
 | Command | Model | Output columns |
 |---------|-------|----------------|
 | `strengths` | Fixed-strength multi-edge | `node,x,y` |
-| `degrees` | Fixed-degree binary | `node,x,y` |
-| `strength-degree-zip` | Exact ME fixed-strength-degree ZIP | `node,x,y,z,w` |
+| `degrees` | Fixed-degree binary occupation | `node,x,y` |
+| `strength-degree-me` | Exact ME fixed-strength + degree | `node,x,y,z,w` |
+| `strength-edges-me` | Exact ME fixed-strength + total edges | `node,x,y,lambda` |
 
 ## Examples
 
 ```bash
 odme fit strengths edges.csv --output strength-fit.csv
 odme fit degrees edges.csv --json
-odme fit strength-degree-zip edges.csv --output zip-fit.csv
+odme fit strength-degree-me edges.csv --output strength-degree-fit.csv
+odme fit strength-edges-me edges.csv --target-edges 500 --json
 ```
 
 ## Options
@@ -32,4 +34,5 @@ odme fit strength-degree-zip edges.csv --output zip-fit.csv
 | `--output`, `-o` | all | Write data to a file instead of stdout |
 | `--json` | all | Emit JSON instead of CSV |
 | `--quiet` | all | Suppress progress messages |
-| `--self-loops/--no-self-loops` | `degrees`, `strength-degree-zip` | Include or exclude diagonal constraints |
+| `--self-loops/--no-self-loops` | `degrees`, `strength-degree-me`, `strength-edges-me` | Include or exclude diagonal constraints |
+| `--target-edges` | `strength-edges-me` | Expected binary edge count; defaults to observed count |

@@ -4,7 +4,7 @@ import numpy as np
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from odme.models import fit_fixed_degree_binary, sample_fixed_degree_zip
+from odme.models import fit_fixed_degree_binary, sample_fixed_degree_events_me
 
 
 def _probability(x: np.ndarray, y: np.ndarray) -> np.ndarray:
@@ -38,12 +38,12 @@ def test_fixed_degree_equations_and_total_weight_expectation(
     np.testing.assert_allclose((p_fit * average_existing_weight).sum(), total_events)
 
 
-def test_fixed_degree_zip_sample_is_reproducible() -> None:
+def test_fixed_degree_events_me_sample_is_reproducible() -> None:
     k_out = np.array([0.8, 1.2, 1.0], dtype=np.float64)
     k_in = np.array([1.1, 0.9, 1.0], dtype=np.float64)
     fit = fit_fixed_degree_binary(k_out, k_in)
-    first = sample_fixed_degree_zip(fit, total_events=100, seed=42)
-    second = sample_fixed_degree_zip(fit, total_events=100, seed=42)
+    first = sample_fixed_degree_events_me(fit, total_events=100, seed=42)
+    second = sample_fixed_degree_events_me(fit, total_events=100, seed=42)
 
     np.testing.assert_array_equal(first.source, second.source)
     np.testing.assert_array_equal(first.target, second.target)

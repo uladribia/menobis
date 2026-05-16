@@ -15,10 +15,10 @@ fixed degree, fixed strength + total edges, fixed strength + degree, and custom
 | Model | Constraint | Equation | Python API |
 |-------|------------|----------|------------|
 | Fixed-strength ME | `s_out`, `s_in` | `E[t_ij] = x_i y_j` | `fit_fixed_strength_me` |
-| Fixed-degree ME | `k_out`, `k_in`, `T` | `E[t_ij] = T p_ij / <E>` | `sample_fixed_degree_zip` |
-| Strength + edges ME | `s_out`, `s_in`, `E` | thesis Case 3 | `fit_strength_edges_zip` |
-| Strength + degree ME | `s_out`, `s_in`, `k_out`, `k_in` | thesis Case 4 | `fit_strength_degree_zip` |
-| Custom `p_ij` ME | `p_ij`, `T` | `E[t_ij] = T p_ij` | `sample_custom_pij_*` |
+| Fixed-degree ME | `k_out`, `k_in`, `T` | `E[t_ij] = T p_ij / <E>` | `sample_fixed_degree_events_me` |
+| Strength + edges ME | `s_out`, `s_in`, `E` | thesis Case 3 | `fit_strength_edges_me` |
+| Strength + degree ME | `s_out`, `s_in`, `k_out`, `k_in` | thesis Case 4 | `fit_strength_degree_me` |
+| Custom `p_ij` ME | `p_ij`, `T` | `E[t_ij] = T p_ij` | `sample_custom_pij_events_*` |
 
 ## Invariant
 
@@ -54,7 +54,7 @@ E[t_{ij}] = \frac{T}{\langle E \rangle}p_{ij}, \quad
 
 ```python
 fit = fit_fixed_degree_binary(k_out, k_in)
-sample = sample_fixed_degree_zip(fit, total_events=10_000, seed=42)
+sample = sample_fixed_degree_events_me(fit, total_events=10_000, seed=42)
 ```
 
 ## Fixed strength + total edges ME
@@ -68,7 +68,7 @@ E[t_{ij}] =
 \]
 
 ```python
-fit = fit_strength_edges_zip(s_out, s_in, target_edges=500.0)
+fit = fit_strength_edges_me(s_out, s_in, target_edges=500.0)
 ```
 
 ## Fixed strength + degree ME
@@ -90,8 +90,8 @@ P(t_{ij}>0) =
 \]
 
 ```python
-fit = fit_strength_degree_zip(s_out, s_in, k_out, k_in)
-sample = sample_strength_degree_zip(fit, seed=42)
+fit = fit_strength_degree_me(s_out, s_in, k_out, k_in)
+sample = sample_strength_degree_me(fit, seed=42)
 ```
 
 ## Custom `p_ij` ME
@@ -104,8 +104,8 @@ E[t_{ij}] = T p_{ij}.
 
 ```python
 probabilities = normalize_probabilities(source, target, p)
-sample = sample_custom_pij_multinomial(probabilities, total_events=T, seed=42)
-sample = sample_custom_pij_poisson(probabilities, total_events=T, seed=42)
+sample = sample_custom_pij_events_multinomial(probabilities, total_events=T, seed=42)
+sample = sample_custom_pij_events_poisson(probabilities, total_events=T, seed=42)
 ```
 
 ## Sampler variants
@@ -113,6 +113,6 @@ sample = sample_custom_pij_poisson(probabilities, total_events=T, seed=42)
 | Constraint | Canonical | Grand-canonical | Alternative GC |
 |------------|-----------|-----------------|----------------|
 | Fixed strength ME | `sample_multinomial` | `sample_poisson` | `sample_poisson_multinomial` |
-| Strength + edges ME | — | `sample_strength_edges_zip` | — |
-| Strength + degree ME | — | `sample_strength_degree_zip` | — |
-| Fixed degree ME | — | `sample_fixed_degree_zip` | — |
+| Strength + edges ME | — | `sample_strength_edges_me` | — |
+| Strength + degree ME | — | `sample_strength_degree_me` | — |
+| Fixed degree ME | — | `sample_fixed_degree_events_me` | — |

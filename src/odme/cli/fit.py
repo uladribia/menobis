@@ -14,7 +14,8 @@ from odme.data.io import read_edges
 from odme.models import (
     fit_fixed_degree_binary,
     fit_fixed_strength_me,
-    fit_strength_degree_zip,
+    fit_strength_degree_me,
+    fit_strength_edges_me,
 )
 
 app = Typer(no_args_is_help=True)
@@ -94,8 +95,8 @@ def degrees(
         typer.echo(f"Wrote degree multipliers to {dest}", err=True)
 
 
-@app.command("strength-degree-zip")
-def strength_degree_zip(
+@app.command("strength-degree-me")
+def strength_degree_me(
     input_path: Path,
     output: Annotated[
         Path | None, Option("--output", "-o", help="Output path. Stdout if omitted.")
@@ -114,7 +115,7 @@ def strength_degree_zip(
     edges = read_edges(input_path)
     s = directed_strengths(edges)
     k = directed_degrees(edges)
-    result = fit_strength_degree_zip(
+    result = fit_strength_degree_me(
         s.out.astype(np.float64),
         s.incoming.astype(np.float64),
         k.out.astype(np.float64),
@@ -156,7 +157,56 @@ def strength_degree_zip(
 
     if not effective_quiet:
         dest = str(output) if output else "stdout"
-        typer.echo(f"Wrote strength-degree ZIP multipliers to {dest}", err=True)
+        typer.echo(f"Wrote strength-degree ME multipliers to {dest}", err=True)
+
+
+@app.command("strength-edges-me")
+def strength_edges_me(
+    input_path: Path,
+    target_edges: Annotated[
+        float | None,
+        Option(
+            "--target-edges", help="Expected binary edge count. Defaults to observed."
+        ),
+    ] = None,
+    output: Annotated[
+        Path | None, Option("--output", "-o", help="Output path. Stdout if omitted.")
+    ] = None,
+    output_json: Annotated[bool, Option("--json", help="Output as JSON.")] = False,
+    quiet: Annotated[
+        bool, Option("--quiet", help="Suppress progress messages.")
+    ] = False,
+    self_loops: Annotated[
+        bool,
+        Option("--self-loops/--no-self-loops", help="Whether model self loops."),
+    ] = True,
+) -> None:
+    """Fit the fixed-strength-and-edge-count ME model."""
+    effective_quiet = quiet or output_json
+    edges = read_edges(input_path)
+    s = directed_strengths(edges)
+    result = fit_strength_edges_me(
+        s.out.astype(np.float64),
+        s.incoming.astype(np.float64),
+        float(edges.num_edges if target_edges is None else target_edges),
+        self_loops=self_loops,
+    )
+
+    if output_json:
+        data = [
+            {"node": int(n), "x": float(x), "y": float(y), "lambda": result.lam}
+            for n, x, y in zip(result.node, result.x, result.y, strict=True)
+        ]
+        _write_output(json.dumps(data, indent=2), output)
+    else:
+        lines = ["node,x,y,lambda"]
+        for n, x, y in zip(result.node, result.x, result.y, strict=True):
+            lines.append(f"{n},{x},{y},{result.lam}")
+        _write_output("\n".join(lines) + "\n", output)
+
+    if not effective_quiet:
+        dest = str(output) if output else "stdout"
+        typer.echo(f"Wrote strength-edges ME multipliers to {dest}", err=True)
 
 
 def _write_output(content: str, path: Path | None) -> None:

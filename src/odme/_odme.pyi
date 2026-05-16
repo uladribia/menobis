@@ -95,7 +95,7 @@ def fit_balance_no_self_loops(
 ) -> tuple[list[float], list[float], bool, int]: ...
 
 
-def sample_custom_pij_poisson(
+def sample_custom_pij_events_poisson(
     sources: list[int],
     targets: list[int],
     probabilities: list[float],
@@ -104,7 +104,7 @@ def sample_custom_pij_poisson(
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
-def sample_custom_pij_multinomial(
+def sample_custom_pij_events_multinomial(
     sources: list[int],
     targets: list[int],
     probabilities: list[float],
@@ -121,7 +121,7 @@ def sample_poisson_multinomial(
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
-def sample_strength_edges_zip(
+def sample_strength_edges_me(
     x: list[float],
     y: list[float],
     lam: float,
@@ -138,7 +138,7 @@ def sample_poisson(
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
-def sample_fixed_degree_zip(
+def sample_fixed_degree_events_me(
     x: list[float],
     y: list[float],
     total_events: int,
@@ -147,7 +147,7 @@ def sample_fixed_degree_zip(
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
-def sample_strength_degree_zip(
+def sample_strength_degree_me(
     degree_x: list[float],
     degree_y: list[float],
     excess_x: list[float],

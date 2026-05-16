@@ -7,14 +7,14 @@ from odme.data.frames import EdgeTable
 from odme.models import (
     fit_fixed_degree_binary,
     fit_fixed_strength_me,
-    fit_strength_degree_zip,
-    fit_strength_edges_zip,
-    sample_fixed_degree_zip,
+    fit_strength_degree_me,
+    fit_strength_edges_me,
+    sample_fixed_degree_events_me,
     sample_multinomial,
     sample_poisson,
     sample_poisson_multinomial,
-    sample_strength_degree_zip,
-    sample_strength_edges_zip,
+    sample_strength_degree_me,
+    sample_strength_edges_me,
 )
 
 
@@ -83,7 +83,7 @@ def test_fixed_strength_me_ensembles_match_observed_constraints() -> None:
 
 
 def test_fixed_degree_total_events_ensemble_matches_degrees_and_trips() -> None:
-    """Fixed-degree ME ZIP samples recover degrees and total trips in mean."""
+    """Fixed-degree ME ME samples recover degrees and total trips in mean."""
     edges = _pareto_like_network()
     degrees = directed_degrees(edges)
     repetitions = 400
@@ -94,7 +94,7 @@ def test_fixed_degree_total_events_ensemble_matches_degrees_and_trips() -> None:
     sampled_degrees: list[np.ndarray] = []
     totals = []
     for seed in range(repetitions):
-        sample = sample_fixed_degree_zip(
+        sample = sample_fixed_degree_events_me(
             fit, total_events=edges.total_events, seed=seed
         )
         sampled_degrees.append(directed_degrees(sample).out.astype(float))
@@ -106,13 +106,13 @@ def test_fixed_degree_total_events_ensemble_matches_degrees_and_trips() -> None:
     assert float(np.std(totals, ddof=1)) > 0.0
 
 
-def test_strength_degree_zip_ensemble_matches_strengths_and_degrees() -> None:
-    """Exact ME strength-degree ZIP samples recover both constraints in mean."""
+def test_strength_degree_me_ensemble_matches_strengths_and_degrees() -> None:
+    """Exact ME strength-degree ME samples recover both constraints in mean."""
     edges = _pareto_like_network()
     strengths = directed_strengths(edges)
     degrees = directed_degrees(edges)
     repetitions = 500
-    fit = fit_strength_degree_zip(
+    fit = fit_strength_degree_me(
         strengths.out.astype(float),
         strengths.incoming.astype(float),
         degrees.out.astype(float),
@@ -123,7 +123,7 @@ def test_strength_degree_zip_ensemble_matches_strengths_and_degrees() -> None:
     sampled_strengths: list[np.ndarray] = []
     sampled_degrees: list[np.ndarray] = []
     for seed in range(repetitions):
-        sample = sample_strength_degree_zip(fit, seed=seed)
+        sample = sample_strength_degree_me(fit, seed=seed)
         sampled_strengths.append(directed_strengths(sample).out.astype(float))
         sampled_degrees.append(directed_degrees(sample).out.astype(float))
 
@@ -133,13 +133,13 @@ def test_strength_degree_zip_ensemble_matches_strengths_and_degrees() -> None:
     _assert_mean_close(mean_k, std_k, degrees.out.astype(float), repetitions)
 
 
-def test_strength_edges_zip_ensemble_matches_strengths_and_binary_edges() -> None:
-    """Fixed-strength+edge-count ZIP samples recover constraints in mean."""
+def test_strength_edges_me_ensemble_matches_strengths_and_binary_edges() -> None:
+    """Fixed-strength+edge-count ME samples recover constraints in mean."""
     edges = _pareto_like_network()
     strengths = directed_strengths(edges)
     target_edges = float(edges.num_edges)
     repetitions = 500
-    fit = fit_strength_edges_zip(
+    fit = fit_strength_edges_me(
         strengths.out.astype(float),
         strengths.incoming.astype(float),
         target_edges,
@@ -149,7 +149,7 @@ def test_strength_edges_zip_ensemble_matches_strengths_and_binary_edges() -> Non
     sampled_strengths: list[np.ndarray] = []
     edge_counts = []
     for seed in range(repetitions):
-        sample = sample_strength_edges_zip(fit, seed=seed)
+        sample = sample_strength_edges_me(fit, seed=seed)
         sampled_strengths.append(directed_strengths(sample).out.astype(float))
         edge_counts.append(sample.num_edges)
 

@@ -10,15 +10,48 @@ import typer
 from typer import Option, Typer
 
 from odme.analysis import directed_degrees, directed_strengths
-from odme.data.io import read_edges
+from odme.data.frames import EdgeTable
+from odme.data.io import read_edges, read_probabilities
 from odme.models import (
+    fit_fixed_degree_binary,
     fit_fixed_strength_me,
-    fit_strength_degree_zip,
+    fit_strength_degree_me,
+    fit_strength_edges_me,
+    sample_custom_pij_events_multinomial,
+    sample_custom_pij_events_poisson,
+    sample_fixed_degree_events_me,
+    sample_multinomial,
     sample_poisson,
-    sample_strength_degree_zip,
+    sample_poisson_multinomial,
+    sample_strength_degree_me,
+    sample_strength_edges_me,
 )
 
 app = Typer(no_args_is_help=True)
+
+
+def _emit_edges(sample: EdgeTable, output: Path | None, output_json: bool) -> None:
+    if output_json:
+        data = [
+            {"source": int(s), "target": int(t), "weight": int(w)}
+            for s, t, w in zip(sample.source, sample.target, sample.weight, strict=True)
+        ]
+        _write_output(json.dumps(data, indent=2), output)
+    else:
+        lines = ["source,target,weight"]
+        for s_val, t_val, w_val in zip(
+            sample.source, sample.target, sample.weight, strict=True
+        ):
+            lines.append(f"{s_val},{t_val},{w_val}")
+        _write_output("\n".join(lines) + "\n", output)
+
+
+def _progress(
+    message: str, output: Path | None, quiet: bool, output_json: bool
+) -> None:
+    if not (quiet or output_json):
+        dest = str(output) if output else "stdout"
+        typer.echo(f"{message} to {dest}", err=True)
 
 
 @app.command()
@@ -34,33 +67,89 @@ def poisson(
     ] = False,
 ) -> None:
     """Generate a Poisson sample from a fixed-strength ME model."""
-    effective_quiet = quiet or output_json
     edges = read_edges(input_path)
     s = directed_strengths(edges)
     fit = fit_fixed_strength_me(s.out, s.incoming)
-    sample = sample_poisson(fit.x, fit.y, seed=seed)
-
-    if output_json:
-        data = [
-            {"source": int(s), "target": int(t), "weight": int(w)}
-            for s, t, w in zip(sample.source, sample.target, sample.weight, strict=True)
-        ]
-        _write_output(json.dumps(data, indent=2), output)
-    else:
-        lines = ["source,target,weight"]
-        for s_val, t_val, w_val in zip(
-            sample.source, sample.target, sample.weight, strict=True
-        ):
-            lines.append(f"{s_val},{t_val},{w_val}")
-        _write_output("\n".join(lines) + "\n", output)
-
-    if not effective_quiet:
-        dest = str(output) if output else "stdout"
-        typer.echo(f"Wrote Poisson sample to {dest}", err=True)
+    _emit_edges(sample_poisson(fit.x, fit.y, seed=seed), output, output_json)
+    _progress("Wrote Poisson sample", output, quiet, output_json)
 
 
-@app.command("strength-degree-zip")
-def strength_degree_zip(
+@app.command()
+def multinomial(
+    input_path: Path,
+    total_events: Annotated[int, Option("--total-events", help="Fixed total events.")],
+    output: Annotated[
+        Path | None, Option("--output", "-o", help="Output path. Stdout if omitted.")
+    ] = None,
+    seed: Annotated[int, Option("--seed", "-s", help="Random seed.")] = 0,
+    output_json: Annotated[bool, Option("--json", help="Output as JSON.")] = False,
+    quiet: Annotated[
+        bool, Option("--quiet", help="Suppress progress messages.")
+    ] = False,
+) -> None:
+    """Generate a multinomial fixed-strength ME sample."""
+    edges = read_edges(input_path)
+    s = directed_strengths(edges)
+    fit = fit_fixed_strength_me(s.out, s.incoming)
+    sample = sample_multinomial(fit.x, fit.y, total_events=total_events, seed=seed)
+    _emit_edges(sample, output, output_json)
+    _progress("Wrote multinomial sample", output, quiet, output_json)
+
+
+@app.command("poisson-multinomial")
+def poisson_multinomial(
+    input_path: Path,
+    output: Annotated[
+        Path | None, Option("--output", "-o", help="Output path. Stdout if omitted.")
+    ] = None,
+    seed: Annotated[int, Option("--seed", "-s", help="Random seed.")] = 0,
+    output_json: Annotated[bool, Option("--json", help="Output as JSON.")] = False,
+    quiet: Annotated[
+        bool, Option("--quiet", help="Suppress progress messages.")
+    ] = False,
+) -> None:
+    """Generate a Poisson-total multinomial fixed-strength ME sample."""
+    edges = read_edges(input_path)
+    s = directed_strengths(edges)
+    fit = fit_fixed_strength_me(s.out, s.incoming)
+    _emit_edges(
+        sample_poisson_multinomial(fit.x, fit.y, seed=seed), output, output_json
+    )
+    _progress("Wrote Poisson-multinomial sample", output, quiet, output_json)
+
+
+@app.command("degree-events-me")
+def degree_events_me(
+    input_path: Path,
+    total_events: Annotated[int, Option("--total-events", help="Expected events T.")],
+    output: Annotated[
+        Path | None, Option("--output", "-o", help="Output path. Stdout if omitted.")
+    ] = None,
+    seed: Annotated[int, Option("--seed", "-s", help="Random seed.")] = 0,
+    output_json: Annotated[bool, Option("--json", help="Output as JSON.")] = False,
+    quiet: Annotated[
+        bool, Option("--quiet", help="Suppress progress messages.")
+    ] = False,
+    self_loops: Annotated[
+        bool,
+        Option("--self-loops/--no-self-loops", help="Whether model self loops."),
+    ] = True,
+) -> None:
+    """Generate a fixed-degree ME sample with expected total events T."""
+    edges = read_edges(input_path)
+    k = directed_degrees(edges)
+    fit = fit_fixed_degree_binary(
+        k.out.astype(np.float64), k.incoming.astype(np.float64), self_loops=self_loops
+    )
+    sample = sample_fixed_degree_events_me(
+        fit, total_events=total_events, seed=seed, self_loops=self_loops
+    )
+    _emit_edges(sample, output, output_json)
+    _progress("Wrote fixed-degree events ME sample", output, quiet, output_json)
+
+
+@app.command("strength-degree-me")
+def strength_degree_me(
     input_path: Path,
     output: Annotated[
         Path | None, Option("--output", "-o", help="Output path. Stdout if omitted.")
@@ -75,37 +164,87 @@ def strength_degree_zip(
         Option("--self-loops/--no-self-loops", help="Whether model self loops."),
     ] = True,
 ) -> None:
-    """Generate a sample from the fixed-strength-degree ZIP model."""
-    effective_quiet = quiet or output_json
+    """Generate a sample from the fixed-strength-degree ME model."""
     edges = read_edges(input_path)
     s = directed_strengths(edges)
     k = directed_degrees(edges)
-    fit = fit_strength_degree_zip(
+    fit = fit_strength_degree_me(
         s.out.astype(np.float64),
         s.incoming.astype(np.float64),
         k.out.astype(np.float64),
         k.incoming.astype(np.float64),
         self_loops=self_loops,
     )
-    sample = sample_strength_degree_zip(fit, seed=seed)
+    _emit_edges(sample_strength_degree_me(fit, seed=seed), output, output_json)
+    _progress("Wrote strength-degree ME sample", output, quiet, output_json)
 
-    if output_json:
-        data = [
-            {"source": int(s), "target": int(t), "weight": int(w)}
-            for s, t, w in zip(sample.source, sample.target, sample.weight, strict=True)
-        ]
-        _write_output(json.dumps(data, indent=2), output)
+
+@app.command("strength-edges-me")
+def strength_edges_me(
+    input_path: Path,
+    target_edges: Annotated[
+        float | None,
+        Option(
+            "--target-edges", help="Expected binary edge count. Defaults to observed."
+        ),
+    ] = None,
+    output: Annotated[
+        Path | None, Option("--output", "-o", help="Output path. Stdout if omitted.")
+    ] = None,
+    seed: Annotated[int, Option("--seed", "-s", help="Random seed.")] = 0,
+    output_json: Annotated[bool, Option("--json", help="Output as JSON.")] = False,
+    quiet: Annotated[
+        bool, Option("--quiet", help="Suppress progress messages.")
+    ] = False,
+    self_loops: Annotated[
+        bool,
+        Option("--self-loops/--no-self-loops", help="Whether model self loops."),
+    ] = True,
+) -> None:
+    """Generate a sample from the fixed-strength-and-edge-count ME model."""
+    edges = read_edges(input_path)
+    s = directed_strengths(edges)
+    fit = fit_strength_edges_me(
+        s.out.astype(np.float64),
+        s.incoming.astype(np.float64),
+        float(edges.num_edges if target_edges is None else target_edges),
+        self_loops=self_loops,
+    )
+    _emit_edges(sample_strength_edges_me(fit, seed=seed), output, output_json)
+    _progress("Wrote strength-edges ME sample", output, quiet, output_json)
+
+
+@app.command("custom-pij")
+def custom_pij(
+    probabilities_path: Path,
+    total_events: Annotated[int, Option("--total-events", help="Expected events T.")],
+    ensemble: Annotated[
+        str, Option("--ensemble", help="Either 'poisson' or 'multinomial'.")
+    ] = "poisson",
+    output: Annotated[
+        Path | None, Option("--output", "-o", help="Output path. Stdout if omitted.")
+    ] = None,
+    seed: Annotated[int, Option("--seed", "-s", help="Random seed.")] = 0,
+    output_json: Annotated[bool, Option("--json", help="Output as JSON.")] = False,
+    quiet: Annotated[
+        bool, Option("--quiet", help="Suppress progress messages.")
+    ] = False,
+) -> None:
+    """Generate a custom p_ij ME sample from a probability table."""
+    probabilities = read_probabilities(probabilities_path)
+    if ensemble == "poisson":
+        sample = sample_custom_pij_events_poisson(
+            probabilities, total_events=total_events, seed=seed
+        )
+    elif ensemble == "multinomial":
+        sample = sample_custom_pij_events_multinomial(
+            probabilities, total_events=total_events, seed=seed
+        )
     else:
-        lines = ["source,target,weight"]
-        for s_val, t_val, w_val in zip(
-            sample.source, sample.target, sample.weight, strict=True
-        ):
-            lines.append(f"{s_val},{t_val},{w_val}")
-        _write_output("\n".join(lines) + "\n", output)
-
-    if not effective_quiet:
-        dest = str(output) if output else "stdout"
-        typer.echo(f"Wrote strength-degree ZIP sample to {dest}", err=True)
+        msg = "--ensemble must be 'poisson' or 'multinomial'"
+        raise typer.BadParameter(msg)
+    _emit_edges(sample, output, output_json)
+    _progress("Wrote custom p_ij ME sample", output, quiet, output_json)
 
 
 def _write_output(content: str, path: Path | None) -> None:

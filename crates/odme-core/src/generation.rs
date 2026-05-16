@@ -15,7 +15,7 @@ pub struct SampledEdges {
 
 /// Sample custom p_ij grand-canonical Poisson graph with E[t_ij] = T p_ij.
 #[must_use]
-pub fn sample_custom_pij_poisson(
+pub fn sample_custom_pij_events_poisson(
     sources: &[u64],
     targets: &[u64],
     probabilities: &[f64],
@@ -50,7 +50,7 @@ pub fn sample_custom_pij_poisson(
 
 /// Sample custom p_ij canonical multinomial graph with fixed T.
 #[must_use]
-pub fn sample_custom_pij_multinomial(
+pub fn sample_custom_pij_events_multinomial(
     sources: &[u64],
     targets: &[u64],
     probabilities: &[f64],
@@ -149,7 +149,7 @@ fn sample_zero_truncated_poisson(rate: f64, rng: &mut StdRng) -> u64 {
 
 /// Sample original fixed-degree ME weighted model.
 #[must_use]
-pub fn sample_fixed_degree_zip(
+pub fn sample_fixed_degree_events_me(
     x: &[f64],
     y: &[f64],
     total_events: u64,
@@ -202,7 +202,7 @@ pub fn sample_fixed_degree_zip(
 
 /// Sample from the exact ME fixed-strength-degree ZIP model.
 #[must_use]
-pub fn sample_strength_degree_zip(
+pub fn sample_strength_degree_me(
     x: &[f64],
     y: &[f64],
     z: &[f64],
@@ -278,7 +278,7 @@ pub fn sample_poisson_multinomial(
 
 /// Sample exact ME fixed-strength-and-edge-count ZIP model.
 #[must_use]
-pub fn sample_strength_edges_zip(
+pub fn sample_strength_edges_me(
     x: &[f64],
     y: &[f64],
     lam: f64,
@@ -420,7 +420,7 @@ fn multinomial_sample(rates: &[f64], total: u64, rng: &mut StdRng) -> Vec<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{sample_multinomial, sample_poisson, sample_strength_degree_zip};
+    use super::{sample_multinomial, sample_poisson, sample_strength_degree_me};
 
     #[test]
     fn poisson_is_reproducible() {
@@ -449,8 +449,8 @@ mod tests {
         let dy = vec![1.5, 0.5];
         let ex = vec![10.0, 20.0];
         let ey = vec![30.0, 40.0];
-        let a = sample_strength_degree_zip(&dx, &dy, &ex, &ey, true, 42);
-        let b = sample_strength_degree_zip(&dx, &dy, &ex, &ey, true, 42);
+        let a = sample_strength_degree_me(&dx, &dy, &ex, &ey, true, 42);
+        let b = sample_strength_degree_me(&dx, &dy, &ex, &ey, true, 42);
         assert_eq!(a.sources, b.sources);
         assert_eq!(a.targets, b.targets);
         assert_eq!(a.weights, b.weights);

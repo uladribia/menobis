@@ -9,13 +9,13 @@ use odme_core::fitting::{
     balance_strength_edges_me, balance_weighted_factors,
 };
 use odme_core::generation::{
-    sample_custom_pij_multinomial as core_sample_custom_pij_multinomial,
-    sample_custom_pij_poisson as core_sample_custom_pij_poisson,
-    sample_fixed_degree_zip as core_sample_fixed_degree_zip,
+    sample_custom_pij_events_multinomial as core_sample_custom_pij_events_multinomial,
+    sample_custom_pij_events_poisson as core_sample_custom_pij_events_poisson,
+    sample_fixed_degree_events_me as core_sample_fixed_degree_events_me,
     sample_multinomial as core_sample_multinomial, sample_poisson as core_sample_poisson,
     sample_poisson_multinomial as core_sample_poisson_multinomial,
-    sample_strength_degree_zip as core_sample_strength_degree_zip,
-    sample_strength_edges_zip as core_sample_strength_edges_zip,
+    sample_strength_degree_me as core_sample_strength_degree_me,
+    sample_strength_edges_me as core_sample_strength_edges_me,
 };
 use odme_core::graph::{
     directed_degrees as core_directed_degrees, directed_strengths as core_directed_strengths,
@@ -285,7 +285,7 @@ fn fit_balance_no_self_loops(
 }
 
 #[pyfunction]
-fn sample_custom_pij_poisson(
+fn sample_custom_pij_events_poisson(
     sources: Vec<u64>,
     targets: Vec<u64>,
     probabilities: Vec<f64>,
@@ -297,13 +297,18 @@ fn sample_custom_pij_poisson(
             "custom p_ij arrays must have same length",
         ));
     }
-    let sample =
-        core_sample_custom_pij_poisson(&sources, &targets, &probabilities, total_events, seed);
+    let sample = core_sample_custom_pij_events_poisson(
+        &sources,
+        &targets,
+        &probabilities,
+        total_events,
+        seed,
+    );
     Ok((sample.sources, sample.targets, sample.weights))
 }
 
 #[pyfunction]
-fn sample_custom_pij_multinomial(
+fn sample_custom_pij_events_multinomial(
     sources: Vec<u64>,
     targets: Vec<u64>,
     probabilities: Vec<f64>,
@@ -315,8 +320,13 @@ fn sample_custom_pij_multinomial(
             "custom p_ij arrays must have same length",
         ));
     }
-    let sample =
-        core_sample_custom_pij_multinomial(&sources, &targets, &probabilities, total_events, seed);
+    let sample = core_sample_custom_pij_events_multinomial(
+        &sources,
+        &targets,
+        &probabilities,
+        total_events,
+        seed,
+    );
     Ok((sample.sources, sample.targets, sample.weights))
 }
 
@@ -335,7 +345,7 @@ fn sample_poisson_multinomial(
 }
 
 #[pyfunction]
-fn sample_strength_edges_zip(
+fn sample_strength_edges_me(
     x: Vec<f64>,
     y: Vec<f64>,
     lam: f64,
@@ -345,7 +355,7 @@ fn sample_strength_edges_zip(
     if x.len() != y.len() {
         return Err(PyValueError::new_err("x and y must have same length"));
     }
-    let sample = core_sample_strength_edges_zip(&x, &y, lam, self_loops, seed);
+    let sample = core_sample_strength_edges_me(&x, &y, lam, self_loops, seed);
     Ok((sample.sources, sample.targets, sample.weights))
 }
 
@@ -361,7 +371,7 @@ fn sample_poisson(
 }
 
 #[pyfunction]
-fn sample_fixed_degree_zip(
+fn sample_fixed_degree_events_me(
     x: Vec<f64>,
     y: Vec<f64>,
     total_events: u64,
@@ -371,12 +381,12 @@ fn sample_fixed_degree_zip(
     if x.len() != y.len() {
         return Err(PyValueError::new_err("x and y must have same length"));
     }
-    let sample = core_sample_fixed_degree_zip(&x, &y, total_events, self_loops, seed);
+    let sample = core_sample_fixed_degree_events_me(&x, &y, total_events, self_loops, seed);
     Ok((sample.sources, sample.targets, sample.weights))
 }
 
 #[pyfunction]
-fn sample_strength_degree_zip(
+fn sample_strength_degree_me(
     degree_x: Vec<f64>,
     degree_y: Vec<f64>,
     excess_x: Vec<f64>,
@@ -392,7 +402,7 @@ fn sample_strength_degree_zip(
             "all multiplier arrays must have same length",
         ));
     }
-    let sample = core_sample_strength_degree_zip(
+    let sample = core_sample_strength_degree_me(
         &degree_x, &degree_y, &excess_x, &excess_y, self_loops, seed,
     );
     Ok((sample.sources, sample.targets, sample.weights))
@@ -444,13 +454,16 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(fit_strength_degree_me, module)?)?;
     module.add_function(wrap_pyfunction!(fit_weighted_factors, module)?)?;
     module.add_function(wrap_pyfunction!(fit_balance_no_self_loops, module)?)?;
-    module.add_function(wrap_pyfunction!(sample_custom_pij_poisson, module)?)?;
-    module.add_function(wrap_pyfunction!(sample_custom_pij_multinomial, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_custom_pij_events_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        sample_custom_pij_events_multinomial,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(sample_poisson_multinomial, module)?)?;
-    module.add_function(wrap_pyfunction!(sample_strength_edges_zip, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_edges_me, module)?)?;
     module.add_function(wrap_pyfunction!(sample_poisson, module)?)?;
-    module.add_function(wrap_pyfunction!(sample_fixed_degree_zip, module)?)?;
-    module.add_function(wrap_pyfunction!(sample_strength_degree_zip, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_fixed_degree_events_me, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_degree_me, module)?)?;
     module.add_function(wrap_pyfunction!(sample_multinomial, module)?)?;
     module.add_function(wrap_pyfunction!(clustering_coefficients, module)?)?;
     module.add_function(wrap_pyfunction!(weighted_clustering_coefficients, module)?)?;
