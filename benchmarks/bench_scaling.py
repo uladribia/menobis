@@ -78,25 +78,26 @@ def benchmark_fitting(edges: EdgeTable) -> dict[str, float]:
     """Benchmark fitting operations."""
     s = directed_strengths(edges)
     k = directed_degrees(edges)
+    n = int(max(edges.source.max(), edges.target.max())) + 1
     results = {}
     results["fit_fixed_strength_me"] = _time_fn(
         fit_fixed_strength_me, s.out, s.incoming
     )
-    results["fit_fixed_degree_binary"] = _time_fn(
-        fit_fixed_degree_binary,
-        k.out.astype(float),
-        k.incoming.astype(float),
-    )
+    if n <= 1000:
+        results["fit_fixed_degree_binary"] = _time_fn(
+            fit_fixed_degree_binary,
+            k.out.astype(float),
+            k.incoming.astype(float),
+        )
     # Only run expensive fitters for small N.
-    n = int(max(edges.source.max(), edges.target.max())) + 1
-    if n <= 5000:
+    if n <= 1000:
         results["fit_strength_edges_me"] = _time_fn(
             fit_strength_edges_me,
             s.out.astype(float),
             s.incoming.astype(float),
             float(edges.num_edges),
         )
-    if n <= 500:
+    if n <= 100:
         results["fit_strength_degree_me"] = _time_fn(
             fit_strength_degree_me,
             s.out.astype(float),
@@ -104,7 +105,7 @@ def benchmark_fitting(edges: EdgeTable) -> dict[str, float]:
             k.out.astype(float),
             k.incoming.astype(float),
         )
-    if n <= 2000:
+    if n <= 1000:
         # Build cost matrix for strength-cost benchmark.
         rng = np.random.default_rng(99)
         positions = rng.uniform(0.0, 10.0, size=(n, 2))

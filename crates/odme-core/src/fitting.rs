@@ -231,6 +231,12 @@ pub fn balance_strength_degree_me(
     let n = strength_out.len();
     let total: f64 = strength_out.iter().sum();
     let sqrt_t = total.sqrt().max(1.0);
+    let k_avg = degree_out.iter().sum::<f64>() / n.max(1) as f64;
+    let n_eff = if self_loops {
+        n as f64
+    } else {
+        (n - 1).max(1) as f64
+    };
     let mut x: Vec<f64> = strength_out
         .iter()
         .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
@@ -239,8 +245,31 @@ pub fn balance_strength_degree_me(
         .iter()
         .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
         .collect();
-    let mut z = vec![0.5; n];
-    let mut w = vec![0.5; n];
+    let c_k = if k_avg < n_eff {
+        (k_avg / (n_eff - k_avg).max(0.01)).sqrt()
+    } else {
+        0.9
+    };
+    let mut z: Vec<f64> = degree_out
+        .iter()
+        .map(|&k| {
+            if k > 0.0 && k_avg > 0.0 {
+                k / k_avg * c_k
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let mut w: Vec<f64> = degree_in
+        .iter()
+        .map(|&k| {
+            if k > 0.0 && k_avg > 0.0 {
+                k / k_avg * c_k
+            } else {
+                0.0
+            }
+        })
+        .collect();
 
     for i in 0..n {
         if degree_out[i] <= 0.0 || strength_out[i] <= 0.0 {
@@ -502,6 +531,8 @@ pub fn balance_masked_strength_degree_me(
     let n = strength_out.len();
     let total: f64 = strength_out.iter().sum();
     let sqrt_t = total.sqrt().max(1.0);
+    let k_avg = degree_out.iter().sum::<f64>() / n.max(1) as f64;
+    let n_free = (0..n * n).filter(|&idx| !mask[idx]).count() as f64 / n.max(1) as f64;
     let mut x: Vec<f64> = strength_out
         .iter()
         .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
@@ -510,8 +541,31 @@ pub fn balance_masked_strength_degree_me(
         .iter()
         .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
         .collect();
-    let mut z = vec![0.5; n];
-    let mut w = vec![0.5; n];
+    let c_k = if k_avg < n_free {
+        (k_avg / (n_free - k_avg).max(0.01)).sqrt()
+    } else {
+        0.9
+    };
+    let mut z: Vec<f64> = degree_out
+        .iter()
+        .map(|&k| {
+            if k > 0.0 && k_avg > 0.0 {
+                k / k_avg * c_k
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let mut w: Vec<f64> = degree_in
+        .iter()
+        .map(|&k| {
+            if k > 0.0 && k_avg > 0.0 {
+                k / k_avg * c_k
+            } else {
+                0.0
+            }
+        })
+        .collect();
     for i in 0..n {
         if degree_out[i] <= 0.0 || strength_out[i] <= 0.0 {
             x[i] = 0.0;

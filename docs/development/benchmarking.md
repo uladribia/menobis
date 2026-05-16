@@ -6,14 +6,14 @@ description: Performance benchmarks and scaling characteristics.
 
 ## TL;DR
 
-All ODME operations scale smoothly to $N = 10{,}000$ nodes with
-${\sim}1{,}000{,}000$ total events. Analysis and generation complete in
-under 1 second. Fixed-strength fitting is instant (analytical).
+All ODME analysis and generation operations scale smoothly to $N = 10{,}000$
+nodes. Fixed-strength fitting is $O(N)$ analytical. Iterative fitters scale
+as $O(N^2)$ per iteration; degree-based fitters are practical to $N \approx 1000$.
 
 ## Scaling results
 
-Benchmarks run on a 14-core x86\_64 machine with 15 GB RAM, using
-Pareto-distributed strength sequences with average strength 100 per node.
+Benchmarks run on a 14-core x86\_64 machine with 15 GB RAM (release build),
+using Pareto-distributed strength sequences with average strength 100 per node.
 
 ### Time vs N (log-log)
 
@@ -23,62 +23,69 @@ Pareto-distributed strength sequences with average strength 100 per node.
 
 ![Benchmark table](../figures/benchmark_table.png)
 
-## Key observations
+## Analysis (Rust kernels)
 
-### Analysis (Rust kernels)
+All analysis operations are $O(E)$ single-pass Rust kernels:
 
-All analysis operations — strengths, degrees, Y2, $k_{nn}$, $s_{nn}$,
-weight distribution — are $O(E)$ single-pass Rust kernels. At
-$N = 10{,}000$ ($E \approx 888{,}000$ edges), they complete in **70 ms**.
+| Operation | N=1000 | N=10000 |
+|-----------|--------|---------|
+| `directed_strengths` | 4 ms | 71 ms |
+| `directed_degrees` | 4 ms | 70 ms |
+| `compute_all_stats` | 4 ms | 72 ms |
 
-### Fitting
+## Fitting
 
-| Model | Complexity | N=10000 time |
-|-------|-----------|--------------|
-| Fixed strength | $O(N)$ analytical | **0.2 ms** |
-| Fixed degree (binary) | $O(N^2 \cdot I)$ bisection | **209 s** |
-| Strength + edges | $O(N^2 \cdot I)$ IPF + outer search | tested to N=1000 |
-| Strength + degree | $O(N^2 \cdot I)$ 4-variable IPF | tested to N=200 |
+| Model | Method | Complexity | N=100 | N=1000 |
+|-------|--------|------------|-------|--------|
+| Fixed strength | Analytical | $O(N)$ | 0.1 ms | 0.2 ms |
+| Fixed degree | IPF balancing | $O(N^2 \cdot I)$ | 1 s | 0.6 s |
+| Strength + edges | IPF + bisection on $\lambda$ | $O(N^2 \cdot I \cdot 80)$ | 21 ms | 2.7 s |
+| Strength + cost | IPF + adaptive search on $\gamma$ | $O(N^2 \cdot I \cdot K)$ | 13 ms | 0.95 s |
+| Strength + degree | 4-variable IPF | $O(N^2 \cdot I)$ | 10.7 s | — |
 
-The fixed-strength model is the only one with an analytical solution.
-All iterative fitters scale as $O(N^2)$ per iteration due to pairwise
-summations. For large $N$, only the fixed-strength model is practical at
-$N = 10{,}000$.
+**Preconditioning**: all fitters use informed initial guesses derived from the
+homogeneous solution (e.g., $c = \sqrt{k_{avg} / (N - k_{avg})}$ for degree).
 
-### Generation (Rust kernels)
+**Convergence**: iterative fitters check both multiplier convergence and
+constraint satisfaction. The degree fitter may oscillate at small $N$ with
+heterogeneous sequences; constraints are satisfied but multipliers keep
+adjusting. This matches the original thesis code behavior.
 
-| Sampler | N=10000 time | Memory |
-|---------|-------------|--------|
-| Poisson | **0.9 s** | $O(E)$ sparse |
-| Multinomial | **2.5 s** | $O(E)$ sparse |
-| Microcanonical | **0.2 s** | $O(T)$ stubs |
+**Warm start**: the strength-cost fitter reuses $x, y$ from the previous
+$\gamma$ iteration as initial guess for the next.
+
+## Generation (Rust kernels)
+
+| Sampler | N=1000 | N=10000 | Memory |
+|---------|--------|---------|--------|
+| Poisson | 17 ms | 1.0 s | $O(E)$ sparse |
+| Multinomial | 34 ms | 2.8 s | $O(E)$ sparse |
+| Microcanonical | 13 ms | 0.2 s | $O(T)$ stubs |
 
 All samplers produce sparse edge lists, never dense $N \times N$ matrices.
-The microcanonical sampler is fastest because it avoids per-pair random
-number generation — it shuffles $T$ stubs instead.
+The microcanonical sampler is fastest because it shuffles $T$ stubs instead of
+generating per-pair random numbers.
 
 ## Memory
 
-ODME uses sparse edge-list representations throughout. Memory usage scales
-as $O(E + N)$, not $O(N^2)$. At $N = 10{,}000$:
-
-- Edge table: ${\sim}20$ MB (3 arrays of $888{,}000$ uint64)
-- Microcanonical stubs: ${\sim}8$ MB ($1{,}000{,}000$ uint64 stubs)
-- No dense matrices allocated during analysis or generation
+ODME uses sparse edge-list representations throughout. Memory scales as
+$O(E + N)$, not $O(N^2)$. Dense $N \times N$ matrices are only allocated
+inside fitters that require pairwise summations.
 
 ## Running benchmarks
 
 ```bash
 uv run maturin develop --release
 uv run python benchmarks/bench_scaling.py
+uv run python benchmarks/bench_quick.py
 uv run pytest tests/test_odme_benchmark.py -v
 ```
 
 ## Performance regression tests
 
-The file `tests/test_odme_benchmark.py` asserts that at $N = 10{,}000$:
+`tests/test_odme_benchmark.py` asserts at $N = 10{,}000$:
 
-- Analysis completes in < 1 second
-- Fixed-strength fitting completes in < 0.1 seconds
-- Poisson generation completes in < 5 seconds
-- Microcanonical generation completes in < 5 seconds
+- Analysis < 1 second
+- Fixed-strength fitting < 0.1 seconds
+- Poisson generation < 5 seconds
+- Microcanonical generation < 5 seconds
