@@ -304,14 +304,14 @@ Every branch with an architectural consequence should add or update a decision d
 | 3. I/O | ✅ Complete | 8 (CSV, TSV, Parquet, GraphML, MTX, Pajek) |
 | 4. Analysis | ✅ Complete | 12 (strengths, degrees, Y2, k_nn, s_nn, P(w), clustering) |
 | 5. Fixed-strength | ✅ Complete | 13 (fitting, generation, ensemble) |
-| 6. Remaining models | 🚧 In progress | 14 (thesis cases 1, 3, 4, 5) |
-| 7. Additional kernels | ❌ Not started | — |
-| 7b. Ensemble equivalence | ✅ Complete | 3 (convergence, microcanonical, canonical) |
-| 8. CLI | ✅ Initial | 10 (analyze, fit, generate with --json/--quiet/--output) |
-| 9. Docs site | ✅ Builds | — |
-| 10. Benchmarks | ❌ Not started | — |
+| 6. Remaining models | ✅ Complete | All thesis cases 1–5 + strength-cost + partial constraints |
+| 7. Additional kernels | ❌ Not started | W/AB/AW variants (geometric, binomial, NB) |
+| 7b. Ensemble equivalence | ✅ Complete | Microcanonical sampler + convergence validation + figures |
+| 8. CLI | ✅ Complete | All models exposed: analyze, fit, generate |
+| 9. Docs site | ✅ Complete | Full LaTeX math, all models, partial constraints, ensembles |
+| 10. Benchmarks | ✅ Complete | Scaling to N=10000, regression tests, figures |
 
-**Totals: 103 Python tests, 16 Rust tests, all passing. All linters green.**
+**Totals: 114 Python tests, 16 Rust tests, all passing. All linters green.**
 
 **Architecture:** All computation in Rust (`odme-core`). Python is thin wrappers + CLI + I/O. No Polars. numpy + pyarrow + rustworkx only.
 
@@ -366,7 +366,7 @@ Every branch with an architectural consequence should add or update a decision d
 - No dense N² path.
 - Ensemble averaging utilities (`ensemble_average`, `ensemble_scalar_average`).
 
-### Milestone 6: Remaining maximum-entropy models — 🚧 IN PROGRESS
+### Milestone 6: Remaining maximum-entropy models — ✅ COMPLETE
 
 - ✅ Implement directed binary fixed-degree fitting with `p_ij = x_i y_j / (1 + x_i y_j)`.
 - ✅ Implement custom-`p_ij` thesis Case 1 generation.
@@ -384,7 +384,7 @@ Every branch with an architectural consequence should add or update a decision d
 - Add radiation and sequential-gravity mobility models only after the maximum-entropy core is stable.
 - TDD: distribution-level property tests, seed reproducibility, invariants on generated graphs.
 
-### Milestone 7b: Ensemble equivalence validation — ❌ NOT STARTED
+### Milestone 7b: Ensemble equivalence validation — ✅ COMPLETE
 
 One can prove that the maximum-entropy ensembles for the multi-edge case are equivalent in the limit of large `T`, irrespective of the number of nodes. ODME must include a validation step that demonstrates this convergence numerically.
 
@@ -421,7 +421,7 @@ TDD:
 - `mkdocs build --strict` passes.
 - Remaining: tutorials, thesis-equation mapping, fuller API docs.
 
-### Milestone 10: Performance and memory benchmarks — ❌ NOT STARTED
+### Milestone 10: Performance and memory benchmarks — ✅ COMPLETE
 
 - Add Criterion and pytest benchmark suites.
 - Benchmark against legacy C/Python temporarily where useful, then against ODME's own tracked baseline.
