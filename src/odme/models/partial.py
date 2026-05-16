@@ -1,4 +1,34 @@
-"""Partial-constraint fitting: some p_ij known, rest fitted from ME models."""
+"""Partial-constraint fitting: some p_ij known, rest fitted from ME models.
+
+This implements a generalization of the thesis ``fitter_pij`` case. Given an
+observed network, certain heavy edges (with ``t_ij > cutoff``) are treated as
+having known expected rates. The remaining pairs are fitted using a
+maximum-entropy model subject to the observed constraints minus the known-pair
+contributions.
+
+The procedure is:
+
+1. Identify the set Q of known pairs (e.g., by weight cutoff).
+2. Compute **excess** constraints: observed strengths (and optionally cost)
+   minus the contribution from Q pairs.
+3. Build a mask that excludes Q pairs (and optionally the diagonal for
+   no-self-loops) from the IPF summations.
+4. Fit Lagrange multipliers ``x, y`` (and optionally ``gamma``) on the excess
+   constraints over the free pairs only.
+5. Combine the known rates with the fitted rates ``x_i y_j`` (or
+   ``x_i y_j exp(-gamma  d_ij)``) into a single rate table.
+6. The result can be normalized to probabilities ``p_ij = rate_ij / sum(rate)``
+   and sampled using ``sample_custom_pij_events_poisson`` or ``_multinomial``.
+
+**Self-loops**: when ``self_loops=False``, diagonal pairs ``(i, i)`` are
+excluded from both the mask and the fitted pairs, regardless of whether they
+appear as known pairs.
+
+**Normalization**: the returned ``PartialFitResult.rate`` values are
+**unnormalized expected counts** (not probabilities). The sampling functions
+``sample_custom_pij_events_*`` normalize internally. To obtain the
+probability matrix, divide each rate by the sum of all rates.
+"""
 
 import warnings
 from dataclasses import dataclass
@@ -16,8 +46,9 @@ class PartialFitResult:
     """Combined rate table from partial-constraint fitting.
 
     Contains rates for all pairs: known pairs at their fixed values,
-    fitted pairs at their model-predicted values. Can be passed directly
-    to ``sample_custom_pij_events_poisson`` or ``_multinomial``.
+    fitted pairs at their model-predicted values. Rates are unnormalized
+    expected counts. Use ``.as_probability_table()`` to convert to a
+    ``ProbabilityTable`` for sampling.
     """
 
     source: NDArray[np.uint64]
@@ -37,10 +68,18 @@ def _build_mask(
     n: int,
     known_source: NDArray[np.uint64],
     known_target: NDArray[np.uint64],
+    self_loops: bool,
 ) -> list[bool]:
+    """Build NxN boolean mask: True = skip this pair in IPF.
+
+    Masks known pairs and, if ``self_loops=False``, the diagonal.
+    """
     mask = [False] * (n * n)
     for s, t in zip(known_source, known_target, strict=True):
         mask[int(s) * n + int(t)] = True
+    if not self_loops:
+        for i in range(n):
+            mask[i * n + i] = True
     return mask
 
 
@@ -61,7 +100,6 @@ def _compute_excess(
     known_source: NDArray[np.uint64],
     known_target: NDArray[np.uint64],
     known_rate: NDArray[np.float64],
-    n: int,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     excess_out = strength_out.copy()
     excess_in = strength_in.copy()
@@ -84,6 +122,9 @@ def _combine_rates(
     x: NDArray[np.float64],
     y: NDArray[np.float64],
     mask: list[bool],
+    *,
+    gamma: float = 0.0,
+    cost_map: dict[tuple[int, int], float] | None = None,
 ) -> PartialFitResult:
     sources: list[int] = []
     targets: list[int] = []
@@ -94,12 +135,16 @@ def _combine_rates(
             sources.append(int(s))
             targets.append(int(t))
             rates.append(float(r))
-    # Fitted pairs.
+    # Fitted pairs (skip masked).
     for i in range(n):
         for j in range(n):
             if mask[i * n + j]:
                 continue
-            rate = x[i] * y[j]
+            if gamma != 0.0 and cost_map is not None:
+                d = cost_map.get((i, j), 0.0)
+                rate = x[i] * y[j] * np.exp(-gamma * d)
+            else:
+                rate = x[i] * y[j]
             if rate > 0:
                 sources.append(i)
                 targets.append(j)
@@ -118,6 +163,7 @@ def fit_partial_strength_me(
     known_target: NDArray[np.integer],
     known_rate: NDArray[np.floating],
     *,
+    self_loops: bool = True,
     tolerance: float = 1e-8,
     max_iterations: int = 10000,
 ) -> PartialFitResult:
@@ -133,6 +179,7 @@ def fit_partial_strength_me(
         known_source: Source node ids of known pairs.
         known_target: Target node ids of known pairs.
         known_rate: Expected event counts for known pairs.
+        self_loops: Whether to allow self-loop pairs in the fitted part.
         tolerance: Solver tolerance.
         max_iterations: Maximum solver iterations.
 
@@ -150,8 +197,8 @@ def fit_partial_strength_me(
         s_out = np.pad(s_out, (0, n - len(s_out)))
         s_in = np.pad(s_in, (0, n - len(s_in)))
 
-    excess_out, excess_in = _compute_excess(s_out, s_in, k_src, k_tgt, k_rate, n)
-    mask = _build_mask(n, k_src, k_tgt)
+    excess_out, excess_in = _compute_excess(s_out, s_in, k_src, k_tgt, k_rate)
+    mask = _build_mask(n, k_src, k_tgt, self_loops)
 
     if excess_out.sum() <= 0:
         return _combine_rates(n, k_src, k_tgt, k_rate, np.zeros(n), np.zeros(n), mask)
@@ -177,23 +224,158 @@ def fit_partial_strength_me(
     return _combine_rates(n, k_src, k_tgt, k_rate, x, y, mask)
 
 
+def fit_partial_strength_cost_me(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    known_source: NDArray[np.integer],
+    known_target: NDArray[np.integer],
+    known_rate: NDArray[np.floating],
+    cost_sources: NDArray[np.integer],
+    cost_targets: NDArray[np.integer],
+    cost_values: NDArray[np.floating],
+    target_cost: float,
+    *,
+    self_loops: bool = True,
+    tolerance: float = 1e-6,
+    max_iterations: int = 5000,
+) -> PartialFitResult:
+    """Fit fixed-strength + fixed-cost ME with some p_ij pairs known.
+
+    Like ``fit_partial_strength_me`` but also fits ``gamma`` to match total cost.
+    The fitted expectation for free pairs is ``E[t_ij] = x_i y_j exp(-gamma  d_ij)``.
+
+    Args:
+        strength_out: Observed outgoing strength per node.
+        strength_in: Observed incoming strength per node.
+        known_source: Source node ids of known pairs.
+        known_target: Target node ids of known pairs.
+        known_rate: Expected event counts for known pairs.
+        cost_sources: Source node ids for cost entries.
+        cost_targets: Target node ids for cost entries.
+        cost_values: Cost/distance values.
+        target_cost: Observed total cost ``C = Σ t_ij d_ij``.
+        self_loops: Whether to allow self-loop pairs in the fitted part.
+        tolerance: Solver tolerance.
+        max_iterations: Maximum solver iterations.
+
+    Returns:
+        PartialFitResult with combined rate table including cost deterrence.
+    """
+    s_out = np.asarray(strength_out, dtype=np.float64)
+    s_in = np.asarray(strength_in, dtype=np.float64)
+    k_src = np.asarray(known_source, dtype=np.uint64)
+    k_tgt = np.asarray(known_target, dtype=np.uint64)
+    k_rate = np.asarray(known_rate, dtype=np.float64)
+    c_src = np.asarray(cost_sources, dtype=np.int64)
+    c_tgt = np.asarray(cost_targets, dtype=np.int64)
+    c_val = np.asarray(cost_values, dtype=np.float64)
+
+    n = _infer_n(s_out, k_src, k_tgt)
+    if len(s_out) < n:
+        s_out = np.pad(s_out, (0, n - len(s_out)))
+        s_in = np.pad(s_in, (0, n - len(s_in)))
+
+    # Build cost lookup.
+    cost_map: dict[tuple[int, int], float] = {}
+    for cs, ct, cv in zip(c_src, c_tgt, c_val, strict=True):
+        cost_map[(int(cs), int(ct))] = float(cv)
+
+    # Excess cost: total cost minus contribution from known pairs.
+    known_cost = sum(
+        float(r) * cost_map.get((int(s), int(t)), 0.0)
+        for s, t, r in zip(k_src, k_tgt, k_rate, strict=True)
+    )
+    excess_cost = target_cost - known_cost
+    if excess_cost < -1e-6:
+        msg = "known pair costs exceed target cost; problem is infeasible"
+        raise ValueError(msg)
+    excess_cost = max(excess_cost, 0.0)
+
+    excess_out, excess_in = _compute_excess(s_out, s_in, k_src, k_tgt, k_rate)
+    mask = _build_mask(n, k_src, k_tgt, self_loops)
+
+    if excess_out.sum() <= 0:
+        return _combine_rates(n, k_src, k_tgt, k_rate, np.zeros(n), np.zeros(n), mask)
+
+    # Balance excess.
+    diff = excess_out.sum() - excess_in.sum()
+    if abs(diff) > 1e-6:
+        if diff > 0:
+            excess_in[np.argmax(excess_in)] += diff
+        else:
+            excess_out[np.argmax(excess_out)] -= diff
+
+    # Filter cost entries to only free pairs.
+    free_src: list[int] = []
+    free_tgt: list[int] = []
+    free_cost: list[float] = []
+    for cs, ct, cv in zip(c_src, c_tgt, c_val, strict=True):
+        i, j = int(cs), int(ct)
+        if i < n and j < n and not mask[i * n + j]:
+            free_src.append(i)
+            free_tgt.append(j)
+            free_cost.append(float(cv))
+
+    from odme.models.fitting import fit_strength_cost_me
+
+    fit = fit_strength_cost_me(
+        excess_out,
+        excess_in,
+        np.array(free_src, dtype=np.int64),
+        np.array(free_tgt, dtype=np.int64),
+        np.array(free_cost, dtype=np.float64),
+        excess_cost,
+        self_loops=self_loops,
+        tolerance=tolerance,
+        max_iterations=max_iterations,
+    )
+
+    return _combine_rates(
+        n,
+        k_src,
+        k_tgt,
+        k_rate,
+        fit.x,
+        fit.y,
+        mask,
+        gamma=fit.gamma,
+        cost_map=cost_map,
+    )
+
+
 def fit_from_network_cutoff(
     edges: EdgeTable,
     cutoff: float,
     model: str = "strength",
     *,
+    self_loops: bool = True,
+    cost_sources: NDArray[np.integer] | None = None,
+    cost_targets: NDArray[np.integer] | None = None,
+    cost_values: NDArray[np.floating] | None = None,
+    target_cost: float | None = None,
     tolerance: float = 1e-8,
     max_iterations: int = 10000,
 ) -> PartialFitResult:
     """Split an observed network by weight cutoff and fit partial constraints.
 
-    Edges with ``weight > cutoff`` are treated as known pairs with fixed rates.
-    The remaining structure is fitted using the specified ME model.
+    Edges with ``weight > cutoff`` are treated as known pairs with rates
+    equal to their observed weight. The remaining structure is fitted using
+    the specified ME model on the excess constraints.
+
+    For the ``"strength-cost"`` model, a cost matrix and target cost must
+    be provided. The target cost defaults to the observed total cost
+    ``C = Σ t_ij d_ij`` if not given.
 
     Args:
         edges: Observed weighted edge table.
         cutoff: Weight threshold; edges above this are fixed.
-        model: Model variant. Currently ``"strength"`` is supported.
+        model: Model variant: ``"strength"`` or ``"strength-cost"``.
+        self_loops: Whether self-loop pairs are allowed in the fitted part.
+        cost_sources: Source node ids for cost entries (strength-cost only).
+        cost_targets: Target node ids for cost entries (strength-cost only).
+        cost_values: Cost/distance values (strength-cost only).
+        target_cost: Total cost constraint (strength-cost only; defaults
+            to observed).
         tolerance: Solver tolerance.
         max_iterations: Maximum solver iterations.
 
@@ -214,15 +396,50 @@ def fit_from_network_cutoff(
             known_source,
             known_target,
             known_rate,
+            self_loops=self_loops,
             tolerance=tolerance,
             max_iterations=max_iterations,
         )
-    msg = f"unsupported model: {model!r}. Currently only 'strength' is supported."
+    if model == "strength-cost":
+        if cost_sources is None or cost_targets is None or cost_values is None:
+            msg = "strength-cost model requires cost_sources, cost_targets, cost_values"
+            raise ValueError(msg)
+        if target_cost is None:
+            cost_map: dict[tuple[int, int], float] = {}
+            for cs, ct, cv in zip(
+                np.asarray(cost_sources),
+                np.asarray(cost_targets),
+                np.asarray(cost_values),
+                strict=True,
+            ):
+                cost_map[(int(cs), int(ct))] = float(cv)
+            target_cost = sum(
+                float(w) * cost_map.get((int(s_val), int(t_val)), 0.0)
+                for s_val, t_val, w in zip(
+                    edges.source, edges.target, edges.weight, strict=True
+                )
+            )
+        return fit_partial_strength_cost_me(
+            s.out.astype(np.float64),
+            s.incoming.astype(np.float64),
+            known_source,
+            known_target,
+            known_rate,
+            cost_sources,
+            cost_targets,
+            cost_values,
+            target_cost,
+            self_loops=self_loops,
+            tolerance=tolerance,
+            max_iterations=max_iterations,
+        )
+    msg = f"unsupported model: {model!r}. Use 'strength' or 'strength-cost'."
     raise ValueError(msg)
 
 
 __all__ = [
     "PartialFitResult",
     "fit_from_network_cutoff",
+    "fit_partial_strength_cost_me",
     "fit_partial_strength_me",
 ]
