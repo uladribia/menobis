@@ -415,6 +415,320 @@ fn solve_binary_multiplier(target: f64, other: &[f64], skip: Option<usize>) -> f
     0.5 * (low + high)
 }
 
+/// Masked alternating coordinate fitting for directed binary fixed-degree.
+///
+/// Pairs where ``mask[i * n + j]`` is true are skipped in summations.
+#[must_use]
+pub fn balance_masked_binary_degrees(
+    degree_out: &[f64],
+    degree_in: &[f64],
+    mask: &[bool],
+    tolerance: f64,
+    max_iterations: usize,
+) -> FitResult {
+    let n = degree_out.len();
+    let mut x = vec![1.0; n];
+    let mut y = vec![1.0; n];
+    for i in 0..n {
+        if degree_out[i] <= 0.0 {
+            x[i] = 0.0;
+        }
+        if degree_in[i] <= 0.0 {
+            y[i] = 0.0;
+        }
+    }
+    for iter in 0..max_iterations {
+        let old_x = x.clone();
+        let old_y = y.clone();
+        for i in 0..n {
+            if degree_out[i] <= 0.0 {
+                continue;
+            }
+            x[i] = solve_binary_multiplier_masked(degree_out[i], &y, i, n, mask);
+        }
+        for j in 0..n {
+            if degree_in[j] <= 0.0 {
+                continue;
+            }
+            y[j] = solve_binary_multiplier_masked_col(degree_in[j], &x, j, n, mask);
+        }
+        let delta = x
+            .iter()
+            .zip(old_x.iter())
+            .chain(y.iter().zip(old_y.iter()))
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0_f64, f64::max);
+        if delta < tolerance {
+            return FitResult {
+                x,
+                y,
+                converged: true,
+                iterations: iter + 1,
+            };
+        }
+    }
+    FitResult {
+        x,
+        y,
+        converged: false,
+        iterations: max_iterations,
+    }
+}
+
+fn solve_binary_multiplier_masked(
+    target: f64,
+    other: &[f64],
+    row: usize,
+    n: usize,
+    mask: &[bool],
+) -> f64 {
+    if target <= 0.0 {
+        return 0.0;
+    }
+    let mut high = 1.0;
+    loop {
+        let sum: f64 = other
+            .iter()
+            .enumerate()
+            .filter(|&(j, _)| !mask[row * n + j])
+            .map(|(_, &v)| {
+                let z = high * v;
+                z / (1.0 + z)
+            })
+            .sum();
+        if sum >= target || high > 1e150 {
+            break;
+        }
+        high *= 2.0;
+    }
+    let mut low = 0.0;
+    for _ in 0..100 {
+        let mid = 0.5 * (low + high);
+        let sum: f64 = other
+            .iter()
+            .enumerate()
+            .filter(|&(j, _)| !mask[row * n + j])
+            .map(|(_, &v)| {
+                let z = mid * v;
+                z / (1.0 + z)
+            })
+            .sum();
+        if sum < target {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    0.5 * (low + high)
+}
+
+fn solve_binary_multiplier_masked_col(
+    target: f64,
+    other: &[f64],
+    col: usize,
+    n: usize,
+    mask: &[bool],
+) -> f64 {
+    if target <= 0.0 {
+        return 0.0;
+    }
+    let mut high = 1.0;
+    loop {
+        let sum: f64 = other
+            .iter()
+            .enumerate()
+            .filter(|&(i, _)| !mask[i * n + col])
+            .map(|(_, &v)| {
+                let z = v * high;
+                z / (1.0 + z)
+            })
+            .sum();
+        if sum >= target || high > 1e150 {
+            break;
+        }
+        high *= 2.0;
+    }
+    let mut low = 0.0;
+    for _ in 0..100 {
+        let mid = 0.5 * (low + high);
+        let sum: f64 = other
+            .iter()
+            .enumerate()
+            .filter(|&(i, _)| !mask[i * n + col])
+            .map(|(_, &v)| {
+                let z = v * mid;
+                z / (1.0 + z)
+            })
+            .sum();
+        if sum < target {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    0.5 * (low + high)
+}
+
+/// Masked fitting for exact ME fixed-strength-and-degree.
+#[must_use]
+pub fn balance_masked_strength_degree_me(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    degree_out: &[f64],
+    degree_in: &[f64],
+    mask: &[bool],
+    tolerance: f64,
+    max_iterations: usize,
+) -> StrengthDegreeFitResult {
+    let n = strength_out.len();
+    let total: f64 = strength_out.iter().sum();
+    let sqrt_t = total.sqrt().max(1.0);
+    let mut x: Vec<f64> = strength_out
+        .iter()
+        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .collect();
+    let mut y: Vec<f64> = strength_in
+        .iter()
+        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .collect();
+    let mut z = vec![0.5; n];
+    let mut w = vec![0.5; n];
+    for i in 0..n {
+        if degree_out[i] <= 0.0 || strength_out[i] <= 0.0 {
+            x[i] = 0.0;
+            z[i] = 0.0;
+        }
+        if degree_in[i] <= 0.0 || strength_in[i] <= 0.0 {
+            y[i] = 0.0;
+            w[i] = 0.0;
+        }
+    }
+    for iter in 0..max_iterations {
+        let old_x = x.clone();
+        let old_y = y.clone();
+        let old_z = z.clone();
+        let old_w = w.clone();
+        for i in 0..n {
+            if strength_out[i] <= 0.0 {
+                continue;
+            }
+            let denom: f64 = (0..n)
+                .filter(|&j| !mask[i * n + j])
+                .map(|j| {
+                    let u = x[i] * y[j];
+                    let exp_u = u.exp();
+                    let den = 1.0 + z[i] * w[j] * (exp_u - 1.0);
+                    if den > 0.0 {
+                        z[i] * y[j] * w[j] * exp_u / den
+                    } else {
+                        0.0
+                    }
+                })
+                .sum();
+            x[i] = if denom > 0.0 {
+                strength_out[i] / denom
+            } else {
+                0.0
+            };
+        }
+        for j in 0..n {
+            if strength_in[j] <= 0.0 {
+                continue;
+            }
+            let denom: f64 = (0..n)
+                .filter(|&i| !mask[i * n + j])
+                .map(|i| {
+                    let u = x[i] * y[j];
+                    let exp_u = u.exp();
+                    let den = 1.0 + z[i] * w[j] * (exp_u - 1.0);
+                    if den > 0.0 {
+                        w[j] * x[i] * z[i] * exp_u / den
+                    } else {
+                        0.0
+                    }
+                })
+                .sum();
+            y[j] = if denom > 0.0 {
+                strength_in[j] / denom
+            } else {
+                0.0
+            };
+        }
+        for j in 0..n {
+            if degree_in[j] <= 0.0 {
+                continue;
+            }
+            let denom: f64 = (0..n)
+                .filter(|&i| !mask[i * n + j])
+                .map(|i| {
+                    let u = x[i] * y[j];
+                    let exp_u = u.exp();
+                    let den = 1.0 + z[i] * w[j] * (exp_u - 1.0);
+                    if den > 0.0 {
+                        z[i] * (exp_u - 1.0) / den
+                    } else {
+                        0.0
+                    }
+                })
+                .sum();
+            w[j] = if denom > 0.0 {
+                degree_in[j] / denom
+            } else {
+                0.0
+            };
+        }
+        for i in 0..n {
+            if degree_out[i] <= 0.0 {
+                continue;
+            }
+            let denom: f64 = (0..n)
+                .filter(|&j| !mask[i * n + j])
+                .map(|j| {
+                    let u = x[i] * y[j];
+                    let exp_u = u.exp();
+                    let den = 1.0 + z[i] * w[j] * (exp_u - 1.0);
+                    if den > 0.0 {
+                        w[j] * (exp_u - 1.0) / den
+                    } else {
+                        0.0
+                    }
+                })
+                .sum();
+            z[i] = if denom > 0.0 {
+                degree_out[i] / denom
+            } else {
+                0.0
+            };
+        }
+        let delta = x
+            .iter()
+            .zip(old_x.iter())
+            .chain(y.iter().zip(old_y.iter()))
+            .chain(z.iter().zip(old_z.iter()))
+            .chain(w.iter().zip(old_w.iter()))
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0_f64, f64::max);
+        if delta < tolerance {
+            return StrengthDegreeFitResult {
+                x,
+                y,
+                z,
+                w,
+                converged: true,
+                iterations: iter + 1,
+            };
+        }
+    }
+    StrengthDegreeFitResult {
+        x,
+        y,
+        z,
+        w,
+        converged: false,
+        iterations: max_iterations,
+    }
+}
+
 /// Alternating coordinate fitting for directed binary fixed-degree models.
 ///
 /// Solves: k_out_i = sum_j p_ij and k_in_j = sum_i p_ij with

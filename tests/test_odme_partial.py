@@ -3,11 +3,14 @@
 import numpy as np
 import pytest
 
-from odme.analysis import directed_strengths
+from odme.analysis import directed_degrees, directed_strengths
 from odme.data.frames import EdgeTable
 from odme.models.partial import (
     fit_from_network_cutoff,
+    fit_partial_degree_me,
     fit_partial_strength_cost_me,
+    fit_partial_strength_degree_me,
+    fit_partial_strength_edges_me,
     fit_partial_strength_me,
 )
 
@@ -128,6 +131,82 @@ def test_fit_from_network_cutoff_no_self_loops() -> None:
     )
     for src, tgt in zip(result.source, result.target, strict=True):
         assert int(src) != int(tgt)
+
+
+def test_partial_degree_recovers_constraints() -> None:
+    """Partial fixed-degree model recovers excess degrees."""
+    edges = _small_network()
+    k = directed_degrees(edges)
+    known_source = np.array([0, 1], dtype=np.uint64)
+    known_target = np.array([1, 0], dtype=np.uint64)
+    result = fit_partial_degree_me(
+        k.out.astype(float),
+        k.incoming.astype(float),
+        known_source,
+        known_target,
+        self_loops=False,
+    )
+    assert result.source.shape[0] > 0
+    for src, tgt in zip(result.source, result.target, strict=True):
+        assert int(src) != int(tgt)
+
+
+def test_partial_strength_degree_recovers_constraints() -> None:
+    """Partial strength-degree model produces valid output."""
+    edges = _small_network()
+    s = directed_strengths(edges)
+    k = directed_degrees(edges)
+    known_source = np.array([0], dtype=np.uint64)
+    known_target = np.array([1], dtype=np.uint64)
+    known_rate = np.array([50.0])
+    result = fit_partial_strength_degree_me(
+        s.out.astype(float),
+        s.incoming.astype(float),
+        k.out.astype(float),
+        k.incoming.astype(float),
+        known_source,
+        known_target,
+        known_rate,
+        self_loops=False,
+    )
+    assert result.source.shape[0] > 0
+    for src, tgt, rate in zip(result.source, result.target, result.rate, strict=True):
+        if int(src) == 0 and int(tgt) == 1:
+            np.testing.assert_allclose(rate, 50.0, rtol=1e-10)
+            break
+
+
+def test_partial_strength_edges_recovers_constraints() -> None:
+    """Partial strength-edges model produces valid output."""
+    edges = _small_network()
+    s = directed_strengths(edges)
+    known_source = np.array([0], dtype=np.uint64)
+    known_target = np.array([1], dtype=np.uint64)
+    known_rate = np.array([50.0])
+    result = fit_partial_strength_edges_me(
+        s.out.astype(float),
+        s.incoming.astype(float),
+        known_source,
+        known_target,
+        known_rate,
+        float(edges.num_edges),
+        self_loops=False,
+    )
+    assert result.source.shape[0] > 0
+    for src, tgt in zip(result.source, result.target, strict=True):
+        assert int(src) != int(tgt)
+
+
+def test_fit_from_network_cutoff_all_models() -> None:
+    """Cutoff method works for all model variants."""
+    edges = _small_network()
+    for model in ["strength", "degree", "strength-degree", "strength-edges"]:
+        result = fit_from_network_cutoff(
+            edges, cutoff=10, model=model, self_loops=False
+        )
+        assert result.source.shape[0] > 0
+        for src, tgt in zip(result.source, result.target, strict=True):
+            assert int(src) != int(tgt), f"{model}: self-loop found"
 
 
 def test_partial_strength_cost_recovers_constraints() -> None:
