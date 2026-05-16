@@ -10,6 +10,19 @@ import odme._odme as _odme
 
 
 @dataclass(frozen=True)
+class GravityMeFit:
+    """Fitted gravity ME model: E[t_ij] = x_i y_j exp(-gamma d_ij)."""
+
+    node: NDArray[np.uint64]
+    x: NDArray[np.float64]
+    y: NDArray[np.float64]
+    gamma: float
+    self_loops: bool
+    converged: bool
+    iterations: int
+
+
+@dataclass(frozen=True)
 class StrengthEdgesMeFit:
     """Fitted exact ME fixed-strength-and-edge-count ME model."""
 
@@ -99,6 +112,76 @@ def validate_strength_degree_constraints(
     if np.any(s_out < k_out) or np.any(s_in < k_in):
         msg = "each node strength must be greater than or equal to its degree"
         raise ValueError(msg)
+
+
+def fit_gravity_me(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    cost_sources: NDArray[np.integer],
+    cost_targets: NDArray[np.integer],
+    cost_values: NDArray[np.floating],
+    target_cost: float,
+    *,
+    self_loops: bool = True,
+    tolerance: float = 1e-6,
+    max_iterations: int = 5000,
+) -> GravityMeFit:
+    """Fit the gravity ME model: fixed strength + fixed total cost.
+
+    The fitted expectation is ``E[t_ij] = x_i y_j exp(-gamma d_ij)``.
+
+    Args:
+        strength_out: Outgoing strength per node.
+        strength_in: Incoming strength per node.
+        cost_sources: Source node ids for cost entries.
+        cost_targets: Target node ids for cost entries.
+        cost_values: Cost/distance values for each (source, target) pair.
+        target_cost: Observed total cost C = sum t_ij d_ij.
+        self_loops: Whether self loops are allowed.
+        tolerance: Solver tolerance.
+        max_iterations: Maximum solver iterations.
+
+    Returns:
+        GravityMeFit with x, y multipliers and gamma.
+    """
+    s_out = np.asarray(strength_out, dtype=np.float64)
+    s_in = np.asarray(strength_in, dtype=np.float64)
+    _validate_balanced_sequences(s_out, s_in, name="strength")
+    if target_cost <= 0.0:
+        msg = "target_cost must be positive"
+        raise ValueError(msg)
+
+    c_src = np.asarray(cost_sources, dtype=np.int64).tolist()
+    c_tgt = np.asarray(cost_targets, dtype=np.int64).tolist()
+    c_val = np.asarray(cost_values, dtype=np.float64).tolist()
+
+    x_list, y_list, gamma, converged, iters = _odme.fit_gravity(
+        s_out.tolist(),
+        s_in.tolist(),
+        c_src,
+        c_tgt,
+        c_val,
+        target_cost,
+        self_loops,
+        tolerance,
+        max_iterations,
+    )
+    n = len(s_out)
+    result = GravityMeFit(
+        node=np.arange(n, dtype=np.uint64),
+        x=np.asarray(x_list, dtype=np.float64),
+        y=np.asarray(y_list, dtype=np.float64),
+        gamma=gamma,
+        self_loops=self_loops,
+        converged=converged,
+        iterations=iters,
+    )
+    if not converged:
+        warnings.warn(
+            f"fit_gravity_me did not converge after {iters} iterations",
+            stacklevel=2,
+        )
+    return result
 
 
 def fit_strength_edges_me(
@@ -323,10 +406,12 @@ def fit_fixed_degree_binary(
 
 __all__ = [
     "FitResult",
+    "GravityMeFit",
     "StrengthDegreeMeFit",
     "StrengthEdgesMeFit",
     "fit_fixed_degree_binary",
     "fit_fixed_strength_me",
+    "fit_gravity_me",
     "fit_strength_degree_me",
     "fit_strength_edges_me",
     "validate_strength_degree_constraints",

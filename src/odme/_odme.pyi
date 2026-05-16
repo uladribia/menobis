@@ -46,6 +46,19 @@ def weight_distribution(
 ) -> tuple[list[int], list[int]]: ...
 
 
+def fit_gravity(
+    strength_out: list[float],
+    strength_in: list[float],
+    cost_sources: list[int],
+    cost_targets: list[int],
+    cost_values: list[float],
+    target_cost: float,
+    self_loops: bool,
+    tolerance: float,
+    max_iterations: int,
+) -> tuple[list[float], list[float], float, bool, int]: ...
+
+
 def fit_binary_degrees(
     degree_out: list[float],
     degree_in: list[float],

@@ -15,11 +15,13 @@ from odme.data.io import read_edges, read_probabilities
 from odme.models import (
     fit_fixed_degree_binary,
     fit_fixed_strength_me,
+    fit_gravity_me,
     fit_strength_degree_me,
     fit_strength_edges_me,
     sample_custom_pij_events_multinomial,
     sample_custom_pij_events_poisson,
     sample_fixed_degree_events_me,
+    sample_gravity_me,
     sample_multinomial,
     sample_poisson,
     sample_poisson_multinomial,
@@ -245,6 +247,63 @@ def custom_pij(
         raise typer.BadParameter(msg)
     _emit_edges(sample, output, output_json)
     _progress("Wrote custom p_ij ME sample", output, quiet, output_json)
+
+
+@app.command("gravity-me")
+def gravity_me_cmd(
+    input_path: Path,
+    cost_path: Annotated[
+        Path, Option("--costs", help="Cost matrix CSV with source,target,cost columns.")
+    ],
+    target_cost: Annotated[
+        float | None,
+        Option("--target-cost", help="Target total cost. Defaults to observed."),
+    ] = None,
+    output: Annotated[
+        Path | None, Option("--output", "-o", help="Output path. Stdout if omitted.")
+    ] = None,
+    seed: Annotated[int, Option("--seed", "-s", help="Random seed.")] = 0,
+    output_json: Annotated[bool, Option("--json", help="Output as JSON.")] = False,
+    quiet: Annotated[
+        bool, Option("--quiet", help="Suppress progress messages.")
+    ] = False,
+    self_loops: Annotated[
+        bool,
+        Option("--self-loops/--no-self-loops", help="Whether model self loops."),
+    ] = True,
+) -> None:
+    """Generate from the gravity ME model: fixed strength + total cost."""
+    import pyarrow.csv as pa_csv
+
+    edges = read_edges(input_path)
+    s = directed_strengths(edges)
+    cost_table = pa_csv.read_csv(cost_path)
+    c_src = cost_table.column("source").to_numpy()
+    c_tgt = cost_table.column("target").to_numpy()
+    c_val = cost_table.column("cost").to_numpy().astype(np.float64)
+    if target_cost is None:
+        cost_map: dict[tuple[int, int], float] = {}
+        for cs, ct, cv in zip(c_src, c_tgt, c_val, strict=True):
+            cost_map[(int(cs), int(ct))] = float(cv)
+        target_cost = sum(
+            float(w_val) * cost_map.get((int(s_val), int(t_val)), 0.0)
+            for s_val, t_val, w_val in zip(
+                edges.source, edges.target, edges.weight, strict=True
+            )
+        )
+    fit = fit_gravity_me(
+        s.out.astype(np.float64),
+        s.incoming.astype(np.float64),
+        c_src,
+        c_tgt,
+        c_val,
+        target_cost,
+        self_loops=self_loops,
+    )
+    _emit_edges(
+        sample_gravity_me(fit, c_src, c_tgt, c_val, seed=seed), output, output_json
+    )
+    _progress("Wrote gravity ME sample", output, quiet, output_json)
 
 
 def _write_output(content: str, path: Path | None) -> None:

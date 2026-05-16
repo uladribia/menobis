@@ -21,6 +21,7 @@ use odme_core::graph::{
     directed_degrees as core_directed_degrees, directed_strengths as core_directed_strengths,
     WeightedEdge,
 };
+use odme_core::gravity::{fit_gravity as core_fit_gravity, GravityOptions};
 use odme_core::stats::{
     compute_all_node_stats as core_compute_all_stats,
     weight_distribution as core_weight_distribution,
@@ -31,6 +32,8 @@ use pyo3::prelude::*;
 type FitPair = (Vec<f64>, Vec<f64>, bool, usize);
 type FitStrengthEdges = (Vec<f64>, Vec<f64>, f64, bool, usize);
 type FitStrengthDegree = (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, bool, usize);
+
+type FitGravity = (Vec<f64>, Vec<f64>, f64, bool, usize);
 
 /// Return the version of the Rust core exposed through Python.
 #[pyfunction]
@@ -145,6 +148,49 @@ fn weight_distribution(
     let edges = build_edges(max_node, sources, targets, weights)?;
     let dist = core_weight_distribution(&edges);
     Ok((dist.weights, dist.counts))
+}
+
+#[allow(clippy::too_many_arguments)]
+#[pyfunction]
+fn fit_gravity(
+    strength_out: Vec<f64>,
+    strength_in: Vec<f64>,
+    cost_sources: Vec<usize>,
+    cost_targets: Vec<usize>,
+    cost_values: Vec<f64>,
+    target_cost: f64,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<FitGravity> {
+    if strength_out.len() != strength_in.len() {
+        return Err(PyValueError::new_err(
+            "strength arrays must have same length",
+        ));
+    }
+    if cost_sources.len() != cost_targets.len() || cost_sources.len() != cost_values.len() {
+        return Err(PyValueError::new_err("cost arrays must have same length"));
+    }
+    let result = core_fit_gravity(
+        &strength_out,
+        &strength_in,
+        &cost_sources,
+        &cost_targets,
+        &cost_values,
+        target_cost,
+        &GravityOptions {
+            self_loops,
+            tolerance,
+            max_iterations,
+        },
+    );
+    Ok((
+        result.x,
+        result.y,
+        result.gamma,
+        result.converged,
+        result.iterations,
+    ))
 }
 
 #[pyfunction]
@@ -449,6 +495,7 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(directed_degrees, module)?)?;
     module.add_function(wrap_pyfunction!(compute_all_node_stats, module)?)?;
     module.add_function(wrap_pyfunction!(weight_distribution, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_gravity, module)?)?;
     module.add_function(wrap_pyfunction!(fit_binary_degrees, module)?)?;
     module.add_function(wrap_pyfunction!(fit_strength_edges_me, module)?)?;
     module.add_function(wrap_pyfunction!(fit_strength_degree_me, module)?)?;

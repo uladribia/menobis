@@ -14,6 +14,7 @@ from odme.data.io import read_edges
 from odme.models import (
     fit_fixed_degree_binary,
     fit_fixed_strength_me,
+    fit_gravity_me,
     fit_strength_degree_me,
     fit_strength_edges_me,
 )
@@ -207,6 +208,75 @@ def strength_edges_me(
     if not effective_quiet:
         dest = str(output) if output else "stdout"
         typer.echo(f"Wrote strength-edges ME multipliers to {dest}", err=True)
+
+
+@app.command("gravity-me")
+def gravity_me(
+    input_path: Path,
+    cost_path: Annotated[
+        Path, Option("--costs", help="Cost matrix CSV with source,target,cost columns.")
+    ],
+    target_cost: Annotated[
+        float | None,
+        Option("--target-cost", help="Target total cost. Defaults to observed."),
+    ] = None,
+    output: Annotated[
+        Path | None, Option("--output", "-o", help="Output path. Stdout if omitted.")
+    ] = None,
+    output_json: Annotated[bool, Option("--json", help="Output as JSON.")] = False,
+    quiet: Annotated[
+        bool, Option("--quiet", help="Suppress progress messages.")
+    ] = False,
+    self_loops: Annotated[
+        bool,
+        Option("--self-loops/--no-self-loops", help="Whether model self loops."),
+    ] = True,
+) -> None:
+    """Fit the gravity ME model: fixed strength + fixed total cost."""
+    effective_quiet = quiet or output_json
+    edges = read_edges(input_path)
+    s = directed_strengths(edges)
+    import pyarrow.csv as pa_csv
+
+    cost_table = pa_csv.read_csv(cost_path)
+    c_src = cost_table.column("source").to_numpy()
+    c_tgt = cost_table.column("target").to_numpy()
+    c_val = cost_table.column("cost").to_numpy().astype(np.float64)
+    if target_cost is None:
+        cost_map: dict[tuple[int, int], float] = {}
+        for cs, ct, cv in zip(c_src, c_tgt, c_val, strict=True):
+            cost_map[(int(cs), int(ct))] = float(cv)
+        target_cost = sum(
+            float(w) * cost_map.get((int(s_val), int(t_val)), 0.0)
+            for s_val, t_val, w in zip(
+                edges.source, edges.target, edges.weight, strict=True
+            )
+        )
+    result = fit_gravity_me(
+        s.out.astype(np.float64),
+        s.incoming.astype(np.float64),
+        c_src,
+        c_tgt,
+        c_val,
+        target_cost,
+        self_loops=self_loops,
+    )
+
+    if output_json:
+        data = [
+            {"node": int(n), "x": float(x), "y": float(y), "gamma": result.gamma}
+            for n, x, y in zip(result.node, result.x, result.y, strict=True)
+        ]
+        _write_output(json.dumps(data, indent=2), output)
+    else:
+        lines = ["node,x,y,gamma"]
+        for n, x, y in zip(result.node, result.x, result.y, strict=True):
+            lines.append(f"{n},{x},{y},{result.gamma}")
+        _write_output("\n".join(lines) + "\n", output)
+
+    if not effective_quiet:
+        dest = str(output) if output else "stdout"
+        typer.echo(f"Wrote gravity ME multipliers to {dest}", err=True)
 
 
 def _write_output(content: str, path: Path | None) -> None:

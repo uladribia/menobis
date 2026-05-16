@@ -7,6 +7,7 @@ pub mod clustering;
 pub mod fitting;
 pub mod generation;
 pub mod graph;
+pub mod gravity;
 pub mod stats;
 
 /// Current ODME core version, synchronized with the Python package during releases.
