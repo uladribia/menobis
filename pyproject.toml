@@ -1,0 +1,102 @@
+[project]
+name = "ODME"
+version = "0.1.0"
+description = "Origin-Destination Multi-Edge network models in Rust and Python"
+readme = "README.md"
+requires-python = ">=3.11,<3.15"
+license = "GPL-3.0-or-later"
+authors = [{ name = "Oleguer Sagarra" }]
+dependencies = [
+  "loguru>=0.7.3,<0.8",
+  "numpy>=2.0,<3",
+  "pyarrow>=16,<23",
+  "rustworkx>=0.16,<0.18",
+  "typer>=0.19,<0.22",
+]
+
+[project.scripts]
+odme = "odme.cli.main:app"
+
+[dependency-groups]
+dev = [
+  "maturin>=1.8,<2",
+]
+docs = [
+  "mkdocs>=1.6,<2",
+  "mkdocs-material>=9.6,<10",
+  "mkdocstrings[python]>=0.27,<1",
+]
+lint = [
+  "ruff>=0.15,<0.16",
+  "ty>=0.0.15,<0.1",
+]
+test = [
+  "hypothesis>=6.0,<7",
+  "pytest>=8.0,<10",
+  "pytest-cov>=6.0,<8",
+]
+
+[build-system]
+requires = ["maturin>=1.8,<2"]
+build-backend = "maturin"
+
+[tool.maturin]
+manifest-path = "crates/odme-python/Cargo.toml"
+python-source = "src"
+module-name = "odme._odme"
+features = ["pyo3/extension-module"]
+
+[tool.ruff]
+target-version = "py311"
+include = [
+  "pyproject.toml",
+  "src/**/*.py",
+  "tests/**/*.py",
+]
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "W",
+  "F",
+  "I",
+  "B",
+  "D",
+  "UP",
+  "N",
+  "RUF",
+  "PTH",
+  "SIM",
+  "RET",
+  "RSE",
+  "Q",
+  "G",
+  "LOG",
+  "C4",
+  "COM",
+  "ANN",
+]
+ignore = [
+  "COM812",
+  "D203",
+  "D213",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["ANN201", "ANN202", "D103"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "--verbose"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ty.src]
+include = ["src/odme", "tests"]
+
+[tool.uv]
+required-version = ">=0.8.0,<1.0"
+default-groups = ["dev", "docs", "lint", "test"]

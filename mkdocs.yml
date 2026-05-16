@@ -1,0 +1,50 @@
+site_name: ODME
+site_description: Origin-Destination Multi-Edge network models
+repo_url: ''
+edit_uri: ''
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.indexes
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Thesis Context: thesis-context.md
+  - Getting Started: getting-started.md
+  - Concepts:
+      - Multi-edge Networks: concepts/multi-edge-networks.md
+      - Maximum Entropy Models: concepts/maximum-entropy-models.md
+      - Spatial Costs: concepts/spatial-costs.md
+      - Ensembles: concepts/ensembles.md
+  - API:
+      - Python: api/python.md
+      - Rust: api/rust.md
+  - CLI:
+      - Analyze: cli/analyze.md
+      - Fit: cli/fit.md
+      - Generate: cli/generate.md
+      - Convert: cli/convert.md
+  - Development:
+      - Testing: development/testing.md
+      - Benchmarking: development/benchmarking.md
+      - Scalability: development/scalability.md
+      - Release Process: development/release-process.md
+  - Decisions:
+      - Rust and Python Architecture: decisions/0001-rust-python-architecture.md
+
+plugins:
+  - search
+  - mkdocstrings
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - attr_list
+  - md_in_html

@@ -1,0 +1,15 @@
+[package]
+name = "odme-python"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "_odme"
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+odme-core.workspace = true
+pyo3.workspace = true

@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+htmlcov/
+.venv/
+
+# Rust / build artifacts
+target/
+*.so
+
+# Docs
+site/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
