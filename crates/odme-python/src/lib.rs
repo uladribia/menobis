@@ -4,9 +4,10 @@ use odme_core::clustering::{
     clustering_coefficients as core_clustering,
     weighted_clustering_coefficients as core_weighted_clustering,
 };
-use odme_core::fitting::balance_no_self_loops;
+use odme_core::fitting::{balance_binary_degrees, balance_no_self_loops, balance_weighted_factors};
 use odme_core::generation::{
     sample_multinomial as core_sample_multinomial, sample_poisson as core_sample_poisson,
+    sample_strength_degree_zip as core_sample_strength_degree_zip,
 };
 use odme_core::graph::{
     directed_degrees as core_directed_degrees, directed_strengths as core_directed_strengths,
@@ -135,6 +136,59 @@ fn weight_distribution(
 }
 
 #[pyfunction]
+fn fit_binary_degrees(
+    degree_out: Vec<f64>,
+    degree_in: Vec<f64>,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<(Vec<f64>, Vec<f64>, bool, usize)> {
+    if degree_out.len() != degree_in.len() {
+        return Err(PyValueError::new_err(
+            "degree_out and degree_in must have same length",
+        ));
+    }
+    let result = balance_binary_degrees(
+        &degree_out,
+        &degree_in,
+        self_loops,
+        tolerance,
+        max_iterations,
+    );
+    Ok((result.x, result.y, result.converged, result.iterations))
+}
+
+#[pyfunction]
+fn fit_weighted_factors(
+    excess_out: Vec<f64>,
+    excess_in: Vec<f64>,
+    degree_x: Vec<f64>,
+    degree_y: Vec<f64>,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<(Vec<f64>, Vec<f64>, bool, usize)> {
+    if excess_out.len() != excess_in.len()
+        || excess_out.len() != degree_x.len()
+        || excess_out.len() != degree_y.len()
+    {
+        return Err(PyValueError::new_err(
+            "excess and degree multiplier arrays must have same length",
+        ));
+    }
+    let result = balance_weighted_factors(
+        &excess_out,
+        &excess_in,
+        &degree_x,
+        &degree_y,
+        self_loops,
+        tolerance,
+        max_iterations,
+    );
+    Ok((result.x, result.y, result.converged, result.iterations))
+}
+
+#[pyfunction]
 fn fit_balance_no_self_loops(
     s_out: Vec<f64>,
     s_in: Vec<f64>,
@@ -159,6 +213,29 @@ fn sample_poisson(
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let edges = core_sample_poisson(&x, &y, self_loops, seed);
     (edges.sources, edges.targets, edges.weights)
+}
+
+#[pyfunction]
+fn sample_strength_degree_zip(
+    degree_x: Vec<f64>,
+    degree_y: Vec<f64>,
+    excess_x: Vec<f64>,
+    excess_y: Vec<f64>,
+    self_loops: bool,
+    seed: u64,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    if degree_x.len() != degree_y.len()
+        || degree_x.len() != excess_x.len()
+        || degree_x.len() != excess_y.len()
+    {
+        return Err(PyValueError::new_err(
+            "all multiplier arrays must have same length",
+        ));
+    }
+    let sample = core_sample_strength_degree_zip(
+        &degree_x, &degree_y, &excess_x, &excess_y, self_loops, seed,
+    );
+    Ok((sample.sources, sample.targets, sample.weights))
 }
 
 #[pyfunction]
@@ -202,8 +279,11 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(directed_degrees, module)?)?;
     module.add_function(wrap_pyfunction!(compute_all_node_stats, module)?)?;
     module.add_function(wrap_pyfunction!(weight_distribution, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_binary_degrees, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_weighted_factors, module)?)?;
     module.add_function(wrap_pyfunction!(fit_balance_no_self_loops, module)?)?;
     module.add_function(wrap_pyfunction!(sample_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_degree_zip, module)?)?;
     module.add_function(wrap_pyfunction!(sample_multinomial, module)?)?;
     module.add_function(wrap_pyfunction!(clustering_coefficients, module)?)?;
     module.add_function(wrap_pyfunction!(weighted_clustering_coefficients, module)?)?;

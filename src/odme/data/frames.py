@@ -41,7 +41,7 @@ def normalize_edges(
 ) -> EdgeTable:
     """Validate and normalize raw edge arrays.
 
-    Drops zero-weight edges, rejects negative weights.
+    Drops zero-weight edges, rejects negative or fractional weights.
 
     Args:
         source: Source node ids.
@@ -52,13 +52,20 @@ def normalize_edges(
         Normalized EdgeTable.
 
     Raises:
-        ValueError: If arrays have different lengths or weights are negative.
+        ValueError: If arrays have different lengths or weights are invalid.
     """
     if len(source) != len(target) or len(source) != len(weight):
         msg = "source, target, and weight arrays must have the same length"
         raise ValueError(msg)
 
-    w = np.asarray(weight, dtype=np.int64)
+    raw_weight = np.asarray(weight)
+    if not np.issubdtype(raw_weight.dtype, np.integer) and not np.all(
+        np.equal(raw_weight, np.floor(raw_weight))
+    ):
+        msg = "edge weights must be non-negative integers"
+        raise ValueError(msg)
+
+    w = raw_weight.astype(np.int64)
     if np.any(w < 0):
         msg = "edge weights must be non-negative integers"
         raise ValueError(msg)

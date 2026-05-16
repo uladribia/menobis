@@ -3,7 +3,7 @@
 use rand::rngs::StdRng;
 use rand::Rng;
 use rand::SeedableRng;
-use rand_distr::{Binomial, Distribution, Poisson};
+use rand_distr::{Bernoulli, Binomial, Distribution, Poisson};
 
 /// Sparse edge output from a generation run.
 #[derive(Clone, Debug, Default)]
@@ -41,6 +41,54 @@ pub fn sample_poisson(x: &[f64], y: &[f64], self_loops: bool, seed: u64) -> Samp
                 result.targets.push(j as u64);
                 result.weights.push(w);
             }
+        }
+    }
+
+    result
+}
+
+/// Sample from zero-inflated shifted-Poisson fixed strength-degree model.
+#[must_use]
+pub fn sample_strength_degree_zip(
+    degree_x: &[f64],
+    degree_y: &[f64],
+    excess_x: &[f64],
+    excess_y: &[f64],
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    let mut rng = StdRng::seed_from_u64(seed);
+    let mut result = SampledEdges::default();
+
+    for (i, &dx) in degree_x.iter().enumerate() {
+        for (j, &dy) in degree_y.iter().enumerate() {
+            if !self_loops && i == j {
+                continue;
+            }
+            let z = dx * dy;
+            let p = z / (1.0 + z);
+            if p <= 0.0 {
+                continue;
+            }
+            let present = match Bernoulli::new(p.min(1.0)) {
+                Ok(dist) => dist.sample(&mut rng),
+                Err(_) => false,
+            };
+            if !present {
+                continue;
+            }
+            let lambda = excess_x[i] * excess_y[j];
+            let extra = if lambda > 0.0 {
+                match Poisson::new(lambda) {
+                    Ok(dist) => dist.sample(&mut rng) as u64,
+                    Err(_) => 0,
+                }
+            } else {
+                0
+            };
+            result.sources.push(i as u64);
+            result.targets.push(j as u64);
+            result.weights.push(1 + extra);
         }
     }
 
@@ -148,7 +196,7 @@ fn multinomial_sample(rates: &[f64], total: u64, rng: &mut StdRng) -> Vec<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{sample_multinomial, sample_poisson};
+    use super::{sample_multinomial, sample_poisson, sample_strength_degree_zip};
 
     #[test]
     fn poisson_is_reproducible() {
@@ -169,6 +217,20 @@ mod tests {
         let edges = sample_multinomial(&x, &y, total, true, 42);
         let sum: u64 = edges.weights.iter().sum();
         assert_eq!(sum, total);
+    }
+
+    #[test]
+    fn zip_is_reproducible() {
+        let dx = vec![1.0, 2.0];
+        let dy = vec![1.5, 0.5];
+        let ex = vec![10.0, 20.0];
+        let ey = vec![30.0, 40.0];
+        let a = sample_strength_degree_zip(&dx, &dy, &ex, &ey, true, 42);
+        let b = sample_strength_degree_zip(&dx, &dy, &ex, &ey, true, 42);
+        assert_eq!(a.sources, b.sources);
+        assert_eq!(a.targets, b.targets);
+        assert_eq!(a.weights, b.weights);
+        assert!(a.weights.iter().all(|&w| w > 0));
     }
 
     #[test]
