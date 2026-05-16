@@ -9,6 +9,368 @@ pub struct FitResult {
     pub iterations: usize,
 }
 
+/// Fitted multipliers for exact ME fixed-strength-and-edge-count models.
+#[derive(Clone, Debug)]
+pub struct StrengthEdgesFitResult {
+    pub x: Vec<f64>,
+    pub y: Vec<f64>,
+    pub lam: f64,
+    pub converged: bool,
+    pub iterations: usize,
+}
+
+/// Fitted multipliers for exact ME fixed-strength-degree models.
+#[derive(Clone, Debug)]
+pub struct StrengthDegreeFitResult {
+    pub x: Vec<f64>,
+    pub y: Vec<f64>,
+    pub z: Vec<f64>,
+    pub w: Vec<f64>,
+    pub converged: bool,
+    pub iterations: usize,
+}
+
+fn balance_strength_edges_for_lambda(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    lam: f64,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> FitResult {
+    let n = strength_out.len();
+    let total: f64 = strength_out.iter().sum();
+    let sqrt_t = total.sqrt().max(1.0);
+    let mut x: Vec<f64> = strength_out
+        .iter()
+        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .collect();
+    let mut y: Vec<f64> = strength_in
+        .iter()
+        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .collect();
+    for iter in 0..max_iterations {
+        let old_x = x.clone();
+        let old_y = y.clone();
+        for j in 0..n {
+            if strength_in[j] <= 0.0 {
+                continue;
+            }
+            let denom: f64 = (0..n)
+                .filter(|&i| self_loops || i != j)
+                .map(|i| {
+                    let u = x[i] * y[j];
+                    let exp_u = u.exp();
+                    let den = 1.0 + lam * (exp_u - 1.0);
+                    if den > 0.0 {
+                        lam * x[i] * exp_u / den
+                    } else {
+                        0.0
+                    }
+                })
+                .sum();
+            y[j] = if denom > 0.0 {
+                strength_in[j] / denom
+            } else {
+                0.0
+            };
+        }
+        for i in 0..n {
+            if strength_out[i] <= 0.0 {
+                continue;
+            }
+            let denom: f64 = (0..n)
+                .filter(|&j| self_loops || i != j)
+                .map(|j| {
+                    let u = x[i] * y[j];
+                    let exp_u = u.exp();
+                    let den = 1.0 + lam * (exp_u - 1.0);
+                    if den > 0.0 {
+                        lam * y[j] * exp_u / den
+                    } else {
+                        0.0
+                    }
+                })
+                .sum();
+            x[i] = if denom > 0.0 {
+                strength_out[i] / denom
+            } else {
+                0.0
+            };
+        }
+        let delta = x
+            .iter()
+            .zip(old_x.iter())
+            .chain(y.iter().zip(old_y.iter()))
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0_f64, f64::max);
+        if delta < tolerance {
+            return FitResult {
+                x,
+                y,
+                converged: true,
+                iterations: iter + 1,
+            };
+        }
+    }
+    FitResult {
+        x,
+        y,
+        converged: false,
+        iterations: max_iterations,
+    }
+}
+
+fn expected_edges_strength_edges(x: &[f64], y: &[f64], lam: f64, self_loops: bool) -> f64 {
+    let mut total = 0.0;
+    for (i, &xi) in x.iter().enumerate() {
+        for (j, &yj) in y.iter().enumerate() {
+            if !self_loops && i == j {
+                continue;
+            }
+            let exp_u = (xi * yj).exp();
+            total += lam * (exp_u - 1.0) / (1.0 + lam * (exp_u - 1.0));
+        }
+    }
+    total
+}
+
+/// Fit exact grand-canonical ME fixed-strength-and-edge-count ZIP constraints.
+#[must_use]
+pub fn balance_strength_edges_me(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    target_edges: f64,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> StrengthEdgesFitResult {
+    let mut low = 1e-12;
+    let mut high = 1.0;
+    let mut best = balance_strength_edges_for_lambda(
+        strength_out,
+        strength_in,
+        high,
+        self_loops,
+        tolerance,
+        max_iterations,
+    );
+    while expected_edges_strength_edges(&best.x, &best.y, high, self_loops) < target_edges
+        && high < 1e12
+    {
+        high *= 2.0;
+        best = balance_strength_edges_for_lambda(
+            strength_out,
+            strength_in,
+            high,
+            self_loops,
+            tolerance,
+            max_iterations,
+        );
+    }
+    let mut iterations = 0;
+    for iter in 0..80 {
+        let mid = 0.5 * (low + high);
+        let fit = balance_strength_edges_for_lambda(
+            strength_out,
+            strength_in,
+            mid,
+            self_loops,
+            tolerance,
+            max_iterations,
+        );
+        let edges = expected_edges_strength_edges(&fit.x, &fit.y, mid, self_loops);
+        best = fit;
+        if (edges - target_edges).abs() < tolerance {
+            iterations = iter + 1;
+            high = mid;
+            break;
+        }
+        if edges < target_edges {
+            low = mid;
+        } else {
+            high = mid;
+        }
+        iterations = iter + 1;
+    }
+    StrengthEdgesFitResult {
+        x: best.x,
+        y: best.y,
+        lam: high,
+        converged: true,
+        iterations,
+    }
+}
+
+/// Fit exact grand-canonical ME fixed-strength-and-degree ZIP constraints.
+///
+/// The model is the thesis case 4 ME equation:
+/// E[t_ij] = z_i w_j x_i y_j exp(x_i y_j) / (1 + z_i w_j(exp(x_i y_j)-1)).
+#[must_use]
+pub fn balance_strength_degree_me(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    degree_out: &[f64],
+    degree_in: &[f64],
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> StrengthDegreeFitResult {
+    let n = strength_out.len();
+    let total: f64 = strength_out.iter().sum();
+    let sqrt_t = total.sqrt().max(1.0);
+    let mut x: Vec<f64> = strength_out
+        .iter()
+        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .collect();
+    let mut y: Vec<f64> = strength_in
+        .iter()
+        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .collect();
+    let mut z = vec![0.5; n];
+    let mut w = vec![0.5; n];
+
+    for i in 0..n {
+        if degree_out[i] <= 0.0 || strength_out[i] <= 0.0 {
+            x[i] = 0.0;
+            z[i] = 0.0;
+        }
+        if degree_in[i] <= 0.0 || strength_in[i] <= 0.0 {
+            y[i] = 0.0;
+            w[i] = 0.0;
+        }
+    }
+
+    for iter in 0..max_iterations {
+        let old_x = x.clone();
+        let old_y = y.clone();
+        let old_z = z.clone();
+        let old_w = w.clone();
+
+        for i in 0..n {
+            if strength_out[i] <= 0.0 {
+                continue;
+            }
+            let denom: f64 = (0..n)
+                .filter(|&j| self_loops || i != j)
+                .map(|j| {
+                    let u = x[i] * y[j];
+                    let v = z[i] * w[j];
+                    let exp_u = u.exp();
+                    let den = 1.0 + v * (exp_u - 1.0);
+                    if den > 0.0 {
+                        z[i] * y[j] * w[j] * exp_u / den
+                    } else {
+                        0.0
+                    }
+                })
+                .sum();
+            x[i] = if denom > 0.0 {
+                strength_out[i] / denom
+            } else {
+                0.0
+            };
+        }
+        for j in 0..n {
+            if strength_in[j] <= 0.0 {
+                continue;
+            }
+            let denom: f64 = (0..n)
+                .filter(|&i| self_loops || i != j)
+                .map(|i| {
+                    let u = x[i] * y[j];
+                    let v = z[i] * w[j];
+                    let exp_u = u.exp();
+                    let den = 1.0 + v * (exp_u - 1.0);
+                    if den > 0.0 {
+                        w[j] * x[i] * z[i] * exp_u / den
+                    } else {
+                        0.0
+                    }
+                })
+                .sum();
+            y[j] = if denom > 0.0 {
+                strength_in[j] / denom
+            } else {
+                0.0
+            };
+        }
+        for j in 0..n {
+            if degree_in[j] <= 0.0 {
+                continue;
+            }
+            let denom: f64 = (0..n)
+                .filter(|&i| self_loops || i != j)
+                .map(|i| {
+                    let u = x[i] * y[j];
+                    let exp_u = u.exp();
+                    let den = 1.0 + z[i] * w[j] * (exp_u - 1.0);
+                    if den > 0.0 {
+                        z[i] * (exp_u - 1.0) / den
+                    } else {
+                        0.0
+                    }
+                })
+                .sum();
+            w[j] = if denom > 0.0 {
+                degree_in[j] / denom
+            } else {
+                0.0
+            };
+        }
+        for i in 0..n {
+            if degree_out[i] <= 0.0 {
+                continue;
+            }
+            let denom: f64 = (0..n)
+                .filter(|&j| self_loops || i != j)
+                .map(|j| {
+                    let u = x[i] * y[j];
+                    let exp_u = u.exp();
+                    let den = 1.0 + z[i] * w[j] * (exp_u - 1.0);
+                    if den > 0.0 {
+                        w[j] * (exp_u - 1.0) / den
+                    } else {
+                        0.0
+                    }
+                })
+                .sum();
+            z[i] = if denom > 0.0 {
+                degree_out[i] / denom
+            } else {
+                0.0
+            };
+        }
+
+        let delta = x
+            .iter()
+            .zip(old_x.iter())
+            .chain(y.iter().zip(old_y.iter()))
+            .chain(z.iter().zip(old_z.iter()))
+            .chain(w.iter().zip(old_w.iter()))
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0_f64, f64::max);
+        if delta < tolerance {
+            return StrengthDegreeFitResult {
+                x,
+                y,
+                z,
+                w,
+                converged: true,
+                iterations: iter + 1,
+            };
+        }
+    }
+    StrengthDegreeFitResult {
+        x,
+        y,
+        z,
+        w,
+        converged: false,
+        iterations: max_iterations,
+    }
+}
+
 fn solve_binary_multiplier(target: f64, other: &[f64], skip: Option<usize>) -> f64 {
     if target <= 0.0 {
         return 0.0;

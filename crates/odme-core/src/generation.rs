@@ -13,6 +13,63 @@ pub struct SampledEdges {
     pub weights: Vec<u64>,
 }
 
+/// Sample custom p_ij grand-canonical Poisson graph with E[t_ij] = T p_ij.
+#[must_use]
+pub fn sample_custom_pij_poisson(
+    sources: &[u64],
+    targets: &[u64],
+    probabilities: &[f64],
+    total_events: u64,
+    seed: u64,
+) -> SampledEdges {
+    let mut rng = StdRng::seed_from_u64(seed);
+    let mut result = SampledEdges::default();
+    let p_sum: f64 = probabilities.iter().sum();
+    if p_sum <= 0.0 {
+        return result;
+    }
+    for ((&source, &target), &probability) in
+        sources.iter().zip(targets.iter()).zip(probabilities.iter())
+    {
+        let rate = total_events as f64 * probability / p_sum;
+        if rate <= 0.0 {
+            continue;
+        }
+        let w = match Poisson::new(rate) {
+            Ok(dist) => dist.sample(&mut rng) as u64,
+            Err(_) => 0,
+        };
+        if w > 0 {
+            result.sources.push(source);
+            result.targets.push(target);
+            result.weights.push(w);
+        }
+    }
+    result
+}
+
+/// Sample custom p_ij canonical multinomial graph with fixed T.
+#[must_use]
+pub fn sample_custom_pij_multinomial(
+    sources: &[u64],
+    targets: &[u64],
+    probabilities: &[f64],
+    total_events: u64,
+    seed: u64,
+) -> SampledEdges {
+    let mut rng = StdRng::seed_from_u64(seed);
+    let counts = multinomial_sample(probabilities, total_events, &mut rng);
+    let mut result = SampledEdges::default();
+    for ((&source, &target), &weight) in sources.iter().zip(targets.iter()).zip(counts.iter()) {
+        if weight > 0 {
+            result.sources.push(source);
+            result.targets.push(target);
+            result.weights.push(weight);
+        }
+    }
+    result
+}
+
 /// Sample from independent Poisson(x_i * y_j) for all (i, j).
 #[must_use]
 pub fn sample_poisson(x: &[f64], y: &[f64], self_loops: bool, seed: u64) -> SampledEdges {
@@ -47,26 +104,129 @@ pub fn sample_poisson(x: &[f64], y: &[f64], self_loops: bool, seed: u64) -> Samp
     result
 }
 
-/// Sample from zero-inflated shifted-Poisson fixed strength-degree model.
+fn zero_truncated_poisson_mean(rate: f64) -> f64 {
+    if rate <= 0.0 {
+        return 1.0;
+    }
+    rate / (1.0 - (-rate).exp())
+}
+
+fn solve_zero_truncated_poisson_rate(mean: f64) -> f64 {
+    if mean <= 1.0 {
+        return 1e-12;
+    }
+    let mut low = 1e-12;
+    let mut high = mean.max(1.0);
+    while zero_truncated_poisson_mean(high) < mean {
+        high *= 2.0;
+    }
+    for _ in 0..100 {
+        let mid = 0.5 * (low + high);
+        if zero_truncated_poisson_mean(mid) < mean {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    0.5 * (low + high)
+}
+
+fn sample_zero_truncated_poisson(rate: f64, rng: &mut StdRng) -> u64 {
+    if rate <= 0.0 {
+        return 1;
+    }
+    let dist = match Poisson::new(rate) {
+        Ok(d) => d,
+        Err(_) => return 1,
+    };
+    loop {
+        let value = dist.sample(rng) as u64;
+        if value > 0 {
+            return value;
+        }
+    }
+}
+
+/// Sample original fixed-degree ME weighted model.
+#[must_use]
+pub fn sample_fixed_degree_zip(
+    x: &[f64],
+    y: &[f64],
+    total_events: u64,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    let mut expected_edges = 0.0;
+    for (i, &xi) in x.iter().enumerate() {
+        for (j, &yj) in y.iter().enumerate() {
+            if !self_loops && i == j {
+                continue;
+            }
+            let z = xi * yj;
+            expected_edges += z / (1.0 + z);
+        }
+    }
+    let mean_existing_weight = if expected_edges > 0.0 {
+        total_events as f64 / expected_edges
+    } else {
+        1.0
+    };
+    let rate = solve_zero_truncated_poisson_rate(mean_existing_weight);
+    let mut rng = StdRng::seed_from_u64(seed);
+    let mut result = SampledEdges::default();
+    for (i, &xi) in x.iter().enumerate() {
+        for (j, &yj) in y.iter().enumerate() {
+            if !self_loops && i == j {
+                continue;
+            }
+            let z = xi * yj;
+            let p = z / (1.0 + z);
+            if p <= 0.0 {
+                continue;
+            }
+            let present = match Bernoulli::new(p.min(1.0)) {
+                Ok(dist) => dist.sample(&mut rng),
+                Err(_) => false,
+            };
+            if present {
+                result.sources.push(i as u64);
+                result.targets.push(j as u64);
+                result
+                    .weights
+                    .push(sample_zero_truncated_poisson(rate, &mut rng));
+            }
+        }
+    }
+    result
+}
+
+/// Sample from the exact ME fixed-strength-degree ZIP model.
 #[must_use]
 pub fn sample_strength_degree_zip(
-    degree_x: &[f64],
-    degree_y: &[f64],
-    excess_x: &[f64],
-    excess_y: &[f64],
+    x: &[f64],
+    y: &[f64],
+    z: &[f64],
+    w: &[f64],
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
     let mut rng = StdRng::seed_from_u64(seed);
     let mut result = SampledEdges::default();
 
-    for (i, &dx) in degree_x.iter().enumerate() {
-        for (j, &dy) in degree_y.iter().enumerate() {
+    for (i, &xi) in x.iter().enumerate() {
+        for (j, &yj) in y.iter().enumerate() {
             if !self_loops && i == j {
                 continue;
             }
-            let z = dx * dy;
-            let p = z / (1.0 + z);
+            let u = xi * yj;
+            let v = z[i] * w[j];
+            let exp_u = u.exp();
+            let den = 1.0 + v * (exp_u - 1.0);
+            let p = if den > 0.0 {
+                v * (exp_u - 1.0) / den
+            } else {
+                0.0
+            };
             if p <= 0.0 {
                 continue;
             }
@@ -77,18 +237,11 @@ pub fn sample_strength_degree_zip(
             if !present {
                 continue;
             }
-            let lambda = excess_x[i] * excess_y[j];
-            let extra = if lambda > 0.0 {
-                match Poisson::new(lambda) {
-                    Ok(dist) => dist.sample(&mut rng) as u64,
-                    Err(_) => 0,
-                }
-            } else {
-                0
-            };
             result.sources.push(i as u64);
             result.targets.push(j as u64);
-            result.weights.push(1 + extra);
+            result
+                .weights
+                .push(sample_zero_truncated_poisson(u, &mut rng));
         }
     }
 

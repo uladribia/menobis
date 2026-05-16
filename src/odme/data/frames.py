@@ -12,6 +12,20 @@ from numpy.typing import NDArray
 
 
 @dataclass(frozen=True)
+class ProbabilityTable:
+    """Sparse custom p_ij probability table."""
+
+    source: NDArray[np.uint64]
+    target: NDArray[np.uint64]
+    probability: NDArray[np.float64]
+
+    @property
+    def num_edges(self) -> int:
+        """Number of candidate edges."""
+        return len(self.source)
+
+
+@dataclass(frozen=True)
 class EdgeTable:
     """Canonical ODME weighted edge table stored as numpy arrays."""
 
@@ -32,6 +46,36 @@ class EdgeTable:
     def __len__(self) -> int:
         """Number of edges."""
         return len(self.source)
+
+
+def normalize_probabilities(
+    source: NDArray[np.integer],
+    target: NDArray[np.integer],
+    probability: NDArray[np.floating],
+) -> ProbabilityTable:
+    """Validate and normalize sparse custom probabilities."""
+    if len(source) != len(target) or len(source) != len(probability):
+        msg = "source, target, and probability arrays must have the same length"
+        raise ValueError(msg)
+    p = np.asarray(probability, dtype=np.float64)
+    if np.any(p < 0.0) or np.any(p > 1.0):
+        msg = "probabilities must be in [0, 1]"
+        raise ValueError(msg)
+    mask = p > 0.0
+    pairs = set[tuple[int, int]]()
+    for s_val, t_val in zip(
+        np.asarray(source)[mask], np.asarray(target)[mask], strict=True
+    ):
+        pair = (int(s_val), int(t_val))
+        if pair in pairs:
+            msg = "duplicate probability entries are not allowed"
+            raise ValueError(msg)
+        pairs.add(pair)
+    return ProbabilityTable(
+        source=np.asarray(source, dtype=np.uint64)[mask],
+        target=np.asarray(target, dtype=np.uint64)[mask],
+        probability=p[mask],
+    )
 
 
 def normalize_edges(
@@ -78,4 +122,9 @@ def normalize_edges(
     )
 
 
-__all__ = ["EdgeTable", "normalize_edges"]
+__all__ = [
+    "EdgeTable",
+    "ProbabilityTable",
+    "normalize_edges",
+    "normalize_probabilities",
+]

@@ -304,18 +304,18 @@ Every branch with an architectural consequence should add or update a decision d
 | 3. I/O | ✅ Complete | 8 (CSV, TSV, Parquet, GraphML, MTX, Pajek) |
 | 4. Analysis | ✅ Complete | 12 (strengths, degrees, Y2, k_nn, s_nn, P(w), clustering) |
 | 5. Fixed-strength | ✅ Complete | 13 (fitting, generation, ensemble) |
-| 6. Remaining models | 🚧 In progress | 9 (fixed-degree, strength-degree ZIP) |
+| 6. Remaining models | 🚧 In progress | 14 (thesis cases 1, 3, 4, 5) |
 | 7. Additional kernels | ❌ Not started | — |
 | 7b. Ensemble equivalence | ❌ Not started | — |
 | 8. CLI | ✅ Initial | 10 (analyze, fit, generate with --json/--quiet/--output) |
 | 9. Docs site | ✅ Builds | — |
 | 10. Benchmarks | ❌ Not started | — |
 
-**Totals: 62 Python tests, 14 Rust tests, all passing. All linters green.**
+**Totals: 67 Python tests, 14 Rust tests, all passing. All linters green.**
 
 **Architecture:** All computation in Rust (`odme-core`). Python is thin wrappers + CLI + I/O. No Polars. numpy + pyarrow + rustworkx only.
 
-**Next steps:** Continue Milestone 6 with fixed-strength-and-degree, custom-`p_ij`, and gravity/distance models.
+**Next steps:** Continue Milestone 6 with gravity/distance-constrained models.
 
 ## Proposed implementation milestones
 
@@ -369,8 +369,11 @@ Every branch with an architectural consequence should add or update a decision d
 ### Milestone 6: Remaining maximum-entropy models — 🚧 IN PROGRESS
 
 - ✅ Implement directed binary fixed-degree fitting with `p_ij = x_i y_j / (1 + x_i y_j)`.
-- ✅ Implement grand-canonical strength-degree zero-inflated shifted-Poisson model.
-- ⬜ Implement custom-`p_ij` and gravity/distance-constrained models from the documented equations.
+- ✅ Implement custom-`p_ij` thesis Case 1 generation.
+- ✅ Implement fixed-strength-and-total-edges thesis Case 3 fitting.
+- ✅ Implement exact fixed-strength-and-degree thesis Case 4 fitting/generation.
+- ✅ Implement fixed-degree thesis Case 5 weighted generation.
+- ⬜ Implement gravity/distance-constrained models from the documented equations.
 - The gravity model `E[t_ij] = x_i * y_j * f(d_ij)` should accept a metric function (e.g., Euclidean) and evaluate `f(d_ij)` on-the-fly per source row, avoiding NxN distance matrix storage. A pre-computed distance matrix should only be needed when the cost is non-metric or loaded from a file, and even then sparse or streaming access should be preferred.
 - Keep each model in its own small branch and expose both Rust and Python endpoints.
 - TDD: expected degree, strength, probability, and cost constraints hold within documented tolerances.

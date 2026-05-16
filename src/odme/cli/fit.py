@@ -126,29 +126,29 @@ def strength_degree_zip(
         data = [
             {
                 "node": int(n),
-                "degree_x": float(dx),
-                "degree_y": float(dy),
-                "excess_x": float(ex),
-                "excess_y": float(ey),
+                "x": float(dx),
+                "y": float(dy),
+                "z": float(ex),
+                "w": float(ey),
             }
             for n, dx, dy, ex, ey in zip(
                 result.node,
-                result.degree_x,
-                result.degree_y,
-                result.excess_x,
-                result.excess_y,
+                result.x,
+                result.y,
+                result.z,
+                result.w,
                 strict=True,
             )
         ]
         _write_output(json.dumps(data, indent=2), output)
     else:
-        lines = ["node,degree_x,degree_y,excess_x,excess_y"]
+        lines = ["node,x,y,z,w"]
         for n, dx, dy, ex, ey in zip(
             result.node,
-            result.degree_x,
-            result.degree_y,
-            result.excess_x,
-            result.excess_y,
+            result.x,
+            result.y,
+            result.z,
+            result.w,
             strict=True,
         ):
             lines.append(f"{n},{dx},{dy},{ex},{ey}")

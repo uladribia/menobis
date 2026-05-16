@@ -15,7 +15,7 @@ Data goes to stdout unless `--output` is set.
 |---------|-------|----------------|
 | `strengths` | Fixed-strength multi-edge | `node,x,y` |
 | `degrees` | Fixed-degree binary | `node,x,y` |
-| `strength-degree-zip` | Strength-degree ZIP | `node,degree_x,degree_y,excess_x,excess_y` |
+| `strength-degree-zip` | Exact ME fixed-strength-degree ZIP | `node,x,y,z,w` |
 
 ## Examples
 

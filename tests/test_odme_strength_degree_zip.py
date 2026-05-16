@@ -1,65 +1,62 @@
-"""Tests for grand-canonical fixed-strength-degree ZIP model."""
+"""Property tests for exact ME fixed-strength-degree ZIP model."""
 
 import numpy as np
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from odme.analysis import directed_degrees, directed_strengths
 from odme.models import fit_strength_degree_zip, sample_strength_degree_zip
 
 
-def _probability(x: np.ndarray, y: np.ndarray, *, self_loops: bool) -> np.ndarray:
-    z = np.outer(x, y)
-    p = z / (1.0 + z)
-    if not self_loops:
-        np.fill_diagonal(p, 0.0)
-    return p
+def _expectations(
+    x: np.ndarray, y: np.ndarray, z: np.ndarray, w: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    u = np.outer(x, y)
+    v = np.outer(z, w)
+    exp_u = np.exp(u)
+    den = 1.0 + v * (exp_u - 1.0)
+    p = v * (exp_u - 1.0) / den
+    expected = v * u * exp_u / den
+    return p, expected
 
 
-def _lambda(a: np.ndarray, b: np.ndarray, *, self_loops: bool) -> np.ndarray:
-    lam = np.outer(a, b)
-    if not self_loops:
-        np.fill_diagonal(lam, 0.0)
-    return lam
-
-
-def test_zip_fit_recovers_expected_strengths_and_degrees() -> None:
-    k_out = np.array([0.8, 1.2, 1.0], dtype=np.float64)
-    k_in = np.array([1.1, 0.9, 1.0], dtype=np.float64)
-    s_out = np.array([2.0, 3.5, 2.5], dtype=np.float64)
-    s_in = np.array([2.7, 2.4, 2.9], dtype=np.float64)
+@given(
+    values=st.lists(
+        st.floats(min_value=0.05, max_value=0.7, allow_nan=False, allow_infinity=False),
+        min_size=12,
+        max_size=12,
+    ),
+)
+@settings(deadline=None, max_examples=15)
+def test_zip_fit_recovers_expected_strengths_and_degrees(values: list[float]) -> None:
+    """Fitted equations recover constraints generated from valid multipliers."""
+    arr = np.asarray(values, dtype=np.float64).reshape(4, 3)
+    true_x, true_y, true_z, true_w = arr
+    p, expected = _expectations(true_x, true_y, true_z, true_w)
+    k_out = p.sum(axis=1)
+    k_in = p.sum(axis=0)
+    s_out = expected.sum(axis=1)
+    s_in = expected.sum(axis=0)
 
     fit = fit_strength_degree_zip(s_out, s_in, k_out, k_in)
-    p = _probability(fit.degree_x, fit.degree_y, self_loops=True)
-    lam = _lambda(fit.excess_x, fit.excess_y, self_loops=True)
-    expected_strength = p * (1.0 + lam)
+    p_fit, expected_fit = _expectations(fit.x, fit.y, fit.z, fit.w)
 
-    np.testing.assert_allclose(p.sum(axis=1), k_out, atol=1e-6)
-    np.testing.assert_allclose(p.sum(axis=0), k_in, atol=1e-6)
-    np.testing.assert_allclose(expected_strength.sum(axis=1), s_out, atol=1e-6)
-    np.testing.assert_allclose(expected_strength.sum(axis=0), s_in, atol=1e-6)
-
-
-def test_zip_fit_no_self_loops() -> None:
-    k_out = np.array([0.8, 1.1, 0.9], dtype=np.float64)
-    k_in = np.array([0.9, 0.8, 1.1], dtype=np.float64)
-    s_out = np.array([2.2, 3.0, 2.8], dtype=np.float64)
-    s_in = np.array([2.5, 2.1, 3.4], dtype=np.float64)
-
-    fit = fit_strength_degree_zip(s_out, s_in, k_out, k_in, self_loops=False)
-    p = _probability(fit.degree_x, fit.degree_y, self_loops=False)
-    lam = _lambda(fit.excess_x, fit.excess_y, self_loops=False)
-    expected_strength = p * (1.0 + lam)
-
-    np.testing.assert_allclose(np.diag(p), 0.0)
-    np.testing.assert_allclose(expected_strength.sum(axis=1), s_out, atol=1e-6)
-    np.testing.assert_allclose(expected_strength.sum(axis=0), s_in, atol=1e-6)
+    np.testing.assert_allclose(p_fit.sum(axis=1), k_out, atol=1e-6)
+    np.testing.assert_allclose(p_fit.sum(axis=0), k_in, atol=1e-6)
+    np.testing.assert_allclose(expected_fit.sum(axis=1), s_out, atol=1e-6)
+    np.testing.assert_allclose(expected_fit.sum(axis=0), s_in, atol=1e-6)
 
 
 def test_zip_sample_is_reproducible_and_weighted_positive() -> None:
-    k_out = np.array([0.8, 1.2, 1.0], dtype=np.float64)
-    k_in = np.array([1.1, 0.9, 1.0], dtype=np.float64)
-    s_out = np.array([20.0, 35.0, 25.0], dtype=np.float64)
-    s_in = np.array([27.0, 24.0, 29.0], dtype=np.float64)
-    fit = fit_strength_degree_zip(s_out, s_in, k_out, k_in)
+    """Samples are seeded and have positive integer weights on present edges."""
+    x = np.array([0.3, 0.4, 0.5], dtype=np.float64)
+    y = np.array([0.2, 0.6, 0.4], dtype=np.float64)
+    z = np.array([0.7, 0.5, 0.8], dtype=np.float64)
+    w = np.array([0.6, 0.9, 0.4], dtype=np.float64)
+    p, expected = _expectations(x, y, z, w)
+    fit = fit_strength_degree_zip(
+        expected.sum(axis=1), expected.sum(axis=0), p.sum(axis=1), p.sum(axis=0)
+    )
 
     first = sample_strength_degree_zip(fit, seed=42)
     second = sample_strength_degree_zip(fit, seed=42)

@@ -14,7 +14,7 @@ seeded synthetic edge table sample.
 | Command | Model | Output columns |
 |---------|-------|----------------|
 | `poisson` | Fixed-strength Poisson multi-edge | `source,target,weight` |
-| `strength-degree-zip` | Strength-degree zero-inflated shifted-Poisson | `source,target,weight` |
+| `strength-degree-zip` | Exact ME fixed-strength-degree ZIP | `source,target,weight` |
 
 ## Examples
 

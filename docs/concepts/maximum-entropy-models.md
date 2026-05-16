@@ -6,102 +6,104 @@ description: Maximum-entropy model constraints implemented by ODME.
 
 ## TL;DR
 
-ODME currently implements directed fixed-strength multi-edge fitting and directed
-fixed-degree binary fitting. Both return Lagrange multipliers `x` and `y`.
+ODME implements thesis-aligned directed multi-edge models: fixed strength,
+fixed degree, fixed strength + total edges, fixed strength + degree, and custom
+`p_ij` generation.
 
 ## Implemented models
 
-| Model | Constraint | Expectation/probability | Python API |
-|-------|------------|-------------------------|------------|
+| Model | Constraint | Equation | Python API |
+|-------|------------|----------|------------|
 | Fixed-strength ME | `s_out`, `s_in` | `E[t_ij] = x_i y_j` | `fit_fixed_strength_me` |
-| Fixed-degree binary | `k_out`, `k_in` | `p_ij = x_i y_j / (1 + x_i y_j)` | `fit_fixed_degree_binary` |
-| Strength-degree ZIP | `s_out`, `s_in`, `k_out`, `k_in` | `E[t_ij] = p_ij(1 + λ_ij)` | `fit_strength_degree_zip` |
+| Fixed-degree ME | `k_out`, `k_in`, `T` | `E[t_ij] = T p_ij / <E>` | `sample_fixed_degree_zip` |
+| Strength + edges ME | `s_out`, `s_in`, `E` | thesis Case 3 | `fit_strength_edges_zip` |
+| Strength + degree ME | `s_out`, `s_in`, `k_out`, `k_in` | thesis Case 4 | `fit_strength_degree_zip` |
+| Custom `p_ij` ME | `p_ij`, `T` | `E[t_ij] = T p_ij` | `sample_custom_pij_*` |
 
-## Strength-degree invariant
+## Invariant
 
-For weighted integer networks, every node must satisfy:
+Weighted integer networks require `s_i >= k_i` for every node and direction.
+ODME rejects fractional weights and validates this before coupled fitting.
 
-\[
-s_i^{out} \ge k_i^{out}, \quad s_i^{in} \ge k_i^{in}.
-\]
+## Fixed-strength ME
 
-Each positive edge contributes at least one unit of strength, so ODME rejects
-fractional weights at the data boundary and validates this constraint before
-future coupled strength-degree model fitting.
-
-```python
-from odme.models import validate_strength_degree_constraints
-
-validate_strength_degree_constraints(s_out, s_in, k_out, k_in)
-```
-
-## Fixed-strength multi-edge model
-
-For directed multi-edge networks with self loops, the analytical solution is:
+With self loops:
 
 \[
-E[t_{ij}] = \frac{s_i^{out} s_j^{in}}{T}.
+E[t_{ij}] = \frac{s_i^{out} s_j^{in}}{T} = x_i y_j.
 \]
 
-ODME returns multipliers where `x_i = s_i^out / sqrt(T)` and
-`y_j = s_j^in / sqrt(T)`, so `E[t_ij] = x_i y_j`.
-
 ```python
-import numpy as np
-from odme.models import fit_fixed_strength_me
-
-s_out = np.array([10, 20, 30])
-s_in = np.array([15, 25, 20])
 fit = fit_fixed_strength_me(s_out, s_in)
 ```
 
-## Fixed-degree binary model
+## Fixed-degree ME
 
-For directed binary networks, ODME fits expected degrees using:
+The binary occupation probability is:
 
 \[
 p_{ij} = \frac{x_i y_j}{1 + x_i y_j}.
 \]
 
-```python
-import numpy as np
-from odme.models import fit_fixed_degree_binary
+For total events `T`, the expected weighted occupation is:
 
-k_out = np.array([0.8, 1.2, 1.0])
-k_in = np.array([1.1, 0.9, 1.0])
+\[
+E[t_{ij}] = \frac{T}{\langle E \rangle}p_{ij}, \quad
+\langle E \rangle = \sum_{ij} p_{ij}.
+\]
+
+```python
 fit = fit_fixed_degree_binary(k_out, k_in)
+sample = sample_fixed_degree_zip(fit, total_events=10_000, seed=42)
 ```
 
-Set `self_loops=False` to constrain only `i != j` probabilities.
+## Fixed strength + total edges ME
 
-## Strength-degree zero-inflated shifted-Poisson model
-
-For the grand-canonical fixed-strength-and-degree case currently implemented,
-ODME uses a hurdle/zero-inflated shifted-Poisson distribution:
+Thesis Case 3 uses:
 
 \[
-P(t_{ij} > 0) = p_{ij}, \quad t_{ij} | t_{ij}>0 = 1 + Pois(\lambda_{ij}).
+E[t_{ij}] =
+\frac{\lambda x_i y_j e^{x_i y_j}}
+{1 + \lambda(e^{x_i y_j}-1)}.
 \]
-
-The expected weight is:
-
-\[
-E[t_{ij}] = p_{ij}(1 + \lambda_{ij}), \quad
-\lambda_{ij} = a_i b_j.
-\]
-
-The binary part fits degrees. The excess part fits `s - k`, which enforces the
-integer-weight invariant `s_i >= k_i`.
 
 ```python
-import numpy as np
-from odme.models import fit_strength_degree_zip, sample_strength_degree_zip
+fit = fit_strength_edges_zip(s_out, s_in, target_edges=500.0)
+```
 
-s_out = np.array([2.0, 3.5, 2.5])
-s_in = np.array([2.7, 2.4, 2.9])
-k_out = np.array([0.8, 1.2, 1.0])
-k_in = np.array([1.1, 0.9, 1.0])
+## Fixed strength + degree ME
 
+Thesis Case 4 uses:
+
+\[
+E[t_{ij}] =
+\frac{z_i w_j x_i y_j e^{x_i y_j}}
+{1 + z_i w_j(e^{x_i y_j}-1)}.
+\]
+
+The binary occupation probability is:
+
+\[
+P(t_{ij}>0) =
+\frac{z_i w_j(e^{x_i y_j}-1)}
+{1 + z_i w_j(e^{x_i y_j}-1)}.
+\]
+
+```python
 fit = fit_strength_degree_zip(s_out, s_in, k_out, k_in)
 sample = sample_strength_degree_zip(fit, seed=42)
+```
+
+## Custom `p_ij` ME
+
+For thesis generator Case 1:
+
+\[
+E[t_{ij}] = T p_{ij}.
+\]
+
+```python
+probabilities = normalize_probabilities(source, target, p)
+sample = sample_custom_pij_multinomial(probabilities, total_events=T, seed=42)
+sample = sample_custom_pij_poisson(probabilities, total_events=T, seed=42)
 ```

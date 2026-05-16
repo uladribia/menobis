@@ -4,8 +4,14 @@ use odme_core::clustering::{
     clustering_coefficients as core_clustering,
     weighted_clustering_coefficients as core_weighted_clustering,
 };
-use odme_core::fitting::{balance_binary_degrees, balance_no_self_loops, balance_weighted_factors};
+use odme_core::fitting::{
+    balance_binary_degrees, balance_no_self_loops, balance_strength_degree_me,
+    balance_strength_edges_me, balance_weighted_factors,
+};
 use odme_core::generation::{
+    sample_custom_pij_multinomial as core_sample_custom_pij_multinomial,
+    sample_custom_pij_poisson as core_sample_custom_pij_poisson,
+    sample_fixed_degree_zip as core_sample_fixed_degree_zip,
     sample_multinomial as core_sample_multinomial, sample_poisson as core_sample_poisson,
     sample_strength_degree_zip as core_sample_strength_degree_zip,
 };
@@ -19,6 +25,10 @@ use odme_core::stats::{
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+
+type FitPair = (Vec<f64>, Vec<f64>, bool, usize);
+type FitStrengthEdges = (Vec<f64>, Vec<f64>, f64, bool, usize);
+type FitStrengthDegree = (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, bool, usize);
 
 /// Return the version of the Rust core exposed through Python.
 #[pyfunction]
@@ -142,7 +152,7 @@ fn fit_binary_degrees(
     self_loops: bool,
     tolerance: f64,
     max_iterations: usize,
-) -> PyResult<(Vec<f64>, Vec<f64>, bool, usize)> {
+) -> PyResult<FitPair> {
     if degree_out.len() != degree_in.len() {
         return Err(PyValueError::new_err(
             "degree_out and degree_in must have same length",
@@ -159,6 +169,74 @@ fn fit_binary_degrees(
 }
 
 #[pyfunction]
+fn fit_strength_edges_me(
+    strength_out: Vec<f64>,
+    strength_in: Vec<f64>,
+    target_edges: f64,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<FitStrengthEdges> {
+    if strength_out.len() != strength_in.len() {
+        return Err(PyValueError::new_err(
+            "strength arrays must have same length",
+        ));
+    }
+    let result = balance_strength_edges_me(
+        &strength_out,
+        &strength_in,
+        target_edges,
+        self_loops,
+        tolerance,
+        max_iterations,
+    );
+    Ok((
+        result.x,
+        result.y,
+        result.lam,
+        result.converged,
+        result.iterations,
+    ))
+}
+
+#[pyfunction]
+fn fit_strength_degree_me(
+    strength_out: Vec<f64>,
+    strength_in: Vec<f64>,
+    degree_out: Vec<f64>,
+    degree_in: Vec<f64>,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<FitStrengthDegree> {
+    if strength_out.len() != strength_in.len()
+        || strength_out.len() != degree_out.len()
+        || strength_out.len() != degree_in.len()
+    {
+        return Err(PyValueError::new_err(
+            "strength and degree arrays must have same length",
+        ));
+    }
+    let result = balance_strength_degree_me(
+        &strength_out,
+        &strength_in,
+        &degree_out,
+        &degree_in,
+        self_loops,
+        tolerance,
+        max_iterations,
+    );
+    Ok((
+        result.x,
+        result.y,
+        result.z,
+        result.w,
+        result.converged,
+        result.iterations,
+    ))
+}
+
+#[pyfunction]
 fn fit_weighted_factors(
     excess_out: Vec<f64>,
     excess_in: Vec<f64>,
@@ -167,7 +245,7 @@ fn fit_weighted_factors(
     self_loops: bool,
     tolerance: f64,
     max_iterations: usize,
-) -> PyResult<(Vec<f64>, Vec<f64>, bool, usize)> {
+) -> PyResult<FitPair> {
     if excess_out.len() != excess_in.len()
         || excess_out.len() != degree_x.len()
         || excess_out.len() != degree_y.len()
@@ -194,7 +272,7 @@ fn fit_balance_no_self_loops(
     s_in: Vec<f64>,
     tolerance: f64,
     max_iterations: usize,
-) -> PyResult<(Vec<f64>, Vec<f64>, bool, usize)> {
+) -> PyResult<FitPair> {
     if s_out.len() != s_in.len() {
         return Err(PyValueError::new_err(
             "s_out and s_in must have the same length",
@@ -202,6 +280,42 @@ fn fit_balance_no_self_loops(
     }
     let result = balance_no_self_loops(&s_out, &s_in, tolerance, max_iterations);
     Ok((result.x, result.y, result.converged, result.iterations))
+}
+
+#[pyfunction]
+fn sample_custom_pij_poisson(
+    sources: Vec<u64>,
+    targets: Vec<u64>,
+    probabilities: Vec<f64>,
+    total_events: u64,
+    seed: u64,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    if sources.len() != targets.len() || sources.len() != probabilities.len() {
+        return Err(PyValueError::new_err(
+            "custom p_ij arrays must have same length",
+        ));
+    }
+    let sample =
+        core_sample_custom_pij_poisson(&sources, &targets, &probabilities, total_events, seed);
+    Ok((sample.sources, sample.targets, sample.weights))
+}
+
+#[pyfunction]
+fn sample_custom_pij_multinomial(
+    sources: Vec<u64>,
+    targets: Vec<u64>,
+    probabilities: Vec<f64>,
+    total_events: u64,
+    seed: u64,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    if sources.len() != targets.len() || sources.len() != probabilities.len() {
+        return Err(PyValueError::new_err(
+            "custom p_ij arrays must have same length",
+        ));
+    }
+    let sample =
+        core_sample_custom_pij_multinomial(&sources, &targets, &probabilities, total_events, seed);
+    Ok((sample.sources, sample.targets, sample.weights))
 }
 
 #[pyfunction]
@@ -213,6 +327,21 @@ fn sample_poisson(
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let edges = core_sample_poisson(&x, &y, self_loops, seed);
     (edges.sources, edges.targets, edges.weights)
+}
+
+#[pyfunction]
+fn sample_fixed_degree_zip(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    total_events: u64,
+    self_loops: bool,
+    seed: u64,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    if x.len() != y.len() {
+        return Err(PyValueError::new_err("x and y must have same length"));
+    }
+    let sample = core_sample_fixed_degree_zip(&x, &y, total_events, self_loops, seed);
+    Ok((sample.sources, sample.targets, sample.weights))
 }
 
 #[pyfunction]
@@ -280,9 +409,14 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(compute_all_node_stats, module)?)?;
     module.add_function(wrap_pyfunction!(weight_distribution, module)?)?;
     module.add_function(wrap_pyfunction!(fit_binary_degrees, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_strength_edges_me, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_strength_degree_me, module)?)?;
     module.add_function(wrap_pyfunction!(fit_weighted_factors, module)?)?;
     module.add_function(wrap_pyfunction!(fit_balance_no_self_loops, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_custom_pij_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_custom_pij_multinomial, module)?)?;
     module.add_function(wrap_pyfunction!(sample_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_fixed_degree_zip, module)?)?;
     module.add_function(wrap_pyfunction!(sample_strength_degree_zip, module)?)?;
     module.add_function(wrap_pyfunction!(sample_multinomial, module)?)?;
     module.add_function(wrap_pyfunction!(clustering_coefficients, module)?)?;

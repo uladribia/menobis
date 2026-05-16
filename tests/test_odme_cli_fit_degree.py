@@ -34,5 +34,4 @@ def test_fit_strength_degree_zip_to_file(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     content = output_path.read_text()
-    assert "degree_x" in content
-    assert "excess_x" in content
+    assert "node,x,y,z,w" in content

@@ -9,14 +9,25 @@ import odme._odme as _odme
 
 
 @dataclass(frozen=True)
-class StrengthDegreeZipFit:
-    """Fitted grand-canonical zero-inflated shifted-Poisson model."""
+class StrengthEdgesZipFit:
+    """Fitted exact ME fixed-strength-and-edge-count ZIP model."""
 
     node: NDArray[np.uint64]
-    degree_x: NDArray[np.float64]
-    degree_y: NDArray[np.float64]
-    excess_x: NDArray[np.float64]
-    excess_y: NDArray[np.float64]
+    x: NDArray[np.float64]
+    y: NDArray[np.float64]
+    lam: float
+    self_loops: bool
+
+
+@dataclass(frozen=True)
+class StrengthDegreeZipFit:
+    """Fitted exact ME fixed-strength-degree ZIP model."""
+
+    node: NDArray[np.uint64]
+    x: NDArray[np.float64]
+    y: NDArray[np.float64]
+    z: NDArray[np.float64]
+    w: NDArray[np.float64]
     self_loops: bool
 
 
@@ -83,6 +94,39 @@ def validate_strength_degree_constraints(
         raise ValueError(msg)
 
 
+def fit_strength_edges_zip(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    target_edges: float,
+    *,
+    self_loops: bool = True,
+    tolerance: float = 1e-10,
+    max_iterations: int = 50000,
+) -> StrengthEdgesZipFit:
+    """Fit exact ME fixed-strength and total-edge-count constraints."""
+    s_out = np.asarray(strength_out, dtype=np.float64)
+    s_in = np.asarray(strength_in, dtype=np.float64)
+    _validate_balanced_sequences(s_out, s_in, name="strength")
+    if target_edges <= 0.0 or target_edges > s_out.sum():
+        msg = "target_edges must be positive and no larger than total strength"
+        raise ValueError(msg)
+    x_list, y_list, lam, _converged, _iters = _odme.fit_strength_edges_me(
+        s_out.tolist(),
+        s_in.tolist(),
+        target_edges,
+        self_loops,
+        tolerance,
+        max_iterations,
+    )
+    return StrengthEdgesZipFit(
+        node=np.arange(len(s_out), dtype=np.uint64),
+        x=np.asarray(x_list, dtype=np.float64),
+        y=np.asarray(y_list, dtype=np.float64),
+        lam=float(lam),
+        self_loops=self_loops,
+    )
+
+
 def fit_strength_degree_zip(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
@@ -93,12 +137,11 @@ def fit_strength_degree_zip(
     tolerance: float = 1e-10,
     max_iterations: int = 50000,
 ) -> StrengthDegreeZipFit:
-    """Fit grand-canonical zero-inflated shifted-Poisson constraints.
+    """Fit exact grand-canonical ME fixed-strength-degree constraints.
 
-    Edge presence follows the fixed-degree binary model. Conditional on edge
-    presence, the weight is ``1 + Poisson(lambda_ij)`` with
-    ``lambda_ij = excess_x_i * excess_y_j``. Therefore
-    ``E[t_ij] = p_ij * (1 + lambda_ij)``.
+    The fitted expectation is the thesis Case 4 ME equation:
+    ``E[t_ij] = z_i w_j x_i y_j exp(x_i y_j) /
+    (1 + z_i w_j (exp(x_i y_j) - 1))``.
 
     Args:
         strength_out: Expected outgoing strength per node.
@@ -118,20 +161,11 @@ def fit_strength_degree_zip(
     k_in = np.asarray(degree_in, dtype=np.float64)
     validate_strength_degree_constraints(s_out, s_in, k_out, k_in)
 
-    degree_fit = fit_fixed_degree_binary(
-        k_out,
-        k_in,
-        self_loops=self_loops,
-        tolerance=tolerance,
-        max_iterations=max_iterations,
-    )
-    excess_out = s_out - k_out
-    excess_in = s_in - k_in
-    x_list, y_list, _converged, _iters = _odme.fit_weighted_factors(
-        excess_out.tolist(),
-        excess_in.tolist(),
-        degree_fit.x.tolist(),
-        degree_fit.y.tolist(),
+    x_list, y_list, z_list, w_list, _converged, _iters = _odme.fit_strength_degree_me(
+        s_out.tolist(),
+        s_in.tolist(),
+        k_out.tolist(),
+        k_in.tolist(),
         self_loops,
         tolerance,
         max_iterations,
@@ -139,10 +173,10 @@ def fit_strength_degree_zip(
     n = len(s_out)
     return StrengthDegreeZipFit(
         node=np.arange(n, dtype=np.uint64),
-        degree_x=degree_fit.x,
-        degree_y=degree_fit.y,
-        excess_x=np.asarray(x_list, dtype=np.float64),
-        excess_y=np.asarray(y_list, dtype=np.float64),
+        x=np.asarray(x_list, dtype=np.float64),
+        y=np.asarray(y_list, dtype=np.float64),
+        z=np.asarray(z_list, dtype=np.float64),
+        w=np.asarray(w_list, dtype=np.float64),
         self_loops=self_loops,
     )
 
@@ -252,8 +286,10 @@ def fit_fixed_degree_binary(
 __all__ = [
     "FitResult",
     "StrengthDegreeZipFit",
+    "StrengthEdgesZipFit",
     "fit_fixed_degree_binary",
     "fit_fixed_strength_me",
     "fit_strength_degree_zip",
+    "fit_strength_edges_zip",
     "validate_strength_degree_constraints",
 ]
