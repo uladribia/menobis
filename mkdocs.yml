@@ -22,6 +22,7 @@ nav:
       - Maximum Entropy Models: concepts/maximum-entropy-models.md
       - Thesis Cases: concepts/thesis-cases.md
       - Spatial Costs: concepts/spatial-costs.md
+      - Partial Constraints: concepts/partial-constraints.md
       - Ensembles: concepts/ensembles.md
   - API:
       - Python: api/python.md
@@ -47,5 +48,10 @@ markdown_extensions:
   - admonition
   - pymdownx.details
   - pymdownx.superfences
+  - pymdownx.arithmatex:
+      generic: true
   - attr_list
   - md_in_html
+
+extra_javascript:
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js

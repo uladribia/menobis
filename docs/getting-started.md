@@ -1,28 +1,62 @@
+---
+description: Quick start guide for ODME.
+---
+
 # Getting started
 
-The first implementation milestone exposes a minimal Python package, Typer CLI, and Rust workspace.
+## Installation
+
+```bash
+uv pip install -e .
+```
+
+Or with maturin for development:
+
+```bash
+uv run maturin develop
+```
+
+## Verify
 
 ```bash
 uv run odme --version
+uv run pytest
 cargo test --workspace
 ```
 
-## Supported weighted network inputs
+## Supported input formats
 
-ODME accepts networks with non-negative integer weights. Zero-weight edges are ignored during normalization because they do not represent existing weighted edges. The canonical in-memory representation is a Polars dataframe with columns:
+ODME accepts networks with non-negative integer weights. Zero-weight edges are
+ignored. The in-memory representation is an `EdgeTable` with numpy arrays.
 
-- `source`
-- `target`
-- `weight`
+| Format | Extensions |
+|--------|-----------|
+| CSV | `.csv` |
+| TSV | `.tsv`, `.tab` |
+| Parquet | `.parquet`, `.pq` |
+| Arrow IPC | `.arrow`, `.ipc`, `.feather` |
+| GraphML | `.graphml` |
+| Matrix Market | `.mtx`, `.mm` |
+| Pajek | `.net`, `.paj` |
 
-Current readers support:
+## Quick workflow
 
-- CSV (`.csv`)
-- TSV (`.tsv`, `.tab`)
-- Parquet (`.parquet`, `.pq`)
-- Arrow IPC / Feather (`.arrow`, `.ipc`, `.feather`)
-- GraphML (`.graphml`)
-- Matrix Market coordinate matrices (`.mtx`, `.mm`)
-- Pajek (`.net`, `.paj`)
+```python
+import numpy as np
+from odme.data.io import read_edges
+from odme.analysis import directed_strengths
+from odme.models import fit_fixed_strength_me, sample_poisson
 
-Formats with one-based node identifiers, such as Matrix Market and Pajek, are converted to zero-based ODME node identifiers.
+edges = read_edges("network.csv")
+s = directed_strengths(edges)
+fit = fit_fixed_strength_me(s.out, s.incoming)
+sample = sample_poisson(fit.x, fit.y, seed=42)
+```
+
+## CLI
+
+```bash
+odme analyze strengths network.csv --json
+odme fit strengths network.csv --output fit.csv
+odme generate poisson network.csv --seed 42 --output sample.csv
+```
