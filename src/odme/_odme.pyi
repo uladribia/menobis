@@ -46,6 +46,26 @@ def weight_distribution(
 ) -> tuple[list[int], list[int]]: ...
 
 
+def fit_masked_binary_degrees(
+    degree_out: list[float],
+    degree_in: list[float],
+    mask: list[bool],
+    tolerance: float,
+    max_iterations: int,
+) -> tuple[list[float], list[float], bool, int]: ...
+
+
+def fit_masked_strength_degree_me(
+    strength_out: list[float],
+    strength_in: list[float],
+    degree_out: list[float],
+    degree_in: list[float],
+    mask: list[bool],
+    tolerance: float,
+    max_iterations: int,
+) -> tuple[list[float], list[float], list[float], list[float], bool, int]: ...
+
+
 def fit_masked_strength(
     strength_out: list[float],
     strength_in: list[float],

@@ -6,8 +6,9 @@ use odme_core::clustering::{
 };
 use odme_core::cost::{fit_strength_cost as core_fit_strength_cost, CostFitOptions};
 use odme_core::fitting::{
-    balance_binary_degrees, balance_masked_strength, balance_no_self_loops,
-    balance_strength_degree_me, balance_strength_edges_me, balance_weighted_factors,
+    balance_binary_degrees, balance_masked_binary_degrees, balance_masked_strength,
+    balance_masked_strength_degree_me, balance_no_self_loops, balance_strength_degree_me,
+    balance_strength_edges_me, balance_weighted_factors,
 };
 use odme_core::generation::{
     sample_custom_pij_events_multinomial as core_sample_custom_pij_events_multinomial,
@@ -176,6 +177,53 @@ fn fit_masked_strength(
         max_iterations,
     );
     Ok((result.x, result.y, result.converged, result.iterations))
+}
+
+#[pyfunction]
+fn fit_masked_binary_degrees(
+    degree_out: Vec<f64>,
+    degree_in: Vec<f64>,
+    mask: Vec<bool>,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<FitPair> {
+    let n = degree_out.len();
+    if n != degree_in.len() || mask.len() != n * n {
+        return Err(PyValueError::new_err("array length mismatch"));
+    }
+    let r =
+        balance_masked_binary_degrees(&degree_out, &degree_in, &mask, tolerance, max_iterations);
+    Ok((r.x, r.y, r.converged, r.iterations))
+}
+
+#[pyfunction]
+fn fit_masked_strength_degree_me(
+    strength_out: Vec<f64>,
+    strength_in: Vec<f64>,
+    degree_out: Vec<f64>,
+    degree_in: Vec<f64>,
+    mask: Vec<bool>,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<FitStrengthDegree> {
+    let n = strength_out.len();
+    if n != strength_in.len()
+        || n != degree_out.len()
+        || n != degree_in.len()
+        || mask.len() != n * n
+    {
+        return Err(PyValueError::new_err("array length mismatch"));
+    }
+    let r = balance_masked_strength_degree_me(
+        &strength_out,
+        &strength_in,
+        &degree_out,
+        &degree_in,
+        &mask,
+        tolerance,
+        max_iterations,
+    );
+    Ok((r.x, r.y, r.z, r.w, r.converged, r.iterations))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -545,6 +593,8 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(directed_degrees, module)?)?;
     module.add_function(wrap_pyfunction!(compute_all_node_stats, module)?)?;
     module.add_function(wrap_pyfunction!(weight_distribution, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_masked_binary_degrees, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_masked_strength_degree_me, module)?)?;
     module.add_function(wrap_pyfunction!(fit_masked_strength, module)?)?;
     module.add_function(wrap_pyfunction!(fit_strength_cost, module)?)?;
     module.add_function(wrap_pyfunction!(fit_binary_degrees, module)?)?;
