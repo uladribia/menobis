@@ -21,62 +21,42 @@ pub struct CostMatrix<'a> {
     pub values: &'a [f64],
 }
 
-/// Balance x,y for a fixed gamma and sparse cost matrix.
+/// Balance x,y for a fixed gamma via IPF, with optional warm start.
+#[allow(clippy::too_many_arguments)]
 fn balance_xy_cost(
     strength_out: &[f64],
     strength_in: &[f64],
-    costs: &CostMatrix<'_>,
-    gamma: f64,
-    self_loops: bool,
+    f_mat: &[f64],
+    n: usize,
     tolerance: f64,
     max_iterations: usize,
+    x_init: Option<&[f64]>,
+    y_init: Option<&[f64]>,
 ) -> FitResult {
-    let n = strength_out.len();
-    let cost_sources = costs.sources;
-    let cost_targets = costs.targets;
-    let cost_values = costs.values;
     let total: f64 = strength_out.iter().sum();
     let sqrt_t = total.sqrt().max(1.0);
-    let mut x: Vec<f64> = strength_out
-        .iter()
-        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
-        .collect();
-    let mut y: Vec<f64> = strength_in
-        .iter()
-        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
-        .collect();
-
-    // Precompute f_ij = exp(-gamma * d_ij) for all cost entries.
-    let f: Vec<f64> = cost_values.iter().map(|&d| (-gamma * d).exp()).collect();
-
-    // Build dense f_ij matrix for IPF (sparse would be better for large N
-    // but matches original thesis code structure).
-    let mut f_mat = vec![0.0; n * n];
-    // Default: f_ij = exp(-gamma * 0) = 1 for pairs without explicit cost.
-    for i in 0..n {
-        for j in 0..n {
-            if !self_loops && i == j {
-                continue;
-            }
-            f_mat[i * n + j] = 1.0;
-        }
-    }
-    for (idx, (&src, &tgt)) in cost_sources.iter().zip(cost_targets.iter()).enumerate() {
-        if !self_loops && src == tgt {
-            continue;
-        }
-        if src < n && tgt < n {
-            f_mat[src * n + tgt] = f[idx];
-        }
-    }
+    let mut x: Vec<f64> = match x_init {
+        Some(xi) => xi.to_vec(),
+        None => strength_out
+            .iter()
+            .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+            .collect(),
+    };
+    let mut y: Vec<f64> = match y_init {
+        Some(yi) => yi.to_vec(),
+        None => strength_in
+            .iter()
+            .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+            .collect(),
+    };
 
     for iter in 0..max_iterations {
         let old_x = x.clone();
         let old_y = y.clone();
 
-        // Update y
         for j in 0..n {
             if strength_in[j] <= 0.0 {
+                y[j] = 0.0;
                 continue;
             }
             let denom: f64 = (0..n).map(|i| x[i] * f_mat[i * n + j]).sum();
@@ -86,9 +66,9 @@ fn balance_xy_cost(
                 0.0
             };
         }
-        // Update x
         for i in 0..n {
             if strength_out[i] <= 0.0 {
+                x[i] = 0.0;
                 continue;
             }
             let denom: f64 = (0..n).map(|j| y[j] * f_mat[i * n + j]).sum();
@@ -123,7 +103,26 @@ fn balance_xy_cost(
     }
 }
 
-/// Compute expected total cost for given x, y, gamma and cost entries.
+/// Build dense f_mat = exp(-gamma * d_ij) from sparse cost entries.
+fn build_f_mat(n: usize, costs: &CostMatrix<'_>, gamma: f64, self_loops: bool) -> Vec<f64> {
+    let mut f_mat = vec![1.0; n * n];
+    if !self_loops {
+        for i in 0..n {
+            f_mat[i * n + i] = 0.0;
+        }
+    }
+    for (idx, (&src, &tgt)) in costs.sources.iter().zip(costs.targets.iter()).enumerate() {
+        if !self_loops && src == tgt {
+            continue;
+        }
+        if src < n && tgt < n {
+            f_mat[src * n + tgt] = (-gamma * costs.values[idx]).exp();
+        }
+    }
+    f_mat
+}
+
+/// Compute expected total cost given x, y, gamma and cost entries.
 fn expected_cost(
     x: &[f64],
     y: &[f64],
@@ -132,19 +131,13 @@ fn expected_cost(
     n: usize,
     self_loops: bool,
 ) -> f64 {
-    let cost_sources = costs.sources;
-    let cost_targets = costs.targets;
-    let cost_values = costs.values;
-    // Sum x_i y_j d_ij exp(-gamma d_ij) over all pairs.
-    // For pairs without explicit cost, d_ij = 0 so contribution is 0.
     let mut total = 0.0;
-    // Also need x_i y_j * 0 for missing pairs = 0, so only iterate cost entries.
-    for (idx, (&src, &tgt)) in cost_sources.iter().zip(cost_targets.iter()).enumerate() {
+    for (idx, (&src, &tgt)) in costs.sources.iter().zip(costs.targets.iter()).enumerate() {
         if !self_loops && src == tgt {
             continue;
         }
         if src < n && tgt < n {
-            let d = cost_values[idx];
+            let d = costs.values[idx];
             total += x[src] * y[tgt] * d * (-gamma * d).exp();
         }
     }
@@ -158,7 +151,11 @@ pub struct CostFitOptions {
     pub max_iterations: usize,
 }
 
-/// Fit the strength-cost model: fixed strengths + fixed total cost.
+/// Fit the strength-cost model using adaptive search on gamma.
+///
+/// Inner loop: IPF balancing of x, y for fixed gamma.
+/// Outer loop: adaptive step on gamma to match target cost,
+/// following the thesis algorithm with warm-started x, y.
 #[must_use]
 pub fn fit_strength_cost(
     strength_out: &[f64],
@@ -180,30 +177,31 @@ pub fn fit_strength_cost(
     let max_iterations = opts.max_iterations;
     let total: f64 = strength_out.iter().sum();
 
-    // Initial gamma guess: T / C
+    // Initial gamma guess.
     let gamma_init = if target_cost > 0.0 {
         total / target_cost
     } else {
         1.0
     };
-
     let mut gamma = gamma_init;
-    let mut delta = gamma_init * 0.5;
+    let mut step = gamma_init * 0.5;
     let mut direction = 1.0_f64;
+    let factor = 3.0;
 
+    // Initial fit.
+    let f_mat = build_f_mat(n, &costs, gamma, self_loops);
     let mut best_fit = balance_xy_cost(
         strength_out,
         strength_in,
-        &costs,
-        gamma,
-        self_loops,
+        &f_mat,
+        n,
         tolerance,
         max_iterations,
+        None,
+        None,
     );
     let mut best_delta_c =
         expected_cost(&best_fit.x, &best_fit.y, &costs, gamma, n, self_loops) - target_cost;
-
-    let factor = 3.0;
 
     for iter in 0..max_iterations {
         if best_delta_c.abs() < tolerance {
@@ -216,39 +214,39 @@ pub fn fit_strength_cost(
             };
         }
 
-        let new_gamma = gamma + delta * direction;
+        let new_gamma = gamma + step * direction;
         if new_gamma <= 0.0 {
-            delta /= factor;
+            step /= factor;
             direction = -direction;
             continue;
         }
 
+        let f_mat_new = build_f_mat(n, &costs, new_gamma, self_loops);
         let fit = balance_xy_cost(
             strength_out,
             strength_in,
-            &costs,
-            new_gamma,
-            self_loops,
+            &f_mat_new,
+            n,
             tolerance,
             max_iterations,
+            Some(&best_fit.x),
+            Some(&best_fit.y),
         );
         let new_delta_c =
             expected_cost(&fit.x, &fit.y, &costs, new_gamma, n, self_loops) - target_cost;
 
         if new_delta_c.abs() < best_delta_c.abs() {
-            // Accepted
             if new_delta_c.signum() != best_delta_c.signum() {
                 direction = -direction;
             }
             gamma = new_gamma;
             best_delta_c = new_delta_c;
             best_fit = fit;
-            delta *= factor;
+            step *= factor;
         } else {
-            // Rejected
-            delta /= factor;
+            step /= factor;
             direction = -direction;
-            if delta < 1e-15 {
+            if step < 1e-15 {
                 break;
             }
         }
@@ -269,30 +267,25 @@ mod tests {
 
     #[test]
     fn recovers_strengths_for_uniform_cost() {
-        // With uniform d_ij = 1 and gamma ~0, should recover fixed-strength solution.
         let s_out = vec![10.0, 20.0, 30.0];
         let s_in = vec![15.0, 25.0, 20.0];
         let mut sources = Vec::new();
         let mut targets = Vec::new();
-        let mut costs = Vec::new();
+        let mut cost_vals = Vec::new();
         for i in 0..3 {
             for j in 0..3 {
                 sources.push(i);
                 targets.push(j);
-                costs.push(1.0);
+                cost_vals.push(1.0);
             }
         }
-        let total_cost: f64 = {
-            // For E[t_ij] = x_i y_j exp(-gamma), total cost = sum x_i y_j * 1 * exp(-gamma)
-            // With gamma=0, total cost = T * 1 = 60
-            60.0 * 0.8 // target something reasonable
-        };
+        let total_cost: f64 = 60.0 * 0.8;
         let result = fit_strength_cost(
             &s_out,
             &s_in,
             &sources,
             &targets,
-            &costs,
+            &cost_vals,
             total_cost,
             &CostFitOptions {
                 self_loops: true,
@@ -300,15 +293,15 @@ mod tests {
                 max_iterations: 5000,
             },
         );
-        // Check strengths are recovered
         let n = 3;
         for (i, &s_out_i) in s_out.iter().enumerate() {
             let row_sum: f64 = (0..n)
-                .map(|j| result.x[i] * result.y[j] * (-result.gamma * costs[i * n + j]).exp())
+                .map(|j| result.x[i] * result.y[j] * (-result.gamma * cost_vals[i * n + j]).exp())
                 .sum();
             assert!(
                 (row_sum - s_out_i).abs() < 0.1,
-                "s_out[{i}]: expected {s_out_i}, got {row_sum}"
+                "s_out[{i}]: expected {s_out_i}, got {row_sum}, gamma={}",
+                result.gamma,
             );
         }
     }
