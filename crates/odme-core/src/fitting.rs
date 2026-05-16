@@ -444,13 +444,13 @@ pub fn balance_masked_binary_degrees(
             if degree_out[i] <= 0.0 {
                 continue;
             }
-            x[i] = solve_binary_multiplier_masked(degree_out[i], &y, i, n, mask);
+            x[i] = solve_binary_multiplier_with_mask(degree_out[i], &y, |j| mask[i * n + j]);
         }
         for j in 0..n {
             if degree_in[j] <= 0.0 {
                 continue;
             }
-            y[j] = solve_binary_multiplier_masked_col(degree_in[j], &x, j, n, mask);
+            y[j] = solve_binary_multiplier_with_mask(degree_in[j], &x, |i| mask[i * n + j]);
         }
         let delta = x
             .iter()
@@ -475,12 +475,10 @@ pub fn balance_masked_binary_degrees(
     }
 }
 
-fn solve_binary_multiplier_masked(
+fn solve_binary_multiplier_with_mask(
     target: f64,
     other: &[f64],
-    row: usize,
-    n: usize,
-    mask: &[bool],
+    is_masked: impl Fn(usize) -> bool,
 ) -> f64 {
     if target <= 0.0 {
         return 0.0;
@@ -490,7 +488,7 @@ fn solve_binary_multiplier_masked(
         let sum: f64 = other
             .iter()
             .enumerate()
-            .filter(|&(j, _)| !mask[row * n + j])
+            .filter(|&(idx, _)| !is_masked(idx))
             .map(|(_, &v)| {
                 let z = high * v;
                 z / (1.0 + z)
@@ -507,56 +505,9 @@ fn solve_binary_multiplier_masked(
         let sum: f64 = other
             .iter()
             .enumerate()
-            .filter(|&(j, _)| !mask[row * n + j])
+            .filter(|&(idx, _)| !is_masked(idx))
             .map(|(_, &v)| {
                 let z = mid * v;
-                z / (1.0 + z)
-            })
-            .sum();
-        if sum < target {
-            low = mid;
-        } else {
-            high = mid;
-        }
-    }
-    0.5 * (low + high)
-}
-
-fn solve_binary_multiplier_masked_col(
-    target: f64,
-    other: &[f64],
-    col: usize,
-    n: usize,
-    mask: &[bool],
-) -> f64 {
-    if target <= 0.0 {
-        return 0.0;
-    }
-    let mut high = 1.0;
-    loop {
-        let sum: f64 = other
-            .iter()
-            .enumerate()
-            .filter(|&(i, _)| !mask[i * n + col])
-            .map(|(_, &v)| {
-                let z = v * high;
-                z / (1.0 + z)
-            })
-            .sum();
-        if sum >= target || high > 1e150 {
-            break;
-        }
-        high *= 2.0;
-    }
-    let mut low = 0.0;
-    for _ in 0..100 {
-        let mid = 0.5 * (low + high);
-        let sum: f64 = other
-            .iter()
-            .enumerate()
-            .filter(|&(i, _)| !mask[i * n + col])
-            .map(|(_, &v)| {
-                let z = v * mid;
                 z / (1.0 + z)
             })
             .sum();
