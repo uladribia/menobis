@@ -7,20 +7,28 @@ use odme_core::clustering::{
 use odme_core::cost::{fit_strength_cost as core_fit_strength_cost, CostFitOptions};
 use odme_core::filter::{
     absent_custom_poisson as core_absent_custom_poisson,
+    absent_degree_events_binomial as core_absent_degree_events_binomial,
     absent_degree_events_poisson as core_absent_degree_events_poisson,
     absent_strength_binomial as core_absent_strength_binomial,
+    absent_strength_cost_binomial as core_absent_strength_cost_binomial,
     absent_strength_cost_poisson as core_absent_strength_cost_poisson,
+    absent_strength_degree_binomial as core_absent_strength_degree_binomial,
     absent_strength_degree_poisson as core_absent_strength_degree_poisson,
+    absent_strength_edges_binomial as core_absent_strength_edges_binomial,
     absent_strength_edges_poisson as core_absent_strength_edges_poisson,
     absent_strength_geometric as core_absent_strength_geometric,
     absent_strength_neg_binomial as core_absent_strength_neg_binomial,
     absent_strength_poisson as core_absent_strength_poisson,
     benjamini_hochberg as core_benjamini_hochberg,
     filter_custom_poisson as core_filter_custom_poisson,
+    filter_degree_events_binomial as core_filter_degree_events_binomial,
     filter_degree_events_poisson as core_filter_degree_events_poisson,
     filter_strength_binomial as core_filter_strength_binomial,
+    filter_strength_cost_binomial as core_filter_strength_cost_binomial,
     filter_strength_cost_poisson as core_filter_strength_cost_poisson,
+    filter_strength_degree_binomial as core_filter_strength_degree_binomial,
     filter_strength_degree_poisson as core_filter_strength_degree_poisson,
+    filter_strength_edges_binomial as core_filter_strength_edges_binomial,
     filter_strength_edges_poisson as core_filter_strength_edges_poisson,
     filter_strength_geometric as core_filter_strength_geometric,
     filter_strength_neg_binomial as core_filter_strength_neg_binomial,
@@ -35,10 +43,14 @@ use odme_core::fitting::{
 use odme_core::generation::{
     sample_custom_multinomial as core_sample_custom_multinomial,
     sample_custom_poisson as core_sample_custom_poisson,
+    sample_degree_events_binomial as core_sample_degree_events_binomial,
     sample_degree_events_poisson as core_sample_degree_events_poisson,
     sample_strength_binomial as core_sample_strength_binomial,
+    sample_strength_cost_binomial as core_sample_strength_cost_binomial,
     sample_strength_cost_poisson as core_sample_strength_cost_poisson,
+    sample_strength_degree_binomial as core_sample_strength_degree_binomial,
     sample_strength_degree_poisson as core_sample_strength_degree_poisson,
+    sample_strength_edges_binomial as core_sample_strength_edges_binomial,
     sample_strength_edges_poisson as core_sample_strength_edges_poisson,
     sample_strength_geometric as core_sample_strength_geometric,
     sample_strength_microcanonical as core_sample_strength_microcanonical,
@@ -580,6 +592,69 @@ fn sample_strength_binomial(
     seed: u64,
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let edges = core_sample_strength_binomial(&x, &y, layers, self_loops, seed);
+    (edges.sources, edges.targets, edges.weights)
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn sample_strength_cost_binomial(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    gamma: f64,
+    cost_sources: Vec<usize>,
+    cost_targets: Vec<usize>,
+    cost_values: Vec<f64>,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
+    let costs = SparseCostEntries {
+        sources: &cost_sources,
+        targets: &cost_targets,
+        values: &cost_values,
+    };
+    let edges = core_sample_strength_cost_binomial(&x, &y, gamma, &costs, layers, self_loops, seed);
+    (edges.sources, edges.targets, edges.weights)
+}
+
+#[pyfunction]
+fn sample_strength_edges_binomial(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    lam: f64,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
+    let edges = core_sample_strength_edges_binomial(&x, &y, lam, layers, self_loops, seed);
+    (edges.sources, edges.targets, edges.weights)
+}
+
+#[pyfunction]
+fn sample_strength_degree_binomial(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    z: Vec<f64>,
+    w: Vec<f64>,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
+    let edges = core_sample_strength_degree_binomial(&x, &y, &z, &w, layers, self_loops, seed);
+    (edges.sources, edges.targets, edges.weights)
+}
+
+#[pyfunction]
+fn sample_degree_events_binomial(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    positive_weight_rate: f64,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
+    let edges =
+        core_sample_degree_events_binomial(&x, &y, positive_weight_rate, layers, self_loops, seed);
     (edges.sources, edges.targets, edges.weights)
 }
 
@@ -1194,6 +1269,269 @@ fn absent_strength_binomial(
 }
 
 #[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn filter_strength_cost_binomial(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    gamma: f64,
+    cost_sources: Vec<usize>,
+    cost_targets: Vec<usize>,
+    cost_values: Vec<f64>,
+    layers: u32,
+    sources: Vec<u64>,
+    targets: Vec<u64>,
+    weights: Vec<u64>,
+) -> PyResult<ObservedFilter> {
+    let result = core_filter_strength_cost_binomial(
+        &x,
+        &y,
+        gamma,
+        &cost_sources,
+        &cost_targets,
+        &cost_values,
+        layers,
+        &sources,
+        &targets,
+        &weights,
+    );
+    Ok((
+        result.upper_pvalues,
+        result.lower_pvalues,
+        result.expected,
+        result.occupation,
+    ))
+}
+
+#[pyfunction]
+#[pyo3(signature = (x, y, gamma, cost_sources, cost_targets, cost_values, layers, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
+#[allow(clippy::too_many_arguments)]
+fn absent_strength_cost_binomial(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    gamma: f64,
+    cost_sources: Vec<usize>,
+    cost_targets: Vec<usize>,
+    cost_values: Vec<f64>,
+    layers: u32,
+    sources: Vec<u64>,
+    targets: Vec<u64>,
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> PyResult<AbsentFilter> {
+    let result = core_absent_strength_cost_binomial(
+        &x,
+        &y,
+        gamma,
+        &cost_sources,
+        &cost_targets,
+        &cost_values,
+        layers,
+        &sources,
+        &targets,
+        self_loops,
+        alpha_lower,
+        min_occupation,
+        min_expected,
+        max_absent,
+    );
+    Ok((
+        result.sources,
+        result.targets,
+        result.lower_pvalues,
+        result.expected,
+        result.occupation,
+    ))
+}
+
+#[pyfunction]
+fn filter_strength_edges_binomial(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    lam: f64,
+    layers: u32,
+    sources: Vec<u64>,
+    targets: Vec<u64>,
+    weights: Vec<u64>,
+) -> PyResult<ObservedFilter> {
+    let result =
+        core_filter_strength_edges_binomial(&x, &y, lam, layers, &sources, &targets, &weights);
+    Ok((
+        result.upper_pvalues,
+        result.lower_pvalues,
+        result.expected,
+        result.occupation,
+    ))
+}
+
+#[pyfunction]
+#[pyo3(signature = (x, y, lam, layers, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
+#[allow(clippy::too_many_arguments)]
+fn absent_strength_edges_binomial(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    lam: f64,
+    layers: u32,
+    sources: Vec<u64>,
+    targets: Vec<u64>,
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> PyResult<AbsentFilter> {
+    let result = core_absent_strength_edges_binomial(
+        &x,
+        &y,
+        lam,
+        layers,
+        &sources,
+        &targets,
+        self_loops,
+        alpha_lower,
+        min_occupation,
+        min_expected,
+        max_absent,
+    );
+    Ok((
+        result.sources,
+        result.targets,
+        result.lower_pvalues,
+        result.expected,
+        result.occupation,
+    ))
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn filter_strength_degree_binomial(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    z: Vec<f64>,
+    w: Vec<f64>,
+    layers: u32,
+    sources: Vec<u64>,
+    targets: Vec<u64>,
+    weights: Vec<u64>,
+) -> PyResult<ObservedFilter> {
+    let result =
+        core_filter_strength_degree_binomial(&x, &y, &z, &w, layers, &sources, &targets, &weights);
+    Ok((
+        result.upper_pvalues,
+        result.lower_pvalues,
+        result.expected,
+        result.occupation,
+    ))
+}
+
+#[pyfunction]
+#[pyo3(signature = (x, y, z, w, layers, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
+#[allow(clippy::too_many_arguments)]
+fn absent_strength_degree_binomial(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    z: Vec<f64>,
+    w: Vec<f64>,
+    layers: u32,
+    sources: Vec<u64>,
+    targets: Vec<u64>,
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> PyResult<AbsentFilter> {
+    let result = core_absent_strength_degree_binomial(
+        &x,
+        &y,
+        &z,
+        &w,
+        layers,
+        &sources,
+        &targets,
+        self_loops,
+        alpha_lower,
+        min_occupation,
+        min_expected,
+        max_absent,
+    );
+    Ok((
+        result.sources,
+        result.targets,
+        result.lower_pvalues,
+        result.expected,
+        result.occupation,
+    ))
+}
+
+#[pyfunction]
+fn filter_degree_events_binomial(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    positive_weight_rate: f64,
+    layers: u32,
+    sources: Vec<u64>,
+    targets: Vec<u64>,
+    weights: Vec<u64>,
+) -> PyResult<ObservedFilter> {
+    let result = core_filter_degree_events_binomial(
+        &x,
+        &y,
+        positive_weight_rate,
+        layers,
+        &sources,
+        &targets,
+        &weights,
+    );
+    Ok((
+        result.upper_pvalues,
+        result.lower_pvalues,
+        result.expected,
+        result.occupation,
+    ))
+}
+
+#[pyfunction]
+#[pyo3(signature = (x, y, positive_weight_rate, layers, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
+#[allow(clippy::too_many_arguments)]
+fn absent_degree_events_binomial(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    positive_weight_rate: f64,
+    layers: u32,
+    sources: Vec<u64>,
+    targets: Vec<u64>,
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> PyResult<AbsentFilter> {
+    let result = core_absent_degree_events_binomial(
+        &x,
+        &y,
+        positive_weight_rate,
+        layers,
+        &sources,
+        &targets,
+        self_loops,
+        alpha_lower,
+        min_occupation,
+        min_expected,
+        max_absent,
+    );
+    Ok((
+        result.sources,
+        result.targets,
+        result.lower_pvalues,
+        result.expected,
+        result.occupation,
+    ))
+}
+
+#[pyfunction]
 fn filter_strength_neg_binomial(
     x: Vec<f64>,
     y: Vec<f64>,
@@ -1314,6 +1652,10 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(sample_strength_multinomial, module)?)?;
     module.add_function(wrap_pyfunction!(sample_strength_geometric, module)?)?;
     module.add_function(wrap_pyfunction!(sample_strength_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_cost_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_edges_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_degree_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_degree_events_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(sample_strength_neg_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(fit_strength_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(fit_masked_strength_binomial, module)?)?;
@@ -1333,6 +1675,14 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(absent_strength_geometric, module)?)?;
     module.add_function(wrap_pyfunction!(filter_strength_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(absent_strength_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(filter_strength_cost_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(absent_strength_cost_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(filter_strength_edges_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(absent_strength_edges_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(filter_strength_degree_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(absent_strength_degree_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(filter_degree_events_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(absent_degree_events_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(filter_strength_neg_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(absent_strength_neg_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(benjamini_hochberg, module)?)?;

@@ -2,10 +2,10 @@
 
 use crate::distribution::{PairDistribution, WeightFamily};
 use crate::pairs::{
-    row_ranges, CandidateSupport, DegreeEventsPoissonProvider, FixedStrengthProvider,
+    row_ranges, CandidateSupport, DegreeEventsProvider, FixedStrengthProvider,
     PairDistributionProvider, SparsePoissonRateMapProvider, SparsePoissonRateProvider,
-    StrengthCostPoissonProvider, StrengthDegreePoissonProvider, StrengthEdgesPoissonProvider,
-    PARALLEL_PAIR_THRESHOLD, SPARSE_CHUNK_SIZE,
+    StrengthCostProvider, StrengthDegreeProvider, StrengthEdgesProvider, PARALLEL_PAIR_THRESHOLD,
+    SPARSE_CHUNK_SIZE,
 };
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -381,7 +381,8 @@ pub fn filter_strength_edges_poisson(
         sources,
         targets,
         weights,
-        &StrengthEdgesPoissonProvider {
+        &StrengthEdgesProvider {
+            family: WeightFamily::Poisson,
             x,
             y,
             lambda: lam,
@@ -405,7 +406,8 @@ pub fn absent_strength_edges_poisson(
     max_absent: Option<usize>,
 ) -> AbsentFilterResult {
     detect_absent_provider(
-        &StrengthEdgesPoissonProvider {
+        &StrengthEdgesProvider {
+            family: WeightFamily::Poisson,
             x,
             y,
             lambda: lam,
@@ -440,7 +442,8 @@ pub fn filter_strength_cost_poisson(
         sources,
         targets,
         weights,
-        &StrengthCostPoissonProvider {
+        &StrengthCostProvider {
+            family: WeightFamily::Poisson,
             x,
             y,
             gamma,
@@ -469,7 +472,8 @@ pub fn absent_strength_cost_poisson(
 ) -> AbsentFilterResult {
     let costs = build_cost_map(cost_sources, cost_targets, cost_values);
     detect_absent_provider(
-        &StrengthCostPoissonProvider {
+        &StrengthCostProvider {
+            family: WeightFamily::Poisson,
             x,
             y,
             gamma,
@@ -501,7 +505,8 @@ pub fn filter_strength_degree_poisson(
         sources,
         targets,
         weights,
-        &StrengthDegreePoissonProvider {
+        &StrengthDegreeProvider {
+            family: WeightFamily::Poisson,
             x,
             y,
             z,
@@ -527,7 +532,8 @@ pub fn absent_strength_degree_poisson(
     max_absent: Option<usize>,
 ) -> AbsentFilterResult {
     detect_absent_provider(
-        &StrengthDegreePoissonProvider {
+        &StrengthDegreeProvider {
+            family: WeightFamily::Poisson,
             x,
             y,
             z,
@@ -558,7 +564,8 @@ pub fn filter_degree_events_poisson(
         sources,
         targets,
         weights,
-        &DegreeEventsPoissonProvider {
+        &DegreeEventsProvider {
+            family: WeightFamily::Poisson,
             x,
             y,
             positive_weight_rate,
@@ -582,7 +589,8 @@ pub fn absent_degree_events_poisson(
     max_absent: Option<usize>,
 ) -> AbsentFilterResult {
     detect_absent_provider(
-        &DegreeEventsPoissonProvider {
+        &DegreeEventsProvider {
+            family: WeightFamily::Poisson,
             x,
             y,
             positive_weight_rate,
@@ -752,6 +760,256 @@ pub fn absent_strength_neg_binomial(
             family: WeightFamily::NegBinomial(layers),
             x,
             y,
+            self_loops,
+        },
+        sources,
+        targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
+}
+
+// --- Binomial constraint variants ---
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn filter_strength_cost_binomial(
+    x: &[f64],
+    y: &[f64],
+    gamma: f64,
+    cost_sources: &[usize],
+    cost_targets: &[usize],
+    cost_values: &[f64],
+    layers: u32,
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    let costs = build_cost_map(cost_sources, cost_targets, cost_values);
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &StrengthCostProvider {
+            family: WeightFamily::Binomial(layers),
+            x,
+            y,
+            gamma,
+            costs: &costs,
+            self_loops: true,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_strength_cost_binomial(
+    x: &[f64],
+    y: &[f64],
+    gamma: f64,
+    cost_sources: &[usize],
+    cost_targets: &[usize],
+    cost_values: &[f64],
+    layers: u32,
+    observed_sources: &[u64],
+    observed_targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    let costs = build_cost_map(cost_sources, cost_targets, cost_values);
+    detect_absent_provider(
+        &StrengthCostProvider {
+            family: WeightFamily::Binomial(layers),
+            x,
+            y,
+            gamma,
+            costs: &costs,
+            self_loops,
+        },
+        observed_sources,
+        observed_targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
+}
+
+#[must_use]
+pub fn filter_strength_edges_binomial(
+    x: &[f64],
+    y: &[f64],
+    lam: f64,
+    layers: u32,
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &StrengthEdgesProvider {
+            family: WeightFamily::Binomial(layers),
+            x,
+            y,
+            lambda: lam,
+            self_loops: true,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_strength_edges_binomial(
+    x: &[f64],
+    y: &[f64],
+    lam: f64,
+    layers: u32,
+    sources: &[u64],
+    targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    detect_absent_provider(
+        &StrengthEdgesProvider {
+            family: WeightFamily::Binomial(layers),
+            x,
+            y,
+            lambda: lam,
+            self_loops,
+        },
+        sources,
+        targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn filter_strength_degree_binomial(
+    x: &[f64],
+    y: &[f64],
+    z: &[f64],
+    w: &[f64],
+    layers: u32,
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &StrengthDegreeProvider {
+            family: WeightFamily::Binomial(layers),
+            x,
+            y,
+            z,
+            w,
+            self_loops: true,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_strength_degree_binomial(
+    x: &[f64],
+    y: &[f64],
+    z: &[f64],
+    w: &[f64],
+    layers: u32,
+    sources: &[u64],
+    targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    detect_absent_provider(
+        &StrengthDegreeProvider {
+            family: WeightFamily::Binomial(layers),
+            x,
+            y,
+            z,
+            w,
+            self_loops,
+        },
+        sources,
+        targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
+}
+
+#[must_use]
+pub fn filter_degree_events_binomial(
+    x: &[f64],
+    y: &[f64],
+    positive_weight_rate: f64,
+    layers: u32,
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &DegreeEventsProvider {
+            family: WeightFamily::Binomial(layers),
+            x,
+            y,
+            positive_weight_rate,
+            self_loops: true,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_degree_events_binomial(
+    x: &[f64],
+    y: &[f64],
+    positive_weight_rate: f64,
+    layers: u32,
+    sources: &[u64],
+    targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    detect_absent_provider(
+        &DegreeEventsProvider {
+            family: WeightFamily::Binomial(layers),
+            x,
+            y,
+            positive_weight_rate,
             self_loops,
         },
         sources,
