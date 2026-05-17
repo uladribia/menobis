@@ -19,7 +19,7 @@ def test_generate_poisson_to_file(tmp_path: Path) -> None:
         app,
         [
             "generate",
-            "poisson",
+            "strength-poisson",
             str(input_path),
             "-o",
             str(output_path),
@@ -40,7 +40,7 @@ def test_generate_poisson_json(tmp_path: Path) -> None:
     input_path.write_text("source,target,weight\n0,1,10\n1,2,20\n0,2,30\n")
 
     result = runner.invoke(
-        app, ["generate", "poisson", str(input_path), "--json", "--seed", "42"]
+        app, ["generate", "strength-poisson", str(input_path), "--json", "--seed", "42"]
     )
 
     assert result.exit_code == 0, result.output

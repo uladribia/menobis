@@ -6,12 +6,12 @@ import numpy as np
 
 from odme.analysis import directed_degrees, directed_strengths
 from odme.models import (
-    fit_fixed_degree_binary,
-    fit_fixed_strength_me,
-    fit_strength_cost_me,
-    fit_strength_degree_me,
-    fit_strength_edges_me,
-    sample_poisson,
+    fit_degree_bernoulli,
+    fit_strength_poisson,
+    fit_strength_cost_poisson,
+    fit_strength_degree_poisson,
+    fit_strength_edges_poisson,
+    sample_strength_poisson,
 )
 
 N_VALUES = [50, 100, 200, 500, 1000]
@@ -32,8 +32,8 @@ def _make_network(n: int):
         s_in[np.argmax(s_in)] += abs(diff)
     elif diff < 0:
         s_out[np.argmax(s_out)] += abs(diff)
-    fit = fit_fixed_strength_me(s_out, s_in)
-    return sample_poisson(fit.x, fit.y, seed=42)
+    fit = fit_strength_poisson(s_out, s_in)
+    return sample_strength_poisson(fit.x, fit.y, seed=42)
 
 
 def _check_strength(name, fit, s_out, s_in, n, rate_fn):
@@ -64,31 +64,31 @@ for n in N_VALUES:
 
     # Fixed strength ME
     t0 = time.perf_counter()
-    fit_s = fit_fixed_strength_me(s_out.astype(np.uint64), s_in.astype(np.uint64), verbose=2)
+    fit_s = fit_strength_poisson(s_out.astype(np.uint64), s_in.astype(np.uint64), verbose=2)
     dt = time.perf_counter() - t0
-    print(f"  fit_fixed_strength_me: {dt:.4f}s  conv={fit_s.converged} iters={fit_s.iterations}")
+    print(f"  fit_strength_poisson: {dt:.4f}s  conv={fit_s.converged} iters={fit_s.iterations}")
 
     # Fixed degree binary
     t0 = time.perf_counter()
-    fit_k = fit_fixed_degree_binary(k_out, k_in, verbose=2)
+    fit_k = fit_degree_bernoulli(k_out, k_in, verbose=2)
     dt = time.perf_counter() - t0
-    print(f"  fit_fixed_degree_binary: {dt:.4f}s  conv={fit_k.converged} iters={fit_k.iterations}")
+    print(f"  fit_degree_bernoulli: {dt:.4f}s  conv={fit_k.converged} iters={fit_k.iterations}")
     _check_strength("degree", fit_k, k_out, k_in, n,
                      lambda i, j: fit_k.x[i]*fit_k.y[j]/(1+fit_k.x[i]*fit_k.y[j]))
 
     # Fixed strength + edges
     if n <= 500:
         t0 = time.perf_counter()
-        fit_se = fit_strength_edges_me(s_out, s_in, float(edges.num_edges), verbose=2)
+        fit_se = fit_strength_edges_poisson(s_out, s_in, float(edges.num_edges), verbose=2)
         dt = time.perf_counter() - t0
-        print(f"  fit_strength_edges_me: {dt:.4f}s  conv={fit_se.converged} iters={fit_se.iterations} lam={fit_se.lam:.6f}")
+        print(f"  fit_strength_edges_poisson: {dt:.4f}s  conv={fit_se.converged} iters={fit_se.iterations} lam={fit_se.lam:.6f}")
 
     # Fixed strength + degree
     if n <= 200:
         t0 = time.perf_counter()
-        fit_sd = fit_strength_degree_me(s_out, s_in, k_out, k_in, verbose=2)
+        fit_sd = fit_strength_degree_poisson(s_out, s_in, k_out, k_in, verbose=2)
         dt = time.perf_counter() - t0
-        print(f"  fit_strength_degree_me: {dt:.4f}s  conv={fit_sd.converged} iters={fit_sd.iterations}")
+        print(f"  fit_strength_degree_poisson: {dt:.4f}s  conv={fit_sd.converged} iters={fit_sd.iterations}")
 
     # Fixed strength + cost
     if n <= 500:
@@ -111,8 +111,8 @@ for n in N_VALUES:
             for sv, tv, w in zip(edges.source, edges.target, edges.weight)
         )
         t0 = time.perf_counter()
-        fit_sc = fit_strength_cost_me(
+        fit_sc = fit_strength_cost_poisson(
             s_out, s_in, cost_src, cost_tgt, cost_val, target_cost, verbose=2
         )
         dt = time.perf_counter() - t0
-        print(f"  fit_strength_cost_me: {dt:.4f}s  conv={fit_sc.converged} iters={fit_sc.iterations} gamma={fit_sc.gamma:.6f}")
+        print(f"  fit_strength_cost_poisson: {dt:.4f}s  conv={fit_sc.converged} iters={fit_sc.iterations} gamma={fit_sc.gamma:.6f}")

@@ -14,12 +14,12 @@ cases plus a fixed-strength baseline. Numbered thesis mappings are listed in
 
 | ODME model | Thesis case | Constraints | Python API |
 |------------|-------------|-------------|------------|
-| Fixed-strength ME | — | $s^{out}$, $s^{in}$ | `fit_fixed_strength_me` |
+| Fixed-strength ME | — | $s^{out}$, $s^{in}$ | `fit_strength_poisson` |
 | Custom probability ME | 1 | $p_{ij}$, $T$ | `sample_custom_pij_events_*` |
-| Strength-cost ME | 2 | $s^{out}$, $s^{in}$, $C$ | `fit_strength_cost_me` |
-| Strength-edges ME | 3 | $s^{out}$, $s^{in}$, $E$ | `fit_strength_edges_me` |
-| Strength-degree ME | 4 | $s^{out}$, $s^{in}$, $k^{out}$, $k^{in}$ | `fit_strength_degree_me` |
-| Degree-events ME | 5 | $k^{out}$, $k^{in}$, $T$ | `fit_fixed_degree_binary` |
+| Strength-cost ME | 2 | $s^{out}$, $s^{in}$, $C$ | `fit_strength_cost_poisson` |
+| Strength-edges ME | 3 | $s^{out}$, $s^{in}$, $E$ | `fit_strength_edges_poisson` |
+| Strength-degree ME | 4 | $s^{out}$, $s^{in}$, $k^{out}$, $k^{in}$ | `fit_strength_degree_poisson` |
+| Degree-events ME | 5 | $k^{out}$, $k^{in}$, $T$ | `fit_degree_bernoulli` |
 
 All models support partial-constraint fitting except custom probability
 sampling; see [Partial Constraints](partial-constraints.md).
@@ -49,16 +49,16 @@ $$
 $$
 
 ```python
-fit = fit_fixed_strength_me(s_out, s_in)
+fit = fit_strength_poisson(s_out, s_in)
 ```
 
 Sampler variants:
 
 | Ensemble | Function | Exactly fixed |
 |----------|----------|---------------|
-| Grand-canonical | `sample_poisson(fit.x, fit.y)` | nothing |
-| Canonical | `sample_multinomial(fit.x, fit.y, total_events=T)` | $T$ |
-| Stub-matched | `sample_microcanonical(s_out, s_in)` | $s^{out}$, $s^{in}$, $T$ |
+| Grand-canonical | `sample_strength_poisson(fit.x, fit.y)` | nothing |
+| Canonical | `sample_strength_multinomial(fit.x, fit.y, total_events=T)` | $T$ |
+| Stub-matched | `sample_strength_microcanonical(s_out, s_in)` | $s^{out}$, $s^{in}$, $T$ |
 
 ## Degree-events ME, thesis case 5
 
@@ -77,8 +77,8 @@ $$
 $$
 
 ```python
-fit = fit_fixed_degree_binary(k_out, k_in)
-sample = sample_fixed_degree_events_me(fit, total_events=T, seed=42)
+fit = fit_degree_bernoulli(k_out, k_in)
+sample = sample_degree_events_poisson(fit, total_events=T, seed=42)
 ```
 
 ## Strength-cost ME, thesis case 2
@@ -88,8 +88,8 @@ $$
 $$
 
 ```python
-fit = fit_strength_cost_me(s_out, s_in, cost_src, cost_tgt, cost_val, C)
-sample = sample_strength_cost_me(fit, cost_src, cost_tgt, cost_val, seed=42)
+fit = fit_strength_cost_poisson(s_out, s_in, cost_src, cost_tgt, cost_val, C)
+sample = sample_strength_cost_poisson(fit, cost_src, cost_tgt, cost_val, seed=42)
 ```
 
 See [Spatial Costs](spatial-costs.md) for constraints and solver notes.
@@ -105,8 +105,8 @@ p_{ij}=\frac{\lambda(e^{u_{ij}}-1)}{1+\lambda(e^{u_{ij}}-1)},
 $$
 
 ```python
-fit = fit_strength_edges_me(s_out, s_in, target_edges=E)
-sample = sample_strength_edges_me(fit, seed=42)
+fit = fit_strength_edges_poisson(s_out, s_in, target_edges=E)
+sample = sample_strength_edges_poisson(fit, seed=42)
 ```
 
 ## Strength-degree ME, thesis case 4
@@ -120,8 +120,8 @@ p_{ij}=\frac{v_{ij}(e^{u_{ij}}-1)}{1+v_{ij}(e^{u_{ij}}-1)},
 $$
 
 ```python
-fit = fit_strength_degree_me(s_out, s_in, k_out, k_in)
-sample = sample_strength_degree_me(fit, seed=42)
+fit = fit_strength_degree_poisson(s_out, s_in, k_out, k_in)
+sample = sample_strength_degree_poisson(fit, seed=42)
 ```
 
 ## Custom probability ME, thesis case 1
@@ -134,6 +134,6 @@ $$
 
 ```python
 probabilities = normalize_probabilities(source, target, p)
-sample = sample_custom_pij_events_multinomial(probabilities, total_events=T, seed=42)
-sample = sample_custom_pij_events_poisson(probabilities, total_events=T, seed=42)
+sample = sample_custom_multinomial(probabilities, total_events=T, seed=42)
+sample = sample_custom_poisson(probabilities, total_events=T, seed=42)
 ```

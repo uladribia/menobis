@@ -5,18 +5,18 @@ import numpy as np
 from odme.analysis import directed_degrees, directed_strengths
 from odme.data.frames import EdgeTable
 from odme.models import (
-    fit_fixed_degree_binary,
-    fit_fixed_strength_me,
-    fit_strength_cost_me,
-    fit_strength_degree_me,
-    fit_strength_edges_me,
-    sample_fixed_degree_events_me,
-    sample_multinomial,
-    sample_poisson,
-    sample_poisson_multinomial,
-    sample_strength_cost_me,
-    sample_strength_degree_me,
-    sample_strength_edges_me,
+    fit_degree_bernoulli,
+    fit_strength_cost_poisson,
+    fit_strength_degree_poisson,
+    fit_strength_edges_poisson,
+    fit_strength_poisson,
+    sample_degree_events_poisson,
+    sample_strength_cost_poisson,
+    sample_strength_degree_poisson,
+    sample_strength_edges_poisson,
+    sample_strength_multinomial,
+    sample_strength_poisson,
+    sample_strength_poisson_multinomial,
 )
 
 
@@ -93,7 +93,7 @@ def test_fixed_strength_me_ensembles_match_observed_constraints() -> None:
     """Fixed-strength ME samplers recover observed strengths in ensemble mean."""
     edges = _pareto_like_network()
     strengths = directed_strengths(edges)
-    fit = fit_fixed_strength_me(
+    fit = fit_strength_poisson(
         strengths.out.astype(float), strengths.incoming.astype(float)
     )
     repetitions = 300
@@ -103,11 +103,11 @@ def test_fixed_strength_me_ensembles_match_observed_constraints() -> None:
     poisson_multinomial_out: list[np.ndarray] = []
     multinomial_totals = []
     for seed in range(repetitions):
-        p_sample = sample_poisson(fit.x, fit.y, seed=seed)
-        m_sample = sample_multinomial(
+        p_sample = sample_strength_poisson(fit.x, fit.y, seed=seed)
+        m_sample = sample_strength_multinomial(
             fit.x, fit.y, total_events=edges.total_events, seed=seed
         )
-        pm_sample = sample_poisson_multinomial(fit.x, fit.y, seed=seed)
+        pm_sample = sample_strength_poisson_multinomial(fit.x, fit.y, seed=seed)
         poisson_out.append(directed_strengths(p_sample).out.astype(float))
         multinomial_out.append(directed_strengths(m_sample).out.astype(float))
         poisson_multinomial_out.append(directed_strengths(pm_sample).out.astype(float))
@@ -124,14 +124,14 @@ def test_fixed_degree_total_events_ensemble_matches_degrees_and_trips() -> None:
     edges = _pareto_like_network()
     degrees = directed_degrees(edges)
     repetitions = 400
-    fit = fit_fixed_degree_binary(
+    fit = fit_degree_bernoulli(
         degrees.out.astype(float), degrees.incoming.astype(float), self_loops=True
     )
 
     sampled_degrees: list[np.ndarray] = []
     totals = []
     for seed in range(repetitions):
-        sample = sample_fixed_degree_events_me(
+        sample = sample_degree_events_poisson(
             fit, total_events=edges.total_events, seed=seed
         )
         sampled_degrees.append(directed_degrees(sample).out.astype(float))
@@ -149,7 +149,7 @@ def test_strength_degree_me_ensemble_matches_strengths_and_degrees() -> None:
     strengths = directed_strengths(edges)
     degrees = directed_degrees(edges)
     repetitions = 500
-    fit = fit_strength_degree_me(
+    fit = fit_strength_degree_poisson(
         strengths.out.astype(float),
         strengths.incoming.astype(float),
         degrees.out.astype(float),
@@ -160,7 +160,7 @@ def test_strength_degree_me_ensemble_matches_strengths_and_degrees() -> None:
     sampled_strengths: list[np.ndarray] = []
     sampled_degrees: list[np.ndarray] = []
     for seed in range(repetitions):
-        sample = sample_strength_degree_me(fit, seed=seed)
+        sample = sample_strength_degree_poisson(fit, seed=seed)
         sampled_strengths.append(directed_strengths(sample).out.astype(float))
         sampled_degrees.append(directed_degrees(sample).out.astype(float))
 
@@ -176,7 +176,7 @@ def test_strength_edges_me_ensemble_matches_strengths_and_binary_edges() -> None
     strengths = directed_strengths(edges)
     target_edges = float(edges.num_edges)
     repetitions = 500
-    fit = fit_strength_edges_me(
+    fit = fit_strength_edges_poisson(
         strengths.out.astype(float),
         strengths.incoming.astype(float),
         target_edges,
@@ -186,7 +186,7 @@ def test_strength_edges_me_ensemble_matches_strengths_and_binary_edges() -> None
     sampled_strengths: list[np.ndarray] = []
     edge_counts = []
     for seed in range(repetitions):
-        sample = sample_strength_edges_me(fit, seed=seed)
+        sample = sample_strength_edges_poisson(fit, seed=seed)
         sampled_strengths.append(directed_strengths(sample).out.astype(float))
         edge_counts.append(sample.num_edges)
 
@@ -234,7 +234,7 @@ def test_strength_cost_me_ensemble_matches_strengths_and_cost() -> None:
     target_cost = _observed_cost(edges, cost_src, cost_tgt, cost_val)
 
     repetitions = 300
-    fit = fit_strength_cost_me(
+    fit = fit_strength_cost_poisson(
         strengths.out.astype(float),
         strengths.incoming.astype(float),
         cost_src,
@@ -245,12 +245,14 @@ def test_strength_cost_me_ensemble_matches_strengths_and_cost() -> None:
         tolerance=1e-4,
         max_iterations=20000,
     )
-    assert fit.converged, "fit_strength_cost_me did not converge"
+    assert fit.converged, "fit_strength_cost_poisson did not converge"
 
     sampled_strengths: list[np.ndarray] = []
     sampled_costs: list[float] = []
     for seed in range(repetitions):
-        sample = sample_strength_cost_me(fit, cost_src, cost_tgt, cost_val, seed=seed)
+        sample = sample_strength_cost_poisson(
+            fit, cost_src, cost_tgt, cost_val, seed=seed
+        )
         sampled_strengths.append(directed_strengths(sample).out.astype(float))
         sampled_costs.append(_observed_cost(sample, cost_src, cost_tgt, cost_val))
 

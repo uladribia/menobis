@@ -6,41 +6,47 @@ use odme_core::clustering::{
 };
 use odme_core::cost::{fit_strength_cost as core_fit_strength_cost, CostFitOptions};
 use odme_core::filter::{
-    absent_binomial as core_absent_binomial,
-    absent_custom_poisson_rates as core_absent_custom_poisson_rates,
-    absent_degree_events_zip as core_absent_degree_events_zip,
-    absent_fixed_strength_poisson as core_absent_fixed_strength_poisson,
-    absent_geometric as core_absent_geometric, absent_neg_binomial as core_absent_neg_binomial,
+    absent_custom_poisson as core_absent_custom_poisson,
+    absent_degree_events_poisson as core_absent_degree_events_poisson,
+    absent_strength_binomial as core_absent_strength_binomial,
     absent_strength_cost_poisson as core_absent_strength_cost_poisson,
-    absent_strength_degree_zip as core_absent_strength_degree_zip,
-    absent_strength_edges_zip as core_absent_strength_edges_zip,
-    benjamini_hochberg as core_benjamini_hochberg, filter_binomial as core_filter_binomial,
-    filter_custom_poisson_rates as core_filter_custom_poisson_rates,
-    filter_degree_events_zip as core_filter_degree_events_zip,
-    filter_fixed_strength_poisson as core_filter_fixed_strength_poisson,
-    filter_geometric as core_filter_geometric, filter_neg_binomial as core_filter_neg_binomial,
+    absent_strength_degree_poisson as core_absent_strength_degree_poisson,
+    absent_strength_edges_poisson as core_absent_strength_edges_poisson,
+    absent_strength_geometric as core_absent_strength_geometric,
+    absent_strength_neg_binomial as core_absent_strength_neg_binomial,
+    absent_strength_poisson as core_absent_strength_poisson,
+    benjamini_hochberg as core_benjamini_hochberg,
+    filter_custom_poisson as core_filter_custom_poisson,
+    filter_degree_events_poisson as core_filter_degree_events_poisson,
+    filter_strength_binomial as core_filter_strength_binomial,
     filter_strength_cost_poisson as core_filter_strength_cost_poisson,
-    filter_strength_degree_zip as core_filter_strength_degree_zip,
-    filter_strength_edges_zip as core_filter_strength_edges_zip,
+    filter_strength_degree_poisson as core_filter_strength_degree_poisson,
+    filter_strength_edges_poisson as core_filter_strength_edges_poisson,
+    filter_strength_geometric as core_filter_strength_geometric,
+    filter_strength_neg_binomial as core_filter_strength_neg_binomial,
+    filter_strength_poisson as core_filter_strength_poisson,
 };
 use odme_core::fitting::{
-    balance_binary_degrees, balance_binomial_strength, balance_masked_binary_degrees,
-    balance_masked_binomial_strength, balance_masked_strength, balance_masked_strength_degree_me,
-    balance_no_self_loops, balance_strength_degree_me, balance_strength_edges_me,
-    balance_weighted_factors,
+    balance_degree_bernoulli, balance_masked_degree_bernoulli, balance_masked_strength_binomial,
+    balance_masked_strength_degree_poisson, balance_masked_strength_poisson,
+    balance_strength_binomial, balance_strength_degree_poisson, balance_strength_edges_poisson,
+    balance_strength_poisson, balance_weighted_factors,
 };
 use odme_core::generation::{
-    sample_binomial as core_sample_binomial,
-    sample_custom_pij_events_multinomial as core_sample_custom_pij_events_multinomial,
-    sample_custom_pij_events_poisson as core_sample_custom_pij_events_poisson,
-    sample_fixed_degree_events_me as core_sample_fixed_degree_events_me,
-    sample_geometric as core_sample_geometric, sample_microcanonical as core_sample_microcanonical,
-    sample_multinomial as core_sample_multinomial, sample_neg_binomial as core_sample_neg_binomial,
-    sample_poisson as core_sample_poisson,
-    sample_poisson_multinomial as core_sample_poisson_multinomial,
-    sample_strength_cost_me as core_sample_strength_cost_me,
-    sample_strength_degree_me as core_sample_strength_degree_me,
-    sample_strength_edges_me as core_sample_strength_edges_me, SparseCostEntries,
+    sample_custom_multinomial as core_sample_custom_multinomial,
+    sample_custom_poisson as core_sample_custom_poisson,
+    sample_degree_events_poisson as core_sample_degree_events_poisson,
+    sample_strength_binomial as core_sample_strength_binomial,
+    sample_strength_cost_poisson as core_sample_strength_cost_poisson,
+    sample_strength_degree_poisson as core_sample_strength_degree_poisson,
+    sample_strength_edges_poisson as core_sample_strength_edges_poisson,
+    sample_strength_geometric as core_sample_strength_geometric,
+    sample_strength_microcanonical as core_sample_strength_microcanonical,
+    sample_strength_multinomial as core_sample_strength_multinomial,
+    sample_strength_neg_binomial as core_sample_strength_neg_binomial,
+    sample_strength_poisson as core_sample_strength_poisson,
+    sample_strength_poisson_multinomial as core_sample_strength_poisson_multinomial,
+    SparseCostEntries,
 };
 use odme_core::graph::{
     directed_degrees as core_directed_degrees, directed_strengths as core_directed_strengths,
@@ -177,7 +183,7 @@ fn weight_distribution(
 }
 
 #[pyfunction]
-fn fit_masked_strength(
+fn fit_masked_strength_poisson(
     strength_out: Vec<f64>,
     strength_in: Vec<f64>,
     mask: Vec<bool>,
@@ -193,7 +199,7 @@ fn fit_masked_strength(
     if mask.len() != n * n {
         return Err(PyValueError::new_err("mask must have length n*n"));
     }
-    let result = balance_masked_strength(
+    let result = balance_masked_strength_poisson(
         &strength_out,
         &strength_in,
         &mask,
@@ -204,7 +210,7 @@ fn fit_masked_strength(
 }
 
 #[pyfunction]
-fn fit_masked_binary_degrees(
+fn fit_masked_degree_bernoulli(
     degree_out: Vec<f64>,
     degree_in: Vec<f64>,
     mask: Vec<bool>,
@@ -216,12 +222,12 @@ fn fit_masked_binary_degrees(
         return Err(PyValueError::new_err("array length mismatch"));
     }
     let r =
-        balance_masked_binary_degrees(&degree_out, &degree_in, &mask, tolerance, max_iterations);
+        balance_masked_degree_bernoulli(&degree_out, &degree_in, &mask, tolerance, max_iterations);
     Ok((r.x, r.y, r.converged, r.iterations))
 }
 
 #[pyfunction]
-fn fit_masked_strength_degree_me(
+fn fit_masked_strength_degree_poisson(
     strength_out: Vec<f64>,
     strength_in: Vec<f64>,
     degree_out: Vec<f64>,
@@ -238,7 +244,7 @@ fn fit_masked_strength_degree_me(
     {
         return Err(PyValueError::new_err("array length mismatch"));
     }
-    let r = balance_masked_strength_degree_me(
+    let r = balance_masked_strength_degree_poisson(
         &strength_out,
         &strength_in,
         &degree_out,
@@ -252,7 +258,7 @@ fn fit_masked_strength_degree_me(
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-fn fit_strength_cost(
+fn fit_strength_cost_poisson(
     strength_out: Vec<f64>,
     strength_in: Vec<f64>,
     cost_sources: Vec<usize>,
@@ -294,7 +300,7 @@ fn fit_strength_cost(
 }
 
 #[pyfunction]
-fn fit_binary_degrees(
+fn fit_degree_bernoulli(
     degree_out: Vec<f64>,
     degree_in: Vec<f64>,
     self_loops: bool,
@@ -306,7 +312,7 @@ fn fit_binary_degrees(
             "degree_out and degree_in must have same length",
         ));
     }
-    let result = balance_binary_degrees(
+    let result = balance_degree_bernoulli(
         &degree_out,
         &degree_in,
         self_loops,
@@ -317,7 +323,7 @@ fn fit_binary_degrees(
 }
 
 #[pyfunction]
-fn fit_strength_edges_me(
+fn fit_strength_edges_poisson(
     strength_out: Vec<f64>,
     strength_in: Vec<f64>,
     target_edges: f64,
@@ -330,7 +336,7 @@ fn fit_strength_edges_me(
             "strength arrays must have same length",
         ));
     }
-    let result = balance_strength_edges_me(
+    let result = balance_strength_edges_poisson(
         &strength_out,
         &strength_in,
         target_edges,
@@ -348,7 +354,7 @@ fn fit_strength_edges_me(
 }
 
 #[pyfunction]
-fn fit_strength_degree_me(
+fn fit_strength_degree_poisson(
     strength_out: Vec<f64>,
     strength_in: Vec<f64>,
     degree_out: Vec<f64>,
@@ -365,7 +371,7 @@ fn fit_strength_degree_me(
             "strength and degree arrays must have same length",
         ));
     }
-    let result = balance_strength_degree_me(
+    let result = balance_strength_degree_poisson(
         &strength_out,
         &strength_in,
         &degree_out,
@@ -415,7 +421,7 @@ fn fit_weighted_factors(
 }
 
 #[pyfunction]
-fn fit_balance_no_self_loops(
+fn fit_strength_poisson_no_self_loops(
     s_out: Vec<f64>,
     s_in: Vec<f64>,
     tolerance: f64,
@@ -426,12 +432,12 @@ fn fit_balance_no_self_loops(
             "s_out and s_in must have the same length",
         ));
     }
-    let result = balance_no_self_loops(&s_out, &s_in, tolerance, max_iterations);
+    let result = balance_strength_poisson(&s_out, &s_in, tolerance, max_iterations);
     Ok((result.x, result.y, result.converged, result.iterations))
 }
 
 #[pyfunction]
-fn sample_microcanonical(
+fn sample_strength_microcanonical(
     strength_out: Vec<u64>,
     strength_in: Vec<u64>,
     seed: u64,
@@ -448,12 +454,12 @@ fn sample_microcanonical(
             "microcanonical requires balanced strengths",
         ));
     }
-    let sample = core_sample_microcanonical(&strength_out, &strength_in, seed);
+    let sample = core_sample_strength_microcanonical(&strength_out, &strength_in, seed);
     Ok((sample.sources, sample.targets, sample.weights))
 }
 
 #[pyfunction]
-fn sample_custom_pij_events_poisson(
+fn sample_custom_poisson(
     sources: Vec<u64>,
     targets: Vec<u64>,
     probabilities: Vec<f64>,
@@ -465,18 +471,12 @@ fn sample_custom_pij_events_poisson(
             "custom p_ij arrays must have same length",
         ));
     }
-    let sample = core_sample_custom_pij_events_poisson(
-        &sources,
-        &targets,
-        &probabilities,
-        total_events,
-        seed,
-    );
+    let sample = core_sample_custom_poisson(&sources, &targets, &probabilities, total_events, seed);
     Ok((sample.sources, sample.targets, sample.weights))
 }
 
 #[pyfunction]
-fn sample_custom_pij_events_multinomial(
+fn sample_custom_multinomial(
     sources: Vec<u64>,
     targets: Vec<u64>,
     probabilities: Vec<f64>,
@@ -488,18 +488,13 @@ fn sample_custom_pij_events_multinomial(
             "custom p_ij arrays must have same length",
         ));
     }
-    let sample = core_sample_custom_pij_events_multinomial(
-        &sources,
-        &targets,
-        &probabilities,
-        total_events,
-        seed,
-    );
+    let sample =
+        core_sample_custom_multinomial(&sources, &targets, &probabilities, total_events, seed);
     Ok((sample.sources, sample.targets, sample.weights))
 }
 
 #[pyfunction]
-fn sample_poisson_multinomial(
+fn sample_strength_poisson_multinomial(
     x: Vec<f64>,
     y: Vec<f64>,
     self_loops: bool,
@@ -508,12 +503,12 @@ fn sample_poisson_multinomial(
     if x.len() != y.len() {
         return Err(PyValueError::new_err("x and y must have same length"));
     }
-    let sample = core_sample_poisson_multinomial(&x, &y, self_loops, seed);
+    let sample = core_sample_strength_poisson_multinomial(&x, &y, self_loops, seed);
     Ok((sample.sources, sample.targets, sample.weights))
 }
 
 #[pyfunction]
-fn sample_strength_edges_me(
+fn sample_strength_edges_poisson(
     x: Vec<f64>,
     y: Vec<f64>,
     lam: f64,
@@ -523,13 +518,13 @@ fn sample_strength_edges_me(
     if x.len() != y.len() {
         return Err(PyValueError::new_err("x and y must have same length"));
     }
-    let sample = core_sample_strength_edges_me(&x, &y, lam, self_loops, seed);
+    let sample = core_sample_strength_edges_poisson(&x, &y, lam, self_loops, seed);
     Ok((sample.sources, sample.targets, sample.weights))
 }
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
-fn sample_strength_cost_me(
+fn sample_strength_cost_poisson(
     x: Vec<f64>,
     y: Vec<f64>,
     gamma: f64,
@@ -550,58 +545,58 @@ fn sample_strength_cost_me(
         targets: &cost_targets,
         values: &cost_values,
     };
-    let sample = core_sample_strength_cost_me(&x, &y, gamma, &costs, self_loops, seed);
+    let sample = core_sample_strength_cost_poisson(&x, &y, gamma, &costs, self_loops, seed);
     Ok((sample.sources, sample.targets, sample.weights))
 }
 
 #[pyfunction]
-fn sample_poisson(
+fn sample_strength_poisson(
     x: Vec<f64>,
     y: Vec<f64>,
     self_loops: bool,
     seed: u64,
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
-    let edges = core_sample_poisson(&x, &y, self_loops, seed);
+    let edges = core_sample_strength_poisson(&x, &y, self_loops, seed);
     (edges.sources, edges.targets, edges.weights)
 }
 
 #[pyfunction]
-fn sample_geometric(
+fn sample_strength_geometric(
     x: Vec<f64>,
     y: Vec<f64>,
     self_loops: bool,
     seed: u64,
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
-    let edges = core_sample_geometric(&x, &y, self_loops, seed);
+    let edges = core_sample_strength_geometric(&x, &y, self_loops, seed);
     (edges.sources, edges.targets, edges.weights)
 }
 
 #[pyfunction]
-fn sample_binomial(
-    x: Vec<f64>,
-    y: Vec<f64>,
-    layers: u32,
-    self_loops: bool,
-    seed: u64,
-) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
-    let edges = core_sample_binomial(&x, &y, layers, self_loops, seed);
-    (edges.sources, edges.targets, edges.weights)
-}
-
-#[pyfunction]
-fn sample_neg_binomial(
+fn sample_strength_binomial(
     x: Vec<f64>,
     y: Vec<f64>,
     layers: u32,
     self_loops: bool,
     seed: u64,
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
-    let edges = core_sample_neg_binomial(&x, &y, layers, self_loops, seed);
+    let edges = core_sample_strength_binomial(&x, &y, layers, self_loops, seed);
     (edges.sources, edges.targets, edges.weights)
 }
 
 #[pyfunction]
-fn fit_binomial_strength(
+fn sample_strength_neg_binomial(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
+    let edges = core_sample_strength_neg_binomial(&x, &y, layers, self_loops, seed);
+    (edges.sources, edges.targets, edges.weights)
+}
+
+#[pyfunction]
+fn fit_strength_binomial(
     strength_out: Vec<f64>,
     strength_in: Vec<f64>,
     layers: u32,
@@ -609,7 +604,7 @@ fn fit_binomial_strength(
     tolerance: f64,
     max_iterations: usize,
 ) -> (Vec<f64>, Vec<f64>, bool, usize) {
-    let result = balance_binomial_strength(
+    let result = balance_strength_binomial(
         &strength_out,
         &strength_in,
         layers,
@@ -621,7 +616,7 @@ fn fit_binomial_strength(
 }
 
 #[pyfunction]
-fn fit_masked_binomial_strength(
+fn fit_masked_strength_binomial(
     strength_out: Vec<f64>,
     strength_in: Vec<f64>,
     mask: Vec<bool>,
@@ -629,7 +624,7 @@ fn fit_masked_binomial_strength(
     tolerance: f64,
     max_iterations: usize,
 ) -> (Vec<f64>, Vec<f64>, bool, usize) {
-    let result = balance_masked_binomial_strength(
+    let result = balance_masked_strength_binomial(
         &strength_out,
         &strength_in,
         &mask,
@@ -641,7 +636,7 @@ fn fit_masked_binomial_strength(
 }
 
 #[pyfunction]
-fn sample_fixed_degree_events_me(
+fn sample_degree_events_poisson(
     x: Vec<f64>,
     y: Vec<f64>,
     total_events: u64,
@@ -651,12 +646,12 @@ fn sample_fixed_degree_events_me(
     if x.len() != y.len() {
         return Err(PyValueError::new_err("x and y must have same length"));
     }
-    let sample = core_sample_fixed_degree_events_me(&x, &y, total_events, self_loops, seed);
+    let sample = core_sample_degree_events_poisson(&x, &y, total_events, self_loops, seed);
     Ok((sample.sources, sample.targets, sample.weights))
 }
 
 #[pyfunction]
-fn sample_strength_degree_me(
+fn sample_strength_degree_poisson(
     degree_x: Vec<f64>,
     degree_y: Vec<f64>,
     excess_x: Vec<f64>,
@@ -672,26 +667,26 @@ fn sample_strength_degree_me(
             "all multiplier arrays must have same length",
         ));
     }
-    let sample = core_sample_strength_degree_me(
+    let sample = core_sample_strength_degree_poisson(
         &degree_x, &degree_y, &excess_x, &excess_y, self_loops, seed,
     );
     Ok((sample.sources, sample.targets, sample.weights))
 }
 
 #[pyfunction]
-fn sample_multinomial(
+fn sample_strength_multinomial(
     x: Vec<f64>,
     y: Vec<f64>,
     total_events: u64,
     self_loops: bool,
     seed: u64,
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
-    let edges = core_sample_multinomial(&x, &y, total_events, self_loops, seed);
+    let edges = core_sample_strength_multinomial(&x, &y, total_events, self_loops, seed);
     (edges.sources, edges.targets, edges.weights)
 }
 
 #[pyfunction]
-fn filter_fixed_strength_poisson(
+fn filter_strength_poisson(
     x: Vec<f64>,
     y: Vec<f64>,
     sources: Vec<u64>,
@@ -706,7 +701,7 @@ fn filter_fixed_strength_poisson(
             "sources, targets, and weights must have same length",
         ));
     }
-    let result = core_filter_fixed_strength_poisson(&x, &y, &sources, &targets, &weights);
+    let result = core_filter_strength_poisson(&x, &y, &sources, &targets, &weights);
     Ok((
         result.upper_pvalues,
         result.lower_pvalues,
@@ -718,7 +713,7 @@ fn filter_fixed_strength_poisson(
 #[pyfunction]
 #[pyo3(signature = (x, y, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
 #[allow(clippy::too_many_arguments)]
-fn absent_fixed_strength_poisson(
+fn absent_strength_poisson(
     x: Vec<f64>,
     y: Vec<f64>,
     sources: Vec<u64>,
@@ -732,7 +727,7 @@ fn absent_fixed_strength_poisson(
     if x.len() != y.len() {
         return Err(PyValueError::new_err("x and y must have same length"));
     }
-    let result = core_absent_fixed_strength_poisson(
+    let result = core_absent_strength_poisson(
         &x,
         &y,
         &sources,
@@ -753,7 +748,7 @@ fn absent_fixed_strength_poisson(
 }
 
 #[pyfunction]
-fn filter_custom_poisson_rates(
+fn filter_custom_poisson(
     rate_sources: Vec<u64>,
     rate_targets: Vec<u64>,
     rates: Vec<f64>,
@@ -764,7 +759,7 @@ fn filter_custom_poisson_rates(
     if rate_sources.len() != rate_targets.len() || rate_sources.len() != rates.len() {
         return Err(PyValueError::new_err("rate arrays must have same length"));
     }
-    let result = core_filter_custom_poisson_rates(
+    let result = core_filter_custom_poisson(
         &rate_sources,
         &rate_targets,
         &rates,
@@ -783,7 +778,7 @@ fn filter_custom_poisson_rates(
 #[pyfunction]
 #[pyo3(signature = (rate_sources, rate_targets, rates, sources, targets, alpha_lower, min_occupation, min_expected, max_absent=None))]
 #[allow(clippy::too_many_arguments)]
-fn absent_custom_poisson_rates(
+fn absent_custom_poisson(
     rate_sources: Vec<u64>,
     rate_targets: Vec<u64>,
     rates: Vec<f64>,
@@ -797,7 +792,7 @@ fn absent_custom_poisson_rates(
     if rate_sources.len() != rate_targets.len() || rate_sources.len() != rates.len() {
         return Err(PyValueError::new_err("rate arrays must have same length"));
     }
-    let result = core_absent_custom_poisson_rates(
+    let result = core_absent_custom_poisson(
         &rate_sources,
         &rate_targets,
         &rates,
@@ -818,7 +813,7 @@ fn absent_custom_poisson_rates(
 }
 
 #[pyfunction]
-fn filter_strength_edges_zip(
+fn filter_strength_edges_poisson(
     x: Vec<f64>,
     y: Vec<f64>,
     lam: f64,
@@ -829,7 +824,7 @@ fn filter_strength_edges_zip(
     if x.len() != y.len() {
         return Err(PyValueError::new_err("x and y must have same length"));
     }
-    let result = core_filter_strength_edges_zip(&x, &y, lam, &sources, &targets, &weights);
+    let result = core_filter_strength_edges_poisson(&x, &y, lam, &sources, &targets, &weights);
     Ok((
         result.upper_pvalues,
         result.lower_pvalues,
@@ -841,7 +836,7 @@ fn filter_strength_edges_zip(
 #[pyfunction]
 #[pyo3(signature = (x, y, lam, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
 #[allow(clippy::too_many_arguments)]
-fn absent_strength_edges_zip(
+fn absent_strength_edges_poisson(
     x: Vec<f64>,
     y: Vec<f64>,
     lam: f64,
@@ -856,7 +851,7 @@ fn absent_strength_edges_zip(
     if x.len() != y.len() {
         return Err(PyValueError::new_err("x and y must have same length"));
     }
-    let result = core_absent_strength_edges_zip(
+    let result = core_absent_strength_edges_poisson(
         &x,
         &y,
         lam,
@@ -958,7 +953,7 @@ fn absent_strength_cost_poisson(
 }
 
 #[pyfunction]
-fn filter_strength_degree_zip(
+fn filter_strength_degree_poisson(
     x: Vec<f64>,
     y: Vec<f64>,
     z: Vec<f64>,
@@ -970,7 +965,7 @@ fn filter_strength_degree_zip(
     if x.len() != y.len() || x.len() != z.len() || x.len() != w.len() {
         return Err(PyValueError::new_err("x, y, z, w must have same length"));
     }
-    let result = core_filter_strength_degree_zip(&x, &y, &z, &w, &sources, &targets, &weights);
+    let result = core_filter_strength_degree_poisson(&x, &y, &z, &w, &sources, &targets, &weights);
     Ok((
         result.upper_pvalues,
         result.lower_pvalues,
@@ -982,7 +977,7 @@ fn filter_strength_degree_zip(
 #[pyfunction]
 #[pyo3(signature = (x, y, z, w, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
 #[allow(clippy::too_many_arguments)]
-fn absent_strength_degree_zip(
+fn absent_strength_degree_poisson(
     x: Vec<f64>,
     y: Vec<f64>,
     z: Vec<f64>,
@@ -998,7 +993,7 @@ fn absent_strength_degree_zip(
     if x.len() != y.len() || x.len() != z.len() || x.len() != w.len() {
         return Err(PyValueError::new_err("x, y, z, w must have same length"));
     }
-    let result = core_absent_strength_degree_zip(
+    let result = core_absent_strength_degree_poisson(
         &x,
         &y,
         &z,
@@ -1021,7 +1016,7 @@ fn absent_strength_degree_zip(
 }
 
 #[pyfunction]
-fn filter_degree_events_zip(
+fn filter_degree_events_poisson(
     x: Vec<f64>,
     y: Vec<f64>,
     positive_weight_rate: f64,
@@ -1032,8 +1027,14 @@ fn filter_degree_events_zip(
     if x.len() != y.len() {
         return Err(PyValueError::new_err("x and y must have same length"));
     }
-    let result =
-        core_filter_degree_events_zip(&x, &y, positive_weight_rate, &sources, &targets, &weights);
+    let result = core_filter_degree_events_poisson(
+        &x,
+        &y,
+        positive_weight_rate,
+        &sources,
+        &targets,
+        &weights,
+    );
     Ok((
         result.upper_pvalues,
         result.lower_pvalues,
@@ -1045,7 +1046,7 @@ fn filter_degree_events_zip(
 #[pyfunction]
 #[pyo3(signature = (x, y, positive_weight_rate, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
 #[allow(clippy::too_many_arguments)]
-fn absent_degree_events_zip(
+fn absent_degree_events_poisson(
     x: Vec<f64>,
     y: Vec<f64>,
     positive_weight_rate: f64,
@@ -1060,7 +1061,7 @@ fn absent_degree_events_zip(
     if x.len() != y.len() {
         return Err(PyValueError::new_err("x and y must have same length"));
     }
-    let result = core_absent_degree_events_zip(
+    let result = core_absent_degree_events_poisson(
         &x,
         &y,
         positive_weight_rate,
@@ -1082,7 +1083,7 @@ fn absent_degree_events_zip(
 }
 
 #[pyfunction]
-fn filter_geometric(
+fn filter_strength_geometric(
     x: Vec<f64>,
     y: Vec<f64>,
     sources: Vec<u64>,
@@ -1092,7 +1093,7 @@ fn filter_geometric(
     if x.len() != y.len() {
         return Err(PyValueError::new_err("x and y must have same length"));
     }
-    let result = core_filter_geometric(&x, &y, &sources, &targets, &weights);
+    let result = core_filter_strength_geometric(&x, &y, &sources, &targets, &weights);
     Ok((
         result.upper_pvalues,
         result.lower_pvalues,
@@ -1104,7 +1105,7 @@ fn filter_geometric(
 #[pyfunction]
 #[pyo3(signature = (x, y, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
 #[allow(clippy::too_many_arguments)]
-fn absent_geometric(
+fn absent_strength_geometric(
     x: Vec<f64>,
     y: Vec<f64>,
     sources: Vec<u64>,
@@ -1115,7 +1116,7 @@ fn absent_geometric(
     min_expected: f64,
     max_absent: Option<usize>,
 ) -> PyResult<AbsentFilter> {
-    let result = core_absent_geometric(
+    let result = core_absent_strength_geometric(
         &x,
         &y,
         &sources,
@@ -1136,7 +1137,7 @@ fn absent_geometric(
 }
 
 #[pyfunction]
-fn filter_binomial(
+fn filter_strength_binomial(
     x: Vec<f64>,
     y: Vec<f64>,
     layers: u32,
@@ -1147,7 +1148,7 @@ fn filter_binomial(
     if x.len() != y.len() {
         return Err(PyValueError::new_err("x and y must have same length"));
     }
-    let result = core_filter_binomial(&x, &y, layers, &sources, &targets, &weights);
+    let result = core_filter_strength_binomial(&x, &y, layers, &sources, &targets, &weights);
     Ok((
         result.upper_pvalues,
         result.lower_pvalues,
@@ -1159,7 +1160,7 @@ fn filter_binomial(
 #[pyfunction]
 #[pyo3(signature = (x, y, layers, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
 #[allow(clippy::too_many_arguments)]
-fn absent_binomial(
+fn absent_strength_binomial(
     x: Vec<f64>,
     y: Vec<f64>,
     layers: u32,
@@ -1171,7 +1172,7 @@ fn absent_binomial(
     min_expected: f64,
     max_absent: Option<usize>,
 ) -> PyResult<AbsentFilter> {
-    let result = core_absent_binomial(
+    let result = core_absent_strength_binomial(
         &x,
         &y,
         layers,
@@ -1193,7 +1194,7 @@ fn absent_binomial(
 }
 
 #[pyfunction]
-fn filter_neg_binomial(
+fn filter_strength_neg_binomial(
     x: Vec<f64>,
     y: Vec<f64>,
     layers: u32,
@@ -1204,7 +1205,7 @@ fn filter_neg_binomial(
     if x.len() != y.len() {
         return Err(PyValueError::new_err("x and y must have same length"));
     }
-    let result = core_filter_neg_binomial(&x, &y, layers, &sources, &targets, &weights);
+    let result = core_filter_strength_neg_binomial(&x, &y, layers, &sources, &targets, &weights);
     Ok((
         result.upper_pvalues,
         result.lower_pvalues,
@@ -1216,7 +1217,7 @@ fn filter_neg_binomial(
 #[pyfunction]
 #[pyo3(signature = (x, y, layers, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
 #[allow(clippy::too_many_arguments)]
-fn absent_neg_binomial(
+fn absent_strength_neg_binomial(
     x: Vec<f64>,
     y: Vec<f64>,
     layers: u32,
@@ -1228,7 +1229,7 @@ fn absent_neg_binomial(
     min_expected: f64,
     max_absent: Option<usize>,
 ) -> PyResult<AbsentFilter> {
-    let result = core_absent_neg_binomial(
+    let result = core_absent_strength_neg_binomial(
         &x,
         &y,
         layers,
@@ -1283,51 +1284,57 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(directed_degrees, module)?)?;
     module.add_function(wrap_pyfunction!(compute_all_node_stats, module)?)?;
     module.add_function(wrap_pyfunction!(weight_distribution, module)?)?;
-    module.add_function(wrap_pyfunction!(fit_masked_binary_degrees, module)?)?;
-    module.add_function(wrap_pyfunction!(fit_masked_strength_degree_me, module)?)?;
-    module.add_function(wrap_pyfunction!(fit_masked_strength, module)?)?;
-    module.add_function(wrap_pyfunction!(fit_strength_cost, module)?)?;
-    module.add_function(wrap_pyfunction!(fit_binary_degrees, module)?)?;
-    module.add_function(wrap_pyfunction!(fit_strength_edges_me, module)?)?;
-    module.add_function(wrap_pyfunction!(fit_strength_degree_me, module)?)?;
-    module.add_function(wrap_pyfunction!(fit_weighted_factors, module)?)?;
-    module.add_function(wrap_pyfunction!(fit_balance_no_self_loops, module)?)?;
-    module.add_function(wrap_pyfunction!(sample_microcanonical, module)?)?;
-    module.add_function(wrap_pyfunction!(sample_custom_pij_events_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_masked_degree_bernoulli, module)?)?;
     module.add_function(wrap_pyfunction!(
-        sample_custom_pij_events_multinomial,
+        fit_masked_strength_degree_poisson,
         module
     )?)?;
-    module.add_function(wrap_pyfunction!(sample_poisson_multinomial, module)?)?;
-    module.add_function(wrap_pyfunction!(sample_strength_edges_me, module)?)?;
-    module.add_function(wrap_pyfunction!(sample_strength_cost_me, module)?)?;
-    module.add_function(wrap_pyfunction!(sample_poisson, module)?)?;
-    module.add_function(wrap_pyfunction!(sample_fixed_degree_events_me, module)?)?;
-    module.add_function(wrap_pyfunction!(sample_strength_degree_me, module)?)?;
-    module.add_function(wrap_pyfunction!(sample_multinomial, module)?)?;
-    module.add_function(wrap_pyfunction!(sample_geometric, module)?)?;
-    module.add_function(wrap_pyfunction!(sample_binomial, module)?)?;
-    module.add_function(wrap_pyfunction!(sample_neg_binomial, module)?)?;
-    module.add_function(wrap_pyfunction!(fit_binomial_strength, module)?)?;
-    module.add_function(wrap_pyfunction!(fit_masked_binomial_strength, module)?)?;
-    module.add_function(wrap_pyfunction!(filter_fixed_strength_poisson, module)?)?;
-    module.add_function(wrap_pyfunction!(absent_fixed_strength_poisson, module)?)?;
-    module.add_function(wrap_pyfunction!(filter_custom_poisson_rates, module)?)?;
-    module.add_function(wrap_pyfunction!(absent_custom_poisson_rates, module)?)?;
-    module.add_function(wrap_pyfunction!(filter_strength_edges_zip, module)?)?;
-    module.add_function(wrap_pyfunction!(absent_strength_edges_zip, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_masked_strength_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_strength_cost_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_degree_bernoulli, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_strength_edges_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_strength_degree_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_weighted_factors, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        fit_strength_poisson_no_self_loops,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_microcanonical, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_custom_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_custom_multinomial, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        sample_strength_poisson_multinomial,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_edges_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_cost_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_degree_events_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_degree_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_multinomial, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_geometric, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_neg_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_strength_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_masked_strength_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(filter_strength_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(absent_strength_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(filter_custom_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(absent_custom_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(filter_strength_edges_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(absent_strength_edges_poisson, module)?)?;
     module.add_function(wrap_pyfunction!(filter_strength_cost_poisson, module)?)?;
     module.add_function(wrap_pyfunction!(absent_strength_cost_poisson, module)?)?;
-    module.add_function(wrap_pyfunction!(filter_strength_degree_zip, module)?)?;
-    module.add_function(wrap_pyfunction!(absent_strength_degree_zip, module)?)?;
-    module.add_function(wrap_pyfunction!(filter_degree_events_zip, module)?)?;
-    module.add_function(wrap_pyfunction!(absent_degree_events_zip, module)?)?;
-    module.add_function(wrap_pyfunction!(filter_geometric, module)?)?;
-    module.add_function(wrap_pyfunction!(absent_geometric, module)?)?;
-    module.add_function(wrap_pyfunction!(filter_binomial, module)?)?;
-    module.add_function(wrap_pyfunction!(absent_binomial, module)?)?;
-    module.add_function(wrap_pyfunction!(filter_neg_binomial, module)?)?;
-    module.add_function(wrap_pyfunction!(absent_neg_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(filter_strength_degree_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(absent_strength_degree_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(filter_degree_events_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(absent_degree_events_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(filter_strength_geometric, module)?)?;
+    module.add_function(wrap_pyfunction!(absent_strength_geometric, module)?)?;
+    module.add_function(wrap_pyfunction!(filter_strength_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(absent_strength_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(filter_strength_neg_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(absent_strength_neg_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(benjamini_hochberg, module)?)?;
     module.add_function(wrap_pyfunction!(clustering_coefficients, module)?)?;
     module.add_function(wrap_pyfunction!(weighted_clustering_coefficients, module)?)?;

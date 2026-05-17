@@ -3,14 +3,14 @@
 Example:
 -------
 ```python
-from odme.models import fit_fixed_strength_me, sample_poisson
+from odme.models import fit_strength_poisson, sample_strength_poisson
 from odme.analysis import directed_strengths
 from odme.ensemble import ensemble_average
 
-result = fit_fixed_strength_me(s_out, s_in)
+result = fit_strength_poisson(s_out, s_in)
 
 def generate(seed: int):
-    return sample_poisson(result.x, result.y, seed=seed)
+    return sample_strength_poisson(result.x, result.y, seed=seed)
 
 mean, std = ensemble_average(
     generate=generate,

@@ -16,8 +16,12 @@ import pytest
 from odme.analysis import directed_strengths
 from odme.analysis.stats import compute_all_stats
 from odme.data.frames import EdgeTable
-from odme.filtering import filter_fixed_strength_me
-from odme.models import fit_fixed_strength_me, sample_microcanonical, sample_poisson
+from odme.filtering import filter_strength_poisson
+from odme.models import (
+    fit_strength_poisson,
+    sample_strength_microcanonical,
+    sample_strength_poisson,
+)
 
 BASELINES_PATH = (
     Path(__file__).resolve().parent.parent / "benchmarks" / "regression_baselines.json"
@@ -45,8 +49,8 @@ def _large_network(n: int = 10000, avg_s: int = 100) -> EdgeTable:
         s_in[np.argmax(s_in)] += abs(diff)
     elif diff < 0:
         s_out[np.argmax(s_out)] += abs(diff)
-    fit = fit_fixed_strength_me(s_out, s_in)
-    return sample_poisson(fit.x, fit.y, seed=42)
+    fit = fit_strength_poisson(s_out, s_in)
+    return sample_strength_poisson(fit.x, fit.y, seed=42)
 
 
 @pytest.fixture(scope="module")
@@ -70,7 +74,7 @@ def test_fitting_strength_10k(large_edges: EdgeTable) -> None:
     threshold = _load_threshold("fitting_strength_10k")
     s = directed_strengths(large_edges)
     start = time.perf_counter()
-    fit_fixed_strength_me(s.out, s.incoming)
+    fit_strength_poisson(s.out, s.incoming)
     elapsed = time.perf_counter() - start
     assert elapsed < threshold, f"fitting took {elapsed:.2f}s (limit {threshold}s)"
 
@@ -79,9 +83,9 @@ def test_poisson_generation_10k(large_edges: EdgeTable) -> None:
     """Poisson generation at N=10000 completes within baseline threshold."""
     threshold = _load_threshold("poisson_generation_10k")
     s = directed_strengths(large_edges)
-    fit = fit_fixed_strength_me(s.out, s.incoming)
+    fit = fit_strength_poisson(s.out, s.incoming)
     start = time.perf_counter()
-    sample_poisson(fit.x, fit.y, seed=0)
+    sample_strength_poisson(fit.x, fit.y, seed=0)
     elapsed = time.perf_counter() - start
     msg = f"Poisson generation took {elapsed:.2f}s (limit {threshold}s)"
     assert elapsed < threshold, msg
@@ -92,7 +96,7 @@ def test_microcanonical_generation_10k(large_edges: EdgeTable) -> None:
     threshold = _load_threshold("microcanonical_generation_10k")
     s = directed_strengths(large_edges)
     start = time.perf_counter()
-    sample_microcanonical(s.out, s.incoming, seed=0)
+    sample_strength_microcanonical(s.out, s.incoming, seed=0)
     elapsed = time.perf_counter() - start
     msg = f"microcanonical took {elapsed:.2f}s (limit {threshold}s)"
     assert elapsed < threshold, msg
@@ -102,6 +106,6 @@ def test_filtering_10k(large_edges: EdgeTable) -> None:
     """Filtering at N=10000 completes within baseline threshold."""
     threshold = _load_threshold("filtering_10k")
     start = time.perf_counter()
-    filter_fixed_strength_me(large_edges, alpha=0.05)
+    filter_strength_poisson(large_edges, alpha=0.05)
     elapsed = time.perf_counter() - start
     assert elapsed < threshold, f"filtering took {elapsed:.2f}s (limit {threshold}s)"

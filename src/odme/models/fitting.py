@@ -43,7 +43,7 @@ def _log_fit_result(
 
 
 @dataclass(frozen=True)
-class StrengthCostMEFit:
+class StrengthCostFit:
     """Fitted strength-cost ME model: E[t_ij] = x_i y_j exp(-gamma d_ij)."""
 
     node: NDArray[np.uint64]
@@ -56,7 +56,7 @@ class StrengthCostMEFit:
 
 
 @dataclass(frozen=True)
-class StrengthEdgesMEFit:
+class StrengthEdgesFit:
     """Fitted exact ME fixed-strength-and-edge-count ME model."""
 
     node: NDArray[np.uint64]
@@ -69,7 +69,7 @@ class StrengthEdgesMEFit:
 
 
 @dataclass(frozen=True)
-class StrengthDegreeMEFit:
+class StrengthDegreeFit:
     """Fitted exact ME fixed-strength-degree ME model."""
 
     node: NDArray[np.uint64]
@@ -147,7 +147,7 @@ def validate_strength_degree_constraints(
         raise ValueError(msg)
 
 
-def fit_strength_cost_me(
+def fit_strength_cost_poisson(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     cost_sources: NDArray[np.integer],
@@ -159,7 +159,7 @@ def fit_strength_cost_me(
     tolerance: float = 1e-6,
     verbose: int = 0,
     max_iterations: int = 5000,
-) -> StrengthCostMEFit:
+) -> StrengthCostFit:
     """Fit the strength-cost ME model: fixed strength + fixed total cost.
 
     The fitted expectation is ``E[t_ij] = x_i y_j exp(-gamma d_ij)``.
@@ -177,7 +177,7 @@ def fit_strength_cost_me(
         max_iterations: Maximum solver iterations.
 
     Returns:
-        StrengthCostMEFit with x, y multipliers and gamma.
+        StrengthCostFit with x, y multipliers and gamma.
     """
     s_out = np.asarray(strength_out, dtype=np.float64)
     s_in = np.asarray(strength_in, dtype=np.float64)
@@ -191,7 +191,7 @@ def fit_strength_cost_me(
     c_val = np.asarray(cost_values, dtype=np.float64).tolist()
 
     t0 = time.perf_counter()
-    x_list, y_list, gamma, converged, iters = _odme.fit_strength_cost(
+    x_list, y_list, gamma, converged, iters = _odme.fit_strength_cost_poisson(
         s_out.tolist(),
         s_in.tolist(),
         c_src,
@@ -203,7 +203,7 @@ def fit_strength_cost_me(
         max_iterations,
     )
     n = len(s_out)
-    result = StrengthCostMEFit(
+    result = StrengthCostFit(
         node=np.arange(n, dtype=np.uint64),
         x=np.asarray(x_list, dtype=np.float64),
         y=np.asarray(y_list, dtype=np.float64),
@@ -213,12 +213,12 @@ def fit_strength_cost_me(
         iterations=iters,
     )
     _log_fit_result(
-        "fit_strength_cost_me", converged, iters, time.perf_counter() - t0, verbose
+        "fit_strength_cost_poisson", converged, iters, time.perf_counter() - t0, verbose
     )
     return result
 
 
-def fit_strength_edges_me(
+def fit_strength_edges_poisson(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     target_edges: float,
@@ -227,7 +227,7 @@ def fit_strength_edges_me(
     tolerance: float = 1e-10,
     verbose: int = 0,
     max_iterations: int = 50000,
-) -> StrengthEdgesMEFit:
+) -> StrengthEdgesFit:
     """Fit exact ME fixed-strength and total-edge-count constraints."""
     s_out = np.asarray(strength_out, dtype=np.float64)
     s_in = np.asarray(strength_in, dtype=np.float64)
@@ -236,7 +236,7 @@ def fit_strength_edges_me(
         msg = "target_edges must be positive and no larger than total strength"
         raise ValueError(msg)
     t0 = time.perf_counter()
-    x_list, y_list, lam, converged, iters = _odme.fit_strength_edges_me(
+    x_list, y_list, lam, converged, iters = _odme.fit_strength_edges_poisson(
         s_out.tolist(),
         s_in.tolist(),
         target_edges,
@@ -244,7 +244,7 @@ def fit_strength_edges_me(
         tolerance,
         max_iterations,
     )
-    result = StrengthEdgesMEFit(
+    result = StrengthEdgesFit(
         node=np.arange(len(s_out), dtype=np.uint64),
         x=np.asarray(x_list, dtype=np.float64),
         y=np.asarray(y_list, dtype=np.float64),
@@ -254,12 +254,16 @@ def fit_strength_edges_me(
         iterations=iters,
     )
     _log_fit_result(
-        "fit_strength_edges_me", converged, iters, time.perf_counter() - t0, verbose
+        "fit_strength_edges_poisson",
+        converged,
+        iters,
+        time.perf_counter() - t0,
+        verbose,
     )
     return result
 
 
-def fit_strength_degree_me(
+def fit_strength_degree_poisson(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     degree_out: NDArray[np.floating],
@@ -269,7 +273,7 @@ def fit_strength_degree_me(
     tolerance: float = 1e-10,
     verbose: int = 0,
     max_iterations: int = 50000,
-) -> StrengthDegreeMEFit:
+) -> StrengthDegreeFit:
     """Fit exact grand-canonical ME fixed-strength-degree constraints.
 
     The fitted expectation is the thesis Case 4 ME equation:
@@ -287,7 +291,7 @@ def fit_strength_degree_me(
         max_iterations: Maximum solver iterations.
 
     Returns:
-        StrengthDegreeMEFit with thesis multipliers x, y, z, and w.
+        StrengthDegreeFit with thesis multipliers x, y, z, and w.
     """
     s_out = np.asarray(strength_out, dtype=np.float64)
     s_in = np.asarray(strength_in, dtype=np.float64)
@@ -296,17 +300,19 @@ def fit_strength_degree_me(
     validate_strength_degree_constraints(s_out, s_in, k_out, k_in)
 
     t0 = time.perf_counter()
-    x_list, y_list, z_list, w_list, converged, iters = _odme.fit_strength_degree_me(
-        s_out.tolist(),
-        s_in.tolist(),
-        k_out.tolist(),
-        k_in.tolist(),
-        self_loops,
-        tolerance,
-        max_iterations,
+    x_list, y_list, z_list, w_list, converged, iters = (
+        _odme.fit_strength_degree_poisson(
+            s_out.tolist(),
+            s_in.tolist(),
+            k_out.tolist(),
+            k_in.tolist(),
+            self_loops,
+            tolerance,
+            max_iterations,
+        )
     )
     n = len(s_out)
-    result = StrengthDegreeMEFit(
+    result = StrengthDegreeFit(
         node=np.arange(n, dtype=np.uint64),
         x=np.asarray(x_list, dtype=np.float64),
         y=np.asarray(y_list, dtype=np.float64),
@@ -317,12 +323,16 @@ def fit_strength_degree_me(
         iterations=iters,
     )
     _log_fit_result(
-        "fit_strength_degree_me", converged, iters, time.perf_counter() - t0, verbose
+        "fit_strength_degree_poisson",
+        converged,
+        iters,
+        time.perf_counter() - t0,
+        verbose,
     )
     return result
 
 
-def fit_fixed_strength_me(
+def fit_strength_poisson(
     strength_out: NDArray[np.integer],
     strength_in: NDArray[np.integer],
     *,
@@ -364,13 +374,13 @@ def fit_fixed_strength_me(
         y = s_in / sqrt_t
     else:
         t0 = time.perf_counter()
-        x_list, y_list, converged, iters = _odme.fit_balance_no_self_loops(
+        x_list, y_list, converged, iters = _odme.fit_strength_poisson_no_self_loops(
             s_out.tolist(), s_in.tolist(), tolerance, max_iterations
         )
         x = np.array(x_list)
         y = np.array(y_list)
         _log_fit_result(
-            "fit_fixed_strength_me",
+            "fit_strength_poisson",
             converged,
             iters,
             time.perf_counter() - t0,
@@ -386,7 +396,7 @@ def fit_fixed_strength_me(
     )
 
 
-def fit_fixed_degree_binary(
+def fit_degree_bernoulli(
     degree_out: NDArray[np.floating],
     degree_in: NDArray[np.floating],
     *,
@@ -429,7 +439,7 @@ def fit_fixed_degree_binary(
         )
 
     t0 = time.perf_counter()
-    x_list, y_list, converged, iters = _odme.fit_binary_degrees(
+    x_list, y_list, converged, iters = _odme.fit_degree_bernoulli(
         k_out.tolist(), k_in.tolist(), self_loops, tolerance, max_iterations
     )
     result = FitResult(
@@ -440,12 +450,12 @@ def fit_fixed_degree_binary(
         iterations=iters,
     )
     _log_fit_result(
-        "fit_fixed_degree_binary", converged, iters, time.perf_counter() - t0, verbose
+        "fit_degree_bernoulli", converged, iters, time.perf_counter() - t0, verbose
     )
     return result
 
 
-def fit_binomial_strength(
+def fit_strength_binomial(
     strength_out: NDArray[np.integer],
     strength_in: NDArray[np.integer],
     *,
@@ -476,11 +486,11 @@ def fit_binomial_strength(
     _validate_balanced_sequences(s_out, s_in, name="strength")
     n = len(s_out)
     t0 = time.perf_counter()
-    x_list, y_list, converged, iters = _odme.fit_binomial_strength(
+    x_list, y_list, converged, iters = _odme.fit_strength_binomial(
         s_out.tolist(), s_in.tolist(), layers, self_loops, tolerance, max_iterations
     )
     _log_fit_result(
-        "fit_binomial_strength",
+        "fit_strength_binomial",
         converged,
         iters,
         time.perf_counter() - t0,
@@ -497,14 +507,14 @@ def fit_binomial_strength(
 
 __all__ = [
     "FitResult",
-    "StrengthCostMEFit",
-    "StrengthDegreeMEFit",
-    "StrengthEdgesMEFit",
-    "fit_binomial_strength",
-    "fit_fixed_degree_binary",
-    "fit_fixed_strength_me",
-    "fit_strength_cost_me",
-    "fit_strength_degree_me",
-    "fit_strength_edges_me",
+    "StrengthCostFit",
+    "StrengthDegreeFit",
+    "StrengthEdgesFit",
+    "fit_degree_bernoulli",
+    "fit_strength_binomial",
+    "fit_strength_cost_poisson",
+    "fit_strength_degree_poisson",
+    "fit_strength_edges_poisson",
+    "fit_strength_poisson",
     "validate_strength_degree_constraints",
 ]

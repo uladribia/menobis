@@ -45,7 +45,7 @@ Filtering supports all independent grand-canonical distributions:
 
 | partial constraints | Poisson rates from combined known + free-pair rates |
 
-Partial-constraint filtering uses `filter_custom_rates_poisson` with the
+Partial-constraint filtering uses `filter_custom_poisson` with the
 combined rate table from `PartialFitResult.as_probability_table()`.
 
 Canonical multinomial filters are intentionally out of scope because pair tests
@@ -68,15 +68,15 @@ For Poisson models, $P(t_{ij}>0)=1-e^{-\lambda_{ij}}$.
 
 ```python
 from odme.filtering import (
-    filter_fixed_strength_me,
-    filter_strength_cost_me,
-    filter_strength_degree_me,
-    filter_strength_edges_me,
-    filter_degree_events_me,
-    filter_custom_rates_poisson,
+    filter_strength_poisson,
+    filter_strength_cost_poisson,
+    filter_strength_degree_poisson,
+    filter_strength_edges_poisson,
+    filter_degree_events_poisson,
+    filter_custom_poisson,
 )
 
-result = filter_fixed_strength_me(
+result = filter_strength_poisson(
     edges,
     alpha=0.05,
     tail="two-sided",

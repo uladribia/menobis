@@ -67,14 +67,14 @@ search with bracketed bisection/Brent or a gradient-based convex-dual solve.
 
 ```python
 import numpy as np
-from odme.models import fit_strength_cost_me, sample_strength_cost_me
+from odme.models import fit_strength_cost_poisson, sample_strength_cost_poisson
 
-fit = fit_strength_cost_me(
+fit = fit_strength_cost_poisson(
     s_out, s_in,
     cost_sources, cost_targets, cost_values,
     target_cost,
 )
-sample = sample_strength_cost_me(fit, cost_sources, cost_targets, cost_values, seed=42)
+sample = sample_strength_cost_poisson(fit, cost_sources, cost_targets, cost_values, seed=42)
 ```
 
 ## CLI
@@ -93,9 +93,9 @@ When some rates are known, ODME subtracts their strength and cost contribution
 and fits the free pairs:
 
 ```python
-from odme.models.partial import fit_partial_strength_cost_me
+from odme.models.partial import fit_partial_strength_cost_poisson
 
-result = fit_partial_strength_cost_me(
+result = fit_partial_strength_cost_poisson(
     s_out, s_in,
     known_source, known_target, known_rate,
     cost_sources, cost_targets, cost_values,

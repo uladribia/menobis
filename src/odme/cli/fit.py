@@ -12,17 +12,17 @@ from typer import Option, Typer
 from odme.analysis import directed_degrees, directed_strengths
 from odme.data.io import read_edges
 from odme.models import (
-    fit_fixed_degree_binary,
-    fit_fixed_strength_me,
-    fit_strength_cost_me,
-    fit_strength_degree_me,
-    fit_strength_edges_me,
+    fit_degree_bernoulli,
+    fit_strength_cost_poisson,
+    fit_strength_degree_poisson,
+    fit_strength_edges_poisson,
+    fit_strength_poisson,
 )
 
 app = Typer(no_args_is_help=True)
 
 
-@app.command()
+@app.command("strength-poisson")
 def strengths(
     input_path: Path,
     output: Annotated[
@@ -37,7 +37,7 @@ def strengths(
     effective_quiet = quiet or output_json
     edges = read_edges(input_path)
     s = directed_strengths(edges)
-    result = fit_fixed_strength_me(s.out, s.incoming)
+    result = fit_strength_poisson(s.out, s.incoming)
 
     if output_json:
         data = [
@@ -56,7 +56,7 @@ def strengths(
         typer.echo(f"Wrote Lagrange multipliers to {dest}", err=True)
 
 
-@app.command()
+@app.command("degree-bernoulli")
 def degrees(
     input_path: Path,
     output: Annotated[
@@ -75,7 +75,7 @@ def degrees(
     effective_quiet = quiet or output_json
     edges = read_edges(input_path)
     k = directed_degrees(edges)
-    result = fit_fixed_degree_binary(
+    result = fit_degree_bernoulli(
         k.out.astype(np.float64), k.incoming.astype(np.float64), self_loops=self_loops
     )
 
@@ -96,7 +96,7 @@ def degrees(
         typer.echo(f"Wrote degree multipliers to {dest}", err=True)
 
 
-@app.command("strength-degree-me")
+@app.command("strength-degree-poisson")
 def strength_degree_me(
     input_path: Path,
     output: Annotated[
@@ -116,7 +116,7 @@ def strength_degree_me(
     edges = read_edges(input_path)
     s = directed_strengths(edges)
     k = directed_degrees(edges)
-    result = fit_strength_degree_me(
+    result = fit_strength_degree_poisson(
         s.out.astype(np.float64),
         s.incoming.astype(np.float64),
         k.out.astype(np.float64),
@@ -161,7 +161,7 @@ def strength_degree_me(
         typer.echo(f"Wrote strength-degree ME multipliers to {dest}", err=True)
 
 
-@app.command("strength-edges-me")
+@app.command("strength-edges-poisson")
 def strength_edges_me(
     input_path: Path,
     target_edges: Annotated[
@@ -186,7 +186,7 @@ def strength_edges_me(
     effective_quiet = quiet or output_json
     edges = read_edges(input_path)
     s = directed_strengths(edges)
-    result = fit_strength_edges_me(
+    result = fit_strength_edges_poisson(
         s.out.astype(np.float64),
         s.incoming.astype(np.float64),
         float(edges.num_edges if target_edges is None else target_edges),
@@ -210,7 +210,7 @@ def strength_edges_me(
         typer.echo(f"Wrote strength-edges ME multipliers to {dest}", err=True)
 
 
-@app.command("strength-cost-me")
+@app.command("strength-cost-poisson")
 def strength_cost_me(
     input_path: Path,
     cost_path: Annotated[
@@ -252,7 +252,7 @@ def strength_cost_me(
                 edges.source, edges.target, edges.weight, strict=True
             )
         )
-    result = fit_strength_cost_me(
+    result = fit_strength_cost_poisson(
         s.out.astype(np.float64),
         s.incoming.astype(np.float64),
         c_src,

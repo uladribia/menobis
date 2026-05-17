@@ -13,20 +13,20 @@ from odme.analysis import directed_degrees, directed_strengths
 from odme.data.frames import EdgeTable
 from odme.data.io import read_edges, read_probabilities
 from odme.models import (
-    fit_fixed_degree_binary,
-    fit_fixed_strength_me,
-    fit_strength_cost_me,
-    fit_strength_degree_me,
-    fit_strength_edges_me,
-    sample_custom_pij_events_multinomial,
-    sample_custom_pij_events_poisson,
-    sample_fixed_degree_events_me,
-    sample_multinomial,
-    sample_poisson,
-    sample_poisson_multinomial,
-    sample_strength_cost_me,
-    sample_strength_degree_me,
-    sample_strength_edges_me,
+    fit_degree_bernoulli,
+    fit_strength_cost_poisson,
+    fit_strength_degree_poisson,
+    fit_strength_edges_poisson,
+    fit_strength_poisson,
+    sample_custom_multinomial,
+    sample_custom_poisson,
+    sample_degree_events_poisson,
+    sample_strength_cost_poisson,
+    sample_strength_degree_poisson,
+    sample_strength_edges_poisson,
+    sample_strength_multinomial,
+    sample_strength_poisson,
+    sample_strength_poisson_multinomial,
 )
 
 app = Typer(no_args_is_help=True)
@@ -56,7 +56,7 @@ def _progress(
         typer.echo(f"{message} to {dest}", err=True)
 
 
-@app.command()
+@app.command("strength-poisson")
 def poisson(
     input_path: Path,
     output: Annotated[
@@ -71,12 +71,12 @@ def poisson(
     """Generate a Poisson sample from a fixed-strength ME model."""
     edges = read_edges(input_path)
     s = directed_strengths(edges)
-    fit = fit_fixed_strength_me(s.out, s.incoming)
-    _emit_edges(sample_poisson(fit.x, fit.y, seed=seed), output, output_json)
+    fit = fit_strength_poisson(s.out, s.incoming)
+    _emit_edges(sample_strength_poisson(fit.x, fit.y, seed=seed), output, output_json)
     _progress("Wrote Poisson sample", output, quiet, output_json)
 
 
-@app.command()
+@app.command("strength-multinomial")
 def multinomial(
     input_path: Path,
     total_events: Annotated[int, Option("--total-events", help="Fixed total events.")],
@@ -92,13 +92,15 @@ def multinomial(
     """Generate a multinomial fixed-strength ME sample."""
     edges = read_edges(input_path)
     s = directed_strengths(edges)
-    fit = fit_fixed_strength_me(s.out, s.incoming)
-    sample = sample_multinomial(fit.x, fit.y, total_events=total_events, seed=seed)
+    fit = fit_strength_poisson(s.out, s.incoming)
+    sample = sample_strength_multinomial(
+        fit.x, fit.y, total_events=total_events, seed=seed
+    )
     _emit_edges(sample, output, output_json)
     _progress("Wrote multinomial sample", output, quiet, output_json)
 
 
-@app.command("poisson-multinomial")
+@app.command("strength-poisson-multinomial")
 def poisson_multinomial(
     input_path: Path,
     output: Annotated[
@@ -113,14 +115,16 @@ def poisson_multinomial(
     """Generate a Poisson-total multinomial fixed-strength ME sample."""
     edges = read_edges(input_path)
     s = directed_strengths(edges)
-    fit = fit_fixed_strength_me(s.out, s.incoming)
+    fit = fit_strength_poisson(s.out, s.incoming)
     _emit_edges(
-        sample_poisson_multinomial(fit.x, fit.y, seed=seed), output, output_json
+        sample_strength_poisson_multinomial(fit.x, fit.y, seed=seed),
+        output,
+        output_json,
     )
     _progress("Wrote Poisson-multinomial sample", output, quiet, output_json)
 
 
-@app.command("degree-events-me")
+@app.command("degree-events-poisson")
 def degree_events_me(
     input_path: Path,
     total_events: Annotated[int, Option("--total-events", help="Expected events T.")],
@@ -140,17 +144,17 @@ def degree_events_me(
     """Generate a fixed-degree ME sample with expected total events T."""
     edges = read_edges(input_path)
     k = directed_degrees(edges)
-    fit = fit_fixed_degree_binary(
+    fit = fit_degree_bernoulli(
         k.out.astype(np.float64), k.incoming.astype(np.float64), self_loops=self_loops
     )
-    sample = sample_fixed_degree_events_me(
+    sample = sample_degree_events_poisson(
         fit, total_events=total_events, seed=seed, self_loops=self_loops
     )
     _emit_edges(sample, output, output_json)
     _progress("Wrote fixed-degree events ME sample", output, quiet, output_json)
 
 
-@app.command("strength-degree-me")
+@app.command("strength-degree-poisson")
 def strength_degree_me(
     input_path: Path,
     output: Annotated[
@@ -170,18 +174,18 @@ def strength_degree_me(
     edges = read_edges(input_path)
     s = directed_strengths(edges)
     k = directed_degrees(edges)
-    fit = fit_strength_degree_me(
+    fit = fit_strength_degree_poisson(
         s.out.astype(np.float64),
         s.incoming.astype(np.float64),
         k.out.astype(np.float64),
         k.incoming.astype(np.float64),
         self_loops=self_loops,
     )
-    _emit_edges(sample_strength_degree_me(fit, seed=seed), output, output_json)
+    _emit_edges(sample_strength_degree_poisson(fit, seed=seed), output, output_json)
     _progress("Wrote strength-degree ME sample", output, quiet, output_json)
 
 
-@app.command("strength-edges-me")
+@app.command("strength-edges-poisson")
 def strength_edges_me(
     input_path: Path,
     target_edges: Annotated[
@@ -206,17 +210,17 @@ def strength_edges_me(
     """Generate a sample from the fixed-strength-and-edge-count ME model."""
     edges = read_edges(input_path)
     s = directed_strengths(edges)
-    fit = fit_strength_edges_me(
+    fit = fit_strength_edges_poisson(
         s.out.astype(np.float64),
         s.incoming.astype(np.float64),
         float(edges.num_edges if target_edges is None else target_edges),
         self_loops=self_loops,
     )
-    _emit_edges(sample_strength_edges_me(fit, seed=seed), output, output_json)
+    _emit_edges(sample_strength_edges_poisson(fit, seed=seed), output, output_json)
     _progress("Wrote strength-edges ME sample", output, quiet, output_json)
 
 
-@app.command("custom-pij")
+@app.command("custom-poisson")
 def custom_pij(
     probabilities_path: Path,
     total_events: Annotated[int, Option("--total-events", help="Expected events T.")],
@@ -235,11 +239,11 @@ def custom_pij(
     """Generate a custom p_ij ME sample from a probability table."""
     probabilities = read_probabilities(probabilities_path)
     if ensemble == "poisson":
-        sample = sample_custom_pij_events_poisson(
+        sample = sample_custom_poisson(
             probabilities, total_events=total_events, seed=seed
         )
     elif ensemble == "multinomial":
-        sample = sample_custom_pij_events_multinomial(
+        sample = sample_custom_multinomial(
             probabilities, total_events=total_events, seed=seed
         )
     else:
@@ -249,7 +253,7 @@ def custom_pij(
     _progress("Wrote custom p_ij ME sample", output, quiet, output_json)
 
 
-@app.command("strength-cost-me")
+@app.command("strength-cost-poisson")
 def strength_cost_me_cmd(
     input_path: Path,
     cost_path: Annotated[
@@ -291,7 +295,7 @@ def strength_cost_me_cmd(
                 edges.source, edges.target, edges.weight, strict=True
             )
         )
-    fit = fit_strength_cost_me(
+    fit = fit_strength_cost_poisson(
         s.out.astype(np.float64),
         s.incoming.astype(np.float64),
         c_src,
@@ -301,7 +305,7 @@ def strength_cost_me_cmd(
         self_loops=self_loops,
     )
     _emit_edges(
-        sample_strength_cost_me(fit, c_src, c_tgt, c_val, seed=seed),
+        sample_strength_cost_poisson(fit, c_src, c_tgt, c_val, seed=seed),
         output,
         output_json,
     )

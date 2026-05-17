@@ -46,7 +46,7 @@ def weight_distribution(
 ) -> tuple[list[int], list[int]]: ...
 
 
-def fit_masked_binary_degrees(
+def fit_masked_degree_bernoulli(
     degree_out: list[float],
     degree_in: list[float],
     mask: list[bool],
@@ -55,7 +55,7 @@ def fit_masked_binary_degrees(
 ) -> tuple[list[float], list[float], bool, int]: ...
 
 
-def fit_masked_strength_degree_me(
+def fit_masked_strength_degree_poisson(
     strength_out: list[float],
     strength_in: list[float],
     degree_out: list[float],
@@ -66,7 +66,7 @@ def fit_masked_strength_degree_me(
 ) -> tuple[list[float], list[float], list[float], list[float], bool, int]: ...
 
 
-def fit_masked_strength(
+def fit_masked_strength_poisson(
     strength_out: list[float],
     strength_in: list[float],
     mask: list[bool],
@@ -75,7 +75,7 @@ def fit_masked_strength(
 ) -> tuple[list[float], list[float], bool, int]: ...
 
 
-def fit_strength_cost(
+def fit_strength_cost_poisson(
     strength_out: list[float],
     strength_in: list[float],
     cost_sources: list[int],
@@ -88,7 +88,7 @@ def fit_strength_cost(
 ) -> tuple[list[float], list[float], float, bool, int]: ...
 
 
-def fit_binary_degrees(
+def fit_degree_bernoulli(
     degree_out: list[float],
     degree_in: list[float],
     self_loops: bool,
@@ -97,7 +97,7 @@ def fit_binary_degrees(
 ) -> tuple[list[float], list[float], bool, int]: ...
 
 
-def fit_strength_edges_me(
+def fit_strength_edges_poisson(
     strength_out: list[float],
     strength_in: list[float],
     target_edges: float,
@@ -107,7 +107,7 @@ def fit_strength_edges_me(
 ) -> tuple[list[float], list[float], float, bool, int]: ...
 
 
-def fit_strength_degree_me(
+def fit_strength_degree_poisson(
     strength_out: list[float],
     strength_in: list[float],
     degree_out: list[float],
@@ -129,7 +129,7 @@ def fit_weighted_factors(
 ) -> tuple[list[float], list[float], bool, int]: ...
 
 
-def fit_balance_no_self_loops(
+def fit_strength_poisson_no_self_loops(
     s_out: list[float],
     s_in: list[float],
     tolerance: float,
@@ -137,14 +137,14 @@ def fit_balance_no_self_loops(
 ) -> tuple[list[float], list[float], bool, int]: ...
 
 
-def sample_microcanonical(
+def sample_strength_microcanonical(
     strength_out: list[int],
     strength_in: list[int],
     seed: int,
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
-def sample_custom_pij_events_poisson(
+def sample_custom_poisson(
     sources: list[int],
     targets: list[int],
     probabilities: list[float],
@@ -153,7 +153,7 @@ def sample_custom_pij_events_poisson(
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
-def sample_custom_pij_events_multinomial(
+def sample_custom_multinomial(
     sources: list[int],
     targets: list[int],
     probabilities: list[float],
@@ -162,7 +162,7 @@ def sample_custom_pij_events_multinomial(
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
-def sample_poisson_multinomial(
+def sample_strength_poisson_multinomial(
     x: list[float],
     y: list[float],
     self_loops: bool,
@@ -170,7 +170,7 @@ def sample_poisson_multinomial(
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
-def sample_strength_edges_me(
+def sample_strength_edges_poisson(
     x: list[float],
     y: list[float],
     lam: float,
@@ -179,7 +179,7 @@ def sample_strength_edges_me(
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
-def sample_strength_cost_me(
+def sample_strength_cost_poisson(
     x: list[float],
     y: list[float],
     gamma: float,
@@ -191,7 +191,7 @@ def sample_strength_cost_me(
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
-def sample_poisson(
+def sample_strength_poisson(
     x: list[float],
     y: list[float],
     self_loops: bool,
@@ -199,7 +199,7 @@ def sample_poisson(
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
-def sample_fixed_degree_events_me(
+def sample_degree_events_poisson(
     x: list[float],
     y: list[float],
     total_events: int,
@@ -208,7 +208,7 @@ def sample_fixed_degree_events_me(
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
-def sample_strength_degree_me(
+def sample_strength_degree_poisson(
     degree_x: list[float],
     degree_y: list[float],
     excess_x: list[float],
@@ -218,7 +218,7 @@ def sample_strength_degree_me(
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
-def sample_multinomial(
+def sample_strength_multinomial(
     x: list[float],
     y: list[float],
     total_events: int,
@@ -227,7 +227,7 @@ def sample_multinomial(
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
-def filter_fixed_strength_poisson(
+def filter_strength_poisson(
     x: list[float],
     y: list[float],
     sources: list[int],
@@ -236,7 +236,7 @@ def filter_fixed_strength_poisson(
 ) -> tuple[list[float], list[float], list[float], list[float]]: ...
 
 
-def absent_fixed_strength_poisson(
+def absent_strength_poisson(
     x: list[float],
     y: list[float],
     sources: list[int],
@@ -249,7 +249,7 @@ def absent_fixed_strength_poisson(
 ) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
 
 
-def filter_custom_poisson_rates(
+def filter_custom_poisson(
     rate_sources: list[int],
     rate_targets: list[int],
     rates: list[float],
@@ -259,7 +259,7 @@ def filter_custom_poisson_rates(
 ) -> tuple[list[float], list[float], list[float], list[float]]: ...
 
 
-def absent_custom_poisson_rates(
+def absent_custom_poisson(
     rate_sources: list[int],
     rate_targets: list[int],
     rates: list[float],
@@ -272,7 +272,7 @@ def absent_custom_poisson_rates(
 ) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
 
 
-def filter_strength_edges_zip(
+def filter_strength_edges_poisson(
     x: list[float],
     y: list[float],
     lam: float,
@@ -282,7 +282,7 @@ def filter_strength_edges_zip(
 ) -> tuple[list[float], list[float], list[float], list[float]]: ...
 
 
-def absent_strength_edges_zip(
+def absent_strength_edges_poisson(
     x: list[float],
     y: list[float],
     lam: float,
@@ -326,7 +326,7 @@ def absent_strength_cost_poisson(
 ) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
 
 
-def filter_strength_degree_zip(
+def filter_strength_degree_poisson(
     x: list[float],
     y: list[float],
     z: list[float],
@@ -337,7 +337,7 @@ def filter_strength_degree_zip(
 ) -> tuple[list[float], list[float], list[float], list[float]]: ...
 
 
-def absent_strength_degree_zip(
+def absent_strength_degree_poisson(
     x: list[float],
     y: list[float],
     z: list[float],
@@ -352,7 +352,7 @@ def absent_strength_degree_zip(
 ) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
 
 
-def filter_degree_events_zip(
+def filter_degree_events_poisson(
     x: list[float],
     y: list[float],
     positive_weight_rate: float,
@@ -362,7 +362,7 @@ def filter_degree_events_zip(
 ) -> tuple[list[float], list[float], list[float], list[float]]: ...
 
 
-def absent_degree_events_zip(
+def absent_degree_events_poisson(
     x: list[float],
     y: list[float],
     positive_weight_rate: float,
@@ -379,7 +379,7 @@ def absent_degree_events_zip(
 def benjamini_hochberg(pvalues: list[float], alpha: float) -> list[bool]: ...
 
 
-def sample_geometric(
+def sample_strength_geometric(
     x: list[float],
     y: list[float],
     self_loops: bool,
@@ -387,16 +387,7 @@ def sample_geometric(
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
-def sample_binomial(
-    x: list[float],
-    y: list[float],
-    layers: int,
-    self_loops: bool,
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
-
-
-def sample_neg_binomial(
+def sample_strength_binomial(
     x: list[float],
     y: list[float],
     layers: int,
@@ -405,7 +396,16 @@ def sample_neg_binomial(
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
-def fit_binomial_strength(
+def sample_strength_neg_binomial(
+    x: list[float],
+    y: list[float],
+    layers: int,
+    self_loops: bool,
+    seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
+
+
+def fit_strength_binomial(
     strength_out: list[float],
     strength_in: list[float],
     layers: int,
@@ -425,7 +425,7 @@ def fit_masked_binomial_strength(
 ) -> tuple[list[float], list[float], bool, int]: ...
 
 
-def filter_geometric(
+def filter_strength_geometric(
     x: list[float],
     y: list[float],
     sources: list[int],
@@ -434,7 +434,7 @@ def filter_geometric(
 ) -> tuple[list[float], list[float], list[float], list[float]]: ...
 
 
-def absent_geometric(
+def absent_strength_geometric(
     x: list[float],
     y: list[float],
     sources: list[int],
@@ -447,7 +447,7 @@ def absent_geometric(
 ) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
 
 
-def filter_binomial(
+def filter_strength_binomial(
     x: list[float],
     y: list[float],
     layers: int,
@@ -457,7 +457,7 @@ def filter_binomial(
 ) -> tuple[list[float], list[float], list[float], list[float]]: ...
 
 
-def absent_binomial(
+def absent_strength_binomial(
     x: list[float],
     y: list[float],
     layers: int,
@@ -471,7 +471,7 @@ def absent_binomial(
 ) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
 
 
-def filter_neg_binomial(
+def filter_strength_neg_binomial(
     x: list[float],
     y: list[float],
     layers: int,
@@ -481,7 +481,7 @@ def filter_neg_binomial(
 ) -> tuple[list[float], list[float], list[float], list[float]]: ...
 
 
-def absent_neg_binomial(
+def absent_strength_neg_binomial(
     x: list[float],
     y: list[float],
     layers: int,

@@ -4,13 +4,13 @@ import numpy as np
 
 from odme.analysis import directed_strengths
 from odme.ensemble import ensemble_average, ensemble_scalar_average
-from odme.models import fit_fixed_strength_me, sample_poisson
+from odme.models import fit_strength_poisson, sample_strength_poisson
 
 
 def _gen(n: int, total: int):
     s = np.full(n, total // n, dtype=np.float64)
-    r = fit_fixed_strength_me(s, s)
-    return lambda seed: sample_poisson(r.x, r.y, seed=seed)
+    r = fit_strength_poisson(s, s)
+    return lambda seed: sample_strength_poisson(r.x, r.y, seed=seed)
 
 
 def test_ensemble_average() -> None:

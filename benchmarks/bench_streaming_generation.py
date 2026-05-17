@@ -26,19 +26,19 @@ import typer
 from odme.data.frames import EdgeTable, ProbabilityTable
 from odme.models import (
     FitResult,
-    StrengthCostMEFit,
-    StrengthDegreeMEFit,
-    StrengthEdgesMEFit,
-    sample_custom_pij_events_multinomial,
-    sample_custom_pij_events_poisson,
-    sample_fixed_degree_events_me,
-    sample_microcanonical,
-    sample_multinomial,
-    sample_poisson,
-    sample_poisson_multinomial,
-    sample_strength_cost_me,
-    sample_strength_degree_me,
-    sample_strength_edges_me,
+    StrengthCostFit,
+    StrengthDegreeFit,
+    StrengthEdgesFit,
+    sample_custom_multinomial,
+    sample_custom_poisson,
+    sample_degree_events_poisson,
+    sample_strength_microcanonical,
+    sample_strength_multinomial,
+    sample_strength_poisson,
+    sample_strength_poisson_multinomial,
+    sample_strength_cost_poisson,
+    sample_strength_degree_poisson,
+    sample_strength_edges_poisson,
 )
 
 DEFAULT_NODES = [10, 100, 500, 1000, 5000, 10000, 20000, 30000]
@@ -83,9 +83,9 @@ class Inputs:
     strength_in: np.ndarray
     custom_probabilities: ProbabilityTable
     degree_fit: FitResult
-    strength_cost_fit: StrengthCostMEFit
-    strength_edges_fit: StrengthEdgesMEFit
-    strength_degree_fit: StrengthDegreeMEFit
+    strength_cost_fit: StrengthCostFit
+    strength_edges_fit: StrengthEdgesFit
+    strength_degree_fit: StrengthDegreeFit
 
 
 def _max_rss_mb() -> float:
@@ -145,7 +145,7 @@ def _make_inputs(n: int, average_strength: int, sparse_degree: int) -> Inputs:
         y=np.full(n, degree_factor, dtype=np.float64),
     )
 
-    strength_cost_fit = StrengthCostMEFit(
+    strength_cost_fit = StrengthCostFit(
         node=np.arange(n, dtype=np.uint64),
         x=x_strength,
         y=y_strength,
@@ -161,7 +161,7 @@ def _make_inputs(n: int, average_strength: int, sparse_degree: int) -> Inputs:
         (1.0 - occupation_probability) * exp_minus_one,
         1e-12,
     )
-    strength_edges_fit = StrengthEdgesMEFit(
+    strength_edges_fit = StrengthEdgesFit(
         node=np.arange(n, dtype=np.uint64),
         x=np.ones(n, dtype=np.float64),
         y=np.ones(n, dtype=np.float64),
@@ -171,7 +171,7 @@ def _make_inputs(n: int, average_strength: int, sparse_degree: int) -> Inputs:
         iterations=0,
     )
     zw = math.sqrt(lam)
-    strength_degree_fit = StrengthDegreeMEFit(
+    strength_degree_fit = StrengthDegreeFit(
         node=np.arange(n, dtype=np.uint64),
         x=np.ones(n, dtype=np.float64),
         y=np.ones(n, dtype=np.float64),
@@ -202,54 +202,54 @@ def _case_functions(inputs: Inputs, seed: int) -> dict[str, Callable[[], EdgeTab
     empty_u64 = np.array([], dtype=np.uint64)
     empty_f64 = np.array([], dtype=np.float64)
     return {
-        "fixed_strength_poisson": lambda: sample_poisson(
+        "fixed_strength_poisson": lambda: sample_strength_poisson(
             inputs.x_strength,
             inputs.y_strength,
             seed=seed,
         ),
-        "fixed_strength_multinomial": lambda: sample_multinomial(
+        "fixed_strength_multinomial": lambda: sample_strength_multinomial(
             inputs.x_strength,
             inputs.y_strength,
             total_events=inputs.total_events,
             seed=seed,
         ),
-        "fixed_strength_poisson_multinomial": lambda: sample_poisson_multinomial(
+        "fixed_strength_poisson_multinomial": lambda: sample_strength_poisson_multinomial(
             inputs.x_strength,
             inputs.y_strength,
             seed=seed,
         ),
-        "fixed_strength_microcanonical": lambda: sample_microcanonical(
+        "fixed_strength_microcanonical": lambda: sample_strength_microcanonical(
             inputs.strength_out,
             inputs.strength_in,
             seed=seed,
         ),
-        "custom_pij_poisson_sparse": lambda: sample_custom_pij_events_poisson(
+        "custom_pij_poisson_sparse": lambda: sample_custom_poisson(
             inputs.custom_probabilities,
             total_events=inputs.total_events,
             seed=seed,
         ),
-        "custom_pij_multinomial_sparse": lambda: sample_custom_pij_events_multinomial(
+        "custom_pij_multinomial_sparse": lambda: sample_custom_multinomial(
             inputs.custom_probabilities,
             total_events=inputs.total_events,
             seed=seed,
         ),
-        "degree_events_zip": lambda: sample_fixed_degree_events_me(
+        "degree_events_zip": lambda: sample_degree_events_poisson(
             inputs.degree_fit,
             total_events=inputs.total_events,
             seed=seed,
         ),
-        "strength_cost_poisson": lambda: sample_strength_cost_me(
+        "strength_cost_poisson": lambda: sample_strength_cost_poisson(
             inputs.strength_cost_fit,
             empty_u64,
             empty_u64,
             empty_f64,
             seed=seed,
         ),
-        "strength_edges_zip": lambda: sample_strength_edges_me(
+        "strength_edges_zip": lambda: sample_strength_edges_poisson(
             inputs.strength_edges_fit,
             seed=seed,
         ),
-        "strength_degree_zip": lambda: sample_strength_degree_me(
+        "strength_degree_zip": lambda: sample_strength_degree_poisson(
             inputs.strength_degree_fit,
             seed=seed,
         ),

@@ -8,17 +8,17 @@ from odme.data.frames import EdgeTable, ProbabilityTable
 from odme.filtering import (
     FilterResult,
     _solve_ztp_rate,
-    filter_custom_rates_poisson,
-    filter_degree_events_me,
-    filter_fixed_strength_me,
-    filter_strength_cost_me,
-    filter_strength_degree_me,
-    filter_strength_edges_me,
+    filter_custom_poisson,
+    filter_degree_events_poisson,
+    filter_strength_cost_poisson,
+    filter_strength_degree_poisson,
+    filter_strength_edges_poisson,
+    filter_strength_poisson,
 )
 from odme.models.fitting import (
-    fit_strength_cost_me,
-    fit_strength_degree_me,
-    fit_strength_edges_me,
+    fit_strength_cost_poisson,
+    fit_strength_degree_poisson,
+    fit_strength_edges_poisson,
 )
 
 
@@ -45,13 +45,13 @@ class TestFixedStrength:
     def test_partitions_edges(self) -> None:
         """Upper + lower + compatible == total edges."""
         edges = _small_edges()
-        result = filter_fixed_strength_me(edges, alpha=0.05)
+        result = filter_strength_poisson(edges, alpha=0.05)
         _assert_filter_partitions(result, len(edges))
 
     def test_pvalues_in_range(self) -> None:
         """All p-values are in [0, 1]."""
         edges = _small_edges()
-        result = filter_fixed_strength_me(edges, alpha=0.05)
+        result = filter_strength_poisson(edges, alpha=0.05)
         for group in [result.upper, result.lower, result.compatible]:
             assert np.all(group.upper_pvalue >= 0.0)
             assert np.all(group.upper_pvalue <= 1.0)
@@ -61,7 +61,7 @@ class TestFixedStrength:
     def test_absent_detection(self) -> None:
         """Absent detection runs without error."""
         edges = _small_edges()
-        result = filter_fixed_strength_me(
+        result = filter_strength_poisson(
             edges, alpha=0.05, detect_absent=True, min_occupation=0.0
         )
         assert len(result.absent_lower.edges) >= 0
@@ -78,7 +78,7 @@ class TestCustomRates:
             target=edges.target,
             probability=np.array([2.0, 1.0, 2.0, 3.0, 1.0], dtype=np.float64),
         )
-        result = filter_custom_rates_poisson(edges, rates, alpha=0.05)
+        result = filter_custom_poisson(edges, rates, alpha=0.05)
         _assert_filter_partitions(result, len(edges))
 
 
@@ -93,8 +93,8 @@ class TestStrengthEdges:
         s_in = np.zeros(n, dtype=np.float64)
         np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
         np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
-        fit = fit_strength_edges_me(s_out, s_in, float(len(edges)))
-        result = filter_strength_edges_me(edges, fit, alpha=0.05)
+        fit = fit_strength_edges_poisson(s_out, s_in, float(len(edges)))
+        result = filter_strength_edges_poisson(edges, fit, alpha=0.05)
         _assert_filter_partitions(result, len(edges))
 
     def test_absent_detection(self) -> None:
@@ -105,8 +105,8 @@ class TestStrengthEdges:
         s_in = np.zeros(n, dtype=np.float64)
         np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
         np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
-        fit = fit_strength_edges_me(s_out, s_in, float(len(edges)))
-        result = filter_strength_edges_me(
+        fit = fit_strength_edges_poisson(s_out, s_in, float(len(edges)))
+        result = filter_strength_edges_poisson(
             edges, fit, alpha=0.05, detect_absent=True, min_occupation=0.0
         )
         assert len(result.absent_lower.edges) >= 0
@@ -126,8 +126,8 @@ class TestStrengthCost:
         cost_src = np.array([0, 0, 1, 1, 2, 2], dtype=np.uint64)
         cost_tgt = np.array([1, 2, 0, 2, 0, 1], dtype=np.uint64)
         cost_val = np.array([1.0, 2.0, 1.0, 1.5, 2.0, 1.5], dtype=np.float64)
-        fit = fit_strength_cost_me(s_out, s_in, cost_src, cost_tgt, cost_val, 1.5)
-        result = filter_strength_cost_me(
+        fit = fit_strength_cost_poisson(s_out, s_in, cost_src, cost_tgt, cost_val, 1.5)
+        result = filter_strength_cost_poisson(
             edges, fit, cost_src, cost_tgt, cost_val, alpha=0.05
         )
         _assert_filter_partitions(result, len(edges))
@@ -143,8 +143,8 @@ class TestStrengthCost:
         cost_src = np.array([0, 0, 1, 1, 2, 2], dtype=np.uint64)
         cost_tgt = np.array([1, 2, 0, 2, 0, 1], dtype=np.uint64)
         cost_val = np.array([1.0, 2.0, 1.0, 1.5, 2.0, 1.5], dtype=np.float64)
-        fit = fit_strength_cost_me(s_out, s_in, cost_src, cost_tgt, cost_val, 1.5)
-        result = filter_strength_cost_me(
+        fit = fit_strength_cost_poisson(s_out, s_in, cost_src, cost_tgt, cost_val, 1.5)
+        result = filter_strength_cost_poisson(
             edges, fit, cost_src, cost_tgt, cost_val, alpha=0.05
         )
         for group in [result.upper, result.lower, result.compatible]:
@@ -169,8 +169,8 @@ class TestStrengthDegree:
             d_out[src] += 1
         for tgt in edges.target:
             d_in[tgt] += 1
-        fit = fit_strength_degree_me(s_out, s_in, d_out, d_in)
-        result = filter_strength_degree_me(edges, fit, alpha=0.05)
+        fit = fit_strength_degree_poisson(s_out, s_in, d_out, d_in)
+        result = filter_strength_degree_poisson(edges, fit, alpha=0.05)
         _assert_filter_partitions(result, len(edges))
 
     def test_absent_detection(self) -> None:
@@ -187,8 +187,8 @@ class TestStrengthDegree:
             d_out[src] += 1
         for tgt in edges.target:
             d_in[tgt] += 1
-        fit = fit_strength_degree_me(s_out, s_in, d_out, d_in)
-        result = filter_strength_degree_me(
+        fit = fit_strength_degree_poisson(s_out, s_in, d_out, d_in)
+        result = filter_strength_degree_poisson(
             edges, fit, alpha=0.05, detect_absent=True, min_occupation=0.0
         )
         assert len(result.absent_lower.edges) >= 0
@@ -207,9 +207,9 @@ class TestDegreeEvents:
             d_out[src] += 1
         for tgt in edges.target:
             d_in[tgt] += 1
-        from odme.models.fitting import fit_fixed_degree_binary
+        from odme.models.fitting import fit_degree_bernoulli
 
-        fit = fit_fixed_degree_binary(d_out, d_in)
+        fit = fit_degree_bernoulli(d_out, d_in)
         total_events = int(edges.weight.sum())
         expected_edges = sum(
             fit.x[i] * fit.y[j] / (1.0 + fit.x[i] * fit.y[j])
@@ -219,7 +219,7 @@ class TestDegreeEvents:
         )
         mean_pos = total_events / expected_edges if expected_edges > 0 else 1.0
         rate = _solve_ztp_rate(max(mean_pos, 1.0))
-        result = filter_degree_events_me(
+        result = filter_degree_events_poisson(
             edges, fit.x, fit.y, rate, alpha=0.05, self_loops=False
         )
         _assert_filter_partitions(result, len(edges))
@@ -234,9 +234,9 @@ class TestDegreeEvents:
             d_out[src] += 1
         for tgt in edges.target:
             d_in[tgt] += 1
-        from odme.models.fitting import fit_fixed_degree_binary
+        from odme.models.fitting import fit_degree_bernoulli
 
-        fit = fit_fixed_degree_binary(d_out, d_in)
+        fit = fit_degree_bernoulli(d_out, d_in)
         total_events = int(edges.weight.sum())
         expected_edges = sum(
             fit.x[i] * fit.y[j] / (1.0 + fit.x[i] * fit.y[j])
@@ -246,7 +246,7 @@ class TestDegreeEvents:
         )
         mean_pos = total_events / expected_edges if expected_edges > 0 else 1.0
         rate = _solve_ztp_rate(max(mean_pos, 1.0))
-        result = filter_degree_events_me(
+        result = filter_degree_events_poisson(
             edges,
             fit.x,
             fit.y,
@@ -263,8 +263,8 @@ class TestPartialConstraints:
     """Tests for partial-constraint filtering via custom rates."""
 
     def test_partial_fit_feeds_custom_rates_filter(self) -> None:
-        """PartialFitResult feeds directly into filter_custom_rates_poisson."""
-        from odme.models.partial import fit_partial_strength_me
+        """PartialFitResult feeds directly into filter_custom_poisson."""
+        from odme.models.partial import fit_partial_strength_poisson
 
         edges = _small_edges()
         n = 3
@@ -275,9 +275,11 @@ class TestPartialConstraints:
         known_src = np.array([0], dtype=np.uint64)
         known_tgt = np.array([1], dtype=np.uint64)
         known_rate = np.array([3.0], dtype=np.float64)
-        partial = fit_partial_strength_me(s_out, s_in, known_src, known_tgt, known_rate)
+        partial = fit_partial_strength_poisson(
+            s_out, s_in, known_src, known_tgt, known_rate
+        )
         rates = partial.as_probability_table()
-        result = filter_custom_rates_poisson(edges, rates, alpha=0.05)
+        result = filter_custom_poisson(edges, rates, alpha=0.05)
         _assert_filter_partitions(result, len(edges))
 
 

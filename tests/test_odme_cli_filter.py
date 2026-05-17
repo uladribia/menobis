@@ -18,7 +18,7 @@ def test_filter_custom_rates_cli(tmp_path: Path) -> None:
         app,
         [
             "filter",
-            "custom-rates",
+            "custom-poisson",
             str(edges),
             "--rates",
             str(rates),

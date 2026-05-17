@@ -17,16 +17,16 @@ from odme.analysis import directed_degrees, directed_strengths
 from odme.analysis.stats import compute_all_stats
 from odme.data.frames import EdgeTable
 from odme.models import (
-    fit_fixed_degree_binary,
-    fit_fixed_strength_me,
-    fit_strength_cost_me,
-    fit_strength_degree_me,
-    fit_strength_edges_me,
-    sample_microcanonical,
-    sample_multinomial,
-    sample_poisson,
-    sample_strength_degree_me,
-    sample_strength_edges_me,
+    fit_degree_bernoulli,
+    fit_strength_poisson,
+    fit_strength_cost_poisson,
+    fit_strength_degree_poisson,
+    fit_strength_edges_poisson,
+    sample_strength_microcanonical,
+    sample_strength_multinomial,
+    sample_strength_poisson,
+    sample_strength_degree_poisson,
+    sample_strength_edges_poisson,
 )
 
 FIGURES_DIR = Path(__file__).resolve().parent.parent / "docs" / "figures"
@@ -54,8 +54,8 @@ def _generate_pareto_network(n: int, avg_s: int, seed: int = 42) -> EdgeTable:
     elif diff < 0:
         s_out[np.argmax(s_out)] += abs(diff)
     # Sample a network from fixed-strength ME.
-    fit = fit_fixed_strength_me(s_out, s_in)
-    return sample_poisson(fit.x, fit.y, seed=seed)
+    fit = fit_strength_poisson(s_out, s_in)
+    return sample_strength_poisson(fit.x, fit.y, seed=seed)
 
 
 def _time_fn(fn, *args, **kwargs) -> float:
@@ -80,26 +80,26 @@ def benchmark_fitting(edges: EdgeTable) -> dict[str, float]:
     k = directed_degrees(edges)
     n = int(max(edges.source.max(), edges.target.max())) + 1
     results = {}
-    results["fit_fixed_strength_me"] = _time_fn(
-        fit_fixed_strength_me, s.out, s.incoming
+    results["fit_strength_poisson"] = _time_fn(
+        fit_strength_poisson, s.out, s.incoming
     )
     if n <= 1000:
-        results["fit_fixed_degree_binary"] = _time_fn(
-            fit_fixed_degree_binary,
+        results["fit_degree_bernoulli"] = _time_fn(
+            fit_degree_bernoulli,
             k.out.astype(float),
             k.incoming.astype(float),
         )
     # Only run expensive fitters for small N.
     if n <= 1000:
-        results["fit_strength_edges_me"] = _time_fn(
-            fit_strength_edges_me,
+        results["fit_strength_edges_poisson"] = _time_fn(
+            fit_strength_edges_poisson,
             s.out.astype(float),
             s.incoming.astype(float),
             float(edges.num_edges),
         )
     if n <= 100:
-        results["fit_strength_degree_me"] = _time_fn(
-            fit_strength_degree_me,
+        results["fit_strength_degree_poisson"] = _time_fn(
+            fit_strength_degree_poisson,
             s.out.astype(float),
             s.incoming.astype(float),
             k.out.astype(float),
@@ -134,10 +134,10 @@ def benchmark_fitting(edges: EdgeTable) -> dict[str, float]:
                 edges.source, edges.target, edges.weight, strict=True
             )
         )
-        from odme.models import fit_strength_cost_me
+        from odme.models import fit_strength_cost_poisson
 
-        results["fit_strength_cost_me"] = _time_fn(
-            fit_strength_cost_me,
+        results["fit_strength_cost_poisson"] = _time_fn(
+            fit_strength_cost_poisson,
             s.out.astype(float),
             s.incoming.astype(float),
             cost_src,
@@ -151,15 +151,15 @@ def benchmark_fitting(edges: EdgeTable) -> dict[str, float]:
 def benchmark_generation(edges: EdgeTable) -> dict[str, float]:
     """Benchmark generation operations."""
     s = directed_strengths(edges)
-    fit = fit_fixed_strength_me(s.out, s.incoming)
+    fit = fit_strength_poisson(s.out, s.incoming)
     total = edges.total_events
     results = {}
-    results["sample_poisson"] = _time_fn(sample_poisson, fit.x, fit.y, seed=0)
-    results["sample_multinomial"] = _time_fn(
-        sample_multinomial, fit.x, fit.y, total_events=total, seed=0
+    results["sample_strength_poisson"] = _time_fn(sample_strength_poisson, fit.x, fit.y, seed=0)
+    results["sample_strength_multinomial"] = _time_fn(
+        sample_strength_multinomial, fit.x, fit.y, total_events=total, seed=0
     )
-    results["sample_microcanonical"] = _time_fn(
-        sample_microcanonical, s.out, s.incoming, seed=0
+    results["sample_strength_microcanonical"] = _time_fn(
+        sample_strength_microcanonical, s.out, s.incoming, seed=0
     )
     return results
 

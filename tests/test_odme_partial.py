@@ -7,11 +7,11 @@ from odme.analysis import directed_degrees, directed_strengths
 from odme.data.frames import EdgeTable
 from odme.models.partial import (
     fit_from_network_cutoff,
-    fit_partial_degree_me,
-    fit_partial_strength_cost_me,
-    fit_partial_strength_degree_me,
-    fit_partial_strength_edges_me,
-    fit_partial_strength_me,
+    fit_partial_degree_poisson,
+    fit_partial_strength_cost_poisson,
+    fit_partial_strength_degree_poisson,
+    fit_partial_strength_edges_poisson,
+    fit_partial_strength_poisson,
 )
 
 
@@ -32,7 +32,7 @@ def test_partial_strength_recovers_constraints() -> None:
     known_target = np.array([1, 0, 0], dtype=np.uint64)
     known_weight = np.array([50, 40, 30], dtype=np.uint64)
 
-    result = fit_partial_strength_me(
+    result = fit_partial_strength_poisson(
         s.out.astype(float),
         s.incoming.astype(float),
         known_source,
@@ -60,7 +60,7 @@ def test_partial_strength_known_rates_preserved() -> None:
     known_target = np.array([1], dtype=np.uint64)
     known_weight = np.array([50.0])
 
-    result = fit_partial_strength_me(
+    result = fit_partial_strength_poisson(
         s.out.astype(float),
         s.incoming.astype(float),
         known_source,
@@ -76,7 +76,7 @@ def test_partial_strength_known_rates_preserved() -> None:
 def test_partial_rejects_infeasible_excess() -> None:
     """If known pairs exceed observed strength, reject."""
     with pytest.raises(ValueError, match="exceed"):
-        fit_partial_strength_me(
+        fit_partial_strength_poisson(
             np.array([10.0, 10.0]),
             np.array([10.0, 10.0]),
             np.array([0], dtype=np.uint64),
@@ -89,7 +89,7 @@ def test_partial_no_self_loops() -> None:
     """With self_loops=False, no diagonal pairs in fitted output."""
     edges = _small_network()
     s = directed_strengths(edges)
-    result = fit_partial_strength_me(
+    result = fit_partial_strength_poisson(
         s.out.astype(float),
         s.incoming.astype(float),
         np.array([0], dtype=np.uint64),
@@ -108,14 +108,14 @@ def test_fit_from_network_cutoff_strength() -> None:
     assert result.source.shape[0] > 0
     assert result.rate.shape[0] > 0
 
-    from odme.models import sample_custom_pij_events_poisson
+    from odme.models import sample_custom_poisson
 
     s = directed_strengths(edges)
     total = edges.total_events
     repetitions = 200
     sampled_out: list[np.ndarray] = []
     for seed in range(repetitions):
-        sample = sample_custom_pij_events_poisson(
+        sample = sample_custom_poisson(
             result.as_probability_table(), total_events=total, seed=seed
         )
         sampled_out.append(directed_strengths(sample).out.astype(float))
@@ -139,7 +139,7 @@ def test_partial_degree_recovers_constraints() -> None:
     k = directed_degrees(edges)
     known_source = np.array([0, 1], dtype=np.uint64)
     known_target = np.array([1, 0], dtype=np.uint64)
-    result = fit_partial_degree_me(
+    result = fit_partial_degree_poisson(
         k.out.astype(float),
         k.incoming.astype(float),
         known_source,
@@ -159,7 +159,7 @@ def test_partial_strength_degree_recovers_constraints() -> None:
     known_source = np.array([0], dtype=np.uint64)
     known_target = np.array([1], dtype=np.uint64)
     known_rate = np.array([50.0])
-    result = fit_partial_strength_degree_me(
+    result = fit_partial_strength_degree_poisson(
         s.out.astype(float),
         s.incoming.astype(float),
         k.out.astype(float),
@@ -183,7 +183,7 @@ def test_partial_strength_edges_recovers_constraints() -> None:
     known_source = np.array([0], dtype=np.uint64)
     known_target = np.array([1], dtype=np.uint64)
     known_rate = np.array([50.0])
-    result = fit_partial_strength_edges_me(
+    result = fit_partial_strength_edges_poisson(
         s.out.astype(float),
         s.incoming.astype(float),
         known_source,
@@ -244,7 +244,7 @@ def test_partial_strength_cost_recovers_constraints() -> None:
     known_target = np.array([1], dtype=np.uint64)
     known_rate = np.array([50.0])
 
-    result = fit_partial_strength_cost_me(
+    result = fit_partial_strength_cost_poisson(
         s.out.astype(float),
         s.incoming.astype(float),
         known_source,

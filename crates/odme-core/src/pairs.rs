@@ -231,14 +231,14 @@ impl PairDistributionProvider for SparsePoissonRateMapProvider<'_> {
     }
 }
 
-pub struct DegreeEventsZipProvider<'a> {
+pub struct DegreeEventsPoissonProvider<'a> {
     pub x: &'a [f64],
     pub y: &'a [f64],
     pub positive_weight_rate: f64,
     pub self_loops: bool,
 }
 
-impl PairDistributionProvider for DegreeEventsZipProvider<'_> {
+impl PairDistributionProvider for DegreeEventsPoissonProvider<'_> {
     fn support(&self) -> CandidateSupport<'_> {
         CandidateSupport::AllPairs {
             node_count: self.x.len(),
@@ -259,14 +259,14 @@ impl PairDistributionProvider for DegreeEventsZipProvider<'_> {
     }
 }
 
-pub struct StrengthEdgesZipProvider<'a> {
+pub struct StrengthEdgesPoissonProvider<'a> {
     pub x: &'a [f64],
     pub y: &'a [f64],
     pub lambda: f64,
     pub self_loops: bool,
 }
 
-impl PairDistributionProvider for StrengthEdgesZipProvider<'_> {
+impl PairDistributionProvider for StrengthEdgesPoissonProvider<'_> {
     fn support(&self) -> CandidateSupport<'_> {
         CandidateSupport::AllPairs {
             node_count: self.x.len(),
@@ -286,7 +286,7 @@ impl PairDistributionProvider for StrengthEdgesZipProvider<'_> {
     }
 }
 
-pub struct StrengthDegreeZipProvider<'a> {
+pub struct StrengthDegreePoissonProvider<'a> {
     pub x: &'a [f64],
     pub y: &'a [f64],
     pub z: &'a [f64],
@@ -294,7 +294,7 @@ pub struct StrengthDegreeZipProvider<'a> {
     pub self_loops: bool,
 }
 
-impl PairDistributionProvider for StrengthDegreeZipProvider<'_> {
+impl PairDistributionProvider for StrengthDegreePoissonProvider<'_> {
     fn support(&self) -> CandidateSupport<'_> {
         CandidateSupport::AllPairs {
             node_count: self.x.len(),

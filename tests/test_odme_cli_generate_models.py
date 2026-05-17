@@ -18,7 +18,14 @@ def test_generate_multinomial_json(tmp_path: Path) -> None:
     _edges(input_path)
     result = runner.invoke(
         app,
-        ["generate", "multinomial", str(input_path), "--total-events", "60", "--json"],
+        [
+            "generate",
+            "strength-multinomial",
+            str(input_path),
+            "--total-events",
+            "60",
+            "--json",
+        ],
     )
     assert result.exit_code == 0, result.output
     assert '"weight"' in result.output
@@ -28,7 +35,7 @@ def test_generate_poisson_multinomial_json(tmp_path: Path) -> None:
     input_path = tmp_path / "edges.csv"
     _edges(input_path)
     result = runner.invoke(
-        app, ["generate", "poisson-multinomial", str(input_path), "--json"]
+        app, ["generate", "strength-poisson-multinomial", str(input_path), "--json"]
     )
     assert result.exit_code == 0, result.output
     assert '"weight"' in result.output
@@ -41,7 +48,7 @@ def test_generate_degree_events_me_json(tmp_path: Path) -> None:
         app,
         [
             "generate",
-            "degree-events-me",
+            "degree-events-poisson",
             str(input_path),
             "--total-events",
             "60",
@@ -56,7 +63,7 @@ def test_generate_strength_edges_me_json(tmp_path: Path) -> None:
     input_path = tmp_path / "edges.csv"
     _edges(input_path)
     result = runner.invoke(
-        app, ["generate", "strength-edges-me", str(input_path), "--json"]
+        app, ["generate", "strength-edges-poisson", str(input_path), "--json"]
     )
     assert result.exit_code == 0, result.output
     assert '"weight"' in result.output
@@ -69,7 +76,7 @@ def test_generate_custom_pij_json(tmp_path: Path) -> None:
         app,
         [
             "generate",
-            "custom-pij",
+            "custom-poisson",
             str(probabilities_path),
             "--total-events",
             "20",
