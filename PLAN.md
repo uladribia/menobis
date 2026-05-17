@@ -43,84 +43,97 @@ provider support.
 The Poisson family is fully implemented. The other three share the same IPF
 structure but differ in the expected-value formula and the pair-level sampler.
 
-#### Required work by constraint set
+#### Fitting complexity
 
-**Fixed strength (thesis Case 1):**
+**Binomial family** fitting uses the same iterative-proportional-fitting (IPF)
+structure as Poisson. The only difference is the correction factor in each
+iteration step:
 
-| Item | Poisson | Geometric | Binomial | Neg. binomial |
-|------|---------|-----------|----------|---------------|
-| Fitting | ✅ | ❌ | ❌ | ❌ |
-| Generation | ✅ | ❌ | ❌ | ❌ |
-| Filtering | ✅ | ❌ | ❌ | ❌ |
-| Provider | ✅ | ❌ | ❌ | ❌ |
+- Poisson: `E[t_ij] = x_i * y_j` (no correction)
+- Binomial: `E[t_ij] = M * x_i*y_j / (1 + x_i*y_j)` (correction `1/(1+x_i*y_j)`)
 
-**Fixed strength + edges (thesis Case 3):**
+The existing Rust IPF solver can be parameterized to support binomial fitting
+with minimal changes. This applies to all constraint sets (fixed-strength,
+strength-edges, strength-degree).
 
-| Item | ZIP/Poisson | ZIP/Geometric | ZIP/Binomial |
-|------|-------------|---------------|--------------|
-| Fitting | ✅ | ❌ | ❌ |
-| Generation | ✅ | ❌ | ❌ |
-| Filtering | ✅ | ❌ | ❌ |
+**Geometric / negative binomial family** fitting does NOT use IPF. The legacy
+code (`fitter_s.py` case `W`) uses bounded scipy optimization (`TNC`) with:
 
-**Fixed strength + degree (thesis Case 4):**
+- Explicit log-likelihood function
+- Analytical gradient vector
+- Sparse Hessian matrix (scipy COO format)
+- Domain constraint: $x_i y_j < 1$ for all pairs
+- Initial conditions: $x_i = y_i = 0.9$ (not strength-derived)
+- Preconditioning via `TNC` before the main solver
 
-| Item | ZIP/Poisson | ZIP/Binomial |
-|------|-------------|--------------|
-| Fitting | ✅ | ❌ |
-| Generation | ✅ | ❌ |
-| Filtering | ✅ | ❌ |
+This is fundamentally different from IPF and requires a new Rust solver.
 
-**Fixed degree (thesis Case 5):**
+#### Implementation plan
 
-| Item | ZIP/Poisson | ZIP/Geometric | ZIP/Binomial | ZIP/Neg. binomial |
-|------|-------------|---------------|--------------|-------------------|
-| Generation | ✅ | ❌ | ❌ | ❌ |
-| Filtering | ✅ | ❌ | ❌ | ❌ |
+**Step 7a: Distribution and provider layer (all families)**
 
-**Mobility models (separate from ME framework):**
+1. Add `PairDistribution::Geometric { rate }` and
+   `PairDistribution::Binomial { n_layers, prob }` and
+   `PairDistribution::NegBinomial { n_layers, rate }` to `distribution.rs`.
+2. Implement `sample()`, `expected()`, `occupation_probability()`,
+   `lower_pvalue()`, `upper_pvalue()` for each.
+3. Add corresponding providers to `pairs.rs` for each constraint set.
+4. Wire generation through `sample_provider` — automatic.
+5. Wire filtering through `filter_observed_provider` / `detect_absent_provider`
+   — automatic.
+6. Add Python wrappers and CLI `--distribution` / `--layers` options.
+7. Add partial-constraint support via `filter_custom_rates_poisson` pattern
+   (partial fitters already produce rate tables).
+8. TDD: PMF normalization, CDF monotonicity, mean/variance match formulas,
+   seed reproducibility, filter partition coverage.
+
+**Step 7b: Binomial family fitting**
+
+1. Parameterize the existing Rust IPF solver to accept a distribution-family
+   enum that selects the correction factor:
+   - `Poisson`: identity
+   - `Binomial(M)`: `1 / (1 + x_i*y_j)`
+2. This applies to `balance_strengths`, `balance_strength_edges_me`,
+   `balance_strength_degree_me`, and the masked/partial variants.
+3. Expose `layers` parameter in Python fitting functions and CLI.
+4. TDD: recovered constraints within tolerance for binomial family at
+   several M values.
+
+**Step 7c: Geometric / negative binomial fitting (plan only)**
+
+This requires a new Rust optimization solver, not IPF. The plan:
+
+1. Implement the log-likelihood, gradient, and Hessian for the geometric
+   family in Rust (`crates/odme-core/src/fitting_geometric.rs` or similar).
+   The formulas from the legacy code:
+   - $\mathcal{L} = M \sum_{ij} \log(1 - x_i y_j) + \sum_i s^{\text{out}}_i \log x_i + \sum_j s^{\text{in}}_j \log y_j$
+   - Gradient: $\partial\mathcal{L}/\partial x_i = s^{\text{out}}_i / x_i - M \sum_j y_j / (1 - x_i y_j)$
+   - Hessian: diagonal and off-diagonal blocks with $1/(1-x_i y_j)^2$ terms
+2. Implement a bounded optimizer in Rust. Options:
+   - L-BFGS-B style box-constrained solver (domain $0 < x_i y_j < 1$)
+   - TNC (truncated Newton with bounds), matching the legacy scipy approach
+   - Or use `argmin` crate if it provides suitable bounded solvers
+3. The negative binomial case is the geometric case with $M > 1$ layers
+   (same log-likelihood structure, different interpretation).
+4. Add preconditioning strategy (legacy uses TNC preconditioning pass).
+5. Support all constraint sets: fixed-strength, strength-edges,
+   strength-degree, and partial variants.
+6. TDD: convergence tests, domain-violation detection, comparison with
+   legacy scipy results on small examples.
+
+Do not implement Step 7c without first completing Steps 7a and 7b, because
+the distribution/provider/generation/filtering infrastructure must be in
+place before the fitting solver is useful.
+
+**Step 7d: Mobility models (separate, after 7a–7c)**
 
 | Model | Status |
 |-------|--------|
 | Sequential gravity (Bernoulli + multinomial) | ❌ |
 | Radiation model (stochastic + multinomial) | ❌ |
 
-#### Implementation strategy
-
-1. Add `PairDistribution::Geometric`, `::Binomial`, `::NegBinomial` variants
-   to `crates/odme-core/src/distribution.rs` with `sample()`, `expected()`,
-   `occupation_probability()`, `lower_pvalue()`, `upper_pvalue()`.
-2. Add corresponding providers to `crates/odme-core/src/pairs.rs`.
-3. Fitting: modify Rust IPF to accept a distribution-family parameter that
-   changes the expected-value formula. The legacy code shows the pattern:
-   - `ME`: `aux = x_i * y_j`
-   - `B`: `aux = M * x_i*y_j / (1 + x_i*y_j)`
-   - `W`: `aux = M * x_i*y_j / (1 - x_i*y_j)`
-4. Generation and filtering follow automatically from providers.
-5. Add `--distribution` / `--layers` CLI options to existing fit/generate/filter
-   commands.
-6. Radiation and sequential-gravity are standalone models, not ME variants.
-   Implement after the distribution families are done.
-
-#### Legacy reference files
-
-| File | Contains |
-|------|----------|
-| `2. Model Fitting/multi_edge_fitter/fitter_s.py` | cases `B`, `W` IPF |
-| `2. Model Fitting/multi_edge_fitter/fitter_sk.py` | `agg=True` binomial variant |
-| `2. Model Fitting/multi_edge_fitter/fitter_E.py` | `agg=True` binomial variant |
-| `3. Model Generation/src/ula_null_models.c` | geometric/binomial/NB samplers |
-| `3. Model Generation/src/others_null_models.c` | radiation, sequential gravity |
-
-#### TDD plan
-
-1. Distribution-level property tests: PMF sums to 1, CDF monotone, mean
-   matches formula, variance matches formula.
-2. Fitting convergence tests: recovered constraints within tolerance for each
-   family.
-3. Seed reproducibility tests for each sampler.
-4. Filter partition tests for each family.
-5. Ensemble equivalence: geometric/binomial ensembles converge in large-T
-   limit like Poisson does.
+These are standalone models, not ME distribution variants. Implement after
+the distribution families are complete.
 
 ### Future: thesis-equation mapping
 
