@@ -425,6 +425,49 @@ TDD:
 - Landing page, Python API reference, Rust API reference, testing guide, release process.
 - Remaining: thesis-equation mapping and tutorials (separate effort).
 
+#### Future: thesis-equation mapping
+
+Create `docs/thesis-context.md` as a reference table mapping thesis equations,
+sections, and table numbers to ODME code paths. Structure:
+
+| Thesis ref | Equation / concept | ODME code path |
+|------------|-------------------|----------------|
+| §3.2, Eq. 3.5 | Fixed-strength ME: $\langle t_{ij}\rangle = x_i y_j$ | `fitting.fit_fixed_strength_me` → `FixedStrengthPoissonProvider` |
+| §3.3, Eq. 3.12 | Strength-cost ME: $\langle t_{ij}\rangle = x_i y_j e^{-\gamma d_{ij}}$ | `fitting.fit_strength_cost_me` → `StrengthCostPoissonProvider` |
+| §3.4, Eq. 3.18 | Strength-edges ZIP | `fitting.fit_strength_edges_me` → `StrengthEdgesZipProvider` |
+| §3.5, Eq. 3.24 | Strength-degree ZIP | `fitting.fit_strength_degree_me` → `StrengthDegreeZipProvider` |
+| ... | ... | ... |
+
+Each row should include: thesis section, equation number, scientific name,
+Python function, Rust provider, and distribution variant. Include both
+fitting constraints and the resulting pair distribution.
+
+This requires careful re-reading of the thesis to get exact equation numbers
+right. Do not guess; only fill rows that have been verified against the PDF.
+
+#### Future: getting-started tutorial
+
+Create `docs/tutorials/filter-workflow.md` as an end-to-end walkthrough:
+
+1. Load a real or synthetic network from CSV.
+2. Compute strengths and degrees.
+3. Fit a null model (e.g., fixed-strength ME).
+4. Generate ensemble samples and compare statistics.
+5. Filter the observed network to find significant edges.
+6. Export results to Parquet.
+
+The tutorial should use copy-pasteable code blocks and show expected output.
+It should reference concept pages for the underlying math but not duplicate
+equations. Target length: 80–120 lines. Include a CLI equivalent for each
+Python step.
+
+A second tutorial `docs/tutorials/partial-constraints.md` should cover:
+
+1. Identify known heavy edges by weight cutoff.
+2. Fit a partial-constraint model.
+3. Filter using the combined rate table.
+4. Compare results with and without partial constraints.
+
 ### Milestone 10: Performance and memory benchmarks — ✅ COMPLETE
 
 - Added verbose Typer benchmark scripts under `benchmarks/`.
