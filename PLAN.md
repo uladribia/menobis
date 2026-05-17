@@ -294,7 +294,7 @@ Every branch with an architectural consequence should add or update a decision d
 - Keep branches small enough to review and test independently.
 - Each branch should include tests, documentation, and a short decision note if behavior changes.
 
-## Implementation status (last updated: 2026-05-15)
+## Implementation status (last updated: 2026-05-17)
 
 | Milestone | Status | Tests |
 |-----------|--------|-------|
@@ -309,14 +309,14 @@ Every branch with an architectural consequence should add or update a decision d
 | 7b. Ensemble equivalence | ✅ Complete | Microcanonical sampler + convergence validation + figures |
 | 8. CLI | ✅ Complete | All models exposed: analyze, fit, generate |
 | 9. Docs site | ✅ Complete | Full LaTeX math, all models, partial constraints, ensembles |
-| 10. Benchmarks | ✅ Complete | Scaling to N=10000, regression tests, figures |
+| 10. Benchmarks | ✅ Complete | Parallel streaming generation to N=30000, regression tests, figures |
 | 11. Statistical filtering | ❌ Not started | Flag edges incompatible with null model |
 
-**Totals: 114 Python tests, 16 Rust tests, all passing. All linters green.**
+**Current validated subset:** streaming-generation Python tests, relevant generation tests, all Rust workspace tests, Ruff checks on touched files, Clippy, Rust formatting, and MkDocs strict build are green.
 
-**Architecture:** All computation in Rust (`odme-core`). Python is thin wrappers + CLI + I/O. No Polars. numpy + pyarrow + rustworkx only.
+**Architecture:** All computation in Rust (`odme-core`). Python is thin wrappers + CLI + I/O. No Polars. numpy + pyarrow + rustworkx only. Generation uses streaming pair providers and Rayon parallel chunks instead of dense $N^2$ probability matrices.
 
-**Next steps:** Continue Milestone 6 with strength-cost/distance-constrained models.
+**Next steps:** Start Milestone 11 statistical filtering, using the streaming pair-distribution providers to avoid dense null-model matrices.
 
 ## Proposed implementation milestones
 
@@ -365,6 +365,7 @@ Every branch with an architectural consequence should add or update a decision d
 - Iterative proportional fitting (IPF) in Rust for no-self-loops case.
 - Poisson and multinomial samplers in Rust, node-factorized, O(E) memory.
 - No dense N² path.
+- Large supports use deterministic Rayon chunks by default.
 - Ensemble averaging utilities (`ensemble_average`, `ensemble_scalar_average`).
 
 ### Milestone 6: Remaining maximum-entropy models — ✅ COMPLETE
@@ -375,7 +376,8 @@ Every branch with an architectural consequence should add or update a decision d
 - ✅ Implement exact fixed-strength-and-degree thesis Case 4 fitting/generation.
 - ✅ Implement fixed-degree thesis Case 5 weighted generation.
 - ✅ Implement strength-cost/distance-constrained thesis Case 2 fitting and generation.
-- The strength-cost model `E[t_ij] = x_i * y_j * f(d_ij)` should accept a metric function (e.g., Euclidean) and evaluate `f(d_ij)` on-the-fly per source row, avoiding NxN distance matrix storage. A pre-computed distance matrix should only be needed when the cost is non-metric or loaded from a file, and even then sparse or streaming access should be preferred.
+- Strength-cost generation streams `E[t_ij] = x_i * y_j * exp(-gamma d_ij)` in Rust; current sparse cost entries treat missing pairs as zero cost, matching the documented API semantics.
+- Future strength-cost fitting should accept metric functions or row-streamed cost access to avoid dense distance storage during fitting as well as generation.
 - Keep each model in its own small branch and expose both Rust and Python endpoints.
 - TDD: expected degree, strength, probability, and cost constraints hold within documented tolerances.
 
@@ -411,7 +413,7 @@ TDD:
 
 ### Milestone 8: Modern CLI — ✅ COMPLETE (initial)
 
-- Implemented: `odme analyze strengths`, `odme fit strengths`, `odme fit degrees`, `odme fit strength-degree-me`, `odme fit strength-edges-me`, `odme generate poisson`, `odme generate multinomial`, `odme generate poisson-multinomial`, `odme generate degree-events-me`, `odme generate strength-degree-me`, `odme generate strength-edges-me`, `odme generate custom-pij`.
+- Implemented: `odme analyze strengths`, `odme fit strengths`, `odme fit degrees`, `odme fit strength-cost-me`, `odme fit strength-degree-me`, `odme fit strength-edges-me`, `odme generate poisson`, `odme generate multinomial`, `odme generate poisson-multinomial`, `odme generate degree-events-me`, `odme generate strength-cost-me`, `odme generate strength-degree-me`, `odme generate strength-edges-me`, `odme generate custom-pij`.
 - Standard universal arguments: `--output`/`-o`, `--json`, `--quiet`, `--seed`/`-s`.
 - stdout for data, stderr for progress.
 - Remaining: `odme convert`, additional subcommands as models are added.
@@ -424,9 +426,13 @@ TDD:
 
 ### Milestone 10: Performance and memory benchmarks — ✅ COMPLETE
 
-- Add Criterion and pytest benchmark suites.
-- Benchmark against legacy C/Python temporarily where useful, then against ODME's own tracked baseline.
-- Optimize only after correctness is established.
+- Added verbose Typer benchmark scripts under `benchmarks/`.
+- Added streaming-generation benchmark data, figures, and docs.
+- Benchmarked all generation cases with five repeats through `N = 30000` on a 14-core machine.
+- Peak RSS remains below 270 MiB for the benchmark setup.
+- Parallel generation uses Rayon row/sparse-entry chunks with deterministic per-chunk seeds.
+- Dense $N^2$ probability matrices are not used for generation.
+- Remaining future work: add Criterion microbenchmarks for Rust kernels and CI-friendly regression thresholds.
 
 ### Milestone 11: Statistical filtering module — ❌ NOT STARTED
 

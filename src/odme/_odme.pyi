@@ -179,6 +179,18 @@ def sample_strength_edges_me(
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
+def sample_strength_cost_me(
+    x: list[float],
+    y: list[float],
+    gamma: float,
+    cost_sources: list[int],
+    cost_targets: list[int],
+    cost_values: list[float],
+    self_loops: bool,
+    seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
+
+
 def sample_poisson(
     x: list[float],
     y: list[float],

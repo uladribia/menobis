@@ -6,61 +6,74 @@ description: Maximum-entropy model constraints implemented by ODME.
 
 ## TL;DR
 
-ODME implements directed multi-edge maximum-entropy models for all thesis
-cases: fixed strength, fixed degree, fixed strength + cost, fixed strength +
-edges, fixed strength + degree, and custom $p_{ij}$.
+ODME implements directed multi-edge maximum-entropy models for selected thesis
+cases plus a fixed-strength baseline. Numbered thesis mappings are listed in
+[Thesis Cases](thesis-cases.md); this page uses ODME model names.
 
 ## Implemented models
 
-| Model | Constraints | Python API |
-|-------|-------------|------------|
-| Fixed strength ME | $s^{out}$, $s^{in}$ | `fit_fixed_strength_me` |
-| Fixed degree ME | $k^{out}$, $k^{in}$, $T$ | `fit_fixed_degree_binary` |
-| Strength + cost ME | $s^{out}$, $s^{in}$, $C$ | `fit_strength_cost_me` |
-| Strength + edges ME | $s^{out}$, $s^{in}$, $E$ | `fit_strength_edges_me` |
-| Strength + degree ME | $s^{out}$, $s^{in}$, $k^{out}$, $k^{in}$ | `fit_strength_degree_me` |
-| Custom $p_{ij}$ ME | $p_{ij}$, $T$ | `sample_custom_pij_events_*` |
+| ODME model | Thesis case | Constraints | Python API |
+|------------|-------------|-------------|------------|
+| Fixed-strength ME | — | $s^{out}$, $s^{in}$ | `fit_fixed_strength_me` |
+| Custom probability ME | 1 | $p_{ij}$, $T$ | `sample_custom_pij_events_*` |
+| Strength-cost ME | 2 | $s^{out}$, $s^{in}$, $C$ | `fit_strength_cost_me` |
+| Strength-edges ME | 3 | $s^{out}$, $s^{in}$, $E$ | `fit_strength_edges_me` |
+| Strength-degree ME | 4 | $s^{out}$, $s^{in}$, $k^{out}$, $k^{in}$ | `fit_strength_degree_me` |
+| Degree-events ME | 5 | $k^{out}$, $k^{in}$, $T$ | `fit_fixed_degree_binary` |
 
-All models support partial-constraint fitting (see
-[Partial Constraints](partial-constraints.md)).
+All models support partial-constraint fitting except custom probability
+sampling; see [Partial Constraints](partial-constraints.md).
 
-## Strength-degree invariant
+## Shared notation
 
-For weighted integer networks:
+| Symbol | Meaning |
+|--------|---------|
+| $t_{ij}$ | Integer event count from node $i$ to node $j$ |
+| $T$ | Total events, $\sum_{ij} t_{ij}$ |
+| $E$ | Binary edge count, $\sum_{ij}\Theta(t_{ij})$ |
+| $s^{out}, s^{in}$ | Outgoing and incoming strength sequences |
+| $k^{out}, k^{in}$ | Outgoing and incoming binary degree sequences |
+
+For integer networks, ODME validates:
 
 $$
-s_i^{out} \ge k_i^{out}, \quad s_i^{in} \ge k_i^{in}.
+s_i^{out} \ge k_i^{out}, \qquad s_i^{in} \ge k_i^{in}.
 $$
 
 ## Fixed-strength ME
 
+The fitted factors recover the analytical expectation:
+
 $$
-E[t_{ij}] = x_i \, y_j = \frac{s_i^{out} \, s_j^{in}}{T}.
+\mathbb{E}[t_{ij}] = x_i y_j = \frac{s_i^{out} s_j^{in}}{T}.
 $$
 
 ```python
 fit = fit_fixed_strength_me(s_out, s_in)
 ```
 
-Three sampler variants:
+Sampler variants:
 
-- **Grand-canonical** (Poisson): `sample_poisson(fit.x, fit.y)`
-- **Canonical** (multinomial, fixed $T$): `sample_multinomial(fit.x, fit.y, total_events=T)`
-- **Microcanonical** (exact $s$, exact $T$): `sample_microcanonical(s_out, s_in)`
+| Ensemble | Function | Exactly fixed |
+|----------|----------|---------------|
+| Grand-canonical | `sample_poisson(fit.x, fit.y)` | nothing |
+| Canonical | `sample_multinomial(fit.x, fit.y, total_events=T)` | $T$ |
+| Stub-matched | `sample_microcanonical(s_out, s_in)` | $s^{out}$, $s^{in}$, $T$ |
 
-## Fixed-degree ME
+## Degree-events ME, thesis case 5
 
 Binary occupation probability:
 
 $$
-p_{ij} = \frac{x_i \, y_j}{1 + x_i \, y_j}.
-$$
-
-Expected weighted occupation with $T$ total events:
-
-$$
-E[t_{ij}] = \frac{T}{\langle E \rangle} \, p_{ij}, \quad
+p_{ij} = \frac{x_i y_j}{1 + x_i y_j},
+\qquad
 \langle E \rangle = \sum_{ij} p_{ij}.
+$$
+
+Positive edges receive weights with common mean $T / \langle E \rangle$:
+
+$$
+\mathbb{E}[t_{ij}] = \frac{T}{\langle E \rangle} p_{ij}.
 $$
 
 ```python
@@ -68,26 +81,27 @@ fit = fit_fixed_degree_binary(k_out, k_in)
 sample = sample_fixed_degree_events_me(fit, total_events=T, seed=42)
 ```
 
-## Strength + cost ME
-
-The doubly-constrained gravity model in exponential deterrence form:
+## Strength-cost ME, thesis case 2
 
 $$
-E[t_{ij}] = x_i \, y_j \, e^{-\gamma \, d_{ij}}.
+\mathbb{E}[t_{ij}] = x_i y_j e^{-\gamma d_{ij}}.
 $$
-
-See [Spatial Costs](spatial-costs.md) for details.
 
 ```python
 fit = fit_strength_cost_me(s_out, s_in, cost_src, cost_tgt, cost_val, C)
 sample = sample_strength_cost_me(fit, cost_src, cost_tgt, cost_val, seed=42)
 ```
 
-## Strength + total edges ME (Case 3)
+See [Spatial Costs](spatial-costs.md) for constraints and solver notes.
+
+## Strength-edges ME, thesis case 3
+
+Let $u_{ij}=x_i y_j$. Then:
 
 $$
-E[t_{ij}] = \frac{\lambda \, x_i \, y_j \, e^{x_i y_j}}
-{1 + \lambda \left(e^{x_i y_j} - 1\right)}.
+p_{ij}=\frac{\lambda(e^{u_{ij}}-1)}{1+\lambda(e^{u_{ij}}-1)},
+\qquad
+\mathbb{E}[t_{ij}]=\frac{\lambda u_{ij}e^{u_{ij}}}{1+\lambda(e^{u_{ij}}-1)}.
 $$
 
 ```python
@@ -95,18 +109,14 @@ fit = fit_strength_edges_me(s_out, s_in, target_edges=E)
 sample = sample_strength_edges_me(fit, seed=42)
 ```
 
-## Strength + degree ME (Case 4)
+## Strength-degree ME, thesis case 4
+
+Let $u_{ij}=x_i y_j$ and $v_{ij}=z_i w_j$. Then:
 
 $$
-E[t_{ij}] = \frac{z_i \, w_j \, x_i \, y_j \, e^{x_i y_j}}
-{1 + z_i \, w_j \left(e^{x_i y_j} - 1\right)}.
-$$
-
-Binary occupation probability:
-
-$$
-P(t_{ij} > 0) = \frac{z_i \, w_j \left(e^{x_i y_j} - 1\right)}
-{1 + z_i \, w_j \left(e^{x_i y_j} - 1\right)}.
+p_{ij}=\frac{v_{ij}(e^{u_{ij}}-1)}{1+v_{ij}(e^{u_{ij}}-1)},
+\qquad
+\mathbb{E}[t_{ij}]=\frac{v_{ij}u_{ij}e^{u_{ij}}}{1+v_{ij}(e^{u_{ij}}-1)}.
 $$
 
 ```python
@@ -114,10 +124,12 @@ fit = fit_strength_degree_me(s_out, s_in, k_out, k_in)
 sample = sample_strength_degree_me(fit, seed=42)
 ```
 
-## Custom $p_{ij}$ ME (Case 1)
+## Custom probability ME, thesis case 1
+
+The supplied probabilities are normalized before sampling:
 
 $$
-E[t_{ij}] = T \, p_{ij}.
+\mathbb{E}[t_{ij}] = T \frac{p_{ij}}{\sum_{ab} p_{ab}}.
 $$
 
 ```python
@@ -125,14 +137,3 @@ probabilities = normalize_probabilities(source, target, p)
 sample = sample_custom_pij_events_multinomial(probabilities, total_events=T, seed=42)
 sample = sample_custom_pij_events_poisson(probabilities, total_events=T, seed=42)
 ```
-
-## Sampler summary
-
-| Constraint | Canonical | Grand-canonical | Microcanonical |
-|------------|-----------|-----------------|----------------|
-| Strength | `sample_multinomial` | `sample_poisson` | `sample_microcanonical` |
-| Strength + cost | — | `sample_strength_cost_me` | — |
-| Strength + edges | — | `sample_strength_edges_me` | — |
-| Strength + degree | — | `sample_strength_degree_me` | — |
-| Degree + events | — | `sample_fixed_degree_events_me` | — |
-| Custom $p_{ij}$ | `sample_custom_pij_events_multinomial` | `sample_custom_pij_events_poisson` | — |

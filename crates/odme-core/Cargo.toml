@@ -13,3 +13,4 @@ path = "src/lib.rs"
 thiserror.workspace = true
 rand.workspace = true
 rand_distr.workspace = true
+rayon.workspace = true

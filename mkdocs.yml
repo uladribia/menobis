@@ -39,6 +39,7 @@ nav:
       - Release Process: development/release-process.md
   - Decisions:
       - Rust and Python Architecture: decisions/0001-rust-python-architecture.md
+      - Streaming Generation: decisions/0002-streaming-generation.md
 
 plugins:
   - search

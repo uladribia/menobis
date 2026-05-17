@@ -17,8 +17,9 @@ use odme_core::generation::{
     sample_microcanonical as core_sample_microcanonical,
     sample_multinomial as core_sample_multinomial, sample_poisson as core_sample_poisson,
     sample_poisson_multinomial as core_sample_poisson_multinomial,
+    sample_strength_cost_me as core_sample_strength_cost_me,
     sample_strength_degree_me as core_sample_strength_degree_me,
-    sample_strength_edges_me as core_sample_strength_edges_me,
+    sample_strength_edges_me as core_sample_strength_edges_me, SparseCostEntries,
 };
 use odme_core::graph::{
     directed_degrees as core_directed_degrees, directed_strengths as core_directed_strengths,
@@ -504,6 +505,33 @@ fn sample_strength_edges_me(
 }
 
 #[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn sample_strength_cost_me(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    gamma: f64,
+    cost_sources: Vec<usize>,
+    cost_targets: Vec<usize>,
+    cost_values: Vec<f64>,
+    self_loops: bool,
+    seed: u64,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    if x.len() != y.len() {
+        return Err(PyValueError::new_err("x and y must have same length"));
+    }
+    if cost_sources.len() != cost_targets.len() || cost_sources.len() != cost_values.len() {
+        return Err(PyValueError::new_err("cost arrays must have same length"));
+    }
+    let costs = SparseCostEntries {
+        sources: &cost_sources,
+        targets: &cost_targets,
+        values: &cost_values,
+    };
+    let sample = core_sample_strength_cost_me(&x, &y, gamma, &costs, self_loops, seed);
+    Ok((sample.sources, sample.targets, sample.weights))
+}
+
+#[pyfunction]
 fn sample_poisson(
     x: Vec<f64>,
     y: Vec<f64>,
@@ -610,6 +638,7 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     module.add_function(wrap_pyfunction!(sample_poisson_multinomial, module)?)?;
     module.add_function(wrap_pyfunction!(sample_strength_edges_me, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_cost_me, module)?)?;
     module.add_function(wrap_pyfunction!(sample_poisson, module)?)?;
     module.add_function(wrap_pyfunction!(sample_fixed_degree_events_me, module)?)?;
     module.add_function(wrap_pyfunction!(sample_strength_degree_me, module)?)?;
