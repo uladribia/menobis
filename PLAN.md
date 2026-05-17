@@ -229,7 +229,7 @@ Fitting:
 | `balance_masked_strength_degree_me` | `balance_masked_strength_degree_poisson` |
 | `balance_binomial_strength` | `balance_strength_binomial` |
 | `balance_masked_binomial_strength` | `balance_masked_strength_binomial` |
-| `balance_no_self_loops` | `balance_strength_poisson_no_self_loops` |
+| `balance_no_self_loops` | `balance_strength_poisson` | only used when `self_loops=false`; `self_loops=true` is analytical |
 | `balance_binary_degrees` | `balance_degree_bernoulli` |
 | `balance_masked_binary_degrees` | `balance_masked_degree_bernoulli` |
 | `balance_masked_strength` | `balance_masked_strength_poisson` |
