@@ -411,12 +411,12 @@ TDD:
 - For large `T` (e.g., `T >> N^2`), all ensemble-averaged statistics must agree within documented tolerances.
 - Property tests: strength sequences are exactly preserved in microcanonical samples; total event count is exactly `T` in canonical samples.
 
-### Milestone 8: Modern CLI — ✅ COMPLETE (initial)
+### Milestone 8: Modern CLI — ✅ COMPLETE
 
-- Implemented: `odme analyze strengths`, `odme fit strengths`, `odme fit degrees`, `odme fit strength-cost-me`, `odme fit strength-degree-me`, `odme fit strength-edges-me`, `odme generate poisson`, `odme generate multinomial`, `odme generate poisson-multinomial`, `odme generate degree-events-me`, `odme generate strength-cost-me`, `odme generate strength-degree-me`, `odme generate strength-edges-me`, `odme generate custom-pij`.
+- Implemented: `odme analyze strengths`, `odme fit strengths`, `odme fit degrees`, `odme fit strength-cost-me`, `odme fit strength-degree-me`, `odme fit strength-edges-me`, `odme generate poisson`, `odme generate multinomial`, `odme generate poisson-multinomial`, `odme generate degree-events-me`, `odme generate strength-cost-me`, `odme generate strength-degree-me`, `odme generate strength-edges-me`, `odme generate custom-pij`, `odme filter fixed-strength`, `odme filter strength-edges`, `odme filter strength-cost`, `odme filter strength-degree`, `odme filter degree-events`, `odme filter custom-rates`, `odme convert`.
 - Standard universal arguments: `--output`/`-o`, `--json`, `--quiet`, `--seed`/`-s`.
 - stdout for data, stderr for progress.
-- Remaining: `odme convert`, additional subcommands as models are added.
+- Remaining: additional subcommands as models are added.
 
 ### Milestone 9: Documentation site — ✅ BUILDS
 

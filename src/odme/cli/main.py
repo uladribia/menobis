@@ -7,6 +7,7 @@ from typer import Option, Typer
 
 from odme import __version__
 from odme.cli.analyze import app as analyze_app
+from odme.cli.convert import convert as convert_command
 from odme.cli.filter import app as filter_app
 from odme.cli.fit import app as fit_app
 from odme.cli.generate import app as generate_app
@@ -16,6 +17,7 @@ app.add_typer(analyze_app, name="analyze", help="Analyze ODME edge tables.")
 app.add_typer(fit_app, name="fit", help="Fit model parameters.")
 app.add_typer(generate_app, name="generate", help="Generate network samples.")
 app.add_typer(filter_app, name="filter", help="Filter edges against null models.")
+app.command(name="convert")(convert_command)
 
 
 @app.callback(invoke_without_command=True)
