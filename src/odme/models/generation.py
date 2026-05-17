@@ -241,13 +241,98 @@ def sample_strength_neg_binomial(
     return _edge_table_from_lists(sources, targets, weights)
 
 
+def sample_strength_cost_binomial(
+    fit: "StrengthCostFit",
+    cost_sources: NDArray[np.uint64],
+    cost_targets: NDArray[np.uint64],
+    cost_values: NDArray[np.float64],
+    *,
+    layers: int = 1,
+    seed: int = 0,
+) -> EdgeTable:
+    """Sample strength-cost binomial: Bin(M, p) with cost-modulated rates."""
+    sources, targets, weights = _odme.sample_strength_cost_binomial(
+        fit.x.tolist(),
+        fit.y.tolist(),
+        fit.gamma,
+        cost_sources.tolist(),
+        cost_targets.tolist(),
+        cost_values.tolist(),
+        layers,
+        fit.self_loops,
+        seed,
+    )
+    return _edge_table_from_lists(sources, targets, weights)
+
+
+def sample_strength_edges_binomial(
+    fit: "StrengthEdgesFit",
+    *,
+    layers: int = 1,
+    seed: int = 0,
+) -> EdgeTable:
+    """Sample strength-edges binomial ZIP: Bernoulli occupation + ZTB(M, p)."""
+    sources, targets, weights = _odme.sample_strength_edges_binomial(
+        fit.x.tolist(),
+        fit.y.tolist(),
+        fit.lam,
+        layers,
+        fit.self_loops,
+        seed,
+    )
+    return _edge_table_from_lists(sources, targets, weights)
+
+
+def sample_strength_degree_binomial(
+    fit: "StrengthDegreeFit",
+    *,
+    layers: int = 1,
+    seed: int = 0,
+) -> EdgeTable:
+    """Sample strength-degree binomial ZIP: Bernoulli occupation + ZTB(M, p)."""
+    sources, targets, weights = _odme.sample_strength_degree_binomial(
+        fit.x.tolist(),
+        fit.y.tolist(),
+        fit.z.tolist(),
+        fit.w.tolist(),
+        layers,
+        fit.self_loops,
+        seed,
+    )
+    return _edge_table_from_lists(sources, targets, weights)
+
+
+def sample_degree_events_binomial(
+    fit: FitResult,
+    *,
+    positive_weight_rate: float,
+    layers: int = 1,
+    self_loops: bool = True,
+    seed: int = 0,
+) -> EdgeTable:
+    """Sample degree-events binomial ZIP: Bernoulli occupation + ZTB(M, mu)."""
+    sources, targets, weights = _odme.sample_degree_events_binomial(
+        fit.x.tolist(),
+        fit.y.tolist(),
+        positive_weight_rate,
+        layers,
+        self_loops,
+        seed,
+    )
+    return _edge_table_from_lists(sources, targets, weights)
+
+
 __all__ = [
     "sample_custom_multinomial",
     "sample_custom_poisson",
+    "sample_degree_events_binomial",
     "sample_degree_events_poisson",
     "sample_strength_binomial",
+    "sample_strength_cost_binomial",
     "sample_strength_cost_poisson",
+    "sample_strength_degree_binomial",
     "sample_strength_degree_poisson",
+    "sample_strength_edges_binomial",
     "sample_strength_edges_poisson",
     "sample_strength_geometric",
     "sample_strength_microcanonical",
