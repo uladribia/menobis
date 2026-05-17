@@ -5,10 +5,10 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from odme.models import (
-    fit_fixed_strength_me,
-    sample_multinomial,
-    sample_poisson,
-    sample_poisson_multinomial,
+    fit_strength_poisson,
+    sample_strength_multinomial,
+    sample_strength_poisson,
+    sample_strength_poisson_multinomial,
 )
 
 
@@ -16,9 +16,9 @@ from odme.models import (
 @settings(deadline=None, max_examples=20)
 def test_fixed_strength_multinomial_preserves_total(values: list[int]) -> None:
     s = np.asarray(values, dtype=np.float64)
-    fit = fit_fixed_strength_me(s, s)
+    fit = fit_strength_poisson(s, s)
     total = int(s.sum())
-    sample = sample_multinomial(fit.x, fit.y, total_events=total, seed=42)
+    sample = sample_strength_multinomial(fit.x, fit.y, total_events=total, seed=42)
     assert sample.total_events == total
     assert np.all(sample.weight > 0)
 
@@ -27,9 +27,9 @@ def test_fixed_strength_multinomial_preserves_total(values: list[int]) -> None:
 @settings(deadline=None, max_examples=20)
 def test_fixed_strength_poisson_is_seeded_and_non_negative(values: list[int]) -> None:
     s = np.asarray(values, dtype=np.float64)
-    fit = fit_fixed_strength_me(s, s)
-    first = sample_poisson(fit.x, fit.y, seed=42)
-    second = sample_poisson(fit.x, fit.y, seed=42)
+    fit = fit_strength_poisson(s, s)
+    first = sample_strength_poisson(fit.x, fit.y, seed=42)
+    second = sample_strength_poisson(fit.x, fit.y, seed=42)
     np.testing.assert_array_equal(first.source, second.source)
     np.testing.assert_array_equal(first.target, second.target)
     np.testing.assert_array_equal(first.weight, second.weight)
@@ -40,9 +40,9 @@ def test_fixed_strength_poisson_is_seeded_and_non_negative(values: list[int]) ->
 @settings(deadline=None, max_examples=20)
 def test_fixed_strength_poisson_multinomial_is_seeded(values: list[int]) -> None:
     s = np.asarray(values, dtype=np.float64)
-    fit = fit_fixed_strength_me(s, s)
-    first = sample_poisson_multinomial(fit.x, fit.y, seed=42)
-    second = sample_poisson_multinomial(fit.x, fit.y, seed=42)
+    fit = fit_strength_poisson(s, s)
+    first = sample_strength_poisson_multinomial(fit.x, fit.y, seed=42)
+    second = sample_strength_poisson_multinomial(fit.x, fit.y, seed=42)
     np.testing.assert_array_equal(first.source, second.source)
     np.testing.assert_array_equal(first.target, second.target)
     np.testing.assert_array_equal(first.weight, second.weight)

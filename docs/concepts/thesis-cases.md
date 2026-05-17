@@ -26,11 +26,11 @@ selected numbered thesis cases plus the unnumbered fixed-strength baseline.
 |-------------|------------|-------------|---------------|---------|---------|
 | 0 | Radiation / sequential gravity | model-specific | not implemented | — | — |
 | 1 | Custom probability ME | $p_{ij}$, $T$ | $\mathbb{E}[t_{ij}] = T p_{ij}$ | — | `sample_custom_pij_events_*` |
-| 2 | Strength-cost ME | $s^{out}$, $s^{in}$, $C$ | $\mathbb{E}[t_{ij}] = x_i y_j e^{-\gamma d_{ij}}$ | `fit_strength_cost_me` | `sample_strength_cost_me` |
-| 3 | Strength-edges ME | $s^{out}$, $s^{in}$, $E$ | ZIP, see below | `fit_strength_edges_me` | `sample_strength_edges_me` |
-| 4 | Strength-degree ME | $s^{out}$, $s^{in}$, $k^{out}$, $k^{in}$ | ZIP, see below | `fit_strength_degree_me` | `sample_strength_degree_me` |
-| 5 | Degree-events ME | $k^{out}$, $k^{in}$, $T$ | binary occupation + weighted events | `fit_fixed_degree_binary` | `sample_fixed_degree_events_me` |
-| — | Fixed-strength ME | $s^{out}$, $s^{in}$ | $\mathbb{E}[t_{ij}] = x_i y_j$ | `fit_fixed_strength_me` | `sample_poisson`, `sample_multinomial`, `sample_microcanonical` |
+| 2 | Strength-cost ME | $s^{out}$, $s^{in}$, $C$ | $\mathbb{E}[t_{ij}] = x_i y_j e^{-\gamma d_{ij}}$ | `fit_strength_cost_poisson` | `sample_strength_cost_poisson` |
+| 3 | Strength-edges ME | $s^{out}$, $s^{in}$, $E$ | ZIP, see below | `fit_strength_edges_poisson` | `sample_strength_edges_poisson` |
+| 4 | Strength-degree ME | $s^{out}$, $s^{in}$, $k^{out}$, $k^{in}$ | ZIP, see below | `fit_strength_degree_poisson` | `sample_strength_degree_poisson` |
+| 5 | Degree-events ME | $k^{out}$, $k^{in}$, $T$ | binary occupation + weighted events | `fit_degree_bernoulli` | `sample_degree_events_poisson` |
+| — | Fixed-strength ME | $s^{out}$, $s^{in}$ | $\mathbb{E}[t_{ij}] = x_i y_j$ | `fit_strength_poisson` | `sample_strength_poisson`, `sample_strength_multinomial`, `sample_strength_microcanonical` |
 
 ## Case 3: strength-edges ME
 

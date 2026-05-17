@@ -18,7 +18,7 @@ The procedure is:
 5. Combine the known rates with the fitted rates ``x_i y_j`` (or
    ``x_i y_j exp(-gamma  d_ij)``) into a single rate table.
 6. The result can be normalized to probabilities ``p_ij = rate_ij / sum(rate)``
-   and sampled using ``sample_custom_pij_events_poisson`` or ``_multinomial``.
+   and sampled using ``sample_custom_poisson`` or ``_multinomial``.
 
 **Self-loops**: when ``self_loops=False``, diagonal pairs ``(i, i)`` are
 excluded from both the mask and the fitted pairs, regardless of whether they
@@ -174,7 +174,7 @@ def _warn_if_not_converged(name: str, converged: bool, iters: int) -> None:
 # ---------------------------------------------------------------------------
 
 
-def fit_partial_strength_me(
+def fit_partial_strength_poisson(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
@@ -199,16 +199,16 @@ def fit_partial_strength_me(
     if excess_out.sum() <= 0:
         return _build_result(n, k_src, k_tgt, k_rate, mask, lambda i, j: 0.0)
     _balance_excess(excess_out, excess_in)
-    x_l, y_l, converged, iters = _odme.fit_masked_strength(
+    x_l, y_l, converged, iters = _odme.fit_masked_strength_poisson(
         excess_out.tolist(), excess_in.tolist(), mask, tolerance, max_iterations
     )
-    _warn_if_not_converged("fit_partial_strength_me", converged, iters)
+    _warn_if_not_converged("fit_partial_strength_poisson", converged, iters)
     x = np.asarray(x_l, dtype=np.float64)
     y = np.asarray(y_l, dtype=np.float64)
     return _build_result(n, k_src, k_tgt, k_rate, mask, lambda i, j: x[i] * y[j])
 
 
-def fit_partial_degree_me(
+def fit_partial_degree_poisson(
     degree_out: NDArray[np.floating],
     degree_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
@@ -230,10 +230,10 @@ def fit_partial_degree_me(
     excess_out, excess_in = _compute_excess(k_out, k_in, k_src, k_tgt, known_binary)
     mask = _build_mask(n, k_src, k_tgt, self_loops)
     _balance_excess(excess_out, excess_in)
-    x_l, y_l, converged, iters = _odme.fit_masked_binary_degrees(
+    x_l, y_l, converged, iters = _odme.fit_masked_degree_bernoulli(
         excess_out.tolist(), excess_in.tolist(), mask, tolerance, max_iterations
     )
-    _warn_if_not_converged("fit_partial_degree_me", converged, iters)
+    _warn_if_not_converged("fit_partial_degree_poisson", converged, iters)
     x = np.asarray(x_l, dtype=np.float64)
     y = np.asarray(y_l, dtype=np.float64)
     known_rate = np.ones(len(k_src))
@@ -245,7 +245,7 @@ def fit_partial_degree_me(
     return _build_result(n, k_src, k_tgt, known_rate, mask, _degree_rate)
 
 
-def fit_partial_strength_degree_me(
+def fit_partial_strength_degree_poisson(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     degree_out: NDArray[np.floating],
@@ -279,7 +279,7 @@ def fit_partial_strength_degree_me(
         return _build_result(n, k_src, k_tgt, k_rate_arr, mask, lambda i, j: 0.0)
     _balance_excess(excess_s_out, excess_s_in)
     _balance_excess(excess_k_out, excess_k_in)
-    x_l, y_l, z_l, w_l, converged, iters = _odme.fit_masked_strength_degree_me(
+    x_l, y_l, z_l, w_l, converged, iters = _odme.fit_masked_strength_degree_poisson(
         excess_s_out.tolist(),
         excess_s_in.tolist(),
         excess_k_out.tolist(),
@@ -288,7 +288,7 @@ def fit_partial_strength_degree_me(
         tolerance,
         max_iterations,
     )
-    _warn_if_not_converged("fit_partial_strength_degree_me", converged, iters)
+    _warn_if_not_converged("fit_partial_strength_degree_poisson", converged, iters)
     x = np.asarray(x_l, dtype=np.float64)
     y = np.asarray(y_l, dtype=np.float64)
     z = np.asarray(z_l, dtype=np.float64)
@@ -304,7 +304,7 @@ def fit_partial_strength_degree_me(
     return _build_result(n, k_src, k_tgt, k_rate_arr, mask, _case4_rate)
 
 
-def fit_partial_strength_edges_me(
+def fit_partial_strength_edges_poisson(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
@@ -336,7 +336,7 @@ def fit_partial_strength_edges_me(
         return _build_result(n, k_src, k_tgt, k_rate_arr, mask, lambda i, j: 0.0)
     _balance_excess(excess_out, excess_in)
 
-    from odme.models.fitting import fit_strength_edges_me as _fit_se
+    from odme.models.fitting import fit_strength_edges_poisson as _fit_se
 
     fit = _fit_se(
         excess_out,
@@ -359,7 +359,7 @@ def fit_partial_strength_edges_me(
     return _build_result(n, k_src, k_tgt, k_rate_arr, mask, _case3_rate)
 
 
-def fit_partial_strength_cost_me(
+def fit_partial_strength_cost_poisson(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
@@ -418,9 +418,9 @@ def fit_partial_strength_cost_me(
         if int(cs) < n and int(ct) < n and not mask[int(cs) * n + int(ct)]
     ]
 
-    from odme.models.fitting import fit_strength_cost_me
+    from odme.models.fitting import fit_strength_cost_poisson
 
-    fit = fit_strength_cost_me(
+    fit = fit_strength_cost_poisson(
         excess_out,
         excess_in,
         np.array(free_src, dtype=np.int64),
@@ -468,7 +468,7 @@ def fit_from_network_cutoff(
     known_rate = edges.weight[heavy].astype(np.float64)
 
     if model == "strength":
-        return fit_partial_strength_me(
+        return fit_partial_strength_poisson(
             s.out.astype(np.float64),
             s.incoming.astype(np.float64),
             known_source,
@@ -480,7 +480,7 @@ def fit_from_network_cutoff(
         )
     if model == "degree":
         k = directed_degrees(edges)
-        return fit_partial_degree_me(
+        return fit_partial_degree_poisson(
             k.out.astype(np.float64),
             k.incoming.astype(np.float64),
             known_source,
@@ -491,7 +491,7 @@ def fit_from_network_cutoff(
         )
     if model == "strength-degree":
         k = directed_degrees(edges)
-        return fit_partial_strength_degree_me(
+        return fit_partial_strength_degree_poisson(
             s.out.astype(np.float64),
             s.incoming.astype(np.float64),
             k.out.astype(np.float64),
@@ -504,7 +504,7 @@ def fit_from_network_cutoff(
             max_iterations=max_iterations,
         )
     if model == "strength-edges":
-        return fit_partial_strength_edges_me(
+        return fit_partial_strength_edges_poisson(
             s.out.astype(np.float64),
             s.incoming.astype(np.float64),
             known_source,
@@ -534,7 +534,7 @@ def fit_from_network_cutoff(
                     edges.source, edges.target, edges.weight, strict=True
                 )
             )
-        return fit_partial_strength_cost_me(
+        return fit_partial_strength_cost_poisson(
             s.out.astype(np.float64),
             s.incoming.astype(np.float64),
             known_source,
@@ -559,9 +559,9 @@ def fit_from_network_cutoff(
 __all__ = [
     "PartialFitResult",
     "fit_from_network_cutoff",
-    "fit_partial_degree_me",
-    "fit_partial_strength_cost_me",
-    "fit_partial_strength_degree_me",
-    "fit_partial_strength_edges_me",
-    "fit_partial_strength_me",
+    "fit_partial_degree_poisson",
+    "fit_partial_strength_cost_poisson",
+    "fit_partial_strength_degree_poisson",
+    "fit_partial_strength_edges_poisson",
+    "fit_partial_strength_poisson",
 ]

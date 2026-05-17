@@ -14,7 +14,7 @@ def test_fit_degrees_json(tmp_path: Path) -> None:
     input_path = tmp_path / "edges.csv"
     input_path.write_text("source,target,weight\n0,1,3\n1,2,4\n0,2,3\n")
 
-    result = runner.invoke(app, ["fit", "degrees", str(input_path), "--json"])
+    result = runner.invoke(app, ["fit", "degree-bernoulli", str(input_path), "--json"])
 
     assert result.exit_code == 0, result.output
     assert '"x"' in result.output
@@ -29,7 +29,7 @@ def test_fit_strength_degree_me_to_file(tmp_path: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["fit", "strength-degree-me", str(input_path), "-o", str(output_path)],
+        ["fit", "strength-degree-poisson", str(input_path), "-o", str(output_path)],
     )
 
     assert result.exit_code == 0, result.output
@@ -42,7 +42,9 @@ def test_fit_strength_edges_me_json(tmp_path: Path) -> None:
     input_path = tmp_path / "edges.csv"
     input_path.write_text("source,target,weight\n0,1,3\n1,2,4\n0,2,3\n")
 
-    result = runner.invoke(app, ["fit", "strength-edges-me", str(input_path), "--json"])
+    result = runner.invoke(
+        app, ["fit", "strength-edges-poisson", str(input_path), "--json"]
+    )
 
     assert result.exit_code == 0, result.output
     assert '"lambda"' in result.output

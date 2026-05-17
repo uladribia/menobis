@@ -45,12 +45,12 @@ ignored. The in-memory representation is an `EdgeTable` with numpy arrays.
 import numpy as np
 from odme.data.io import read_edges
 from odme.analysis import directed_strengths
-from odme.models import fit_fixed_strength_me, sample_poisson
+from odme.models import fit_strength_poisson, sample_strength_poisson
 
 edges = read_edges("network.csv")
 s = directed_strengths(edges)
-fit = fit_fixed_strength_me(s.out, s.incoming)
-sample = sample_poisson(fit.x, fit.y, seed=42)
+fit = fit_strength_poisson(s.out, s.incoming)
+sample = sample_strength_poisson(fit.x, fit.y, seed=42)
 ```
 
 ## CLI

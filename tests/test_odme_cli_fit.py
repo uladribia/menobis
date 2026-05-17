@@ -16,7 +16,7 @@ def test_fit_strengths_to_file(tmp_path: Path) -> None:
     input_path.write_text("source,target,weight\n0,1,3\n1,2,4\n0,2,3\n")
 
     result = runner.invoke(
-        app, ["fit", "strengths", str(input_path), "-o", str(output_path)]
+        app, ["fit", "strength-poisson", str(input_path), "-o", str(output_path)]
     )
 
     assert result.exit_code == 0, result.output
@@ -30,7 +30,7 @@ def test_fit_strengths_json(tmp_path: Path) -> None:
     input_path = tmp_path / "edges.csv"
     input_path.write_text("source,target,weight\n0,1,3\n1,2,4\n0,2,3\n")
 
-    result = runner.invoke(app, ["fit", "strengths", str(input_path), "--json"])
+    result = runner.invoke(app, ["fit", "strength-poisson", str(input_path), "--json"])
 
     assert result.exit_code == 0, result.output
     assert '"x"' in result.output

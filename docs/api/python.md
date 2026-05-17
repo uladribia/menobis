@@ -11,9 +11,9 @@ description: Python API reference for ODME.
 | `EdgeTable` | `odme.data.frames` | Sparse edge table with `source`, `target`, `weight` numpy arrays |
 | `ProbabilityTable` | `odme.data.frames` | Sparse table with `source`, `target`, `probability` arrays |
 | `FitResult` | `odme.models.fitting` | Fitted Lagrange multipliers `x`, `y` |
-| `StrengthCostMEFit` | `odme.models.fitting` | Fitted strength-cost model with `x`, `y`, `gamma` |
-| `StrengthEdgesMEFit` | `odme.models.fitting` | Fitted strength-edges model with `x`, `y`, `lam` |
-| `StrengthDegreeMEFit` | `odme.models.fitting` | Fitted strength-degree model with `x`, `y`, `z`, `w` |
+| `StrengthCostFit` | `odme.models.fitting` | Fitted strength-cost model with `x`, `y`, `gamma` |
+| `StrengthEdgesFit` | `odme.models.fitting` | Fitted strength-edges model with `x`, `y`, `lam` |
+| `StrengthDegreeFit` | `odme.models.fitting` | Fitted strength-degree model with `x`, `y`, `z`, `w` |
 | `FilterResult` | `odme.filtering` | Filtering output with upper, lower, compatible, absent tables |
 | `FilteredEdges` | `odme.filtering` | Edge subset with p-values, expected weights, occupation |
 
@@ -38,36 +38,36 @@ description: Python API reference for ODME.
 
 | Function | Model | Constraints |
 |----------|-------|-------------|
-| `fit_fixed_strength_me` | Poisson | strengths |
-| `fit_fixed_degree_binary` | Bernoulli | degrees |
-| `fit_strength_edges_me` | ZIP | strengths + edge count |
-| `fit_strength_degree_me` | ZIP | strengths + degrees |
-| `fit_strength_cost_me` | Poisson with cost | strengths + spatial cost |
+| `fit_strength_poisson` | Poisson | strengths |
+| `fit_degree_bernoulli` | Bernoulli | degrees |
+| `fit_strength_edges_poisson` | ZIP | strengths + edge count |
+| `fit_strength_degree_poisson` | ZIP | strengths + degrees |
+| `fit_strength_cost_poisson` | Poisson with cost | strengths + spatial cost |
 
 ## Generation
 
 | Function | Model | Ensemble |
 |----------|-------|----------|
-| `sample_poisson` | fixed-strength Poisson | grand-canonical |
-| `sample_multinomial` | fixed-strength multinomial | canonical |
-| `sample_poisson_multinomial` | Poisson-total multinomial | mixed |
-| `sample_microcanonical` | stub-matching | microcanonical |
-| `sample_strength_edges_me` | strength-edges ZIP | grand-canonical |
-| `sample_strength_degree_me` | strength-degree ZIP | grand-canonical |
-| `sample_strength_cost_me` | strength-cost Poisson | grand-canonical |
-| `sample_fixed_degree_events_me` | degree-events ZIP | grand-canonical |
-| `sample_custom_pij_events_poisson` | custom sparse Poisson | grand-canonical |
-| `sample_custom_pij_events_multinomial` | custom sparse multinomial | canonical |
+| `sample_strength_poisson` | fixed-strength Poisson | grand-canonical |
+| `sample_strength_multinomial` | fixed-strength multinomial | canonical |
+| `sample_strength_poisson_multinomial` | Poisson-total multinomial | mixed |
+| `sample_strength_microcanonical` | stub-matching | microcanonical |
+| `sample_strength_edges_poisson` | strength-edges ZIP | grand-canonical |
+| `sample_strength_degree_poisson` | strength-degree ZIP | grand-canonical |
+| `sample_strength_cost_poisson` | strength-cost Poisson | grand-canonical |
+| `sample_degree_events_poisson` | degree-events ZIP | grand-canonical |
+| `sample_custom_poisson` | custom sparse Poisson | grand-canonical |
+| `sample_custom_multinomial` | custom sparse multinomial | canonical |
 
 ## Filtering
 
 | Function | Null model |
 |----------|------------|
-| `filter_fixed_strength_me` | Poisson, auto-fitted |
-| `filter_strength_cost_me` | Poisson with costs, pre-fitted |
-| `filter_strength_edges_me` | ZIP, pre-fitted |
-| `filter_strength_degree_me` | ZIP, pre-fitted |
-| `filter_degree_events_me` | ZIP, manual parameters |
-| `filter_custom_rates_poisson` | Poisson, user/partial rates |
+| `filter_strength_poisson` | Poisson, auto-fitted |
+| `filter_strength_cost_poisson` | Poisson with costs, pre-fitted |
+| `filter_strength_edges_poisson` | ZIP, pre-fitted |
+| `filter_strength_degree_poisson` | ZIP, pre-fitted |
+| `filter_degree_events_poisson` | ZIP, manual parameters |
+| `filter_custom_poisson` | Poisson, user/partial rates |
 
 See [Filtering API](filtering.md) for detailed parameter tables and examples.

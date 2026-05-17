@@ -5,7 +5,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from odme.analysis import directed_degrees, directed_strengths
-from odme.models import fit_strength_degree_me, sample_strength_degree_me
+from odme.models import fit_strength_degree_poisson, sample_strength_degree_poisson
 
 
 def _expectations(
@@ -38,7 +38,7 @@ def test_zip_fit_recovers_expected_strengths_and_degrees(values: list[float]) ->
     s_out = expected.sum(axis=1)
     s_in = expected.sum(axis=0)
 
-    fit = fit_strength_degree_me(s_out, s_in, k_out, k_in)
+    fit = fit_strength_degree_poisson(s_out, s_in, k_out, k_in)
     p_fit, expected_fit = _expectations(fit.x, fit.y, fit.z, fit.w)
 
     np.testing.assert_allclose(p_fit.sum(axis=1), k_out, atol=1e-6)
@@ -54,12 +54,12 @@ def test_zip_sample_is_reproducible_and_weighted_positive() -> None:
     z = np.array([0.7, 0.5, 0.8], dtype=np.float64)
     w = np.array([0.6, 0.9, 0.4], dtype=np.float64)
     p, expected = _expectations(x, y, z, w)
-    fit = fit_strength_degree_me(
+    fit = fit_strength_degree_poisson(
         expected.sum(axis=1), expected.sum(axis=0), p.sum(axis=1), p.sum(axis=0)
     )
 
-    first = sample_strength_degree_me(fit, seed=42)
-    second = sample_strength_degree_me(fit, seed=42)
+    first = sample_strength_degree_poisson(fit, seed=42)
+    second = sample_strength_degree_poisson(fit, seed=42)
 
     np.testing.assert_array_equal(first.source, second.source)
     np.testing.assert_array_equal(first.target, second.target)

@@ -13,12 +13,12 @@ import typer
 from odme.data.frames import EdgeTable, ProbabilityTable
 from odme.filtering import (
     FilterResult,
-    filter_custom_rates_poisson,
-    filter_fixed_strength_me,
-    filter_strength_edges_me,
+    filter_custom_poisson,
+    filter_strength_poisson,
+    filter_strength_edges_poisson,
 )
-from odme.models import StrengthEdgesMEFit, fit_fixed_strength_me, sample_poisson
-from odme.models.generation import sample_strength_edges_me
+from odme.models import StrengthEdgesFit, fit_strength_poisson, sample_strength_poisson
+from odme.models.generation import sample_strength_edges_poisson
 
 app = typer.Typer(help="Benchmark filtering calibration across alpha levels.")
 ALPHAS = [0.01, 0.05, 0.1]
@@ -34,16 +34,16 @@ def _complete_rates(n: int, rate: float) -> ProbabilityTable:
 
 def _make_strength_sample(n: int, seed: int) -> EdgeTable:
     strength = np.full(n, round(n * RATE), dtype=np.uint64)
-    fit = fit_fixed_strength_me(strength, strength)
-    return sample_poisson(fit.x, fit.y, seed=seed)
+    fit = fit_strength_poisson(strength, strength)
+    return sample_strength_poisson(fit.x, fit.y, seed=seed)
 
 
-def _make_strength_edges_fit(n: int) -> StrengthEdgesMEFit:
+def _make_strength_edges_fit(n: int) -> StrengthEdgesFit:
     occupation = 0.98
     x = np.full(n, np.sqrt(RATE), dtype=np.float64)
     y = np.full(n, np.sqrt(RATE), dtype=np.float64)
     lam = occupation / ((1.0 - occupation) * np.expm1(RATE))
-    return StrengthEdgesMEFit(
+    return StrengthEdgesFit(
         node=np.arange(n, dtype=np.uint64),
         x=x,
         y=y,
@@ -70,13 +70,13 @@ def main(
     for alpha in ALPHAS:
         for repeat in range(repeats):
             sample = _make_strength_sample(n, repeat)
-            filtered = filter_fixed_strength_me(sample, alpha=alpha)
+            filtered = filter_strength_poisson(sample, alpha=alpha)
             _append_row(rows, "fixed_strength_poisson", alpha, repeat, sample, filtered)
 
-            custom_sample = sample_poisson(
+            custom_sample = sample_strength_poisson(
                 np.full(n, np.sqrt(RATE)), np.full(n, np.sqrt(RATE)), seed=repeat
             )
-            custom_filtered = filter_custom_rates_poisson(
+            custom_filtered = filter_custom_poisson(
                 custom_sample, custom_rates, alpha=alpha
             )
             _append_row(
@@ -88,8 +88,8 @@ def main(
                 custom_filtered,
             )
 
-            zip_sample = sample_strength_edges_me(zip_fit, seed=repeat)
-            zip_filtered = filter_strength_edges_me(zip_sample, zip_fit, alpha=alpha)
+            zip_sample = sample_strength_edges_poisson(zip_fit, seed=repeat)
+            zip_filtered = filter_strength_edges_poisson(zip_sample, zip_fit, alpha=alpha)
             _append_row(
                 rows, "strength_edges_zip", alpha, repeat, zip_sample, zip_filtered
             )

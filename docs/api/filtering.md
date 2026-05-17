@@ -13,12 +13,12 @@ return a `FilterResult` with upper, lower, compatible, and absent-lower tables.
 
 | Function | Null model | Key parameters |
 |----------|------------|----------------|
-| `filter_fixed_strength_me` | Poisson, auto-fitted | edges |
-| `filter_strength_cost_me` | Poisson with costs | edges, fit, cost arrays |
-| `filter_strength_edges_me` | ZIP, pre-fitted | edges, fit |
-| `filter_strength_degree_me` | ZIP, pre-fitted | edges, fit |
-| `filter_degree_events_me` | ZIP, manual | edges, x, y, rate |
-| `filter_custom_rates_poisson` | Poisson, user/partial rates | edges, rates table |
+| `filter_strength_poisson` | Poisson, auto-fitted | edges |
+| `filter_strength_cost_poisson` | Poisson with costs | edges, fit, cost arrays |
+| `filter_strength_edges_poisson` | ZIP, pre-fitted | edges, fit |
+| `filter_strength_degree_poisson` | ZIP, pre-fitted | edges, fit |
+| `filter_degree_events_poisson` | ZIP, manual | edges, x, y, rate |
+| `filter_custom_poisson` | Poisson, user/partial rates | edges, rates table |
 
 ## Common options
 
@@ -59,11 +59,11 @@ class FilterResult:
 ## Example
 
 ```python
-from odme.filtering import filter_fixed_strength_me
+from odme.filtering import filter_strength_poisson
 from odme.data.io import read_edges
 
 edges = read_edges("network.csv")
-result = filter_fixed_strength_me(edges, alpha=0.05, detect_absent=True)
+result = filter_strength_poisson(edges, alpha=0.05, detect_absent=True)
 
 print(f"Upper: {len(result.upper.edges)} edges")
 print(f"Lower: {len(result.lower.edges)} edges")

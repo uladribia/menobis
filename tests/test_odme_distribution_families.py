@@ -7,15 +7,15 @@ import numpy as np
 from odme.data.frames import EdgeTable
 from odme.filtering import (
     FilterResult,
-    filter_binomial,
-    filter_geometric,
-    filter_neg_binomial,
+    filter_strength_binomial,
+    filter_strength_geometric,
+    filter_strength_neg_binomial,
 )
-from odme.models.fitting import fit_binomial_strength
+from odme.models.fitting import fit_strength_binomial
 from odme.models.generation import (
-    sample_binomial,
-    sample_geometric,
-    sample_neg_binomial,
+    sample_strength_binomial,
+    sample_strength_geometric,
+    sample_strength_neg_binomial,
 )
 
 
@@ -43,8 +43,8 @@ class TestGeometricGeneration:
         """Seeded geometric sampling is reproducible."""
         x = np.array([0.3, 0.4, 0.2])
         y = np.array([0.25, 0.35, 0.3])
-        a = sample_geometric(x, y, seed=42)
-        b = sample_geometric(x, y, seed=42)
+        a = sample_strength_geometric(x, y, seed=42)
+        b = sample_strength_geometric(x, y, seed=42)
         np.testing.assert_array_equal(a.source, b.source)
         np.testing.assert_array_equal(a.weight, b.weight)
 
@@ -52,7 +52,7 @@ class TestGeometricGeneration:
         """All geometric weights are non-negative."""
         x = np.array([0.3, 0.4, 0.2])
         y = np.array([0.25, 0.35, 0.3])
-        edges = sample_geometric(x, y, seed=0)
+        edges = sample_strength_geometric(x, y, seed=0)
         assert np.all(edges.weight >= 0)
 
 
@@ -63,8 +63,8 @@ class TestBinomialGeneration:
         """Seeded binomial sampling is reproducible."""
         x = np.array([0.5, 0.6])
         y = np.array([0.4, 0.5])
-        a = sample_binomial(x, y, layers=10, seed=42)
-        b = sample_binomial(x, y, layers=10, seed=42)
+        a = sample_strength_binomial(x, y, layers=10, seed=42)
+        b = sample_strength_binomial(x, y, layers=10, seed=42)
         np.testing.assert_array_equal(a.source, b.source)
         np.testing.assert_array_equal(a.weight, b.weight)
 
@@ -72,7 +72,7 @@ class TestBinomialGeneration:
         """Binomial weights cannot exceed M layers."""
         x = np.array([0.9, 0.8])
         y = np.array([0.9, 0.8])
-        edges = sample_binomial(x, y, layers=5, seed=0)
+        edges = sample_strength_binomial(x, y, layers=5, seed=0)
         assert np.all(edges.weight <= 5)
 
 
@@ -83,8 +83,8 @@ class TestNegBinomialGeneration:
         """Seeded negative binomial sampling is reproducible."""
         x = np.array([0.3, 0.4])
         y = np.array([0.25, 0.35])
-        a = sample_neg_binomial(x, y, layers=3, seed=42)
-        b = sample_neg_binomial(x, y, layers=3, seed=42)
+        a = sample_strength_neg_binomial(x, y, layers=3, seed=42)
+        b = sample_strength_neg_binomial(x, y, layers=3, seed=42)
         np.testing.assert_array_equal(a.source, b.source)
         np.testing.assert_array_equal(a.weight, b.weight)
 
@@ -92,7 +92,7 @@ class TestNegBinomialGeneration:
         """All NB weights are non-negative."""
         x = np.array([0.3, 0.4])
         y = np.array([0.25, 0.35])
-        edges = sample_neg_binomial(x, y, layers=3, seed=0)
+        edges = sample_strength_neg_binomial(x, y, layers=3, seed=0)
         assert np.all(edges.weight >= 0)
 
 
@@ -103,7 +103,7 @@ class TestBinomialFitting:
         """Binomial fitting converges on a small graph."""
         s_out = np.array([10.0, 15.0, 5.0])
         s_in = np.array([8.0, 12.0, 10.0])
-        fit = fit_binomial_strength(
+        fit = fit_strength_binomial(
             s_out, s_in, layers=5, tolerance=0.01, max_iterations=50000
         )
         assert fit.converged
@@ -112,7 +112,7 @@ class TestBinomialFitting:
         """Fitted binomial model approximately recovers strength constraints."""
         s_out = np.array([20.0, 30.0, 10.0, 40.0])
         s_in = np.array([25.0, 25.0, 20.0, 30.0])
-        fit = fit_binomial_strength(s_out, s_in, layers=10, max_iterations=50000)
+        fit = fit_strength_binomial(s_out, s_in, layers=10, max_iterations=50000)
         n = len(s_out)
         pred_out = np.zeros(n)
         pred_in = np.zeros(n)
@@ -134,7 +134,7 @@ class TestGeometricFiltering:
         edges = _small_edges()
         x = np.array([0.3, 0.4, 0.2])
         y = np.array([0.25, 0.35, 0.3])
-        result = filter_geometric(edges, x, y, alpha=0.05)
+        result = filter_strength_geometric(edges, x, y, alpha=0.05)
         _assert_filter_partitions(result, len(edges))
 
 
@@ -146,7 +146,7 @@ class TestBinomialFiltering:
         edges = _small_edges()
         x = np.array([0.5, 0.6, 0.4])
         y = np.array([0.4, 0.5, 0.5])
-        result = filter_binomial(edges, x, y, layers=10, alpha=0.05)
+        result = filter_strength_binomial(edges, x, y, layers=10, alpha=0.05)
         _assert_filter_partitions(result, len(edges))
 
     def test_pvalues_in_range(self) -> None:
@@ -154,7 +154,7 @@ class TestBinomialFiltering:
         edges = _small_edges()
         x = np.array([0.5, 0.6, 0.4])
         y = np.array([0.4, 0.5, 0.5])
-        result = filter_binomial(edges, x, y, layers=10, alpha=0.05)
+        result = filter_strength_binomial(edges, x, y, layers=10, alpha=0.05)
         for group in [result.upper, result.lower, result.compatible]:
             assert np.all(group.upper_pvalue >= 0.0)
             assert np.all(group.upper_pvalue <= 1.0)
@@ -168,5 +168,5 @@ class TestNegBinomialFiltering:
         edges = _small_edges()
         x = np.array([0.3, 0.4, 0.2])
         y = np.array([0.25, 0.35, 0.3])
-        result = filter_neg_binomial(edges, x, y, layers=3, alpha=0.05)
+        result = filter_strength_neg_binomial(edges, x, y, layers=3, alpha=0.05)
         _assert_filter_partitions(result, len(edges))

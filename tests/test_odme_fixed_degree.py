@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from odme.models import fit_fixed_degree_binary
+from odme.models import fit_degree_bernoulli
 
 
 def _probability_matrix(
@@ -20,7 +20,7 @@ def test_fixed_degree_recovers_expected_degrees() -> None:
     k_out = np.array([0.8, 1.2, 1.0], dtype=np.float64)
     k_in = np.array([1.1, 0.9, 1.0], dtype=np.float64)
 
-    result = fit_fixed_degree_binary(k_out, k_in)
+    result = fit_degree_bernoulli(k_out, k_in)
     p = _probability_matrix(result.x, result.y, self_loops=True)
 
     np.testing.assert_allclose(p.sum(axis=1), k_out, atol=1e-6)
@@ -31,7 +31,7 @@ def test_fixed_degree_no_self_loops_recovers_expected_degrees() -> None:
     k_out = np.array([0.8, 1.1, 0.9], dtype=np.float64)
     k_in = np.array([0.9, 0.8, 1.1], dtype=np.float64)
 
-    result = fit_fixed_degree_binary(k_out, k_in, self_loops=False)
+    result = fit_degree_bernoulli(k_out, k_in, self_loops=False)
     p = _probability_matrix(result.x, result.y, self_loops=False)
 
     np.testing.assert_allclose(p.sum(axis=1), k_out, atol=1e-6)
@@ -41,4 +41,4 @@ def test_fixed_degree_no_self_loops_recovers_expected_degrees() -> None:
 
 def test_fixed_degree_rejects_unbalanced_sequences() -> None:
     with pytest.raises(ValueError, match="balanced"):
-        fit_fixed_degree_binary(np.array([1.0]), np.array([0.5]))
+        fit_degree_bernoulli(np.array([1.0]), np.array([0.5]))

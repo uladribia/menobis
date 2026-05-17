@@ -52,11 +52,11 @@ Any negative free constraint is infeasible and rejected.
 
 | ODME model | Function | Free constraints |
 |------------|----------|------------------|
-| Fixed-strength ME | `fit_partial_strength_me` | $s^{free}$ |
-| Degree-events ME | `fit_partial_degree_me` | $k^{free}$ |
-| Strength-degree ME | `fit_partial_strength_degree_me` | $s^{free}$, $k^{free}$ |
-| Strength-edges ME | `fit_partial_strength_edges_me` | $s^{free}$, $E^{free}$ |
-| Strength-cost ME | `fit_partial_strength_cost_me` | $s^{free}$, $C^{free}$ |
+| Fixed-strength ME | `fit_partial_strength_poisson` | $s^{free}$ |
+| Degree-events ME | `fit_partial_degree_poisson` | $k^{free}$ |
+| Strength-degree ME | `fit_partial_strength_degree_poisson` | $s^{free}$, $k^{free}$ |
+| Strength-edges ME | `fit_partial_strength_edges_poisson` | $s^{free}$, $E^{free}$ |
+| Strength-cost ME | `fit_partial_strength_cost_poisson` | $s^{free}$, $C^{free}$ |
 
 ## Self-loops
 
@@ -86,10 +86,10 @@ are fitted on free pairs.
 probabilities. Convert before custom-probability sampling:
 
 ```python
-from odme.models import sample_custom_pij_events_poisson
+from odme.models import sample_custom_poisson
 
 prob = result.as_probability_table()
-sample = sample_custom_pij_events_poisson(prob, total_events=T, seed=42)
+sample = sample_custom_poisson(prob, total_events=T, seed=42)
 ```
 
 Custom-probability samplers normalize their input rates internally.

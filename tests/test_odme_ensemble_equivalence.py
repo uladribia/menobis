@@ -18,10 +18,10 @@ from odme.analysis.graph_algorithms import clustering_coefficient
 from odme.analysis.stats import compute_all_stats
 from odme.data.frames import EdgeTable
 from odme.models import (
-    fit_fixed_strength_me,
-    sample_microcanonical,
-    sample_multinomial,
-    sample_poisson,
+    fit_strength_poisson,
+    sample_strength_microcanonical,
+    sample_strength_multinomial,
+    sample_strength_poisson,
 )
 
 FIGURES_DIR = Path(__file__).resolve().parent.parent / "docs" / "figures"
@@ -95,21 +95,23 @@ def _run_convergence() -> dict[str, dict[int, tuple[np.ndarray, np.ndarray]]]:
 
     for total in T_VALUES:
         s_out, s_in = _balanced_integer_strengths(P_OUT, P_IN, total)
-        fit = fit_fixed_strength_me(s_out, s_in)
+        fit = fit_strength_poisson(s_out, s_in)
 
         _s_out, _s_in, _fit, _total = s_out, s_in, fit, total
         results["microcanonical"][total] = _ensemble_stats(
-            lambda seed, so=_s_out, si=_s_in: sample_microcanonical(so, si, seed=seed),
+            lambda seed, so=_s_out, si=_s_in: sample_strength_microcanonical(
+                so, si, seed=seed
+            ),
             REPETITIONS,
         )
         results["canonical"][total] = _ensemble_stats(
-            lambda seed, f=_fit, t=_total: sample_multinomial(
+            lambda seed, f=_fit, t=_total: sample_strength_multinomial(
                 f.x, f.y, total_events=t, seed=seed
             ),
             REPETITIONS,
         )
         results["grand_canonical"][total] = _ensemble_stats(
-            lambda seed, f=_fit: sample_poisson(f.x, f.y, seed=seed),
+            lambda seed, f=_fit: sample_strength_poisson(f.x, f.y, seed=seed),
             REPETITIONS,
         )
 
@@ -121,7 +123,7 @@ def _collect_per_node_stats(
 ) -> dict[str, dict[str, np.ndarray]]:
     """Collect per-node ensemble-averaged Y2_out and s_nn_out for each ensemble."""
     s_out, s_in = _balanced_integer_strengths(P_OUT, P_IN, total)
-    fit = fit_fixed_strength_me(s_out, s_in)
+    fit = fit_strength_poisson(s_out, s_in)
 
     ensemble_y2: dict[str, list[np.ndarray]] = {
         "microcanonical": [],
@@ -135,13 +137,15 @@ def _collect_per_node_stats(
     }
 
     samplers: dict[str, Callable[[int], EdgeTable]] = {
-        "microcanonical": lambda seed, so=s_out, si=s_in: sample_microcanonical(
-            so, si, seed=seed
+        "microcanonical": lambda seed, so=s_out, si=s_in: (
+            sample_strength_microcanonical(so, si, seed=seed)
         ),
-        "canonical": lambda seed, f=fit, t=total: sample_multinomial(
+        "canonical": lambda seed, f=fit, t=total: sample_strength_multinomial(
             f.x, f.y, total_events=t, seed=seed
         ),
-        "grand_canonical": lambda seed, f=fit: sample_poisson(f.x, f.y, seed=seed),
+        "grand_canonical": lambda seed, f=fit: sample_strength_poisson(
+            f.x, f.y, seed=seed
+        ),
     }
 
     for name, sampler in samplers.items():
@@ -355,7 +359,7 @@ def test_microcanonical_preserves_exact_strengths() -> None:
     for total in [100, 1000]:
         s_out, s_in = _balanced_integer_strengths(P_OUT, P_IN, total)
         for seed in range(50):
-            sample = sample_microcanonical(s_out, s_in, seed=seed)
+            sample = sample_strength_microcanonical(s_out, s_in, seed=seed)
             actual_s = directed_strengths(sample)
             np.testing.assert_array_equal(actual_s.out, s_out)
             np.testing.assert_array_equal(actual_s.incoming, s_in)
@@ -366,7 +370,9 @@ def test_canonical_preserves_exact_total() -> None:
     """Canonical multinomial always preserves exact T."""
     for total in [100, 1000]:
         s_out, s_in = _balanced_integer_strengths(P_OUT, P_IN, total)
-        fit = fit_fixed_strength_me(s_out, s_in)
+        fit = fit_strength_poisson(s_out, s_in)
         for seed in range(50):
-            sample = sample_multinomial(fit.x, fit.y, total_events=total, seed=seed)
+            sample = sample_strength_multinomial(
+                fit.x, fit.y, total_events=total, seed=seed
+            )
             assert sample.total_events == total

@@ -15,9 +15,9 @@ relative to $T$ as total events grow.
 
 | Sampler family | Function | Exactly fixed | Fluctuates |
 |----------------|----------|---------------|------------|
-| Grand-canonical | `sample_poisson` | nothing | $s^{out}$, $s^{in}$, $T$ |
-| Canonical | `sample_multinomial` | $T$ | $s^{out}$, $s^{in}$ |
-| Stub-matched exact strength | `sample_microcanonical` | $s^{out}$, $s^{in}$, $T$ | edge weights only |
+| Grand-canonical | `sample_strength_poisson` | nothing | $s^{out}$, $s^{in}$, $T$ |
+| Canonical | `sample_strength_multinomial` | $T$ | $s^{out}$, $s^{in}$ |
+| Stub-matched exact strength | `sample_strength_microcanonical` | $s^{out}$, $s^{in}$, $T$ | edge weights only |
 
 All three have the same target marginal expectation:
 

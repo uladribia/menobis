@@ -137,7 +137,7 @@ fn expected_edges_strength_edges(x: &[f64], y: &[f64], lam: f64, self_loops: boo
 
 /// Fit exact grand-canonical ME fixed-strength-and-edge-count ZIP constraints.
 #[must_use]
-pub fn balance_strength_edges_me(
+pub fn balance_strength_edges_poisson(
     strength_out: &[f64],
     strength_in: &[f64],
     target_edges: f64,
@@ -219,7 +219,7 @@ pub fn balance_strength_edges_me(
 /// The model is the thesis case 4 ME equation:
 /// E[t_ij] = z_i w_j x_i y_j exp(x_i y_j) / (1 + z_i w_j(exp(x_i y_j)-1)).
 #[must_use]
-pub fn balance_strength_degree_me(
+pub fn balance_strength_degree_poisson(
     strength_out: &[f64],
     strength_in: &[f64],
     degree_out: &[f64],
@@ -416,7 +416,7 @@ pub fn balance_strength_degree_me(
 ///
 /// Pairs where ``mask[i * n + j]`` is true are skipped in summations.
 #[must_use]
-pub fn balance_masked_binary_degrees(
+pub fn balance_masked_degree_bernoulli(
     degree_out: &[f64],
     degree_in: &[f64],
     mask: &[bool],
@@ -519,7 +519,7 @@ pub fn balance_masked_binary_degrees(
 
 /// Masked fitting for exact ME fixed-strength-and-degree.
 #[must_use]
-pub fn balance_masked_strength_degree_me(
+pub fn balance_masked_strength_degree_poisson(
     strength_out: &[f64],
     strength_in: &[f64],
     degree_out: &[f64],
@@ -707,7 +707,7 @@ pub fn balance_masked_strength_degree_me(
 /// Solves: k_out_i = sum_j p_ij and k_in_j = sum_i p_ij with
 /// p_ij = x_i * y_j / (1 + x_i * y_j).
 #[must_use]
-pub fn balance_binary_degrees(
+pub fn balance_degree_bernoulli(
     degree_out: &[f64],
     degree_in: &[f64],
     self_loops: bool,
@@ -950,7 +950,7 @@ pub fn balance_weighted_factors(
 /// Pairs where `mask[i * n + j]` is true are skipped in summations.
 /// This supports partial-constraint fitting where some p_ij are known.
 #[must_use]
-pub fn balance_masked_strength(
+pub fn balance_masked_strength_poisson(
     strength_out: &[f64],
     strength_in: &[f64],
     mask: &[bool],
@@ -1024,7 +1024,7 @@ pub fn balance_masked_strength(
 ///
 /// Solves: s_out_i = sum_{j != i} x_i * y_j  and  s_in_j = sum_{i != j} x_i * y_j
 #[must_use]
-pub fn balance_no_self_loops(
+pub fn balance_strength_poisson(
     s_out: &[f64],
     s_in: &[f64],
     tolerance: f64,
@@ -1101,7 +1101,7 @@ pub fn balance_no_self_loops(
 /// Solves: s_out_i = sum_j M * x_i*y_j / (1 + x_i*y_j)
 #[must_use]
 #[allow(clippy::needless_range_loop)]
-pub fn balance_binomial_strength(
+pub fn balance_strength_binomial(
     strength_out: &[f64],
     strength_in: &[f64],
     layers: u32,
@@ -1194,7 +1194,7 @@ pub fn balance_binomial_strength(
 /// Masked binomial(M) IPF for partial-constraint fitting.
 #[must_use]
 #[allow(clippy::needless_range_loop)]
-pub fn balance_masked_binomial_strength(
+pub fn balance_masked_strength_binomial(
     strength_out: &[f64],
     strength_in: &[f64],
     mask: &[bool],
@@ -1286,13 +1286,13 @@ pub fn balance_masked_binomial_strength(
 
 #[cfg(test)]
 mod tests {
-    use super::{balance_binary_degrees, balance_no_self_loops, binary_probability};
+    use super::{balance_degree_bernoulli, balance_strength_poisson, binary_probability};
 
     #[test]
     fn recovers_binary_degrees() {
         let k_out = vec![0.8, 1.2, 1.0];
         let k_in = vec![1.1, 0.9, 1.0];
-        let result = balance_binary_degrees(&k_out, &k_in, true, 1e-12, 50000);
+        let result = balance_degree_bernoulli(&k_out, &k_in, true, 1e-12, 50000);
 
         assert!(result.converged);
         for (i, &expected) in k_out.iter().enumerate() {
@@ -1314,7 +1314,7 @@ mod tests {
         let s_out = vec![10.0, 20.0, 30.0];
         let s_in = vec![15.0, 25.0, 20.0];
 
-        let result = balance_no_self_loops(&s_out, &s_in, 1e-10, 50000);
+        let result = balance_strength_poisson(&s_out, &s_in, 1e-10, 50000);
 
         assert!(result.converged);
         // Check: sum_{j!=i} x_i * y_j ≈ s_out_i

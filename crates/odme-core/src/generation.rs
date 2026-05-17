@@ -2,9 +2,9 @@
 
 use crate::distribution::{zero_truncated_poisson_mean, PairDistribution, WeightFamily};
 use crate::pairs::{
-    chunk_seed, row_ranges, CandidateSupport, DegreeEventsZipProvider, FixedStrengthProvider,
+    chunk_seed, row_ranges, CandidateSupport, DegreeEventsPoissonProvider, FixedStrengthProvider,
     NormalizedSparsePoissonProvider, PairDistributionProvider, StrengthCostPoissonProvider,
-    StrengthDegreeZipProvider, StrengthEdgesZipProvider, PARALLEL_PAIR_THRESHOLD,
+    StrengthDegreePoissonProvider, StrengthEdgesPoissonProvider, PARALLEL_PAIR_THRESHOLD,
     SPARSE_CHUNK_SIZE,
 };
 use rand::rngs::StdRng;
@@ -211,7 +211,7 @@ where
 
 /// Sample custom p_ij grand-canonical Poisson graph with E[t_ij] = T p_ij.
 #[must_use]
-pub fn sample_custom_pij_events_poisson(
+pub fn sample_custom_poisson(
     sources: &[u64],
     targets: &[u64],
     probabilities: &[f64],
@@ -236,7 +236,7 @@ pub fn sample_custom_pij_events_poisson(
 
 /// Sample custom p_ij canonical multinomial graph with fixed T.
 #[must_use]
-pub fn sample_custom_pij_events_multinomial(
+pub fn sample_custom_multinomial(
     sources: &[u64],
     targets: &[u64],
     probabilities: &[f64],
@@ -258,7 +258,11 @@ pub fn sample_custom_pij_events_multinomial(
 /// allowed. Without self-loops the rejection/constraint introduces bias that
 /// requires more sophisticated algorithms (e.g., MCMC) to correct.
 #[must_use]
-pub fn sample_microcanonical(strength_out: &[u64], strength_in: &[u64], seed: u64) -> SampledEdges {
+pub fn sample_strength_microcanonical(
+    strength_out: &[u64],
+    strength_in: &[u64],
+    seed: u64,
+) -> SampledEdges {
     let n = strength_out.len();
     let total_out: u64 = strength_out.iter().sum();
     let total_in: u64 = strength_in.iter().sum();
@@ -309,7 +313,7 @@ pub fn sample_microcanonical(strength_out: &[u64], strength_in: &[u64], seed: u6
 
 /// Sample from independent Poisson(x_i * y_j) for all (i, j).
 #[must_use]
-pub fn sample_poisson(x: &[f64], y: &[f64], self_loops: bool, seed: u64) -> SampledEdges {
+pub fn sample_strength_poisson(x: &[f64], y: &[f64], self_loops: bool, seed: u64) -> SampledEdges {
     sample_provider(
         &FixedStrengthProvider {
             x,
@@ -323,7 +327,12 @@ pub fn sample_poisson(x: &[f64], y: &[f64], self_loops: bool, seed: u64) -> Samp
 
 /// Sample from independent Geometric(1 - x_i*y_j) for all (i, j).
 #[must_use]
-pub fn sample_geometric(x: &[f64], y: &[f64], self_loops: bool, seed: u64) -> SampledEdges {
+pub fn sample_strength_geometric(
+    x: &[f64],
+    y: &[f64],
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
     sample_provider(
         &FixedStrengthProvider {
             x,
@@ -337,7 +346,7 @@ pub fn sample_geometric(x: &[f64], y: &[f64], self_loops: bool, seed: u64) -> Sa
 
 /// Sample from independent Binomial(M, x_i*y_j/(1+x_i*y_j)) for all (i, j).
 #[must_use]
-pub fn sample_binomial(
+pub fn sample_strength_binomial(
     x: &[f64],
     y: &[f64],
     layers: u32,
@@ -357,7 +366,7 @@ pub fn sample_binomial(
 
 /// Sample from independent NegBinomial(M, 1-x_i*y_j) for all (i, j).
 #[must_use]
-pub fn sample_neg_binomial(
+pub fn sample_strength_neg_binomial(
     x: &[f64],
     y: &[f64],
     layers: u32,
@@ -380,7 +389,7 @@ pub fn sample_neg_binomial(
 /// Cost entries are read sparsely. Missing pairs have d_ij = 0, matching the
 /// fitting API's current semantics, and rates are generated on the fly.
 #[must_use]
-pub fn sample_strength_cost_me(
+pub fn sample_strength_cost_poisson(
     x: &[f64],
     y: &[f64],
     gamma: f64,
@@ -432,7 +441,7 @@ fn solve_zero_truncated_poisson_rate(mean: f64) -> f64 {
 
 /// Sample original fixed-degree ME weighted model.
 #[must_use]
-pub fn sample_fixed_degree_events_me(
+pub fn sample_degree_events_poisson(
     x: &[f64],
     y: &[f64],
     total_events: u64,
@@ -456,7 +465,7 @@ pub fn sample_fixed_degree_events_me(
     };
     let rate = solve_zero_truncated_poisson_rate(mean_existing_weight.max(1.0));
     sample_provider(
-        &DegreeEventsZipProvider {
+        &DegreeEventsPoissonProvider {
             x,
             y,
             positive_weight_rate: rate,
@@ -468,7 +477,7 @@ pub fn sample_fixed_degree_events_me(
 
 /// Sample from the exact ME fixed-strength-degree ZIP model.
 #[must_use]
-pub fn sample_strength_degree_me(
+pub fn sample_strength_degree_poisson(
     x: &[f64],
     y: &[f64],
     z: &[f64],
@@ -477,7 +486,7 @@ pub fn sample_strength_degree_me(
     seed: u64,
 ) -> SampledEdges {
     sample_provider(
-        &StrengthDegreeZipProvider {
+        &StrengthDegreePoissonProvider {
             x,
             y,
             z,
@@ -490,7 +499,7 @@ pub fn sample_strength_degree_me(
 
 /// Poisson-total multinomial sampling with node-factorized probabilities.
 #[must_use]
-pub fn sample_poisson_multinomial(
+pub fn sample_strength_poisson_multinomial(
     x: &[f64],
     y: &[f64],
     self_loops: bool,
@@ -513,12 +522,12 @@ pub fn sample_poisson_multinomial(
         Ok(dist) => dist.sample(&mut rng) as u64,
         Err(_) => 0,
     };
-    sample_multinomial(x, y, total_events, self_loops, seed.wrapping_add(1))
+    sample_strength_multinomial(x, y, total_events, self_loops, seed.wrapping_add(1))
 }
 
 /// Sample exact ME fixed-strength-and-edge-count ZIP model.
 #[must_use]
-pub fn sample_strength_edges_me(
+pub fn sample_strength_edges_poisson(
     x: &[f64],
     y: &[f64],
     lam: f64,
@@ -526,7 +535,7 @@ pub fn sample_strength_edges_me(
     seed: u64,
 ) -> SampledEdges {
     sample_provider(
-        &StrengthEdgesZipProvider {
+        &StrengthEdgesPoissonProvider {
             x,
             y,
             lambda: lam,
@@ -538,7 +547,7 @@ pub fn sample_strength_edges_me(
 
 /// Multinomial sampling with node-factorized probabilities.
 #[must_use]
-pub fn sample_multinomial(
+pub fn sample_strength_multinomial(
     x: &[f64],
     y: &[f64],
     total_events: u64,
@@ -753,16 +762,16 @@ fn multinomial_sample(rates: &[f64], total: u64, rng: &mut StdRng) -> Vec<u64> {
 #[cfg(test)]
 mod tests {
     use super::{
-        sample_microcanonical, sample_multinomial, sample_poisson, sample_strength_cost_me,
-        sample_strength_degree_me,
+        sample_strength_cost_poisson, sample_strength_degree_poisson,
+        sample_strength_microcanonical, sample_strength_multinomial, sample_strength_poisson,
     };
 
     #[test]
     fn poisson_is_reproducible() {
         let x = vec![3.0, 5.0];
         let y = vec![4.0, 6.0];
-        let a = sample_poisson(&x, &y, true, 42);
-        let b = sample_poisson(&x, &y, true, 42);
+        let a = sample_strength_poisson(&x, &y, true, 42);
+        let b = sample_strength_poisson(&x, &y, true, 42);
         assert_eq!(a.sources, b.sources);
         assert_eq!(a.targets, b.targets);
         assert_eq!(a.weights, b.weights);
@@ -773,7 +782,7 @@ mod tests {
         let x = vec![3.0, 5.0, 2.0];
         let y = vec![4.0, 6.0, 1.0];
         let total = 1000;
-        let edges = sample_multinomial(&x, &y, total, true, 42);
+        let edges = sample_strength_multinomial(&x, &y, total, true, 42);
         let sum: u64 = edges.weights.iter().sum();
         assert_eq!(sum, total);
     }
@@ -784,8 +793,8 @@ mod tests {
         let dy = vec![1.5, 0.5];
         let ex = vec![10.0, 20.0];
         let ey = vec![30.0, 40.0];
-        let a = sample_strength_degree_me(&dx, &dy, &ex, &ey, true, 42);
-        let b = sample_strength_degree_me(&dx, &dy, &ex, &ey, true, 42);
+        let a = sample_strength_degree_poisson(&dx, &dy, &ex, &ey, true, 42);
+        let b = sample_strength_degree_poisson(&dx, &dy, &ex, &ey, true, 42);
         assert_eq!(a.sources, b.sources);
         assert_eq!(a.targets, b.targets);
         assert_eq!(a.weights, b.weights);
@@ -796,7 +805,7 @@ mod tests {
     fn microcanonical_preserves_exact_strengths() {
         let s_out = vec![10, 20, 30];
         let s_in = vec![15, 25, 20];
-        let edges = sample_microcanonical(&s_out, &s_in, 42);
+        let edges = sample_strength_microcanonical(&s_out, &s_in, 42);
         let total: u64 = edges.weights.iter().sum();
         assert_eq!(total, 60);
         let mut actual_out = vec![0u64; 3];
@@ -818,7 +827,7 @@ mod tests {
     fn no_self_loops() {
         let x = vec![10.0, 10.0, 10.0];
         let y = vec![10.0, 10.0, 10.0];
-        let edges = sample_poisson(&x, &y, false, 42);
+        let edges = sample_strength_poisson(&x, &y, false, 42);
         for (s, t) in edges.sources.iter().zip(edges.targets.iter()) {
             assert_ne!(s, t, "self-loop found: {s} -> {t}");
         }
@@ -839,7 +848,7 @@ mod tests {
     fn degree_events_with_unit_positive_weight_mean_does_not_hang() {
         let x = vec![0.5; 100];
         let y = vec![0.5; 100];
-        let edges = super::sample_fixed_degree_events_me(&x, &y, 2000, true, 42);
+        let edges = super::sample_degree_events_poisson(&x, &y, 2000, true, 42);
         assert!(edges.weights.iter().all(|&w| w >= 1));
     }
 
@@ -853,7 +862,7 @@ mod tests {
             targets: &[],
             values: &[],
         };
-        let edges = sample_strength_cost_me(&x, &y, 0.1, &costs, true, 7);
+        let edges = sample_strength_cost_poisson(&x, &y, 0.1, &costs, true, 7);
         assert_eq!(edges.sources.len(), edges.targets.len());
         assert_eq!(edges.sources.len(), edges.weights.len());
     }

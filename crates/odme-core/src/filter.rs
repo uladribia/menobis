@@ -2,9 +2,9 @@
 
 use crate::distribution::{PairDistribution, WeightFamily};
 use crate::pairs::{
-    row_ranges, CandidateSupport, DegreeEventsZipProvider, FixedStrengthProvider,
+    row_ranges, CandidateSupport, DegreeEventsPoissonProvider, FixedStrengthProvider,
     PairDistributionProvider, SparsePoissonRateMapProvider, SparsePoissonRateProvider,
-    StrengthCostPoissonProvider, StrengthDegreeZipProvider, StrengthEdgesZipProvider,
+    StrengthCostPoissonProvider, StrengthDegreePoissonProvider, StrengthEdgesPoissonProvider,
     PARALLEL_PAIR_THRESHOLD, SPARSE_CHUNK_SIZE,
 };
 use rayon::prelude::*;
@@ -260,7 +260,7 @@ fn push_absent_if_significant(
 }
 
 #[must_use]
-pub fn filter_fixed_strength_poisson(
+pub fn filter_strength_poisson(
     x: &[f64],
     y: &[f64],
     sources: &[u64],
@@ -282,7 +282,7 @@ pub fn filter_fixed_strength_poisson(
 
 #[allow(clippy::too_many_arguments)]
 #[must_use]
-pub fn absent_fixed_strength_poisson(
+pub fn absent_strength_poisson(
     x: &[f64],
     y: &[f64],
     sources: &[u64],
@@ -312,7 +312,7 @@ pub fn absent_fixed_strength_poisson(
 }
 
 #[must_use]
-pub fn filter_custom_poisson_rates(
+pub fn filter_custom_poisson(
     rate_sources: &[u64],
     rate_targets: &[u64],
     rates: &[f64],
@@ -340,7 +340,7 @@ pub fn filter_custom_poisson_rates(
 
 #[allow(clippy::too_many_arguments)]
 #[must_use]
-pub fn absent_custom_poisson_rates(
+pub fn absent_custom_poisson(
     rate_sources: &[u64],
     rate_targets: &[u64],
     rates: &[f64],
@@ -369,7 +369,7 @@ pub fn absent_custom_poisson_rates(
 }
 
 #[must_use]
-pub fn filter_strength_edges_zip(
+pub fn filter_strength_edges_poisson(
     x: &[f64],
     y: &[f64],
     lam: f64,
@@ -381,7 +381,7 @@ pub fn filter_strength_edges_zip(
         sources,
         targets,
         weights,
-        &StrengthEdgesZipProvider {
+        &StrengthEdgesPoissonProvider {
             x,
             y,
             lambda: lam,
@@ -392,7 +392,7 @@ pub fn filter_strength_edges_zip(
 
 #[allow(clippy::too_many_arguments)]
 #[must_use]
-pub fn absent_strength_edges_zip(
+pub fn absent_strength_edges_poisson(
     x: &[f64],
     y: &[f64],
     lam: f64,
@@ -405,7 +405,7 @@ pub fn absent_strength_edges_zip(
     max_absent: Option<usize>,
 ) -> AbsentFilterResult {
     detect_absent_provider(
-        &StrengthEdgesZipProvider {
+        &StrengthEdgesPoissonProvider {
             x,
             y,
             lambda: lam,
@@ -488,7 +488,7 @@ pub fn absent_strength_cost_poisson(
 }
 
 #[must_use]
-pub fn filter_strength_degree_zip(
+pub fn filter_strength_degree_poisson(
     x: &[f64],
     y: &[f64],
     z: &[f64],
@@ -501,7 +501,7 @@ pub fn filter_strength_degree_zip(
         sources,
         targets,
         weights,
-        &StrengthDegreeZipProvider {
+        &StrengthDegreePoissonProvider {
             x,
             y,
             z,
@@ -513,7 +513,7 @@ pub fn filter_strength_degree_zip(
 
 #[allow(clippy::too_many_arguments)]
 #[must_use]
-pub fn absent_strength_degree_zip(
+pub fn absent_strength_degree_poisson(
     x: &[f64],
     y: &[f64],
     z: &[f64],
@@ -527,7 +527,7 @@ pub fn absent_strength_degree_zip(
     max_absent: Option<usize>,
 ) -> AbsentFilterResult {
     detect_absent_provider(
-        &StrengthDegreeZipProvider {
+        &StrengthDegreePoissonProvider {
             x,
             y,
             z,
@@ -546,7 +546,7 @@ pub fn absent_strength_degree_zip(
 }
 
 #[must_use]
-pub fn filter_degree_events_zip(
+pub fn filter_degree_events_poisson(
     x: &[f64],
     y: &[f64],
     positive_weight_rate: f64,
@@ -558,7 +558,7 @@ pub fn filter_degree_events_zip(
         sources,
         targets,
         weights,
-        &DegreeEventsZipProvider {
+        &DegreeEventsPoissonProvider {
             x,
             y,
             positive_weight_rate,
@@ -569,7 +569,7 @@ pub fn filter_degree_events_zip(
 
 #[allow(clippy::too_many_arguments)]
 #[must_use]
-pub fn absent_degree_events_zip(
+pub fn absent_degree_events_poisson(
     x: &[f64],
     y: &[f64],
     positive_weight_rate: f64,
@@ -582,7 +582,7 @@ pub fn absent_degree_events_zip(
     max_absent: Option<usize>,
 ) -> AbsentFilterResult {
     detect_absent_provider(
-        &DegreeEventsZipProvider {
+        &DegreeEventsPoissonProvider {
             x,
             y,
             positive_weight_rate,
@@ -602,7 +602,7 @@ pub fn absent_degree_events_zip(
 // --- Geometric family ---
 
 #[must_use]
-pub fn filter_geometric(
+pub fn filter_strength_geometric(
     x: &[f64],
     y: &[f64],
     sources: &[u64],
@@ -624,7 +624,7 @@ pub fn filter_geometric(
 
 #[allow(clippy::too_many_arguments)]
 #[must_use]
-pub fn absent_geometric(
+pub fn absent_strength_geometric(
     x: &[f64],
     y: &[f64],
     sources: &[u64],
@@ -656,7 +656,7 @@ pub fn absent_geometric(
 // --- Binomial family ---
 
 #[must_use]
-pub fn filter_binomial(
+pub fn filter_strength_binomial(
     x: &[f64],
     y: &[f64],
     layers: u32,
@@ -679,7 +679,7 @@ pub fn filter_binomial(
 
 #[allow(clippy::too_many_arguments)]
 #[must_use]
-pub fn absent_binomial(
+pub fn absent_strength_binomial(
     x: &[f64],
     y: &[f64],
     layers: u32,
@@ -712,7 +712,7 @@ pub fn absent_binomial(
 // --- Negative binomial family ---
 
 #[must_use]
-pub fn filter_neg_binomial(
+pub fn filter_strength_neg_binomial(
     x: &[f64],
     y: &[f64],
     layers: u32,
@@ -735,7 +735,7 @@ pub fn filter_neg_binomial(
 
 #[allow(clippy::too_many_arguments)]
 #[must_use]
-pub fn absent_neg_binomial(
+pub fn absent_strength_neg_binomial(
     x: &[f64],
     y: &[f64],
     layers: u32,
@@ -854,7 +854,7 @@ mod tests {
     fn absent_filter_uses_occupation_threshold() {
         let x = vec![1.0, 1.0];
         let y = vec![1.0, 1.0];
-        let absent = absent_fixed_strength_poisson(&x, &y, &[0], &[1], true, 0.9, 0.5, 0.0, None);
+        let absent = absent_strength_poisson(&x, &y, &[0], &[1], true, 0.9, 0.5, 0.0, None);
         assert!(absent
             .sources
             .iter()
@@ -866,7 +866,7 @@ mod tests {
     fn all_pairs_absent_provider_respects_self_loop_mask() {
         let x = vec![10.0, 10.0];
         let y = vec![10.0, 10.0];
-        let absent = absent_fixed_strength_poisson(&x, &y, &[], &[], false, 0.1, 0.0, 0.0, None);
+        let absent = absent_strength_poisson(&x, &y, &[], &[], false, 0.1, 0.0, 0.0, None);
         assert!(absent
             .sources
             .iter()
@@ -876,7 +876,7 @@ mod tests {
 
     #[test]
     fn sparse_absent_provider_preserves_support_order_and_limit() {
-        let absent = absent_custom_poisson_rates(
+        let absent = absent_custom_poisson(
             &[2, 0, 1],
             &[0, 1, 2],
             &[10.0, 10.0, 10.0],

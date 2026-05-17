@@ -16,7 +16,14 @@ def test_generate_strength_degree_me_json(tmp_path: Path) -> None:
 
     result = runner.invoke(
         app,
-        ["generate", "strength-degree-me", str(input_path), "--json", "--seed", "42"],
+        [
+            "generate",
+            "strength-degree-poisson",
+            str(input_path),
+            "--json",
+            "--seed",
+            "42",
+        ],
     )
 
     assert result.exit_code == 0, result.output

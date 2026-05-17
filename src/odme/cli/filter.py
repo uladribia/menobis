@@ -16,24 +16,24 @@ from odme.filtering import (
     FilterResult,
     Tail,
     _solve_ztp_rate,
-    filter_custom_rates_poisson,
-    filter_degree_events_me,
-    filter_fixed_strength_me,
-    filter_strength_cost_me,
-    filter_strength_degree_me,
-    filter_strength_edges_me,
+    filter_custom_poisson,
+    filter_degree_events_poisson,
+    filter_strength_cost_poisson,
+    filter_strength_degree_poisson,
+    filter_strength_edges_poisson,
+    filter_strength_poisson,
 )
 from odme.models.fitting import (
-    fit_fixed_degree_binary,
+    fit_degree_bernoulli,
 )
 from odme.models.fitting import (
-    fit_strength_cost_me as fit_strength_cost,
+    fit_strength_cost_poisson as fit_strength_cost,
 )
 from odme.models.fitting import (
-    fit_strength_degree_me as fit_strength_degree,
+    fit_strength_degree_poisson as fit_strength_degree,
 )
 from odme.models.fitting import (
-    fit_strength_edges_me as fit_strength_edges,
+    fit_strength_edges_poisson as fit_strength_edges,
 )
 
 app = Typer(no_args_is_help=True)
@@ -49,7 +49,7 @@ def _read_rate_table(path: Path) -> ProbabilityTable:
     )
 
 
-@app.command("custom-rates")
+@app.command("custom-poisson")
 def custom_rates(
     input_path: Path,
     rates_path: Annotated[
@@ -80,7 +80,7 @@ def custom_rates(
     ] = None,
 ) -> None:
     """Filter against user-supplied Poisson rates t_ij = T p_ij."""
-    result = filter_custom_rates_poisson(
+    result = filter_custom_poisson(
         read_edges(input_path),
         _read_rate_table(rates_path),
         alpha=alpha,
@@ -94,7 +94,7 @@ def custom_rates(
     _write_outputs(result, output_prefix)
 
 
-@app.command("fixed-strength")
+@app.command("strength-poisson")
 def fixed_strength(
     input_path: Path,
     output_prefix: Annotated[
@@ -121,7 +121,7 @@ def fixed_strength(
     ] = True,
 ) -> None:
     """Fit fixed-strength ME, then filter against its Poisson null."""
-    result = filter_fixed_strength_me(
+    result = filter_strength_poisson(
         read_edges(input_path),
         alpha=alpha,
         tail=tail,
@@ -134,7 +134,7 @@ def fixed_strength(
     _write_outputs(result, output_prefix)
 
 
-@app.command("strength-edges")
+@app.command("strength-edges-poisson")
 def strength_edges(
     input_path: Path,
     output_prefix: Annotated[
@@ -175,7 +175,7 @@ def strength_edges(
     np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
     np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
     fit = fit_strength_edges(s_out, s_in, target_edges, self_loops=self_loops)
-    result = filter_strength_edges_me(
+    result = filter_strength_edges_poisson(
         edges,
         fit,
         alpha=alpha,
@@ -189,7 +189,7 @@ def strength_edges(
     _write_outputs(result, output_prefix)
 
 
-@app.command("strength-cost")
+@app.command("strength-cost-poisson")
 def strength_cost(
     input_path: Path,
     costs_path: Annotated[
@@ -245,7 +245,7 @@ def strength_cost(
         target_cost,
         self_loops=self_loops,
     )
-    result = filter_strength_cost_me(
+    result = filter_strength_cost_poisson(
         edges,
         fit,
         cost_sources,
@@ -262,7 +262,7 @@ def strength_cost(
     _write_outputs(result, output_prefix)
 
 
-@app.command("strength-degree")
+@app.command("strength-degree-poisson")
 def strength_degree(
     input_path: Path,
     output_prefix: Annotated[
@@ -306,7 +306,7 @@ def strength_degree(
     for tgt in edges.target:
         d_in[tgt] += 1
     fit = fit_strength_degree(s_out, s_in, d_out, d_in, self_loops=self_loops)
-    result = filter_strength_degree_me(
+    result = filter_strength_degree_poisson(
         edges,
         fit,
         alpha=alpha,
@@ -320,7 +320,7 @@ def strength_degree(
     _write_outputs(result, output_prefix)
 
 
-@app.command("degree-events")
+@app.command("degree-events-poisson")
 def degree_events(
     input_path: Path,
     output_prefix: Annotated[
@@ -359,7 +359,7 @@ def degree_events(
         d_out[src] += 1
     for tgt in edges.target:
         d_in[tgt] += 1
-    fit = fit_fixed_degree_binary(d_out, d_in, self_loops=self_loops)
+    fit = fit_degree_bernoulli(d_out, d_in, self_loops=self_loops)
     total_events = int(edges.weight.sum())
     expected_edges = sum(
         fit.x[i] * fit.y[j] / (1.0 + fit.x[i] * fit.y[j])
@@ -369,7 +369,7 @@ def degree_events(
     )
     mean_pos_weight = total_events / expected_edges if expected_edges > 0 else 1.0
     positive_weight_rate = _solve_ztp_rate(max(mean_pos_weight, 1.0))
-    result = filter_degree_events_me(
+    result = filter_degree_events_poisson(
         edges,
         fit.x,
         fit.y,

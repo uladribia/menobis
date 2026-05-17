@@ -10,10 +10,10 @@ from numpy.typing import NDArray
 import odme._odme as _odme
 from odme.data.frames import EdgeTable, ProbabilityTable
 from odme.models.fitting import (
-    StrengthCostMEFit,
-    StrengthDegreeMEFit,
-    StrengthEdgesMEFit,
-    fit_fixed_strength_me,
+    StrengthCostFit,
+    StrengthDegreeFit,
+    StrengthEdgesFit,
+    fit_strength_poisson,
 )
 
 Tail = Literal["upper", "lower", "two-sided"]
@@ -46,7 +46,7 @@ class FilterResult:
     correction: Correction
 
 
-def filter_fixed_strength_me(
+def filter_strength_poisson(
     edges: EdgeTable,
     *,
     alpha: float = 0.05,
@@ -61,8 +61,8 @@ def filter_fixed_strength_me(
     """Filter edges against the independent Poisson fixed-strength ME null."""
     node_count = _node_count(edges)
     strengths_out, strengths_in = _strengths(edges, node_count)
-    fit = fit_fixed_strength_me(strengths_out, strengths_in, self_loops=self_loops)
-    upper, lower, expected, occupation = _odme.filter_fixed_strength_poisson(
+    fit = fit_strength_poisson(strengths_out, strengths_in, self_loops=self_loops)
+    upper, lower, expected, occupation = _odme.filter_strength_poisson(
         fit.x.tolist(),
         fit.y.tolist(),
         edges.source.tolist(),
@@ -71,7 +71,7 @@ def filter_fixed_strength_me(
     )
     absent = None
     if detect_absent:
-        absent = _odme.absent_fixed_strength_poisson(
+        absent = _odme.absent_strength_poisson(
             fit.x.tolist(),
             fit.y.tolist(),
             edges.source.tolist(),
@@ -95,7 +95,7 @@ def filter_fixed_strength_me(
     )
 
 
-def filter_custom_rates_poisson(
+def filter_custom_poisson(
     edges: EdgeTable,
     rates: ProbabilityTable,
     *,
@@ -112,7 +112,7 @@ def filter_custom_rates_poisson(
     ``rates.probability`` is interpreted as the occupation number/rate
     ``T p_ij`` rather than as a normalized probability.
     """
-    upper, lower, expected, occupation = _odme.filter_custom_poisson_rates(
+    upper, lower, expected, occupation = _odme.filter_custom_poisson(
         rates.source.tolist(),
         rates.target.tolist(),
         rates.probability.tolist(),
@@ -122,7 +122,7 @@ def filter_custom_rates_poisson(
     )
     absent = None
     if detect_absent:
-        absent = _odme.absent_custom_poisson_rates(
+        absent = _odme.absent_custom_poisson(
             rates.source.tolist(),
             rates.target.tolist(),
             rates.probability.tolist(),
@@ -146,9 +146,9 @@ def filter_custom_rates_poisson(
     )
 
 
-def filter_strength_edges_me(
+def filter_strength_edges_poisson(
     edges: EdgeTable,
-    fit: StrengthEdgesMEFit,
+    fit: StrengthEdgesFit,
     *,
     alpha: float = 0.05,
     tail: Tail = "two-sided",
@@ -159,7 +159,7 @@ def filter_strength_edges_me(
     max_absent: int | None = None,
 ) -> FilterResult:
     """Filter edges against a fitted strength-edges ZIP null model."""
-    upper, lower, expected, occupation = _odme.filter_strength_edges_zip(
+    upper, lower, expected, occupation = _odme.filter_strength_edges_poisson(
         fit.x.tolist(),
         fit.y.tolist(),
         fit.lam,
@@ -169,7 +169,7 @@ def filter_strength_edges_me(
     )
     absent = None
     if detect_absent:
-        absent = _odme.absent_strength_edges_zip(
+        absent = _odme.absent_strength_edges_poisson(
             fit.x.tolist(),
             fit.y.tolist(),
             fit.lam,
@@ -194,9 +194,9 @@ def filter_strength_edges_me(
     )
 
 
-def filter_strength_cost_me(
+def filter_strength_cost_poisson(
     edges: EdgeTable,
-    fit: StrengthCostMEFit,
+    fit: StrengthCostFit,
     cost_sources: NDArray[np.uint64],
     cost_targets: NDArray[np.uint64],
     cost_values: NDArray[np.float64],
@@ -251,9 +251,9 @@ def filter_strength_cost_me(
     )
 
 
-def filter_strength_degree_me(
+def filter_strength_degree_poisson(
     edges: EdgeTable,
-    fit: StrengthDegreeMEFit,
+    fit: StrengthDegreeFit,
     *,
     alpha: float = 0.05,
     tail: Tail = "two-sided",
@@ -264,7 +264,7 @@ def filter_strength_degree_me(
     max_absent: int | None = None,
 ) -> FilterResult:
     """Filter edges against a fitted strength-degree ZIP null model."""
-    upper, lower, expected, occupation = _odme.filter_strength_degree_zip(
+    upper, lower, expected, occupation = _odme.filter_strength_degree_poisson(
         fit.x.tolist(),
         fit.y.tolist(),
         fit.z.tolist(),
@@ -275,7 +275,7 @@ def filter_strength_degree_me(
     )
     absent = None
     if detect_absent:
-        absent = _odme.absent_strength_degree_zip(
+        absent = _odme.absent_strength_degree_poisson(
             fit.x.tolist(),
             fit.y.tolist(),
             fit.z.tolist(),
@@ -301,7 +301,7 @@ def filter_strength_degree_me(
     )
 
 
-def filter_degree_events_me(
+def filter_degree_events_poisson(
     edges: EdgeTable,
     x: NDArray[np.float64],
     y: NDArray[np.float64],
@@ -317,7 +317,7 @@ def filter_degree_events_me(
     max_absent: int | None = None,
 ) -> FilterResult:
     """Filter edges against a fitted degree-events ZIP null model."""
-    upper, lower, expected, occupation = _odme.filter_degree_events_zip(
+    upper, lower, expected, occupation = _odme.filter_degree_events_poisson(
         x.tolist(),
         y.tolist(),
         positive_weight_rate,
@@ -327,7 +327,7 @@ def filter_degree_events_me(
     )
     absent = None
     if detect_absent:
-        absent = _odme.absent_degree_events_zip(
+        absent = _odme.absent_degree_events_poisson(
             x.tolist(),
             y.tolist(),
             positive_weight_rate,
@@ -352,7 +352,7 @@ def filter_degree_events_me(
     )
 
 
-def filter_geometric(
+def filter_strength_geometric(
     edges: EdgeTable,
     x: NDArray[np.float64],
     y: NDArray[np.float64],
@@ -367,7 +367,7 @@ def filter_geometric(
     max_absent: int | None = None,
 ) -> FilterResult:
     """Filter edges against a geometric null model."""
-    upper, lower, expected, occupation = _odme.filter_geometric(
+    upper, lower, expected, occupation = _odme.filter_strength_geometric(
         x.tolist(),
         y.tolist(),
         edges.source.tolist(),
@@ -376,7 +376,7 @@ def filter_geometric(
     )
     absent = None
     if detect_absent:
-        absent = _odme.absent_geometric(
+        absent = _odme.absent_strength_geometric(
             x.tolist(),
             y.tolist(),
             edges.source.tolist(),
@@ -400,7 +400,7 @@ def filter_geometric(
     )
 
 
-def filter_binomial(
+def filter_strength_binomial(
     edges: EdgeTable,
     x: NDArray[np.float64],
     y: NDArray[np.float64],
@@ -416,7 +416,7 @@ def filter_binomial(
     max_absent: int | None = None,
 ) -> FilterResult:
     """Filter edges against a binomial(M) null model."""
-    upper, lower, expected, occupation = _odme.filter_binomial(
+    upper, lower, expected, occupation = _odme.filter_strength_binomial(
         x.tolist(),
         y.tolist(),
         layers,
@@ -426,7 +426,7 @@ def filter_binomial(
     )
     absent = None
     if detect_absent:
-        absent = _odme.absent_binomial(
+        absent = _odme.absent_strength_binomial(
             x.tolist(),
             y.tolist(),
             layers,
@@ -451,7 +451,7 @@ def filter_binomial(
     )
 
 
-def filter_neg_binomial(
+def filter_strength_neg_binomial(
     edges: EdgeTable,
     x: NDArray[np.float64],
     y: NDArray[np.float64],
@@ -467,7 +467,7 @@ def filter_neg_binomial(
     max_absent: int | None = None,
 ) -> FilterResult:
     """Filter edges against a negative binomial(M) null model."""
-    upper, lower, expected, occupation = _odme.filter_neg_binomial(
+    upper, lower, expected, occupation = _odme.filter_strength_neg_binomial(
         x.tolist(),
         y.tolist(),
         layers,
@@ -477,7 +477,7 @@ def filter_neg_binomial(
     )
     absent = None
     if detect_absent:
-        absent = _odme.absent_neg_binomial(
+        absent = _odme.absent_strength_neg_binomial(
             x.tolist(),
             y.tolist(),
             layers,
@@ -657,13 +657,13 @@ def _solve_ztp_rate(mean: float) -> float:
 __all__ = [
     "FilterResult",
     "FilteredEdges",
-    "filter_binomial",
-    "filter_custom_rates_poisson",
-    "filter_degree_events_me",
-    "filter_fixed_strength_me",
-    "filter_geometric",
-    "filter_neg_binomial",
-    "filter_strength_cost_me",
-    "filter_strength_degree_me",
-    "filter_strength_edges_me",
+    "filter_custom_poisson",
+    "filter_degree_events_poisson",
+    "filter_strength_binomial",
+    "filter_strength_cost_poisson",
+    "filter_strength_degree_poisson",
+    "filter_strength_edges_poisson",
+    "filter_strength_geometric",
+    "filter_strength_neg_binomial",
+    "filter_strength_poisson",
 ]
