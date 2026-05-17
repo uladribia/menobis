@@ -1,0 +1,28 @@
+{
+  "average_strength": 20,
+  "cases": [
+    "strength_poisson",
+    "strength_multinomial",
+    "strength_poisson_multinomial",
+    "strength_microcanonical",
+    "strength_binomial",
+    "custom_poisson_sparse",
+    "custom_multinomial_sparse",
+    "degree_events_poisson",
+    "strength_cost_poisson",
+    "strength_cost_binomial",
+    "strength_edges_poisson",
+    "strength_edges_binomial",
+    "strength_degree_poisson"
+  ],
+  "created_utc": "2026-05-17T21:08:19.449140+00:00",
+  "nodes": [
+    100,
+    1000
+  ],
+  "progress_interval": 5.0,
+  "repeats": 1,
+  "run_id": "20260517T210819Z",
+  "seed": 42,
+  "sparse_degree": 20
+}

@@ -29,12 +29,20 @@ from odme.models import (
     StrengthCostFit,
     StrengthDegreeFit,
     StrengthEdgesFit,
+    fit_degree_bernoulli,
+    fit_strength_binomial,
+    fit_strength_cost_poisson,
+    fit_strength_degree_poisson,
+    fit_strength_edges_poisson,
+    fit_strength_poisson,
     sample_custom_multinomial,
     sample_custom_poisson,
+    sample_degree_events_binomial,
     sample_degree_events_poisson,
     sample_strength_binomial,
     sample_strength_cost_binomial,
     sample_strength_cost_poisson,
+    sample_strength_degree_binomial,
     sample_strength_degree_poisson,
     sample_strength_edges_binomial,
     sample_strength_edges_poisson,
@@ -92,6 +100,10 @@ class Inputs:
     strength_cost_fit: StrengthCostFit
     strength_edges_fit: StrengthEdgesFit
     strength_degree_fit: StrengthDegreeFit
+    strength_binomial_fit: FitResult
+    cost_sources: np.ndarray
+    cost_targets: np.ndarray
+    cost_values: np.ndarray
 
 
 def _max_rss_mb() -> float:
@@ -128,64 +140,82 @@ def _make_sparse_probability_table(n: int, degree: int) -> ProbabilityTable:
 
 
 def _make_inputs(n: int, average_strength: int, sparse_degree: int) -> Inputs:
-    """Create model parameters without iterative fitting.
-
-    The parameters target sparse sampled outputs while still forcing all-pairs
-    generators to visit their full candidate support.
-    """
+    """Generate a real synthetic network and fit all models from it."""
+    rng = np.random.default_rng(42)
     total_events = n * average_strength
-    factor = math.sqrt(average_strength / n)
-    x_strength = np.full(n, factor, dtype=np.float64)
-    y_strength = np.full(n, factor, dtype=np.float64)
-    strength_out = np.full(n, average_strength, dtype=np.uint64)
-    strength_in = np.full(n, average_strength, dtype=np.uint64)
+
+    # 1. Create heterogeneous strength targets
+    raw = rng.pareto(1.5, size=n) + 1.0
+    s_out_target = np.round(raw / raw.sum() * total_events).astype(np.uint64)
+    raw = rng.pareto(1.5, size=n) + 1.0
+    s_in_target = np.round(raw / raw.sum() * total_events).astype(np.uint64)
+    diff = int(s_out_target.sum()) - int(s_in_target.sum())
+    if diff > 0:
+        s_in_target[np.argmax(s_in_target)] += abs(diff)
+    elif diff < 0:
+        s_out_target[np.argmax(s_out_target)] += abs(diff)
+
+    # 2. Fit and sample a real Poisson network
+    pre_fit = fit_strength_poisson(s_out_target, s_in_target)
+    network = sample_strength_poisson(pre_fit.x, pre_fit.y, seed=42)
+
+    # 3. Extract actual strengths and degrees from the real network
+    strength_out = np.zeros(n, dtype=np.uint64)
+    strength_in = np.zeros(n, dtype=np.uint64)
+    d_out = np.zeros(n, dtype=np.float64)
+    d_in = np.zeros(n, dtype=np.float64)
+    np.add.at(strength_out, network.source, network.weight)
+    np.add.at(strength_in, network.target, network.weight)
+    for src in network.source:
+        if src < n:
+            d_out[src] += 1
+    for tgt in network.target:
+        if tgt < n:
+            d_in[tgt] += 1
+    # Balance (rounding may cause tiny imbalance)
+    diff = int(strength_out.sum()) - int(strength_in.sum())
+    if diff > 0:
+        strength_in[np.argmax(strength_in)] += abs(diff)
+    elif diff < 0:
+        strength_out[np.argmax(strength_out)] += abs(diff)
+    total_events = int(strength_out.sum())
+
+    s_out_f = strength_out.astype(np.float64)
+    s_in_f = strength_in.astype(np.float64)
+
+    # 4. Fit all models from the real network
+    strength_fit = fit_strength_poisson(strength_out, strength_in)
+    x_strength = strength_fit.x
+    y_strength = strength_fit.y
+
+    strength_binomial_fit = fit_strength_binomial(
+        strength_out, strength_in, layers=10, tolerance=0.1, max_iterations=1000,
+    )
 
     custom = _make_sparse_probability_table(n, sparse_degree)
 
-    occupation_probability = min(0.2, max(1e-12, sparse_degree / max(n, 1)))
-    binary_z = occupation_probability / max(1.0 - occupation_probability, 1e-12)
-    degree_factor = math.sqrt(binary_z)
-    degree_fit = FitResult(
-        node=np.arange(n, dtype=np.uint64),
-        x=np.full(n, degree_factor, dtype=np.float64),
-        y=np.full(n, degree_factor, dtype=np.float64),
+    degree_fit = fit_degree_bernoulli(d_out, d_in, max_iterations=1000)
+
+    target_edges = float(d_out.sum())
+    strength_edges_fit = fit_strength_edges_poisson(
+        s_out_f, s_in_f, target_edges, max_iterations=1000,
     )
 
-    strength_cost_fit = StrengthCostFit(
-        node=np.arange(n, dtype=np.uint64),
-        x=x_strength,
-        y=y_strength,
-        gamma=0.0,
-        self_loops=True,
-        converged=True,
-        iterations=0,
+    strength_degree_fit = fit_strength_degree_poisson(
+        s_out_f, s_in_f, d_out, d_in, max_iterations=1000,
     )
 
-    zip_u = 1.0
-    exp_minus_one = math.expm1(zip_u)
-    lam = occupation_probability / max(
-        (1.0 - occupation_probability) * exp_minus_one,
-        1e-12,
-    )
-    strength_edges_fit = StrengthEdgesFit(
-        node=np.arange(n, dtype=np.uint64),
-        x=np.ones(n, dtype=np.float64),
-        y=np.ones(n, dtype=np.float64),
-        lam=lam,
-        self_loops=True,
-        converged=True,
-        iterations=0,
-    )
-    zw = math.sqrt(lam)
-    strength_degree_fit = StrengthDegreeFit(
-        node=np.arange(n, dtype=np.uint64),
-        x=np.ones(n, dtype=np.float64),
-        y=np.ones(n, dtype=np.float64),
-        z=np.full(n, zw, dtype=np.float64),
-        w=np.full(n, zw, dtype=np.float64),
-        self_loops=True,
-        converged=True,
-        iterations=0,
+    cost_degree = min(sparse_degree, n)
+    cost_sources = np.repeat(np.arange(n, dtype=np.uint64), cost_degree)
+    cost_offsets = np.arange(1, cost_degree + 1, dtype=np.uint64)
+    cost_targets = (
+        (cost_sources.reshape(n, cost_degree) + cost_offsets.reshape(1, cost_degree)) % n
+    ).reshape(-1).astype(np.uint64)
+    cost_values = rng.exponential(1.0, size=len(cost_sources))
+    target_cost = float(np.mean(cost_values))
+    strength_cost_fit = fit_strength_cost_poisson(
+        s_out_f, s_in_f, cost_sources, cost_targets, cost_values,
+        target_cost, max_iterations=1000,
     )
 
     return Inputs(
@@ -200,13 +230,15 @@ def _make_inputs(n: int, average_strength: int, sparse_degree: int) -> Inputs:
         strength_cost_fit=strength_cost_fit,
         strength_edges_fit=strength_edges_fit,
         strength_degree_fit=strength_degree_fit,
+        strength_binomial_fit=strength_binomial_fit,
+        cost_sources=cost_sources,
+        cost_targets=cost_targets,
+        cost_values=cost_values,
     )
 
 
 def _case_functions(inputs: Inputs, seed: int) -> dict[str, Callable[[], EdgeTable]]:
     """Return benchmark callables for every generation case."""
-    empty_u64 = np.array([], dtype=np.uint64)
-    empty_f64 = np.array([], dtype=np.float64)
     return {
         "strength_poisson": lambda: sample_strength_poisson(
             inputs.x_strength,
@@ -230,8 +262,8 @@ def _case_functions(inputs: Inputs, seed: int) -> dict[str, Callable[[], EdgeTab
             seed=seed,
         ),
         "strength_binomial": lambda: sample_strength_binomial(
-            inputs.x_strength,
-            inputs.y_strength,
+            inputs.strength_binomial_fit.x,
+            inputs.strength_binomial_fit.y,
             layers=10,
             seed=seed,
         ),
@@ -252,16 +284,16 @@ def _case_functions(inputs: Inputs, seed: int) -> dict[str, Callable[[], EdgeTab
         ),
         "strength_cost_poisson": lambda: sample_strength_cost_poisson(
             inputs.strength_cost_fit,
-            empty_u64,
-            empty_u64,
-            empty_f64,
+            inputs.cost_sources,
+            inputs.cost_targets,
+            inputs.cost_values,
             seed=seed,
         ),
         "strength_cost_binomial": lambda: sample_strength_cost_binomial(
             inputs.strength_cost_fit,
-            empty_u64,
-            empty_u64,
-            empty_f64,
+            inputs.cost_sources,
+            inputs.cost_targets,
+            inputs.cost_values,
             layers=10,
             seed=seed,
         ),
