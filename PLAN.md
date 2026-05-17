@@ -634,21 +634,35 @@ Options:
 - Add a decision note if two-sided p-values, multiple-testing correction, or
   absent-edge defaults require scientific choices.
 
-#### Open questions for the milestone
+#### Resolved filtering decisions
 
-1. Should the default test be one-sided upper, one-sided lower, or two-sided?
-2. Should two-sided filtering use `2 * min(p_upper, p_lower)` or split alpha
-   (`upper < alpha/2` or `lower < alpha/2`)?
-3. Should ODME include multiple-testing correction (Bonferroni/FDR), and if so
-   should it be default or opt-in?
-4. For absent-edge detection, should the default threshold be expected weight,
-   occupation probability, p-value only, or a combination?
-5. Should lower-significant observed edges include only positive observed edges,
-   with absent edges reported separately, or should they be merged?
-6. For canonical multinomial models, is a marginal approximation acceptable for
-   filtering, or do we require exact coupled multinomial tests?
-7. Should filtering accept already-fitted model objects/files to avoid refitting
-   in repeated workflows?
+| Question | Decision |
+|----------|----------|
+| Default tail | two-sided |
+| Two-sided rule | split alpha: upper `< alpha/2` or lower `< alpha/2` |
+| Multiple testing | include Bonferroni and FDR support |
+| Absent-edge output | report absent lower-significant pairs separately |
+| Canonical multinomial | do not filter canonical multinomial; support independent grand-canonical Poisson and ZIP/ZTP cases only |
+| Fitted models | accept already-fitted model objects/files to avoid refitting |
+
+#### Remaining filtering question: absent-edge threshold
+
+Absent-edge detection can be expensive and can produce many results because it
+streams candidate pairs where `t_ij = 0`. ODME needs a default prefilter before
+computing/reporting absent lower-significant pairs.
+
+Options:
+
+| Threshold | Meaning | Pros | Cons |
+|-----------|---------|------|------|
+| `min_expected` | require `E[t_ij] >= value` | intuitive for flow magnitude; works for Poisson and ZIP | can miss high-probability ZIP edges whose expected weight is modest |
+| `min_occupation` | require `P(t_ij > 0) >= value` | natural for ZIP/degree models; detects missing expected binary links | not meaningful for pure Poisson unless converted to `1-exp(-lambda)` |
+| p-value only | compute all absent p-values and keep significant ones | scientifically direct | may require scanning/reporting huge numbers of pairs |
+| combined | require p-value significance plus `min_expected` and/or `min_occupation` | controls output size and scientific relevance | more parameters to explain |
+
+Proposed default unless changed: use combined filtering with
+`min_expected=1.0`, `min_occupation=0.0`, and p-value significance. Users can
+set `min_expected=0` and a `max_absent` cap for exhaustive scans.
 
 ## Replacement plan
 
