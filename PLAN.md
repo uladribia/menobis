@@ -437,113 +437,218 @@ TDD:
 ### Milestone 11: Statistical filtering module — ❌ NOT STARTED
 
 Given an observed weighted network and a chosen ME null model, the filtering
-module identifies edges that are statistically incompatible with the null model.
+module identifies pairs whose observed weight is statistically incompatible
+with the fitted null distribution. It must reuse the streaming pair-distribution
+machinery from generation rather than building dense probability matrices.
+
+#### Scientific scope
+
+| Filter model | Null distribution |
+|--------------|-------------------|
+| fixed-strength ME | Poisson rate $x_i y_j$ |
+| strength-cost ME | Poisson rate $x_i y_j e^{-\gamma d_{ij}}$ |
+| custom $p_{ij}$ ME | Poisson or multinomial-compatible rate $T p_{ij}$ |
+| degree-events ME | Bernoulli occupation + conditional positive weight |
+| strength-edges ME | ZIP with occupation $p_{ij}$ and ZTP rate $x_i y_j$ |
+| strength-degree ME | ZIP with occupation $p_{ij}$ and ZTP rate $x_i y_j$ |
+| partial constraints | known pairs bypassed; free pairs filtered by fitted model |
+
+Initial implementation should support Poisson and ZIP/ZTP filters first, then
+add canonical multinomial p-values only if the exact coupled test is required.
+
+#### Reuse-first architecture
+
+Extend the generation abstraction into a public Rust-internal pair-distribution
+provider:
+
+| Reusable component | Used by generation | Used by filtering |
+|--------------------|-------------------|-------------------|
+| pair provider | sample each candidate pair | compute p-values per pair |
+| `PairDistribution` | draw Poisson or ZIP weight | choose CDF/survival formula |
+| Rayon chunk runner | parallel sampling | parallel p-value computation |
+| sparse support provider | custom $p_{ij}$ generation | custom $p_{ij}$ filtering |
+| no-self-loop mask | skip diagonal sampling | skip diagonal filtering |
+| known-pair mask | partial generation support | partial filtering support |
+
+The filter should add sinks, not duplicate model math. Desired Rust shape:
+
+```text
+provider -> filter sink -> significant/compatible sparse outputs
+```
+
+The sink receives `(source, target, distribution, observed_weight)` and emits
+classified results. This keeps future models reusable: a new model implements a
+provider once and gets generation plus filtering.
 
 #### Procedure
 
-1. Extract constraints from the observed network.
-2. Fit the chosen ME null model (any of the implemented cases).
-3. For each pair `(i,j)`, compute the expected rate `E[t_ij]` and the
-   exact null-model distribution of `t_ij`.
-4. For each observed `t_ij`, compute upper and lower p-values:
-   - Upper: `P(T >= t_ij | null)` — is the edge unexpectedly heavy?
-   - Lower: `P(T <= t_ij | null)` — is the edge unexpectedly light?
-5. Flag edges where p-value < alpha (one-sided) or alpha/2 (two-sided).
-6. Since distributions are discrete, support both "lower included" and
-   "upper included" rounding conventions for the boundary.
+1. Extract observed sparse weights and constraints from the network.
+2. Fit or accept a fitted null model.
+3. Build the model's pair-distribution provider.
+4. For observed edges, compute upper/lower p-values:
+   - upper: $P(T \ge t_{ij}\mid null)$;
+   - lower: $P(T \le t_{ij}\mid null)$.
+5. Classify observed edges as upper, lower, or compatible.
+6. Optionally stream candidate pairs for absent-edge detection.
+7. Emit sparse result tables with p-values and expected weights.
 
-#### Output
+Use strict, documented tail conventions:
 
-Three edge tables:
-- **Upper significant**: edges heavier than expected (over-represented flows).
-- **Lower significant**: edges lighter than expected (under-represented,
-  including absent edges that should be present under the null).
-- **Compatible**: edges consistent with the null model (the "erased" middle).
+| Tail | Suggested default |
+|------|-------------------|
+| upper | $P(T \ge t)$, inclusive observed count |
+| lower | $P(T \le t)$, inclusive observed count |
+| two-sided | `2 * min(upper, lower)` capped at 1 unless user chooses split-alpha |
+
+#### Exact distributions
+
+Poisson:
+
+$$
+P(T \le t)=F_\lambda(t),\qquad P(T \ge t)=1-F_\lambda(t-1).
+$$
+
+ZIP/ZTP with occupation probability $p$ and positive-weight rate $\lambda$:
+
+$$
+P(T=0)=1-p,
+$$
+
+$$
+P(T=k>0)=p\,\frac{e^{-\lambda}\lambda^k/k!}{1-e^{-\lambda}}.
+$$
+
+Therefore:
+
+$$
+P(T \le 0)=1-p,
+$$
+
+$$
+P(T \le t>0)=1-p+p\,F_{ZTP,\lambda}(t),
+$$
+
+$$
+P(T \ge t>0)=p\,P_{ZTP,\lambda}(T\ge t).
+$$
+
+The zero-truncated Poisson boundary rules from generation apply: conditional
+mean below one is infeasible, mean near one is deterministic positive weight 1,
+and tiny rates use stable direct CDF/PMF logic.
 
 #### Absent-edge detection
 
-Pairs with `t_ij = 0` but large `E[t_ij]` should be flagged as
-lower-significant. This is triggered by a dedicated option
-`--detect-absent` / `detect_absent=True` with a configurable minimum
-expected rate threshold (default `min_rate=1.0`). When enabled, the filter
-iterates over all node pairs where `E[t_ij] >= min_rate` and `t_ij = 0`,
-computing the lower p-value `P(T = 0 | null)` for each.
+Observed-edge filtering is $O(E_{obs})$. Absent-edge detection can require
+streaming all candidate pairs, so it must be opt-in:
 
-#### Exact distributions per model
+| Option | Meaning |
+|--------|---------|
+| `detect_absent=True` | consider pairs with observed weight zero |
+| `min_expected` | skip pairs with expected weight below threshold |
+| `min_occupation` | skip ZIP pairs with small occupation probability |
+| `max_absent` | optional cap to prevent huge outputs |
 
-The filter uses the exact discrete distribution implied by each model,
-not approximations:
+The implementation should reuse the same Rayon row/sparse chunks used for
+generation. It should build an observed-pair hash set once, then stream only
+candidate pairs not in that set and passing thresholds.
 
-| Model | Distribution of `t_ij` |
-|-------|------------------------|
-| Fixed-strength ME | `Poisson(x_i y_j)` |
-| Strength + cost ME | `Poisson(x_i y_j exp(-gamma d_ij))` |
-| Strength + edges ME (Case 3) | Zero-inflated: `P(t=0) = 1 - p_ij`, `P(t=k\|t>0)` = truncated Poisson. `p_ij = lambda(exp(x_i y_j)-1) / (1 + lambda(exp(x_i y_j)-1))`, rate `= x_i y_j`. |
-| Strength + degree ME (Case 4) | Zero-inflated: `P(t=0) = 1 - p_ij`, `P(t=k\|t>0)` = truncated Poisson. `p_ij = z_i w_j(exp(x_i y_j)-1) / (1 + z_i w_j(exp(x_i y_j)-1))`, rate `= x_i y_j`. |
-| Fixed-degree ME (Case 5) | Zero-inflated: `P(t=0) = 1 - p_ij`, conditional weight from the generation model. `p_ij = x_i y_j / (1 + x_i y_j)`. |
+#### Rust modules
 
-For Poisson models, `P(T >= t) = 1 - CDF(t-1)` and `P(T <= t) = CDF(t)`
-where CDF is the Poisson cumulative distribution function.
+Add `crates/odme-core/src/filter.rs`:
 
-For zero-inflated models, `P(T = 0) = 1 - p_ij + p_ij * P_trunc(0)` and
-for `t > 0`, `P(T = t) = p_ij * P_trunc(t)` where `P_trunc` is the
-zero-truncated Poisson PMF.
+- `FilterTailPValues { upper, lower }`.
+- `FilteredEdge { source, target, weight, expected, upper_p, lower_p }`.
+- `FilterClassified { upper, lower, compatible, absent_lower }`.
+- Poisson p-value helpers using numerically stable CDF/survival routines.
+- ZIP/ZTP p-value helpers shared with generation's ZTP functions.
+- Parallel filtering sinks over provider chunks.
+- Unit tests for exact PMF/CDF identities and boundary cases.
 
-#### Architecture
+Refactor `generation.rs` only as needed to share provider/distribution types;
+avoid a large rewrite. If needed, create `crates/odme-core/src/distribution.rs`
+for reusable Poisson and ZIP/ZTP math.
 
-**Rust** (`crates/odme-core/src/filter.rs`):
-- `compute_poisson_pvalues(weights, rates) -> (upper_pvals, lower_pvals)`
-- `compute_zip_pvalues(weights, p_ij, rates) -> (upper_pvals, lower_pvals)`
-- `detect_absent_edges(n, mask, rates, min_rate) -> (sources, targets, lower_pvals)`
-  where mask marks observed edges to skip.
+#### Python API
 
-**PyO3** (`crates/odme-python/src/lib.rs`):
-- Expose the Rust kernels as `_odme.compute_poisson_pvalues`, etc.
+Add `src/odme/filtering.py`:
 
-**Python** (`src/odme/filtering.py`):
-- `FilterResult` dataclass with `upper`, `lower`, `compatible` EdgeTables
-  and `upper_pvalues`, `lower_pvalues` arrays.
-- `filter_network(edges, model, alpha, ...)` — top-level function that:
-  1. Fits the chosen model.
-  2. Computes rates from fitted multipliers.
-  3. Calls the appropriate Rust p-value kernel.
-  4. Splits edges by threshold.
-  5. Optionally detects absent edges.
-- Convenience wrappers: `filter_strength_me(edges, alpha, ...)`, etc.
+- `FilterResult` dataclass with upper, lower, compatible, and optional absent
+  edge tables plus p-value arrays.
+- `filter_network(edges, model, alpha=0.05, tail="two-sided", ...)`.
+- Typed convenience wrappers:
+  - `filter_fixed_strength_me`;
+  - `filter_strength_cost_me`;
+  - `filter_strength_edges_me`;
+  - `filter_strength_degree_me`;
+  - `filter_degree_events_me`;
+  - `filter_custom_pij_me`.
 
-**CLI** (`src/odme/cli/filter.py`):
-- `odme filter INPUT --model strength --alpha 0.05`
-- Options:
-  - `--output-upper PATH` — write over-represented edges.
-  - `--output-lower PATH` — write under-represented edges.
-  - `--output-compatible PATH` — write null-compatible edges.
-  - `--detect-absent` — enable absent-edge detection.
-  - `--min-rate FLOAT` — minimum expected rate for absent detection (default 1.0).
-  - `--json`, `--quiet`, `--self-loops/--no-self-loops` as usual.
+Python should validate inputs, call fitters if needed, pass arrays to Rust, and
+wrap outputs. No Python loops over pairs.
+
+#### CLI
+
+Add a Typer subcommand module `src/odme/cli/filter.py` and register it in the
+main app. Use `/skill:create-cli` before implementation.
+
+Proposed commands:
+
+```bash
+odme filter fixed-strength edges.csv --alpha 0.05 --output-prefix filtered/
+odme filter strength-cost edges.csv --costs costs.csv --detect-absent
+odme filter strength-edges edges.csv --target-edges 500 --tail upper
+```
+
+Options:
+
+| Option | Meaning |
+|--------|---------|
+| `--alpha` | significance level |
+| `--tail` | `upper`, `lower`, `two-sided` |
+| `--output-prefix` | write upper/lower/compatible/absent files |
+| `--json` | emit summary JSON to stdout |
+| `--detect-absent` | enable absent-edge streaming |
+| `--min-expected` | absent-edge expected-weight threshold |
+| `--min-occupation` | ZIP absent-edge occupation threshold |
+| `--max-absent` | cap absent output size |
+| `--self-loops/--no-self-loops` | diagonal handling |
 
 #### Testing strategy
 
-**1. Exact analytical p-value test** (numerical correctness):
-- For a single known Poisson rate (e.g., lambda=5.0), compute p-values
-  for specific `t_ij` values (0, 1, 5, 10, 20) in Rust.
-- Compare against `scipy.stats.poisson.cdf` / `.sf` to machine precision.
-- Same for zero-inflated distributions.
+1. Red tests for Poisson p-values from hand-computed small examples; avoid
+   adding SciPy as a dependency.
+2. Red tests for ZIP/ZTP PMF normalization and CDF/survival consistency.
+3. Seeded end-to-end tests: generate from a fitted null, filter at alpha, and
+   assert flagged fractions are calibrated within documented tolerances.
+4. Absent-edge tests with tiny graphs where missing high-rate pairs are flagged.
+5. CLI smoke tests with `CliRunner` and JSON summaries.
+6. Performance smoke test: filter observed edges at `N=10000` without dense
+   allocation; absent detection tested with thresholds to keep output bounded.
 
-**2. Ensemble calibration test** (end-to-end scientific correctness):
-- Generate the Pareto-like synthetic network.
-- Fit the fixed-strength ME null model.
-- Generate 200 null-model samples.
-- Apply the filter at alpha=0.05 to each sample.
-- Assert: mean fraction of flagged edges is within `[0.03, 0.08]` (centered
-  around alpha=0.05, with tolerance for discrete-distribution effects).
-- Assert: the fraction decreases toward alpha as T increases.
+#### Documentation and decisions
 
-**3. Edge cases**:
-- Zero-rate pairs produce p-value = 1.0 (always compatible).
-- Self-loops excluded when `self_loops=False`.
-- Network with a single node: no edges, no filtering.
-- All edges flagged when alpha=1.0.
-- No edges flagged when alpha=0.0.
+- Add `docs/concepts/statistical-filtering.md` with equations and tail
+  conventions.
+- Add `docs/api/filtering.md` for Python API.
+- Add `docs/cli/filter.md` for CLI examples.
+- Add a decision note if two-sided p-values, multiple-testing correction, or
+  absent-edge defaults require scientific choices.
+
+#### Open questions for the milestone
+
+1. Should the default test be one-sided upper, one-sided lower, or two-sided?
+2. Should two-sided filtering use `2 * min(p_upper, p_lower)` or split alpha
+   (`upper < alpha/2` or `lower < alpha/2`)?
+3. Should ODME include multiple-testing correction (Bonferroni/FDR), and if so
+   should it be default or opt-in?
+4. For absent-edge detection, should the default threshold be expected weight,
+   occupation probability, p-value only, or a combination?
+5. Should lower-significant observed edges include only positive observed edges,
+   with absent edges reported separately, or should they be merged?
+6. For canonical multinomial models, is a marginal approximation acceptable for
+   filtering, or do we require exact coupled multinomial tests?
+7. Should filtering accept already-fitted model objects/files to avoid refitting
+   in repeated workflows?
 
 ## Replacement plan
 
