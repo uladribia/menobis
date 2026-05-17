@@ -5,9 +5,12 @@
 
 pub mod clustering;
 pub mod cost;
+pub mod distribution;
+pub mod filter;
 pub mod fitting;
 pub mod generation;
 pub mod graph;
+pub mod pairs;
 pub mod stats;
 
 /// Current ODME core version, synchronized with the Python package during releases.

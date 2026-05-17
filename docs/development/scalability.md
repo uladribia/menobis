@@ -1,121 +1,106 @@
 # Scalability
 
-ODME is designed to handle large networks efficiently by exploiting the
-**node-factorized** nature of maximum-entropy models.
+## TL;DR
 
-## Key insight
+ODME generation defaults to **streaming pair rates** and uses Rayon parallel
+chunks for large candidate supports. It does not materialize an $N^2$
+probability matrix for independent grand-canonical models, ZIP-Poisson models,
+or canonical multinomial sampling.
 
-For the fixed-strength multi-edge model:
+## Default execution model
 
+Generation is organized as:
+
+```text
+model parameters -> pair-rate provider -> sampler/stat sink -> sparse edges
 ```
-E[t_ij] = x_i * y_j
-```
 
-The expected weight between any pair (i, j) depends only on per-node Lagrange
-multipliers `x` (length N) and `y` (length N). The full NxN matrix is never
-needed for fitting, sampling, or most statistics.
+The provider computes candidate pairs on demand. For large supports, ODME
+splits rows or sparse entries into deterministic chunks, samples chunks on all
+available Rayon worker threads, and merges chunk outputs in order. The sink
+stores only non-zero sampled edges or accumulates statistics.
 
 ## Memory complexity by operation
 
-| Operation | Memory | Notes |
-|-----------|--------|-------|
-| Fitting (Lagrange multipliers) | O(N) | Only x and y vectors |
-| Factorized Poisson sampling | O(E) | E = non-zero edges in sample |
-| Factorized multinomial sampling | O(E) | Row-by-row allocation |
-| Directed strengths/degrees | O(E) | Rust single-pass kernel |
-| Y2, k_nn, s_nn | O(E) | Rust single-pass kernel |
-| Clustering coefficient | O(E) | Via rustworkx graph |
-| Dense expected matrix | O(N²) | **Avoid for large N** |
+| Operation | Default memory | Notes |
+|-----------|----------------|-------|
+| Poisson generation | $O(E_s)$ | parallel chunks for large supports |
+| ZIP-Poisson generation | $O(E_s)$ | parallel occupation and weight draws |
+| Factorized multinomial | $O(N + E_s)$ | row totals, then parallel non-empty rows |
+| Sparse custom $p_{ij}$ Poisson | $O(E_p + E_s)$ | parallel sparse chunks |
+| Sparse custom $p_{ij}$ multinomial | $O(E_p + E_s)$ | chunk totals, then parallel chunks |
+| Dense matrix export | $O(N^2)$ | explicit opt-in only |
+| Fitting multipliers | model-dependent | usually $O(N)$ plus sparse inputs |
 
-## Practical thresholds
+## Existing model coverage
 
-| N (nodes) | Dense NxN | Recommendation |
-|-----------|-----------|----------------|
-| < 3,000 | ~72 MB | Dense API is fine |
-| 3,000–10,000 | 72 MB–800 MB | Use factorized samplers |
-| > 10,000 | > 800 MB | **Must** use factorized operations |
+| ODME model | Generation strategy |
+|------------|---------------------|
+| Fixed-strength ME Poisson | stream $x_i y_j$ |
+| Fixed-strength ME multinomial | sample source totals, then targets |
+| Custom probability ME | stream supplied sparse $p_{ij}$ entries |
+| Degree-events ME | stream Bernoulli occupation + conditional weight |
+| Strength-cost ME | stream $x_i y_j e^{-\gamma d_{ij}}$ |
+| Strength-edges ME | stream ZIP occupation + zero-truncated Poisson |
+| Strength-degree ME | stream ZIP occupation + zero-truncated Poisson |
+| Partial constraints | stream free pairs plus known rates |
 
-## API guidance
+## Parallelism and reproducibility
 
-For small networks (N < 3,000):
+Independent Poisson and ZIP-Poisson models are parallelized by deterministic
+row chunks. Sparse custom probability inputs are parallelized by deterministic
+entry chunks. Each chunk gets a seed derived from the global seed and chunk id,
+so execution avoids shared RNG locks and is independent of thread scheduling.
 
-```python
-from odme.models import expected_multi_edge_weights, sample_poisson
+Canonical multinomial sampling is coupled by the fixed total $T$. ODME first
+samples totals for rows or sparse chunks, then samples each non-empty row/chunk
+in parallel.
 
-expected = expected_multi_edge_weights(strengths)
-sample = sample_poisson(expected, seed=42)
+## Canonical multinomial without dense probabilities
+
+A multinomial with total $T$ can be sampled by repeated binomial draws:
+
+```text
+remaining_T = T
+remaining_mass = sum(rate)
+for pair or group:
+    count ~ Binomial(remaining_T, rate / remaining_mass)
+    remaining_T -= count
+    remaining_mass -= rate
 ```
 
-For large networks (N > 3,000):
+For factorized fixed-strength models, ODME uses this idea hierarchically:
 
-```python
-from odme.models import fit_fixed_strength_me, sample_poisson_factorized
+1. sample source-node event totals from row masses;
+2. sample target counts within each non-empty source row.
 
-multipliers = fit_fixed_strength_me(strengths)
-x = multipliers.get_column("x").to_numpy()
-y = multipliers.get_column("y").to_numpy()
-sample = sample_poisson_factorized(x, y, seed=42)
+This avoids storing all pair probabilities and still preserves exact total
+$T$.
+
+## When $N^2$ is still unavoidable
+
+Computation over all node pairs is still $O(N^2)$ for all-pairs models. The
+streaming design removes $O(N^2)$ **memory**, not necessarily $O(N^2)$ time.
+Dense memory is still needed only when a user explicitly requests a full matrix
+or supplies a full dense cost/probability table.
+
+## Cost and probability inputs
+
+Sparse custom $p_{ij}$ inputs are treated as the candidate support: only
+supplied entries are sampled. Strength-cost fitting and sampling currently use
+sparse cost entries with missing costs interpreted as $d_{ij}=0$; pass complete
+costs unless zero-cost missing pairs are intentional.
+
+## Large-network regression
+
+The test suite includes generation smoke tests at `N = 1000` for:
+
+- factorized Poisson generation;
+- factorized canonical multinomial generation;
+- strength-cost generation.
+
+Run them with:
+
+```bash
+uv run pytest tests/test_odme_streaming_generation.py -q
 ```
-
-The factorized samplers iterate over source nodes (O(N) outer loop), sampling
-a target vector of length N per source but only storing non-zero results.
-Peak memory per row is O(N); total stored output is O(E).
-
-## Which models are node-factorized?
-
-| Model | Factorized? | Notes |
-|-------|:-----------:|-------|
-| Fixed strength (ME) | ✓ | E[t_ij] = x_i * y_j |
-| Fixed strength (W/AB/AW) | ✓ | Same structure, different link function |
-| Fixed degree | ✓ | E[p_ij] = z_i * w_j / (1 + z_i * w_j) |
-| Fixed strength + degree | ✓ | Four multipliers per node |
-| Strength-cost / distance | ✓ | E[t_ij] = x_i * y_j * f(d_ij); metric avoids NxN storage |
-| Custom p_ij | ✗ | Requires full NxN probability matrix |
-
-All models except custom p_ij are node-factorized and scale to large N
-without materializing dense matrices. The strength-cost model with a metric
-function (e.g., Euclidean distance) is also scalable: `f(d_ij)` is evaluated
-on-the-fly per row at O(N) peak memory, never storing the full NxN cost matrix.
-
-## The strength-cost / distance-constrained model
-
-The most general node-factorized model in the thesis is the strength-cost model:
-
-```
-p_ij = x_i * y_j * f(d_ij)
-```
-
-where `f(d_ij)` is a deterrence function of the cost/distance between nodes i and j.
-This does NOT require a full NxN distance matrix if the cost function `f` can be
-evaluated on-the-fly from node coordinates or a metric function.
-
-For example, with exponential deterrence `f(d) = exp(-gamma * d)` and Euclidean
-distance, the sampling loop for source i only needs:
-
-1. The coordinates of node i.
-2. The coordinates of all target nodes j.
-3. Evaluate `d_ij = distance(i, j)` and `rate_ij = x_i * y_j * exp(-gamma * d_ij)`.
-
-This is O(N) per source, O(N^2) total computation but O(N) peak memory per row.
-The full NxN distance matrix is never stored.
-
-When the distance matrix IS pre-computed (e.g., from a file or a non-Euclidean
-metric), it is inherently O(N^2) in storage. In that case, ODME should support
-sparse distance formats (only storing node pairs within a cutoff) or streaming
-row-by-row access.
-
-Summary of distance/cost handling strategies:
-
-| Scenario | Memory | Approach |
-|----------|--------|----------|
-| Metric function (Euclidean, etc.) | O(N) per row | Compute d_ij on-the-fly |
-| Sparse cost matrix (cutoff) | O(E_cost) | Only store pairs within cutoff |
-| Full pre-computed distance matrix | O(N^2) | Avoid for N > 10,000 |
-
-## The custom p_ij exception
-
-The custom p_ij model requires an explicit probability for every node pair.
-This is inherently O(N²) in memory and cannot be factorized. For this model,
-ODME limits N to MAX_DENSE_NODES (3,000) by default, with an override flag
-for users who have sufficient memory.
-"""

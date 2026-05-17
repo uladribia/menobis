@@ -6,44 +6,62 @@ description: Strength-cost model for spatially constrained multi-edge networks.
 
 ## TL;DR
 
-The strength-cost model (thesis Case 2) constrains both the strength sequence
-and the total network cost. It is the doubly-constrained gravity model in
-exponential deterrence form.
+The **strength-cost ME** model is thesis case 2. It constrains outgoing and
+incoming strengths plus total cost, with expectation
+$\mathbb{E}[t_{ij}] = x_i y_j e^{-\gamma d_{ij}}$.
 
 ## Model
 
-Given a cost matrix $d_{ij}$ (e.g., Euclidean distance between nodes),
-the expected occupation is:
+Given pair costs $d_{ij}$, usually distances, the expected occupation is:
 
 $$
-E[t_{ij}] = x_i \, y_j \, e^{-\gamma \, d_{ij}}
+\mathbb{E}[t_{ij}] = x_i y_j e^{-\gamma d_{ij}}.
 $$
 
-where $x_i$, $y_j$ are node-level Lagrange multipliers fitted to match the
-observed strength sequences, and $\gamma \ge 0$ is a scalar multiplier
-fitted to match the observed total cost:
+Here $x_i$ and $y_j$ are node multipliers and $\gamma \ge 0$ is the scalar cost
+multiplier. The observed total cost is:
 
 $$
-C = \sum_{ij} t_{ij} \, d_{ij}.
+C = \sum_{ij} t_{ij} d_{ij}.
 $$
 
 ## Constraints
 
-The model satisfies:
+The fitted expectation satisfies:
 
 $$
-s_i^{out} = \sum_j x_i \, y_j \, e^{-\gamma \, d_{ij}}, \quad
-s_j^{in} = \sum_i x_i \, y_j \, e^{-\gamma \, d_{ij}}, \quad
-C = \sum_{ij} x_i \, y_j \, d_{ij} \, e^{-\gamma \, d_{ij}}.
+s_i^{out} = \sum_j x_i y_j e^{-\gamma d_{ij}},
 $$
+
+$$
+s_j^{in} = \sum_i x_i y_j e^{-\gamma d_{ij}},
+$$
+
+$$
+C = \sum_{ij} x_i y_j d_{ij} e^{-\gamma d_{ij}}.
+$$
+
+When `self_loops=False`, diagonal pairs $(i,i)$ are omitted from all sums.
+
+## Cost entries
+
+ODME accepts costs as sparse `source,target,cost` entries. For current fitting
+and sampling, omitted pairs are treated as cost $d_{ij}=0$. Prefer passing a
+complete cost table unless zero-cost missing pairs are intentional.
 
 ## Solver
 
-ODME uses a two-level solver:
+ODME currently uses a two-level structure:
 
-1. **Inner loop**: IPF balancing of $x$, $y$ for fixed $\gamma$ to match
-   strength constraints.
-2. **Outer loop**: adaptive search on $\gamma$ to match the total cost $C$.
+| Level | Method | What it uses |
+|-------|--------|--------------|
+| Inner | IPF balancing | exact multiplicative structure for $x,y$ at fixed $\gamma$ |
+| Outer | adaptive scalar search | warm-started updates of $\gamma$ to match $C$ |
+
+The dual problem is convex under the usual feasible maximum-entropy setup, but
+the current implementation does **not** call a generic convex optimizer. It
+exploits separability/IPF and warm starts. Future work can replace the outer
+search with bracketed bisection/Brent or a gradient-based convex-dual solve.
 
 ## Python API
 
@@ -59,10 +77,20 @@ fit = fit_strength_cost_me(
 sample = sample_strength_cost_me(fit, cost_sources, cost_targets, cost_values, seed=42)
 ```
 
+## CLI
+
+```bash
+odme fit strength-cost-me edges.csv --costs costs.csv --target-cost 120.0
+odme generate strength-cost-me edges.csv --costs costs.csv --target-cost 120.0 --seed 42
+```
+
+If `--target-cost` is omitted, the CLI computes it from the observed edges and
+cost table. Observed edges missing from the cost table contribute zero cost.
+
 ## Partial-constraint variant
 
-When some edges have known rates (e.g., from a cutoff), the excess constraints
-are computed and the solver fits only the free pairs:
+When some rates are known, ODME subtracts their strength and cost contribution
+and fits the free pairs:
 
 ```python
 from odme.models.partial import fit_partial_strength_cost_me
@@ -75,4 +103,4 @@ result = fit_partial_strength_cost_me(
 )
 ```
 
-See [Partial Constraints](partial-constraints.md) for details.
+See [Partial Constraints](partial-constraints.md).

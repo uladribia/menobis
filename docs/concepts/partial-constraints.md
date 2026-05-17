@@ -1,57 +1,69 @@
 ---
-description: Partial-constraint fitting with known edge probabilities.
+description: Partial-constraint fitting with known edge rates.
 ---
 
 # Partial constraints
 
 ## TL;DR
 
-When some edge rates $t_{ij}$ are known (e.g., heavy edges above a cutoff),
-ODME fits the remaining edges using any ME model on the **excess** constraints.
+Partial fitting fixes some pair rates $q_{ij}$ and fits the remaining pairs on
+**free** constraints. ODME names these functions `fit_partial_*` and keeps the
+same model names as the full fitters.
 
 ## Problem setup
 
-Partition the set of node pairs into:
+Partition node pairs into:
 
-- **Known set** $Q$: pairs where $E[t_{ij}] = q_{ij}$ is fixed.
-- **Free set** $\bar{Q}$: pairs fitted by the ME model.
+| Set | Meaning |
+|-----|---------|
+| $Q$ | known pairs with fixed expectation $\mathbb{E}[t_{ij}] = q_{ij}$ |
+| $\bar Q$ | free pairs fitted by a maximum-entropy model |
 
-The observed constraints apply to the **full** network:
-
-$$
-s_i^{out} = \underbrace{\sum_{j \in Q_i} q_{ij}}_{\text{known}} +
-\underbrace{\sum_{j \notin Q_i} E[t_{ij}]}_{\text{fitted}}.
-$$
-
-The solver works on **excess** constraints:
+Full outgoing strength is split as:
 
 $$
-s_i^{out,\text{free}} = s_i^{out} - \sum_{j \in Q_i} q_{ij}.
+s_i^{out} = \sum_{j:(i,j)\in Q} q_{ij}
++ \sum_{j:(i,j)\in \bar Q} \mathbb{E}[t_{ij}].
 $$
 
-Similarly for incoming strengths, degrees, and cost.
-
-## Feasibility
-
-If any excess constraint is negative, the problem is infeasible:
+The solver uses free, or excess, constraints:
 
 $$
-s_i^{out,\text{free}} < 0 \implies \text{reject}.
+s_i^{out,free} = s_i^{out} - \sum_{j:(i,j)\in Q} q_{ij}.
 $$
+
+Incoming strengths, degrees, total binary edges, and total cost are reduced in
+the same way.
+
+## Excess constraints
+
+| Constraint | Free value |
+|------------|------------|
+| Out strength | $s_i^{out} - \sum_{j:(i,j)\in Q} q_{ij}$ |
+| In strength | $s_j^{in} - \sum_{i:(i,j)\in Q} q_{ij}$ |
+| Out degree | $k_i^{out} - \sum_{j:(i,j)\in Q} \Theta(q_{ij})$ |
+| In degree | $k_j^{in} - \sum_{i:(i,j)\in Q} \Theta(q_{ij})$ |
+| Binary edges | $E - \sum_{(i,j)\in Q}\Theta(q_{ij})$ |
+| Cost | $C - \sum_{(i,j)\in Q} q_{ij} d_{ij}$ |
+
+Any negative free constraint is infeasible and rejected.
 
 ## Available models
 
-All ME models support partial constraints via masked solvers:
+| ODME model | Function | Free constraints |
+|------------|----------|------------------|
+| Fixed-strength ME | `fit_partial_strength_me` | $s^{free}$ |
+| Degree-events ME | `fit_partial_degree_me` | $k^{free}$ |
+| Strength-degree ME | `fit_partial_strength_degree_me` | $s^{free}$, $k^{free}$ |
+| Strength-edges ME | `fit_partial_strength_edges_me` | $s^{free}$, $E^{free}$ |
+| Strength-cost ME | `fit_partial_strength_cost_me` | $s^{free}$, $C^{free}$ |
 
-| Model | Function | Excess constraints |
-|-------|----------|--------------------|
-| Fixed strength | `fit_partial_strength_me` | $s^{free}$ |
-| Fixed degree | `fit_partial_degree_me` | $k^{free}$ (known pairs contribute 1 each) |
-| Strength + degree | `fit_partial_strength_degree_me` | $s^{free}$, $k^{free}$ |
-| Strength + edges | `fit_partial_strength_edges_me` | $s^{free}$, $E^{free} = E - |Q|$ |
-| Strength + cost | `fit_partial_strength_cost_me` | $s^{free}$, $C^{free} = C - \sum_Q q_{ij} d_{ij}$ |
+## Self-loops
 
-## Convenience: cutoff-based splitting
+When `self_loops=False`, diagonal pairs $(i,i)$ are excluded from both known and
+free sets.
+
+## Cutoff-based splitting
 
 ```python
 from odme.models.partial import fit_from_network_cutoff
@@ -65,17 +77,13 @@ result = fit_from_network_cutoff(
 )
 ```
 
-Edges with `weight > cutoff` become known pairs. The rest are fitted.
+Edges with `weight > cutoff` become known positive pairs. Remaining constraints
+are fitted on free pairs.
 
-## Self-loops
+## Sampling from partial fits
 
-When `self_loops=False`, diagonal pairs $(i, i)$ are excluded from both the
-known set and the fitted pairs, regardless of the data.
-
-## Normalization
-
-The returned `PartialFitResult.rate` values are **unnormalized expected
-counts**. For sampling, convert to a `ProbabilityTable`:
+`PartialFitResult.rate` contains unnormalized expected counts, not normalized
+probabilities. Convert before custom-probability sampling:
 
 ```python
 from odme.models import sample_custom_pij_events_poisson
@@ -84,15 +92,14 @@ prob = result.as_probability_table()
 sample = sample_custom_pij_events_poisson(prob, total_events=T, seed=42)
 ```
 
-The sampling functions normalize internally by dividing each rate by the total.
+Custom-probability samplers normalize their input rates internally.
 
-## Example: heavy-edge splitting
+## Example
 
 ```python
 import numpy as np
 from odme.data.frames import EdgeTable
 from odme.models.partial import fit_from_network_cutoff
-from odme.models import sample_custom_pij_events_poisson
 
 edges = EdgeTable(
     source=np.array([0, 0, 1, 1, 2, 2]),
@@ -101,9 +108,5 @@ edges = EdgeTable(
 )
 
 result = fit_from_network_cutoff(edges, cutoff=10, model="strength")
-sample = sample_custom_pij_events_poisson(
-    result.as_probability_table(),
-    total_events=edges.total_events,
-    seed=42,
-)
+prob = result.as_probability_table()
 ```

@@ -1,0 +1,31 @@
+{
+  "average_strength": 20,
+  "cases": [
+    "fixed_strength_poisson",
+    "fixed_strength_multinomial",
+    "fixed_strength_poisson_multinomial",
+    "fixed_strength_microcanonical",
+    "custom_pij_poisson_sparse",
+    "custom_pij_multinomial_sparse",
+    "degree_events_zip",
+    "strength_cost_poisson",
+    "strength_edges_zip",
+    "strength_degree_zip"
+  ],
+  "created_utc": "2026-05-17T10:24:10.272095+00:00",
+  "nodes": [
+    10,
+    100,
+    500,
+    1000,
+    5000,
+    10000,
+    20000,
+    30000
+  ],
+  "progress_interval": 15.0,
+  "repeats": 5,
+  "run_id": "20260517T102410Z",
+  "seed": 42,
+  "sparse_degree": 20
+}

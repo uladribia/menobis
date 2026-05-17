@@ -6,79 +6,74 @@ description: Ensemble equivalence validation for fixed-strength ME models.
 
 ## TL;DR
 
-The three statistical ensembles for fixed-strength multi-edge networks —
-microcanonical, canonical, and grand-canonical — produce identical marginal
-statistics in the limit of large total events `T`. ODME validates this
-numerically.
+ODME validates three fixed-strength samplers: grand-canonical Poisson,
+canonical multinomial, and exact-strength stub matching. Their marginal means
+match $\mathbb{E}[t_{ij}] = s_i^{out}s_j^{in}/T$; fluctuations differ and shrink
+relative to $T$ as total events grow.
 
-## Three ensembles
+## Three samplers
 
-| Ensemble | Sampler | What is fixed exactly | What fluctuates |
-|----------|---------|----------------------|-----------------|
-| Microcanonical | `sample_microcanonical` | `s_out`, `s_in`, `T` | nothing |
-| Canonical | `sample_multinomial` | `T` | `s_out`, `s_in` |
-| Grand-canonical | `sample_poisson` | nothing | `s_out`, `s_in`, `T` |
+| Sampler family | Function | Exactly fixed | Fluctuates |
+|----------------|----------|---------------|------------|
+| Grand-canonical | `sample_poisson` | nothing | $s^{out}$, $s^{in}$, $T$ |
+| Canonical | `sample_multinomial` | $T$ | $s^{out}$, $s^{in}$ |
+| Stub-matched exact strength | `sample_microcanonical` | $s^{out}$, $s^{in}$, $T$ | edge weights only |
 
-All three share the same analytical expectation:
+All three have the same target marginal expectation:
 
-\[
-E[t_{ij}] = \frac{s_i^{out} s_j^{in}}{T} = x_i y_j.
-\]
+$$
+\mathbb{E}[t_{ij}] = \frac{s_i^{out} s_j^{in}}{T} = x_i y_j.
+$$
 
-## Microcanonical sampler
+## Stub-matched exact-strength sampler
 
-The microcanonical ensemble is implemented as a **stub-matching** algorithm:
+The exact-strength sampler uses directed stubs:
 
-1. Create `s_out[i]` outgoing stubs for each node `i`.
-2. Create `s_in[j]` incoming stubs for each node `j`.
-3. Shuffle the incoming stubs uniformly at random.
-4. Pair outgoing stub `k` with incoming stub `k`.
-5. Count edge weights from the pairings.
+1. Create $s_i^{out}$ outgoing stubs for each node $i$.
+2. Create $s_j^{in}$ incoming stubs for each node $j$.
+3. Shuffle incoming stubs uniformly.
+4. Pair outgoing stub $r$ with shuffled incoming stub $r$.
+5. Aggregate repeated pairs into integer edge weights.
 
-This produces an **unbiased uniform sample** from the space of all directed
-integer-weight graphs with exactly the given strength sequence.
+This is uniform over matchings of distinguishable event stubs. The induced
+distribution over aggregated occupation matrices is not uniform over all
+integer matrices with the same strength sequence; matrices with more stub
+labelings have larger probability. That is the intended ME event model.
 
-**Important**: uniform sampling is only unbiased when self-loops are allowed.
-Without self-loops, the rejection of diagonal pairings introduces bias that
-requires MCMC or other correction methods. ODME therefore only implements the
-self-loop-allowed version.
+Self-loops are required for unbiased direct stub matching. Sampling exact
+strengths while forbidding self-loops needs a different constrained algorithm
+such as MCMC.
 
 ## Validation protocol
 
-1. Fix a heterogeneous relative strength profile `p_out`, `p_in` (Pareto-like).
-2. For increasing `T` values (100, 500, 2000, 10000):
-   - Compute integer strengths: `s = round(T × p)`, balanced.
-   - Generate 200 ensemble samples from each of the three samplers.
-   - Compute **all** higher-order graph statistics per sample:
-     strengths, degrees, Y2 disparity, k_nn, s_nn, clustering.
-3. Assert:
-   - Ensemble means converge across all three ensembles as `T` grows.
-   - Ensemble variances (per unit T) decrease with `T`.
+1. Fix heterogeneous relative profiles `p_out` and `p_in`.
+2. For `T` values 100, 500, 2000, and 10000:
+   - compute balanced integer strengths from `round(T * p)`;
+   - generate 200 samples from each sampler;
+   - compute strengths, degrees, Y2 disparity, nearest-neighbor statistics,
+     and clustering.
+3. Assert that sample means converge toward the same analytical marginals and
+   relative differences shrink as `T` grows.
 
 ## Results
 
 ### Mean convergence
 
-At large `T`, the maximum normalized difference between any pair of ensemble
-means decreases as ~1/T:
+At large `T`, normalized differences between ensemble means decrease:
 
 ![Ensemble equivalence convergence](../figures/ensemble_equivalence.png)
 
 ### Per-statistic comparison at T=10000
 
-At `T = 10000`, all three ensembles produce statistically indistinguishable
-means for every computed graph statistic:
+At `T = 10000`, all sampler families produce close means for computed graph
+statistics:
 
 ![Per-statistic ensemble means](../figures/ensemble_per_statistic.png)
 
-### Per-node higher-order statistics vs relative strength
+### Per-node higher-order statistics
 
-Y2 disparity and weighted nearest-neighbor strength plotted against the
-relative outgoing strength `p_s = s^out / T` for each node, ensemble, and
-increasing T. Error bars show standard error of the ensemble mean.
-
-At small T the ensembles differ (especially for low-strength nodes). At large T
-they overlap completely:
+Y2 disparity and weighted nearest-neighbor strength are plotted against
+relative outgoing strength $p_s=s^{out}/T$:
 
 ![Y2 and s_nn vs p_s](../figures/ensemble_y2_snn_vs_ps.png)
 
@@ -88,4 +83,4 @@ they overlap completely:
 uv run pytest tests/test_odme_ensemble_equivalence.py -q
 ```
 
-The test generates the figures in `docs/figures/` automatically.
+The test updates figures in `docs/figures/`.

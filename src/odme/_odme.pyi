@@ -179,6 +179,18 @@ def sample_strength_edges_me(
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
+def sample_strength_cost_me(
+    x: list[float],
+    y: list[float],
+    gamma: float,
+    cost_sources: list[int],
+    cost_targets: list[int],
+    cost_values: list[float],
+    self_loops: bool,
+    seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
+
+
 def sample_poisson(
     x: list[float],
     y: list[float],
@@ -213,6 +225,78 @@ def sample_multinomial(
     self_loops: bool,
     seed: int,
 ) -> tuple[list[int], list[int], list[int]]: ...
+
+
+def filter_fixed_strength_poisson(
+    x: list[float],
+    y: list[float],
+    sources: list[int],
+    targets: list[int],
+    weights: list[int],
+) -> tuple[list[float], list[float], list[float], list[float]]: ...
+
+
+def absent_fixed_strength_poisson(
+    x: list[float],
+    y: list[float],
+    sources: list[int],
+    targets: list[int],
+    self_loops: bool,
+    alpha_lower: float,
+    min_occupation: float,
+    min_expected: float,
+    max_absent: int | None,
+) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
+
+
+def filter_custom_poisson_rates(
+    rate_sources: list[int],
+    rate_targets: list[int],
+    rates: list[float],
+    sources: list[int],
+    targets: list[int],
+    weights: list[int],
+) -> tuple[list[float], list[float], list[float], list[float]]: ...
+
+
+def absent_custom_poisson_rates(
+    rate_sources: list[int],
+    rate_targets: list[int],
+    rates: list[float],
+    sources: list[int],
+    targets: list[int],
+    alpha_lower: float,
+    min_occupation: float,
+    min_expected: float,
+    max_absent: int | None,
+) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
+
+
+def filter_strength_edges_zip(
+    x: list[float],
+    y: list[float],
+    lam: float,
+    sources: list[int],
+    targets: list[int],
+    weights: list[int],
+) -> tuple[list[float], list[float], list[float], list[float]]: ...
+
+
+def absent_strength_edges_zip(
+    x: list[float],
+    y: list[float],
+    lam: float,
+    sources: list[int],
+    targets: list[int],
+    self_loops: bool,
+    alpha_lower: float,
+    min_occupation: float,
+    min_expected: float,
+    max_absent: int | None,
+) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
+
+
+def benjamini_hochberg(pvalues: list[float], alpha: float) -> list[bool]: ...
 
 
 def clustering_coefficients(

@@ -23,6 +23,7 @@ nav:
       - Thesis Cases: concepts/thesis-cases.md
       - Spatial Costs: concepts/spatial-costs.md
       - Partial Constraints: concepts/partial-constraints.md
+      - Statistical Filtering: concepts/statistical-filtering.md
       - Ensembles: concepts/ensembles.md
   - API:
       - Python: api/python.md
@@ -31,6 +32,7 @@ nav:
       - Analyze: cli/analyze.md
       - Fit: cli/fit.md
       - Generate: cli/generate.md
+      - Filter: cli/filter.md
       - Convert: cli/convert.md
   - Development:
       - Testing: development/testing.md
@@ -39,6 +41,8 @@ nav:
       - Release Process: development/release-process.md
   - Decisions:
       - Rust and Python Architecture: decisions/0001-rust-python-architecture.md
+      - Streaming Generation: decisions/0002-streaming-generation.md
+      - Provider Pipeline: decisions/0003-provider-pipeline.md
 
 plugins:
   - search

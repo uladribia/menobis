@@ -1,9 +1,20 @@
 //! Seeded network generation for node-factorized models.
 
+use crate::distribution::{zero_truncated_poisson_mean, PairDistribution};
+use crate::pairs::{
+    chunk_seed, row_ranges, CandidateSupport, DegreeEventsZipProvider,
+    FixedStrengthPoissonProvider, NormalizedSparsePoissonProvider, PairDistributionProvider,
+    StrengthCostPoissonProvider, StrengthDegreeZipProvider, StrengthEdgesZipProvider,
+    PARALLEL_PAIR_THRESHOLD, SPARSE_CHUNK_SIZE,
+};
 use rand::rngs::StdRng;
 use rand::Rng;
 use rand::SeedableRng;
-use rand_distr::{Bernoulli, Binomial, Distribution, Poisson};
+use rand_distr::{Binomial, Distribution, Poisson};
+use rayon::prelude::*;
+use std::collections::HashMap;
+
+const ZTP_MEAN_EPSILON: f64 = 1e-10;
 
 /// Sparse edge output from a generation run.
 #[derive(Clone, Debug, Default)]
@@ -11,6 +22,191 @@ pub struct SampledEdges {
     pub sources: Vec<u64>,
     pub targets: Vec<u64>,
     pub weights: Vec<u64>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PairDraw {
+    source: u64,
+    target: u64,
+    distribution: PairDistribution,
+}
+
+/// Sparse cost entries for strength-cost generation.
+pub struct SparseCostEntries<'a> {
+    pub sources: &'a [usize],
+    pub targets: &'a [usize],
+    pub values: &'a [f64],
+}
+
+fn merge_samples(chunks: Vec<SampledEdges>) -> SampledEdges {
+    let total_edges = chunks.iter().map(|chunk| chunk.sources.len()).sum();
+    let mut result = SampledEdges {
+        sources: Vec::with_capacity(total_edges),
+        targets: Vec::with_capacity(total_edges),
+        weights: Vec::with_capacity(total_edges),
+    };
+    for mut chunk in chunks {
+        result.sources.append(&mut chunk.sources);
+        result.targets.append(&mut chunk.targets);
+        result.weights.append(&mut chunk.weights);
+    }
+    result
+}
+
+fn push_sampled_pair(result: &mut SampledEdges, pair: PairDraw, rng: &mut StdRng) {
+    let weight = pair.distribution.sample(rng);
+    if weight > 0 {
+        result.sources.push(pair.source);
+        result.targets.push(pair.target);
+        result.weights.push(weight);
+    }
+}
+
+fn sample_independent_pairs<I>(pairs: I, rng: &mut StdRng) -> SampledEdges
+where
+    I: IntoIterator<Item = PairDraw>,
+{
+    let mut result = SampledEdges::default();
+    for pair in pairs {
+        push_sampled_pair(&mut result, pair, rng);
+    }
+    result
+}
+
+fn sample_provider<P>(provider: &P, seed: u64) -> SampledEdges
+where
+    P: PairDistributionProvider,
+{
+    match provider.support() {
+        CandidateSupport::AllPairs {
+            node_count,
+            self_loops,
+        } => sample_all_pairs_by_rows(node_count, self_loops, seed, |i, j| {
+            provider.distribution(i, j)
+        }),
+        CandidateSupport::SparsePairs { sources, targets } => {
+            sample_sparse_provider(provider, sources, targets, seed)
+        }
+    }
+}
+
+fn sample_sparse_provider<P>(
+    provider: &P,
+    sources: &[u64],
+    targets: &[u64],
+    seed: u64,
+) -> SampledEdges
+where
+    P: PairDistributionProvider,
+{
+    if sources.len() < SPARSE_CHUNK_SIZE {
+        let pairs = sources.iter().zip(targets.iter()).enumerate().filter_map(
+            |(index, (&source, &target))| {
+                provider
+                    .distribution_at(index, source as usize, target as usize)
+                    .map(|distribution| PairDraw {
+                        source,
+                        target,
+                        distribution,
+                    })
+            },
+        );
+        return sample_independent_pairs(pairs, &mut StdRng::seed_from_u64(seed));
+    }
+
+    let chunks: Vec<SampledEdges> = (0..sources.len())
+        .step_by(SPARSE_CHUNK_SIZE)
+        .map(|start| (start, (start + SPARSE_CHUNK_SIZE).min(sources.len())))
+        .collect::<Vec<_>>()
+        .into_par_iter()
+        .enumerate()
+        .map(|(chunk_index, (start, end))| {
+            let mut rng = StdRng::seed_from_u64(chunk_seed(seed, chunk_index));
+            let mut result = SampledEdges::default();
+            for index in start..end {
+                if let Some(distribution) = provider.distribution_at(
+                    index,
+                    sources[index] as usize,
+                    targets[index] as usize,
+                ) {
+                    push_sampled_pair(
+                        &mut result,
+                        PairDraw {
+                            source: sources[index],
+                            target: targets[index],
+                            distribution,
+                        },
+                        &mut rng,
+                    );
+                }
+            }
+            result
+        })
+        .collect();
+    merge_samples(chunks)
+}
+
+fn sample_all_pairs_by_rows<F>(n: usize, self_loops: bool, seed: u64, pair_fn: F) -> SampledEdges
+where
+    F: Fn(usize, usize) -> Option<PairDistribution> + Sync,
+{
+    let candidate_pairs = if self_loops {
+        n.saturating_mul(n)
+    } else {
+        n.saturating_mul(n.saturating_sub(1))
+    };
+    if candidate_pairs < PARALLEL_PAIR_THRESHOLD {
+        let mut rng = StdRng::seed_from_u64(seed);
+        let mut result = SampledEdges::default();
+        for i in 0..n {
+            for j in 0..n {
+                if !self_loops && i == j {
+                    continue;
+                }
+                if let Some(distribution) = pair_fn(i, j) {
+                    push_sampled_pair(
+                        &mut result,
+                        PairDraw {
+                            source: i as u64,
+                            target: j as u64,
+                            distribution,
+                        },
+                        &mut rng,
+                    );
+                }
+            }
+        }
+        return result;
+    }
+
+    let chunks: Vec<SampledEdges> = row_ranges(n)
+        .into_par_iter()
+        .enumerate()
+        .map(|(chunk_index, (start, end))| {
+            let mut rng = StdRng::seed_from_u64(chunk_seed(seed, chunk_index));
+            let mut result = SampledEdges::default();
+            for i in start..end {
+                for j in 0..n {
+                    if !self_loops && i == j {
+                        continue;
+                    }
+                    if let Some(distribution) = pair_fn(i, j) {
+                        push_sampled_pair(
+                            &mut result,
+                            PairDraw {
+                                source: i as u64,
+                                target: j as u64,
+                                distribution,
+                            },
+                            &mut rng,
+                        );
+                    }
+                }
+            }
+            result
+        })
+        .collect();
+    merge_samples(chunks)
 }
 
 /// Sample custom p_ij grand-canonical Poisson graph with E[t_ij] = T p_ij.
@@ -22,30 +218,20 @@ pub fn sample_custom_pij_events_poisson(
     total_events: u64,
     seed: u64,
 ) -> SampledEdges {
-    let mut rng = StdRng::seed_from_u64(seed);
-    let mut result = SampledEdges::default();
     let p_sum: f64 = probabilities.iter().sum();
     if p_sum <= 0.0 {
-        return result;
+        return SampledEdges::default();
     }
-    for ((&source, &target), &probability) in
-        sources.iter().zip(targets.iter()).zip(probabilities.iter())
-    {
-        let rate = total_events as f64 * probability / p_sum;
-        if rate <= 0.0 {
-            continue;
-        }
-        let w = match Poisson::new(rate) {
-            Ok(dist) => dist.sample(&mut rng) as u64,
-            Err(_) => 0,
-        };
-        if w > 0 {
-            result.sources.push(source);
-            result.targets.push(target);
-            result.weights.push(w);
-        }
-    }
-    result
+    sample_provider(
+        &NormalizedSparsePoissonProvider {
+            sources,
+            targets,
+            probabilities,
+            total_events,
+            probability_sum: p_sum,
+        },
+        seed,
+    )
 }
 
 /// Sample custom p_ij canonical multinomial graph with fixed T.
@@ -58,16 +244,7 @@ pub fn sample_custom_pij_events_multinomial(
     seed: u64,
 ) -> SampledEdges {
     let mut rng = StdRng::seed_from_u64(seed);
-    let counts = multinomial_sample(probabilities, total_events, &mut rng);
-    let mut result = SampledEdges::default();
-    for ((&source, &target), &weight) in sources.iter().zip(targets.iter()).zip(counts.iter()) {
-        if weight > 0 {
-            result.sources.push(source);
-            result.targets.push(target);
-            result.weights.push(weight);
-        }
-    }
-    result
+    sparse_multinomial_sample(sources, targets, probabilities, total_events, &mut rng)
 }
 
 /// Microcanonical stub-matching sampler for fixed-strength ME with self-loops.
@@ -133,49 +310,49 @@ pub fn sample_microcanonical(strength_out: &[u64], strength_in: &[u64], seed: u6
 /// Sample from independent Poisson(x_i * y_j) for all (i, j).
 #[must_use]
 pub fn sample_poisson(x: &[f64], y: &[f64], self_loops: bool, seed: u64) -> SampledEdges {
-    let mut rng = StdRng::seed_from_u64(seed);
-    let mut result = SampledEdges::default();
-
-    for (i, &xi) in x.iter().enumerate() {
-        if xi == 0.0 {
-            continue;
-        }
-        for (j, &yj) in y.iter().enumerate() {
-            if !self_loops && i == j {
-                continue;
-            }
-            let rate = xi * yj;
-            if rate <= 0.0 {
-                continue;
-            }
-            let dist = match Poisson::new(rate) {
-                Ok(d) => d,
-                Err(_) => continue,
-            };
-            let w = dist.sample(&mut rng) as u64;
-            if w > 0 {
-                result.sources.push(i as u64);
-                result.targets.push(j as u64);
-                result.weights.push(w);
-            }
-        }
-    }
-
-    result
+    sample_provider(&FixedStrengthPoissonProvider { x, y, self_loops }, seed)
 }
 
-fn zero_truncated_poisson_mean(rate: f64) -> f64 {
-    if rate <= 0.0 {
-        return 1.0;
-    }
-    rate / (1.0 - (-rate).exp())
+/// Sample from independent Poisson(x_i * y_j * exp(-gamma d_ij)).
+///
+/// Cost entries are read sparsely. Missing pairs have d_ij = 0, matching the
+/// fitting API's current semantics, and rates are generated on the fly.
+#[must_use]
+pub fn sample_strength_cost_me(
+    x: &[f64],
+    y: &[f64],
+    gamma: f64,
+    costs: &SparseCostEntries<'_>,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    let cost_map: HashMap<(usize, usize), f64> = costs
+        .sources
+        .iter()
+        .zip(costs.targets.iter())
+        .zip(costs.values.iter())
+        .map(|((&source, &target), &cost)| ((source, target), cost))
+        .collect();
+    sample_provider(
+        &StrengthCostPoissonProvider {
+            x,
+            y,
+            gamma,
+            costs: &cost_map,
+            self_loops,
+        },
+        seed,
+    )
 }
 
 fn solve_zero_truncated_poisson_rate(mean: f64) -> f64 {
-    if mean <= 1.0 {
-        return 1e-12;
+    if mean < 1.0 - ZTP_MEAN_EPSILON {
+        return f64::NAN;
     }
-    let mut low = 1e-12;
+    if mean <= 1.0 + ZTP_MEAN_EPSILON {
+        return 0.0;
+    }
+    let mut low = 0.0;
     let mut high = mean.max(1.0);
     while zero_truncated_poisson_mean(high) < mean {
         high *= 2.0;
@@ -189,22 +366,6 @@ fn solve_zero_truncated_poisson_rate(mean: f64) -> f64 {
         }
     }
     0.5 * (low + high)
-}
-
-fn sample_zero_truncated_poisson(rate: f64, rng: &mut StdRng) -> u64 {
-    if rate <= 0.0 {
-        return 1;
-    }
-    let dist = match Poisson::new(rate) {
-        Ok(d) => d,
-        Err(_) => return 1,
-    };
-    loop {
-        let value = dist.sample(rng) as u64;
-        if value > 0 {
-            return value;
-        }
-    }
 }
 
 /// Sample original fixed-degree ME weighted model.
@@ -231,33 +392,16 @@ pub fn sample_fixed_degree_events_me(
     } else {
         1.0
     };
-    let rate = solve_zero_truncated_poisson_rate(mean_existing_weight);
-    let mut rng = StdRng::seed_from_u64(seed);
-    let mut result = SampledEdges::default();
-    for (i, &xi) in x.iter().enumerate() {
-        for (j, &yj) in y.iter().enumerate() {
-            if !self_loops && i == j {
-                continue;
-            }
-            let z = xi * yj;
-            let p = z / (1.0 + z);
-            if p <= 0.0 {
-                continue;
-            }
-            let present = match Bernoulli::new(p.min(1.0)) {
-                Ok(dist) => dist.sample(&mut rng),
-                Err(_) => false,
-            };
-            if present {
-                result.sources.push(i as u64);
-                result.targets.push(j as u64);
-                result
-                    .weights
-                    .push(sample_zero_truncated_poisson(rate, &mut rng));
-            }
-        }
-    }
-    result
+    let rate = solve_zero_truncated_poisson_rate(mean_existing_weight.max(1.0));
+    sample_provider(
+        &DegreeEventsZipProvider {
+            x,
+            y,
+            positive_weight_rate: rate,
+            self_loops,
+        },
+        seed,
+    )
 }
 
 /// Sample from the exact ME fixed-strength-degree ZIP model.
@@ -270,42 +414,16 @@ pub fn sample_strength_degree_me(
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
-    let mut rng = StdRng::seed_from_u64(seed);
-    let mut result = SampledEdges::default();
-
-    for (i, &xi) in x.iter().enumerate() {
-        for (j, &yj) in y.iter().enumerate() {
-            if !self_loops && i == j {
-                continue;
-            }
-            let u = xi * yj;
-            let v = z[i] * w[j];
-            let exp_u = u.exp();
-            let den = 1.0 + v * (exp_u - 1.0);
-            let p = if den > 0.0 {
-                v * (exp_u - 1.0) / den
-            } else {
-                0.0
-            };
-            if p <= 0.0 {
-                continue;
-            }
-            let present = match Bernoulli::new(p.min(1.0)) {
-                Ok(dist) => dist.sample(&mut rng),
-                Err(_) => false,
-            };
-            if !present {
-                continue;
-            }
-            result.sources.push(i as u64);
-            result.targets.push(j as u64);
-            result
-                .weights
-                .push(sample_zero_truncated_poisson(u, &mut rng));
-        }
-    }
-
-    result
+    sample_provider(
+        &StrengthDegreeZipProvider {
+            x,
+            y,
+            z,
+            w,
+            self_loops,
+        },
+        seed,
+    )
 }
 
 /// Poisson-total multinomial sampling with node-factorized probabilities.
@@ -345,38 +463,15 @@ pub fn sample_strength_edges_me(
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
-    let mut rng = StdRng::seed_from_u64(seed);
-    let mut result = SampledEdges::default();
-    for (i, &xi) in x.iter().enumerate() {
-        for (j, &yj) in y.iter().enumerate() {
-            if !self_loops && i == j {
-                continue;
-            }
-            let u = xi * yj;
-            let exp_u = u.exp();
-            let den = 1.0 + lam * (exp_u - 1.0);
-            let p = if den > 0.0 {
-                lam * (exp_u - 1.0) / den
-            } else {
-                0.0
-            };
-            if p <= 0.0 {
-                continue;
-            }
-            let present = match Bernoulli::new(p.min(1.0)) {
-                Ok(dist) => dist.sample(&mut rng),
-                Err(_) => false,
-            };
-            if present {
-                result.sources.push(i as u64);
-                result.targets.push(j as u64);
-                result
-                    .weights
-                    .push(sample_zero_truncated_poisson(u, &mut rng));
-            }
-        }
-    }
-    result
+    sample_provider(
+        &StrengthEdgesZipProvider {
+            x,
+            y,
+            lambda: lam,
+            self_loops,
+        },
+        seed,
+    )
 }
 
 /// Multinomial sampling with node-factorized probabilities.
@@ -410,26 +505,150 @@ pub fn sample_multinomial(
     }
 
     let row_events = multinomial_sample(&row_rates, total_events, &mut rng);
-
-    for (i, &t_i) in row_events.iter().enumerate() {
-        if t_i == 0 {
-            continue;
+    let non_empty_rows = row_events.iter().filter(|&&events| events > 0).count();
+    if n.saturating_mul(non_empty_rows) < PARALLEL_PAIR_THRESHOLD {
+        for (i, &t_i) in row_events.iter().enumerate() {
+            append_multinomial_row(&mut result, i, t_i, y, self_loops, &mut rng);
         }
-        let mut col_rates: Vec<f64> = y.to_vec();
-        if !self_loops {
-            col_rates[i] = 0.0;
-        }
-        let col_events = multinomial_sample(&col_rates, t_i, &mut rng);
-        for (j, &cj) in col_events.iter().enumerate().take(n) {
-            if cj > 0 {
-                result.sources.push(i as u64);
-                result.targets.push(j as u64);
-                result.weights.push(cj);
-            }
-        }
+        return result;
     }
 
+    let chunks: Vec<SampledEdges> = row_events
+        .par_iter()
+        .enumerate()
+        .map(|(i, &t_i)| {
+            let mut local = SampledEdges::default();
+            let mut row_rng = StdRng::seed_from_u64(chunk_seed(seed, i));
+            append_multinomial_row(&mut local, i, t_i, y, self_loops, &mut row_rng);
+            local
+        })
+        .collect();
+    merge_samples(chunks)
+}
+
+fn append_multinomial_row(
+    result: &mut SampledEdges,
+    i: usize,
+    total_events: u64,
+    y: &[f64],
+    self_loops: bool,
+    rng: &mut StdRng,
+) {
+    if total_events == 0 {
+        return;
+    }
+    let mut col_rates: Vec<f64> = y.to_vec();
+    if !self_loops {
+        col_rates[i] = 0.0;
+    }
+    let col_events = multinomial_sample(&col_rates, total_events, rng);
+    for (j, &count) in col_events.iter().enumerate() {
+        if count > 0 {
+            result.sources.push(i as u64);
+            result.targets.push(j as u64);
+            result.weights.push(count);
+        }
+    }
+}
+
+fn sparse_multinomial_sample(
+    sources: &[u64],
+    targets: &[u64],
+    rates: &[f64],
+    total: u64,
+    rng: &mut StdRng,
+) -> SampledEdges {
+    if rates.len() < SPARSE_CHUNK_SIZE || total == 0 {
+        return sparse_multinomial_sample_serial(sources, targets, rates, total, rng);
+    }
+    let ranges: Vec<(usize, usize)> = (0..rates.len())
+        .step_by(SPARSE_CHUNK_SIZE)
+        .map(|start| (start, (start + SPARSE_CHUNK_SIZE).min(rates.len())))
+        .collect();
+    let chunk_rates: Vec<f64> = ranges
+        .iter()
+        .map(|&(start, end)| rates[start..end].iter().sum())
+        .collect();
+    let chunk_events = multinomial_sample(&chunk_rates, total, rng);
+    let base_seed = rng.random::<u64>();
+    let chunks: Vec<SampledEdges> = ranges
+        .into_par_iter()
+        .zip(chunk_events.into_par_iter())
+        .enumerate()
+        .map(|(chunk_index, ((start, end), events))| {
+            let mut local_rng = StdRng::seed_from_u64(chunk_seed(base_seed, chunk_index));
+            sparse_multinomial_sample_serial(
+                &sources[start..end],
+                &targets[start..end],
+                &rates[start..end],
+                events,
+                &mut local_rng,
+            )
+        })
+        .collect();
+    merge_samples(chunks)
+}
+
+fn sparse_multinomial_sample_serial(
+    sources: &[u64],
+    targets: &[u64],
+    rates: &[f64],
+    total: u64,
+    rng: &mut StdRng,
+) -> SampledEdges {
+    let mut result = SampledEdges::default();
+    let rate_sum: f64 = rates.iter().sum();
+    if rate_sum == 0.0 || total == 0 {
+        return result;
+    }
+
+    let mut remaining = total;
+    let mut remaining_rate = rate_sum;
+    let mut last_positive: Option<(u64, u64)> = None;
+
+    for ((&source, &target), &rate) in sources.iter().zip(targets.iter()).zip(rates.iter()) {
+        if rate > 0.0 {
+            last_positive = Some((source, target));
+        }
+        if remaining == 0 || remaining_rate <= 0.0 {
+            break;
+        }
+        let p = (rate / remaining_rate).min(1.0);
+        if p <= 0.0 {
+            remaining_rate -= rate;
+            continue;
+        }
+        let count = draw_binomial_prefix_count(remaining, p, rng);
+        if count > 0 {
+            result.sources.push(source);
+            result.targets.push(target);
+            result.weights.push(count);
+        }
+        remaining -= count;
+        remaining_rate -= rate;
+    }
+
+    if remaining > 0 {
+        if let Some((source, target)) = last_positive {
+            result.sources.push(source);
+            result.targets.push(target);
+            result.weights.push(remaining);
+        }
+    }
     result
+}
+
+fn draw_binomial_prefix_count(remaining: u64, p: f64, rng: &mut StdRng) -> u64 {
+    if p >= 1.0 {
+        remaining
+    } else if remaining == 1 {
+        u64::from(rng.random::<f64>() < p)
+    } else {
+        match Binomial::new(remaining, p) {
+            Ok(dist) => dist.sample(rng),
+            Err(_) => 0,
+        }
+    }
 }
 
 fn multinomial_sample(rates: &[f64], total: u64, rng: &mut StdRng) -> Vec<u64> {
@@ -452,16 +671,7 @@ fn multinomial_sample(rates: &[f64], total: u64, rng: &mut StdRng) -> Vec<u64> {
             remaining_rate -= rates[i];
             continue;
         }
-        let count = if p >= 1.0 {
-            remaining
-        } else if remaining == 1 {
-            u64::from(rng.random::<f64>() < p)
-        } else {
-            match Binomial::new(remaining, p) {
-                Ok(dist) => dist.sample(rng),
-                Err(_) => 0,
-            }
-        };
+        let count = draw_binomial_prefix_count(remaining, p, rng);
         result[i] = count;
         remaining -= count;
         remaining_rate -= rates[i];
@@ -481,7 +691,8 @@ fn multinomial_sample(rates: &[f64], total: u64, rng: &mut StdRng) -> Vec<u64> {
 #[cfg(test)]
 mod tests {
     use super::{
-        sample_microcanonical, sample_multinomial, sample_poisson, sample_strength_degree_me,
+        sample_microcanonical, sample_multinomial, sample_poisson, sample_strength_cost_me,
+        sample_strength_degree_me,
     };
 
     #[test]
@@ -549,5 +760,39 @@ mod tests {
         for (s, t) in edges.sources.iter().zip(edges.targets.iter()) {
             assert_ne!(s, t, "self-loop found: {s} -> {t}");
         }
+    }
+
+    #[test]
+    fn zero_truncated_poisson_rate_handles_boundary_mean() {
+        assert_eq!(super::solve_zero_truncated_poisson_rate(1.0), 0.0);
+        assert_eq!(
+            super::solve_zero_truncated_poisson_rate(1.0 + super::ZTP_MEAN_EPSILON / 2.0),
+            0.0,
+        );
+        assert!(super::solve_zero_truncated_poisson_rate(1.01).is_finite());
+        assert!(super::solve_zero_truncated_poisson_rate(0.99).is_nan());
+    }
+
+    #[test]
+    fn degree_events_with_unit_positive_weight_mean_does_not_hang() {
+        let x = vec![0.5; 100];
+        let y = vec![0.5; 100];
+        let edges = super::sample_fixed_degree_events_me(&x, &y, 2000, true, 42);
+        assert!(edges.weights.iter().all(|&w| w >= 1));
+    }
+
+    #[test]
+    fn strength_cost_sampler_streams_large_factorized_model() {
+        let n = 1000;
+        let x = vec![0.0005; n];
+        let y = vec![0.0005; n];
+        let costs = super::SparseCostEntries {
+            sources: &[],
+            targets: &[],
+            values: &[],
+        };
+        let edges = sample_strength_cost_me(&x, &y, 0.1, &costs, true, 7);
+        assert_eq!(edges.sources.len(), edges.targets.len());
+        assert_eq!(edges.sources.len(), edges.weights.len());
     }
 }
