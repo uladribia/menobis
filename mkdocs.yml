@@ -23,6 +23,7 @@ nav:
       - Thesis Cases: concepts/thesis-cases.md
       - Spatial Costs: concepts/spatial-costs.md
       - Partial Constraints: concepts/partial-constraints.md
+      - Statistical Filtering: concepts/statistical-filtering.md
       - Ensembles: concepts/ensembles.md
   - API:
       - Python: api/python.md

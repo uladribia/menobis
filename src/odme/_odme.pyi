@@ -227,6 +227,55 @@ def sample_multinomial(
 ) -> tuple[list[int], list[int], list[int]]: ...
 
 
+def filter_fixed_strength_poisson(
+    x: list[float],
+    y: list[float],
+    sources: list[int],
+    targets: list[int],
+    weights: list[int],
+) -> tuple[list[float], list[float], list[float], list[float]]: ...
+
+
+def absent_fixed_strength_poisson(
+    x: list[float],
+    y: list[float],
+    sources: list[int],
+    targets: list[int],
+    self_loops: bool,
+    alpha_lower: float,
+    min_occupation: float,
+    min_expected: float,
+    max_absent: int | None,
+) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
+
+
+def filter_strength_edges_zip(
+    x: list[float],
+    y: list[float],
+    lam: float,
+    sources: list[int],
+    targets: list[int],
+    weights: list[int],
+) -> tuple[list[float], list[float], list[float], list[float]]: ...
+
+
+def absent_strength_edges_zip(
+    x: list[float],
+    y: list[float],
+    lam: float,
+    sources: list[int],
+    targets: list[int],
+    self_loops: bool,
+    alpha_lower: float,
+    min_occupation: float,
+    min_expected: float,
+    max_absent: int | None,
+) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
+
+
+def benjamini_hochberg(pvalues: list[float], alpha: float) -> list[bool]: ...
+
+
 def clustering_coefficients(
     node_count: int,
     sources: list[int],

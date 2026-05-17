@@ -5,6 +5,7 @@
 
 pub mod clustering;
 pub mod cost;
+pub mod filter;
 pub mod fitting;
 pub mod generation;
 pub mod graph;

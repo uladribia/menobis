@@ -5,6 +5,13 @@ use odme_core::clustering::{
     weighted_clustering_coefficients as core_weighted_clustering,
 };
 use odme_core::cost::{fit_strength_cost as core_fit_strength_cost, CostFitOptions};
+use odme_core::filter::{
+    absent_fixed_strength_poisson as core_absent_fixed_strength_poisson,
+    absent_strength_edges_zip as core_absent_strength_edges_zip,
+    benjamini_hochberg as core_benjamini_hochberg,
+    filter_fixed_strength_poisson as core_filter_fixed_strength_poisson,
+    filter_strength_edges_zip as core_filter_strength_edges_zip,
+};
 use odme_core::fitting::{
     balance_binary_degrees, balance_masked_binary_degrees, balance_masked_strength,
     balance_masked_strength_degree_me, balance_no_self_loops, balance_strength_degree_me,
@@ -37,6 +44,8 @@ type FitStrengthEdges = (Vec<f64>, Vec<f64>, f64, bool, usize);
 type FitStrengthDegree = (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, bool, usize);
 
 type FitStrengthCost = (Vec<f64>, Vec<f64>, f64, bool, usize);
+type ObservedFilter = (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>);
+type AbsentFilter = (Vec<u64>, Vec<u64>, Vec<f64>, Vec<f64>, Vec<f64>);
 
 /// Return the version of the Rust core exposed through Python.
 #[pyfunction]
@@ -593,6 +602,133 @@ fn sample_multinomial(
 }
 
 #[pyfunction]
+fn filter_fixed_strength_poisson(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    sources: Vec<u64>,
+    targets: Vec<u64>,
+    weights: Vec<u64>,
+) -> PyResult<ObservedFilter> {
+    if x.len() != y.len() {
+        return Err(PyValueError::new_err("x and y must have same length"));
+    }
+    if sources.len() != targets.len() || sources.len() != weights.len() {
+        return Err(PyValueError::new_err(
+            "sources, targets, and weights must have same length",
+        ));
+    }
+    let result = core_filter_fixed_strength_poisson(&x, &y, &sources, &targets, &weights);
+    Ok((
+        result.upper_pvalues,
+        result.lower_pvalues,
+        result.expected,
+        result.occupation,
+    ))
+}
+
+#[pyfunction]
+#[pyo3(signature = (x, y, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
+#[allow(clippy::too_many_arguments)]
+fn absent_fixed_strength_poisson(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    sources: Vec<u64>,
+    targets: Vec<u64>,
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> PyResult<AbsentFilter> {
+    if x.len() != y.len() {
+        return Err(PyValueError::new_err("x and y must have same length"));
+    }
+    let result = core_absent_fixed_strength_poisson(
+        &x,
+        &y,
+        &sources,
+        &targets,
+        self_loops,
+        alpha_lower,
+        min_occupation,
+        min_expected,
+        max_absent,
+    );
+    Ok((
+        result.sources,
+        result.targets,
+        result.lower_pvalues,
+        result.expected,
+        result.occupation,
+    ))
+}
+
+#[pyfunction]
+fn filter_strength_edges_zip(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    lam: f64,
+    sources: Vec<u64>,
+    targets: Vec<u64>,
+    weights: Vec<u64>,
+) -> PyResult<ObservedFilter> {
+    if x.len() != y.len() {
+        return Err(PyValueError::new_err("x and y must have same length"));
+    }
+    let result = core_filter_strength_edges_zip(&x, &y, lam, &sources, &targets, &weights);
+    Ok((
+        result.upper_pvalues,
+        result.lower_pvalues,
+        result.expected,
+        result.occupation,
+    ))
+}
+
+#[pyfunction]
+#[pyo3(signature = (x, y, lam, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
+#[allow(clippy::too_many_arguments)]
+fn absent_strength_edges_zip(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    lam: f64,
+    sources: Vec<u64>,
+    targets: Vec<u64>,
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> PyResult<AbsentFilter> {
+    if x.len() != y.len() {
+        return Err(PyValueError::new_err("x and y must have same length"));
+    }
+    let result = core_absent_strength_edges_zip(
+        &x,
+        &y,
+        lam,
+        &sources,
+        &targets,
+        self_loops,
+        alpha_lower,
+        min_occupation,
+        min_expected,
+        max_absent,
+    );
+    Ok((
+        result.sources,
+        result.targets,
+        result.lower_pvalues,
+        result.expected,
+        result.occupation,
+    ))
+}
+
+#[pyfunction]
+fn benjamini_hochberg(pvalues: Vec<f64>, alpha: f64) -> Vec<bool> {
+    core_benjamini_hochberg(&pvalues, alpha)
+}
+
+#[pyfunction]
 fn clustering_coefficients(
     node_count: usize,
     sources: Vec<usize>,
@@ -643,6 +779,11 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(sample_fixed_degree_events_me, module)?)?;
     module.add_function(wrap_pyfunction!(sample_strength_degree_me, module)?)?;
     module.add_function(wrap_pyfunction!(sample_multinomial, module)?)?;
+    module.add_function(wrap_pyfunction!(filter_fixed_strength_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(absent_fixed_strength_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(filter_strength_edges_zip, module)?)?;
+    module.add_function(wrap_pyfunction!(absent_strength_edges_zip, module)?)?;
+    module.add_function(wrap_pyfunction!(benjamini_hochberg, module)?)?;
     module.add_function(wrap_pyfunction!(clustering_coefficients, module)?)?;
     module.add_function(wrap_pyfunction!(weighted_clustering_coefficients, module)?)?;
     Ok(())
