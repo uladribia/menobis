@@ -1,10 +1,12 @@
 //! Statistical filtering kernels for fitted ODME null models.
 
+use crate::distribution::PairDistribution;
+use crate::pairs::{
+    row_ranges, FixedStrengthPoissonProvider, PairDistributionProvider,
+    SparsePoissonRateMapProvider, StrengthEdgesZipProvider, PARALLEL_PAIR_THRESHOLD,
+};
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
-
-const PARALLEL_PAIR_THRESHOLD: usize = 1_000_000;
-const ROW_CHUNK_SIZE: usize = 128;
 
 /// P-values and expectations for observed positive edges.
 #[derive(Clone, Debug, Default)]
@@ -25,61 +27,21 @@ pub struct AbsentFilterResult {
     pub occupation: Vec<f64>,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum NullDistribution {
-    Poisson { rate: f64 },
-    ZipPoisson { occupation: f64, rate: f64 },
-}
-
-impl NullDistribution {
-    #[must_use]
-    pub fn expected(self) -> f64 {
-        match self {
-            Self::Poisson { rate } => rate.max(0.0),
-            Self::ZipPoisson { occupation, rate } => {
-                occupation.max(0.0) * zero_truncated_poisson_mean(rate)
-            }
-        }
-    }
-
-    #[must_use]
-    pub fn occupation(self) -> f64 {
-        match self {
-            Self::Poisson { rate } => 1.0 - (-rate.max(0.0)).exp(),
-            Self::ZipPoisson { occupation, .. } => occupation.clamp(0.0, 1.0),
-        }
-    }
-
-    #[must_use]
-    pub fn lower_pvalue(self, weight: u64) -> f64 {
-        match self {
-            Self::Poisson { rate } => poisson_cdf(weight, rate),
-            Self::ZipPoisson { occupation, rate } => {
-                let p = occupation.clamp(0.0, 1.0);
-                if weight == 0 {
-                    1.0 - p
-                } else {
-                    (1.0 - p) + p * zero_truncated_poisson_cdf(weight, rate)
-                }
-            }
-        }
-        .clamp(0.0, 1.0)
-    }
-
-    #[must_use]
-    pub fn upper_pvalue(self, weight: u64) -> f64 {
-        match self {
-            Self::Poisson { rate } => poisson_sf_inclusive(weight, rate),
-            Self::ZipPoisson { occupation, rate } => {
-                if weight == 0 {
-                    1.0
-                } else {
-                    occupation.clamp(0.0, 1.0) * zero_truncated_poisson_sf_inclusive(weight, rate)
-                }
-            }
-        }
-        .clamp(0.0, 1.0)
-    }
+#[must_use]
+pub fn filter_observed_provider<P>(
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+    provider: &P,
+) -> ObservedFilterResult
+where
+    P: PairDistributionProvider,
+{
+    filter_observed_with(sources, targets, weights, |i, j| {
+        provider
+            .distribution(i, j)
+            .unwrap_or(PairDistribution::Poisson { rate: 0.0 })
+    })
 }
 
 #[must_use]
@@ -90,7 +52,7 @@ pub fn filter_observed_with<F>(
     provider: F,
 ) -> ObservedFilterResult
 where
-    F: Fn(usize, usize) -> NullDistribution + Sync,
+    F: Fn(usize, usize) -> PairDistribution + Sync,
 {
     let rows: Vec<(f64, f64, f64, f64)> = sources
         .par_iter()
@@ -102,7 +64,7 @@ where
                 dist.upper_pvalue(weight),
                 dist.lower_pvalue(weight),
                 dist.expected(),
-                dist.occupation(),
+                dist.occupation_probability(),
             )
         })
         .collect();
@@ -136,7 +98,7 @@ pub fn detect_absent_with<F>(
     provider: F,
 ) -> AbsentFilterResult
 where
-    F: Fn(usize, usize) -> NullDistribution + Sync,
+    F: Fn(usize, usize) -> PairDistribution + Sync,
 {
     let observed: HashSet<(usize, usize)> = observed_sources
         .iter()
@@ -157,7 +119,7 @@ where
                     continue;
                 }
                 let dist = provider(i, j);
-                let occupation = dist.occupation();
+                let occupation = dist.occupation_probability();
                 let expected = dist.expected();
                 if occupation < min_occupation || expected < min_expected {
                     continue;
@@ -178,10 +140,7 @@ where
     let mut result = if candidate_pairs < PARALLEL_PAIR_THRESHOLD {
         scan_range(0, n)
     } else {
-        let chunks: Vec<AbsentFilterResult> = (0..n)
-            .step_by(ROW_CHUNK_SIZE)
-            .map(|start| (start, (start + ROW_CHUNK_SIZE).min(n)))
-            .collect::<Vec<_>>()
+        let chunks: Vec<AbsentFilterResult> = row_ranges(n)
             .into_par_iter()
             .map(|(start, end)| scan_range(start, end))
             .collect();
@@ -202,9 +161,16 @@ pub fn filter_fixed_strength_poisson(
     targets: &[u64],
     weights: &[u64],
 ) -> ObservedFilterResult {
-    filter_observed_with(sources, targets, weights, |i, j| {
-        NullDistribution::Poisson { rate: x[i] * y[j] }
-    })
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &FixedStrengthPoissonProvider {
+            x,
+            y,
+            self_loops: true,
+        },
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -229,7 +195,11 @@ pub fn absent_fixed_strength_poisson(
         min_occupation,
         min_expected,
         max_absent,
-        |i, j| NullDistribution::Poisson { rate: x[i] * y[j] },
+        |i, j| {
+            FixedStrengthPoissonProvider { x, y, self_loops }
+                .distribution(i, j)
+                .unwrap_or(PairDistribution::Poisson { rate: 0.0 })
+        },
     )
 }
 
@@ -248,11 +218,16 @@ pub fn filter_custom_poisson_rates(
         .zip(rates.iter())
         .map(|((&source, &target), &rate)| ((source as usize, target as usize), rate))
         .collect();
-    filter_observed_with(sources, targets, weights, |i, j| {
-        NullDistribution::Poisson {
-            rate: rate_map.get(&(i, j)).copied().unwrap_or(0.0),
-        }
-    })
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &SparsePoissonRateMapProvider {
+            sources: rate_sources,
+            targets: rate_targets,
+            map: &rate_map,
+        },
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -278,8 +253,8 @@ pub fn absent_custom_poisson_rates(
         if observed.contains(&(source, target)) {
             continue;
         }
-        let dist = NullDistribution::Poisson { rate };
-        let occupation = dist.occupation();
+        let dist = PairDistribution::Poisson { rate };
+        let occupation = dist.occupation_probability();
         let expected = dist.expected();
         if occupation < min_occupation || expected < min_expected {
             continue;
@@ -308,9 +283,17 @@ pub fn filter_strength_edges_zip(
     targets: &[u64],
     weights: &[u64],
 ) -> ObservedFilterResult {
-    filter_observed_with(sources, targets, weights, |i, j| {
-        strength_edges_distribution(x[i], y[j], lam)
-    })
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &StrengthEdgesZipProvider {
+            x,
+            y,
+            lambda: lam,
+            self_loops: true,
+        },
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -336,17 +319,17 @@ pub fn absent_strength_edges_zip(
         min_occupation,
         min_expected,
         max_absent,
-        |i, j| strength_edges_distribution(x[i], y[j], lam),
+        |i, j| {
+            StrengthEdgesZipProvider {
+                x,
+                y,
+                lambda: lam,
+                self_loops,
+            }
+            .distribution(i, j)
+            .unwrap_or(PairDistribution::Poisson { rate: 0.0 })
+        },
     )
-}
-
-#[must_use]
-pub fn strength_edges_distribution(xi: f64, yj: f64, lam: f64) -> NullDistribution {
-    let rate = xi * yj;
-    let expm1 = rate.exp_m1();
-    let den = 1.0 + lam * expm1;
-    let occupation = if den > 0.0 { lam * expm1 / den } else { 0.0 };
-    NullDistribution::ZipPoisson { occupation, rate }
 }
 
 fn merge_absent(chunks: Vec<AbsentFilterResult>) -> AbsentFilterResult {
@@ -374,62 +357,6 @@ fn truncate_absent(result: &mut AbsentFilterResult, limit: usize) {
     result.lower_pvalues.truncate(limit);
     result.expected.truncate(limit);
     result.occupation.truncate(limit);
-}
-
-fn zero_truncated_poisson_mean(rate: f64) -> f64 {
-    if rate <= 0.0 {
-        1.0
-    } else {
-        rate / (1.0 - (-rate).exp())
-    }
-}
-
-fn zero_truncated_poisson_cdf(weight: u64, rate: f64) -> f64 {
-    if weight == 0 {
-        return 0.0;
-    }
-    if rate <= 0.0 {
-        return 1.0;
-    }
-    let numerator = poisson_cdf(weight, rate) - (-rate).exp();
-    let denominator = 1.0 - (-rate).exp();
-    (numerator / denominator).clamp(0.0, 1.0)
-}
-
-fn zero_truncated_poisson_sf_inclusive(weight: u64, rate: f64) -> f64 {
-    if weight <= 1 && rate <= 0.0 {
-        return 1.0;
-    }
-    if rate <= 0.0 {
-        return 0.0;
-    }
-    let numerator = poisson_sf_inclusive(weight, rate);
-    let denominator = 1.0 - (-rate).exp();
-    (numerator / denominator).clamp(0.0, 1.0)
-}
-
-fn poisson_cdf(weight: u64, rate: f64) -> f64 {
-    if rate <= 0.0 {
-        return 1.0;
-    }
-    let mut term = (-rate).exp();
-    let mut sum = term;
-    for k in 1..=weight {
-        term *= rate / k as f64;
-        sum += term;
-        if term == 0.0 {
-            break;
-        }
-    }
-    sum.clamp(0.0, 1.0)
-}
-
-fn poisson_sf_inclusive(weight: u64, rate: f64) -> f64 {
-    if weight == 0 {
-        1.0
-    } else {
-        (1.0 - poisson_cdf(weight - 1, rate)).clamp(0.0, 1.0)
-    }
 }
 
 #[must_use]
@@ -462,14 +389,14 @@ mod tests {
 
     #[test]
     fn poisson_pvalues_match_small_hand_values() {
-        let dist = NullDistribution::Poisson { rate: 2.0 };
+        let dist = PairDistribution::Poisson { rate: 2.0 };
         assert!((dist.lower_pvalue(0) - (-2.0_f64).exp()).abs() < 1e-12);
         assert!((dist.upper_pvalue(0) - 1.0).abs() < 1e-12);
     }
 
     #[test]
     fn zip_zero_probability_is_one_minus_occupation() {
-        let dist = NullDistribution::ZipPoisson {
+        let dist = PairDistribution::ZipPoisson {
             occupation: 0.7,
             rate: 2.0,
         };

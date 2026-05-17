@@ -1,16 +1,19 @@
 //! Seeded network generation for node-factorized models.
 
+use crate::distribution::{zero_truncated_poisson_mean, PairDistribution};
+use crate::pairs::{
+    chunk_seed, row_ranges, CandidateSupport, FixedStrengthPoissonProvider,
+    PairDistributionProvider, StrengthCostPoissonProvider, StrengthDegreeZipProvider,
+    StrengthEdgesZipProvider, PARALLEL_PAIR_THRESHOLD, SPARSE_CHUNK_SIZE,
+};
 use rand::rngs::StdRng;
 use rand::Rng;
 use rand::SeedableRng;
-use rand_distr::{Bernoulli, Binomial, Distribution, Poisson};
+use rand_distr::{Binomial, Distribution, Poisson};
 use rayon::prelude::*;
+use std::collections::HashMap;
 
-const PARALLEL_PAIR_THRESHOLD: usize = 1_000_000;
-const ROW_CHUNK_SIZE: usize = 128;
-const SPARSE_CHUNK_SIZE: usize = 65_536;
 const ZTP_MEAN_EPSILON: f64 = 1e-10;
-const ZTP_REJECTION_MIN_RATE: f64 = 0.05;
 
 /// Sparse edge output from a generation run.
 #[derive(Clone, Debug, Default)]
@@ -18,17 +21,6 @@ pub struct SampledEdges {
     pub sources: Vec<u64>,
     pub targets: Vec<u64>,
     pub weights: Vec<u64>,
-}
-
-#[derive(Clone, Copy, Debug)]
-enum PairDistribution {
-    Poisson {
-        rate: f64,
-    },
-    ZipPoisson {
-        occupation_prob: f64,
-        poisson_rate: f64,
-    },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -43,18 +35,6 @@ pub struct SparseCostEntries<'a> {
     pub sources: &'a [usize],
     pub targets: &'a [usize],
     pub values: &'a [f64],
-}
-
-fn splitmix64(mut value: u64) -> u64 {
-    value = value.wrapping_add(0x9E37_79B9_7F4A_7C15);
-    let mut z = value;
-    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    z ^ (z >> 31)
-}
-
-fn chunk_seed(seed: u64, chunk_index: usize) -> u64 {
-    splitmix64(seed ^ ((chunk_index as u64).wrapping_mul(0xD1B5_4A32_D192_ED03)))
 }
 
 fn merge_samples(chunks: Vec<SampledEdges>) -> SampledEdges {
@@ -72,40 +52,8 @@ fn merge_samples(chunks: Vec<SampledEdges>) -> SampledEdges {
     result
 }
 
-fn sample_distribution(distribution: PairDistribution, rng: &mut StdRng) -> u64 {
-    match distribution {
-        PairDistribution::Poisson { rate } => {
-            if rate <= 0.0 {
-                0
-            } else {
-                match Poisson::new(rate) {
-                    Ok(dist) => dist.sample(rng) as u64,
-                    Err(_) => 0,
-                }
-            }
-        }
-        PairDistribution::ZipPoisson {
-            occupation_prob,
-            poisson_rate,
-        } => {
-            if occupation_prob <= 0.0 {
-                return 0;
-            }
-            let present = match Bernoulli::new(occupation_prob.min(1.0)) {
-                Ok(dist) => dist.sample(rng),
-                Err(_) => false,
-            };
-            if present {
-                sample_zero_truncated_poisson(poisson_rate, rng)
-            } else {
-                0
-            }
-        }
-    }
-}
-
 fn push_sampled_pair(result: &mut SampledEdges, pair: PairDraw, rng: &mut StdRng) {
-    let weight = sample_distribution(pair.distribution, rng);
+    let weight = pair.distribution.sample(rng);
     if weight > 0 {
         result.sources.push(pair.source);
         result.targets.push(pair.target);
@@ -122,6 +70,35 @@ where
         push_sampled_pair(&mut result, pair, rng);
     }
     result
+}
+
+fn sample_provider<P>(provider: &P, seed: u64) -> SampledEdges
+where
+    P: PairDistributionProvider,
+{
+    match provider.support() {
+        CandidateSupport::AllPairs {
+            node_count,
+            self_loops,
+        } => sample_all_pairs_by_rows(node_count, self_loops, seed, |i, j| {
+            provider.distribution(i, j)
+        }),
+        CandidateSupport::SparsePairs { sources, targets } => {
+            let pairs = sources
+                .iter()
+                .zip(targets.iter())
+                .filter_map(|(&source, &target)| {
+                    provider
+                        .distribution(source as usize, target as usize)
+                        .map(|distribution| PairDraw {
+                            source,
+                            target,
+                            distribution,
+                        })
+                });
+            sample_independent_pairs(pairs, &mut StdRng::seed_from_u64(seed))
+        }
+    }
 }
 
 fn sample_all_pairs_by_rows<F>(n: usize, self_loops: bool, seed: u64, pair_fn: F) -> SampledEdges
@@ -157,11 +134,7 @@ where
         return result;
     }
 
-    let row_ranges: Vec<(usize, usize)> = (0..n)
-        .step_by(ROW_CHUNK_SIZE)
-        .map(|start| (start, (start + ROW_CHUNK_SIZE).min(n)))
-        .collect();
-    let chunks: Vec<SampledEdges> = row_ranges
+    let chunks: Vec<SampledEdges> = row_ranges(n)
         .into_par_iter()
         .enumerate()
         .map(|(chunk_index, (start, end))| {
@@ -322,15 +295,7 @@ pub fn sample_microcanonical(strength_out: &[u64], strength_in: &[u64], seed: u6
 /// Sample from independent Poisson(x_i * y_j) for all (i, j).
 #[must_use]
 pub fn sample_poisson(x: &[f64], y: &[f64], self_loops: bool, seed: u64) -> SampledEdges {
-    sample_all_pairs_by_rows(x.len(), self_loops, seed, |i, j| {
-        let xi = x[i];
-        let yj = y[j];
-        if xi <= 0.0 || yj <= 0.0 {
-            None
-        } else {
-            Some(PairDistribution::Poisson { rate: xi * yj })
-        }
-    })
+    sample_provider(&FixedStrengthPoissonProvider { x, y, self_loops }, seed)
 }
 
 /// Sample from independent Poisson(x_i * y_j * exp(-gamma d_ij)).
@@ -346,31 +311,23 @@ pub fn sample_strength_cost_me(
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
-    let cost_map: std::collections::HashMap<(usize, usize), f64> = costs
+    let cost_map: HashMap<(usize, usize), f64> = costs
         .sources
         .iter()
         .zip(costs.targets.iter())
         .zip(costs.values.iter())
         .map(|((&source, &target), &cost)| ((source, target), cost))
         .collect();
-    sample_all_pairs_by_rows(x.len(), self_loops, seed, |i, j| {
-        let xi = x[i];
-        let yj = y[j];
-        if xi <= 0.0 || yj <= 0.0 {
-            None
-        } else {
-            let cost = cost_map.get(&(i, j)).copied().unwrap_or(0.0);
-            let rate = xi * yj * (-gamma * cost).exp();
-            Some(PairDistribution::Poisson { rate })
-        }
-    })
-}
-
-fn zero_truncated_poisson_mean(rate: f64) -> f64 {
-    if rate <= 0.0 {
-        return 1.0;
-    }
-    rate / (1.0 - (-rate).exp())
+    sample_provider(
+        &StrengthCostPoissonProvider {
+            x,
+            y,
+            gamma,
+            costs: &cost_map,
+            self_loops,
+        },
+        seed,
+    )
 }
 
 fn solve_zero_truncated_poisson_rate(mean: f64) -> f64 {
@@ -394,40 +351,6 @@ fn solve_zero_truncated_poisson_rate(mean: f64) -> f64 {
         }
     }
     0.5 * (low + high)
-}
-
-fn sample_zero_truncated_poisson(rate: f64, rng: &mut StdRng) -> u64 {
-    if rate <= 0.0 || !rate.is_finite() {
-        return 1;
-    }
-    if rate < ZTP_REJECTION_MIN_RATE {
-        let normalizer = -rate.exp_m1();
-        if normalizer <= 0.0 {
-            return 1;
-        }
-        let mut cumulative = 0.0;
-        let mut probability = (-rate).exp() * rate / normalizer;
-        let draw = rng.random::<f64>();
-        let mut value = 1_u64;
-        loop {
-            cumulative += probability;
-            if draw <= cumulative || value >= 64 {
-                return value;
-            }
-            value += 1;
-            probability *= rate / value as f64;
-        }
-    }
-    let dist = match Poisson::new(rate) {
-        Ok(d) => d,
-        Err(_) => return 1,
-    };
-    loop {
-        let value = dist.sample(rng) as u64;
-        if value > 0 {
-            return value;
-        }
-    }
 }
 
 /// Sample original fixed-degree ME weighted model.
@@ -459,8 +382,8 @@ pub fn sample_fixed_degree_events_me(
         let z = x[i] * y[j];
         let occupation_prob = z / (1.0 + z);
         Some(PairDistribution::ZipPoisson {
-            occupation_prob,
-            poisson_rate: rate,
+            occupation: occupation_prob,
+            rate,
         })
     })
 }
@@ -475,21 +398,16 @@ pub fn sample_strength_degree_me(
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
-    sample_all_pairs_by_rows(x.len(), self_loops, seed, |i, j| {
-        let u = x[i] * y[j];
-        let v = z[i] * w[j];
-        let exp_u = u.exp();
-        let den = 1.0 + v * (exp_u - 1.0);
-        let occupation_prob = if den > 0.0 {
-            v * (exp_u - 1.0) / den
-        } else {
-            0.0
-        };
-        Some(PairDistribution::ZipPoisson {
-            occupation_prob,
-            poisson_rate: u,
-        })
-    })
+    sample_provider(
+        &StrengthDegreeZipProvider {
+            x,
+            y,
+            z,
+            w,
+            self_loops,
+        },
+        seed,
+    )
 }
 
 /// Poisson-total multinomial sampling with node-factorized probabilities.
@@ -529,20 +447,15 @@ pub fn sample_strength_edges_me(
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
-    sample_all_pairs_by_rows(x.len(), self_loops, seed, |i, j| {
-        let u = x[i] * y[j];
-        let exp_u = u.exp();
-        let den = 1.0 + lam * (exp_u - 1.0);
-        let occupation_prob = if den > 0.0 {
-            lam * (exp_u - 1.0) / den
-        } else {
-            0.0
-        };
-        Some(PairDistribution::ZipPoisson {
-            occupation_prob,
-            poisson_rate: u,
-        })
-    })
+    sample_provider(
+        &StrengthEdgesZipProvider {
+            x,
+            y,
+            lambda: lam,
+            self_loops,
+        },
+        seed,
+    )
 }
 
 /// Multinomial sampling with node-factorized probabilities.

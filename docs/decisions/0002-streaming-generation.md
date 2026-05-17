@@ -15,18 +15,21 @@ work became easy to split across CPU cores.
 
 ## Decision
 
-Use reusable generation components:
+Use reusable generation and filtering components:
 
 | Component | Responsibility |
 |-----------|----------------|
-| Pair-rate provider | Compute a pair distribution on demand |
+| `PairDistribution` | Encapsulate sampling, expectation, occupation probability, and p-values |
+| `PairDistributionProvider` | Compute a pair distribution on demand for a null model |
 | Sampler sink | Draw weights and keep non-zero edges |
+| Filter sink | Compute p-values and classify observed/absent pairs |
 | Parallel chunk runner | Process row or sparse-entry chunks on Rayon |
 | Canonical allocator | Allocate fixed totals by binomial splits |
 | Future stats sink | Accumulate expected/sample stats without edges |
 
 Python APIs call Rust kernels. The default path is streaming; dense matrix
-construction is not a prerequisite for sampling.
+construction is not a prerequisite for sampling or filtering. New null models
+should implement one provider and reuse generation/filtering/stat sinks.
 
 ## Parallel strategy
 

@@ -458,8 +458,8 @@ add canonical multinomial p-values only if the exact coupled test is required.
 
 #### Reuse-first architecture
 
-Extend the generation abstraction into a public Rust-internal pair-distribution
-provider:
+The generation/filtering refactor provides the first Rust-internal
+pair-distribution provider abstraction:
 
 | Reusable component | Used by generation | Used by filtering |
 |--------------------|-------------------|-------------------|
@@ -470,7 +470,7 @@ provider:
 | no-self-loop mask | skip diagonal sampling | skip diagonal filtering |
 | known-pair mask | partial generation support | partial filtering support |
 
-The filter should add sinks, not duplicate model math. Desired Rust shape:
+The filter adds sinks, not duplicated model math. Desired Rust shape:
 
 ```text
 provider -> filter sink -> significant/compatible sparse outputs
