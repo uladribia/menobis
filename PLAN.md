@@ -645,24 +645,38 @@ Options:
 | Canonical multinomial | do not filter canonical multinomial; support independent grand-canonical Poisson and ZIP/ZTP cases only |
 | Fitted models | accept already-fitted model objects/files to avoid refitting |
 
-#### Remaining filtering question: absent-edge threshold
+#### Absent-edge threshold decision
 
-Absent-edge detection can be expensive and can produce many results because it
-streams candidate pairs where `t_ij = 0`. ODME needs a default prefilter before
-computing/reporting absent lower-significant pairs.
+Absent-edge detection uses binary existence probability as the relevance
+threshold. A missing pair is considered for absent-edge filtering only if:
 
-Options:
+$$
+P(t_{ij} > 0 \mid null) \ge \texttt{min\_occupation}.
+$$
 
-| Threshold | Meaning | Pros | Cons |
-|-----------|---------|------|------|
-| `min_expected` | require `E[t_ij] >= value` | intuitive for flow magnitude; works for Poisson and ZIP | can miss high-probability ZIP edges whose expected weight is modest |
-| `min_occupation` | require `P(t_ij > 0) >= value` | natural for ZIP/degree models; detects missing expected binary links | not meaningful for pure Poisson unless converted to `1-exp(-lambda)` |
-| p-value only | compute all absent p-values and keep significant ones | scientifically direct | may require scanning/reporting huge numbers of pairs |
-| combined | require p-value significance plus `min_expected` and/or `min_occupation` | controls output size and scientific relevance | more parameters to explain |
+For Poisson models:
 
-Proposed default unless changed: use combined filtering with
-`min_expected=1.0`, `min_occupation=0.0`, and p-value significance. Users can
-set `min_expected=0` and a `max_absent` cap for exhaustive scans.
+$$
+P(t_{ij} > 0)=1-e^{-\lambda_{ij}}.
+$$
+
+For ZIP/ZTP models, use the model's fitted occupation probability $p_{ij}$.
+The default should be `min_occupation` rather than `min_expected`, because the
+scientific question for absent edges is whether a binary edge should exist at
+all. A separate optional `min_expected` may still be exposed for users who want
+to suppress low-volume expected flows.
+
+Recommended defaults:
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `--detect-absent` | off | avoid all-pairs scans unless requested |
+| `--min-occupation` | `0.5` | only inspect pairs with at least 50% null edge-existence probability |
+| `--min-expected` | `0.0` | optional additional flow-size threshold |
+| `--max-absent` | unset | optional output cap for safety |
+
+Absent lower-significant pairs remain a separate output table from lower
+significant observed positive edges.
 
 ## Replacement plan
 
