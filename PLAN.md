@@ -140,16 +140,24 @@ the distribution families are complete.
 
 ### Future: naming cleanup
 
-The codebase uses inconsistent naming. Fix all public names to follow:
+The codebase uses inconsistent naming. The key insight is that **sampling and
+filtering are distribution-level operations** — they don't care what constraint
+produced the multipliers. The constraint only determines how multipliers
+combine into the `xy` product (handled by the provider). Once you have a
+`PairDistribution`, sampling and filtering are the same regardless of
+constraint.
 
-```text
-{operation}_{constraint}_{distribution}
-```
+However, the public API exposes constraint-specific functions because users
+pass constraint-specific parameters (e.g. `x, y` for strength vs `x, y, lam`
+for strength-edges). The naming should reflect:
 
-where:
-- **operation**: `fit`, `sample`, `filter`, `absent`
-- **constraint**: `strength`, `strength_edges`, `strength_degree`, `strength_cost`, `degree`, `custom`
-- **distribution**: `poisson`, `geometric`, `binomial`, `neg_binomial`, `multinomial`, `microcanonical`, `bernoulli`
+- **Fitting**: `fit_{constraint}_{distribution}` — needs both.
+- **Sampling/filtering with constraint-specific params**: include constraint
+  only when the function signature requires constraint-specific parameters
+  (e.g. `lam`, `gamma`, `z`, `w`). When only `x, y` are needed, the
+  constraint is implicit.
+- **Generic provider-level**: `sample_provider`, `filter_observed_provider`,
+  `detect_absent_provider` — distribution-agnostic.
 
 The distribution name implies the ensemble type:
 
@@ -160,52 +168,73 @@ The distribution name implies the ensemble type:
 | B (binary layers) | `B` | Binomial, Bernoulli | IPF with correction factor |
 
 The `_me` suffix is **removed** from function names. ME stands for multi-edge
-(the project name), not maximum entropy. The models ARE maximum entropy, but
-`_me` in function names inside the ODME package is redundant and was
-incorrectly interpreted as "maximum entropy" in some docstrings.
+(the project name), not maximum entropy.
 
 The `_zip` suffix is also removed — ZIP describes the inflation structure,
-not the distribution. The positive-weight distribution is still Poisson (or
-will be geometric/binomial in future ZIP variants).
+not the distribution.
+
+#### Naming convention
+
+```text
+fit_{constraint}_{distribution}           # fitting
+sample_{distribution}                     # simple (x, y only)
+sample_{constraint}_{distribution}        # when extra params needed
+filter_{distribution}                     # simple (x, y only)
+filter_{constraint}_{distribution}        # when extra params needed
+```
 
 #### Rust renames (crates/odme-core)
 
-| Current | Proposed |
-|---------|----------|
-| `sample_poisson` | `sample_strength_poisson` |
-| `sample_geometric` | `sample_strength_geometric` |
-| `sample_binomial` | `sample_strength_binomial` |
-| `sample_neg_binomial` | `sample_strength_neg_binomial` |
-| `sample_microcanonical` | `sample_strength_microcanonical` |
-| `sample_multinomial` | `sample_strength_multinomial` |
-| `sample_poisson_multinomial` | `sample_strength_poisson_multinomial` |
-| `sample_strength_edges_me` | `sample_strength_edges_poisson` |
-| `sample_strength_degree_me` | `sample_strength_degree_poisson` |
-| `sample_strength_cost_me` | `sample_strength_cost_poisson` |
-| `sample_fixed_degree_events_me` | `sample_degree_events_poisson` |
-| `sample_custom_pij_events_poisson` | `sample_custom_poisson` |
-| `sample_custom_pij_events_multinomial` | `sample_custom_multinomial` |
-| `filter_fixed_strength_poisson` | `filter_strength_poisson` |
-| `filter_geometric` | `filter_strength_geometric` |
-| `filter_binomial` | `filter_strength_binomial` |
-| `filter_neg_binomial` | `filter_strength_neg_binomial` |
-| `filter_strength_edges_zip` | `filter_strength_edges_poisson` |
-| `filter_strength_degree_zip` | `filter_strength_degree_poisson` |
-| `filter_strength_cost_poisson` | unchanged |
-| `filter_degree_events_zip` | `filter_degree_events_poisson` |
-| `filter_custom_poisson_rates` | `filter_custom_poisson` |
-| `absent_*` | same pattern as `filter_*` |
-| `balance_strength_edges_me` | `balance_strength_edges_poisson` |
-| `balance_strength_degree_me` | `balance_strength_degree_poisson` |
-| `balance_masked_strength_degree_me` | `balance_masked_strength_degree_poisson` |
-| `balance_binomial_strength` | `balance_strength_binomial` |
-| `balance_masked_binomial_strength` | `balance_masked_strength_binomial` |
-| `balance_no_self_loops` | `balance_strength_poisson_no_self_loops` |
-| `balance_binary_degrees` | `balance_degree_bernoulli` |
-| `balance_masked_binary_degrees` | `balance_masked_degree_bernoulli` |
-| `balance_masked_strength` | `balance_masked_strength_poisson` |
+Generation:
+
+| Current | Proposed | Reason |
+|---------|----------|--------|
+| `sample_poisson` | `sample_poisson` | x,y only — constraint implicit |
+| `sample_geometric` | `sample_geometric` | x,y only |
+| `sample_binomial` | `sample_binomial` | x,y,layers only |
+| `sample_neg_binomial` | `sample_neg_binomial` | x,y,layers only |
+| `sample_microcanonical` | `sample_microcanonical` | strengths only |
+| `sample_multinomial` | `sample_multinomial` | x,y,T — constraint implicit |
+| `sample_poisson_multinomial` | `sample_poisson_multinomial` | unchanged |
+| `sample_strength_edges_me` | `sample_strength_edges_poisson` | constraint params needed |
+| `sample_strength_degree_me` | `sample_strength_degree_poisson` | constraint params needed |
+| `sample_strength_cost_me` | `sample_strength_cost_poisson` | constraint params needed |
+| `sample_fixed_degree_events_me` | `sample_degree_events_poisson` | drop `fixed_` |
+| `sample_custom_pij_events_poisson` | `sample_custom_poisson` | simplify |
+| `sample_custom_pij_events_multinomial` | `sample_custom_multinomial` | simplify |
+
+Filtering:
+
+| Current | Proposed | Reason |
+|---------|----------|--------|
+| `filter_fixed_strength_poisson` | `filter_poisson` | x,y only |
+| `filter_geometric` | `filter_geometric` | unchanged |
+| `filter_binomial` | `filter_binomial` | unchanged |
+| `filter_neg_binomial` | `filter_neg_binomial` | unchanged |
+| `filter_strength_edges_zip` | `filter_strength_edges_poisson` | constraint params |
+| `filter_strength_degree_zip` | `filter_strength_degree_poisson` | constraint params |
+| `filter_strength_cost_poisson` | `filter_strength_cost_poisson` | unchanged |
+| `filter_degree_events_zip` | `filter_degree_events_poisson` | constraint params |
+| `filter_custom_poisson_rates` | `filter_custom_poisson` | simplify |
+| `absent_*` | same pattern as `filter_*` | |
+
+Fitting:
+
+| Current | Proposed | Reason |
+|---------|----------|--------|
+| `balance_strength_edges_me` | `balance_strength_edges_poisson` | drop `_me` |
+| `balance_strength_degree_me` | `balance_strength_degree_poisson` | drop `_me` |
+| `balance_masked_strength_degree_me` | `balance_masked_strength_degree_poisson` | drop `_me` |
+| `balance_binomial_strength` | `balance_strength_binomial` | reorder |
+| `balance_masked_binomial_strength` | `balance_masked_strength_binomial` | reorder |
+| `balance_no_self_loops` | `balance_strength_poisson_no_self_loops` | add constraint+dist |
+| `balance_binary_degrees` | `balance_degree_bernoulli` | rename |
+| `balance_masked_binary_degrees` | `balance_masked_degree_bernoulli` | rename |
+| `balance_masked_strength` | `balance_masked_strength_poisson` | add distribution |
 
 #### Python renames (src/odme)
+
+Fitting:
 
 | Current | Proposed |
 |---------|----------|
@@ -218,54 +247,40 @@ will be geometric/binomial in future ZIP variants).
 | `StrengthCostMEFit` | `StrengthCostFit` |
 | `StrengthEdgesMEFit` | `StrengthEdgesFit` |
 | `StrengthDegreeMEFit` | `StrengthDegreeFit` |
-| `filter_fixed_strength_me` | `filter_strength_poisson` |
-| `filter_strength_edges_me` | `filter_strength_edges_poisson` |
-| `filter_strength_degree_me` | `filter_strength_degree_poisson` |
-| `filter_strength_cost_me` | `filter_strength_cost_poisson` |
-| `filter_degree_events_me` | `filter_degree_events_poisson` |
-| `filter_custom_rates_poisson` | `filter_custom_poisson` |
-| `filter_geometric` | `filter_strength_geometric` |
-| `filter_binomial` | `filter_strength_binomial` |
-| `filter_neg_binomial` | `filter_strength_neg_binomial` |
-| `sample_poisson` | `sample_strength_poisson` |
-| `sample_microcanonical` | `sample_strength_microcanonical` |
-| `sample_multinomial` | `sample_strength_multinomial` |
-| `sample_poisson_multinomial` | `sample_strength_poisson_multinomial` |
+
+Generation (same logic as Rust — no constraint when params are simple):
+
+| Current | Proposed |
+|---------|----------|
+| `sample_poisson` | `sample_poisson` |
+| `sample_geometric` | `sample_geometric` |
+| `sample_binomial` | `sample_binomial` |
+| `sample_neg_binomial` | `sample_neg_binomial` |
+| `sample_microcanonical` | `sample_microcanonical` |
+| `sample_multinomial` | `sample_multinomial` |
+| `sample_poisson_multinomial` | `sample_poisson_multinomial` |
 | `sample_strength_edges_me` | `sample_strength_edges_poisson` |
 | `sample_strength_degree_me` | `sample_strength_degree_poisson` |
 | `sample_strength_cost_me` | `sample_strength_cost_poisson` |
 | `sample_fixed_degree_events_me` | `sample_degree_events_poisson` |
 | `sample_custom_pij_events_poisson` | `sample_custom_poisson` |
 | `sample_custom_pij_events_multinomial` | `sample_custom_multinomial` |
-| `sample_geometric` | `sample_strength_geometric` |
-| `sample_binomial` | `sample_strength_binomial` |
-| `sample_neg_binomial` | `sample_strength_neg_binomial` |
 
-#### CLI renames
+Filtering:
 
 | Current | Proposed |
 |---------|----------|
-| `odme fit strengths` | `odme fit strength-poisson` |
-| `odme fit degrees` | `odme fit degree-bernoulli` |
-| `odme fit strength-cost-me` | `odme fit strength-cost-poisson` |
-| `odme fit strength-edges-me` | `odme fit strength-edges-poisson` |
-| `odme fit strength-degree-me` | `odme fit strength-degree-poisson` |
-| `odme generate poisson` | `odme generate strength-poisson` |
-| `odme generate multinomial` | `odme generate strength-multinomial` |
-| `odme generate poisson-multinomial` | `odme generate strength-poisson-multinomial` |
-| `odme generate degree-events-me` | `odme generate degree-events-poisson` |
-| `odme generate strength-cost-me` | `odme generate strength-cost-poisson` |
-| `odme generate strength-edges-me` | `odme generate strength-edges-poisson` |
-| `odme generate strength-degree-me` | `odme generate strength-degree-poisson` |
-| `odme generate custom-pij` | `odme generate custom-poisson` |
-| `odme filter fixed-strength` | `odme filter strength-poisson` |
-| `odme filter strength-edges` | `odme filter strength-edges-poisson` |
-| `odme filter strength-degree` | `odme filter strength-degree-poisson` |
-| `odme filter strength-cost` | `odme filter strength-cost-poisson` |
-| `odme filter degree-events` | `odme filter degree-events-poisson` |
-| `odme filter custom-rates` | `odme filter custom-poisson` |
+| `filter_fixed_strength_me` | `filter_poisson` |
+| `filter_geometric` | `filter_geometric` |
+| `filter_binomial` | `filter_binomial` |
+| `filter_neg_binomial` | `filter_neg_binomial` |
+| `filter_strength_edges_me` | `filter_strength_edges_poisson` |
+| `filter_strength_degree_me` | `filter_strength_degree_poisson` |
+| `filter_strength_cost_me` | `filter_strength_cost_poisson` |
+| `filter_degree_events_me` | `filter_degree_events_poisson` |
+| `filter_custom_rates_poisson` | `filter_custom_poisson` |
 
-#### Partial fitter renames
+Partial fitters:
 
 | Current | Proposed |
 |---------|----------|
@@ -274,6 +289,42 @@ will be geometric/binomial in future ZIP variants).
 | `fit_partial_strength_degree_me` | `fit_partial_strength_degree_poisson` |
 | `fit_partial_strength_cost_me` | `fit_partial_strength_cost_poisson` |
 | `fit_partial_degree_me` | `fit_partial_degree_poisson` |
+
+#### CLI renames
+
+Fitting always needs constraint + distribution:
+
+| Current | Proposed |
+|---------|----------|
+| `odme fit strengths` | `odme fit strength-poisson` |
+| `odme fit degrees` | `odme fit degree-bernoulli` |
+| `odme fit strength-cost-me` | `odme fit strength-cost-poisson` |
+| `odme fit strength-edges-me` | `odme fit strength-edges-poisson` |
+| `odme fit strength-degree-me` | `odme fit strength-degree-poisson` |
+
+Generation — include constraint only when CLI needs extra params:
+
+| Current | Proposed |
+|---------|----------|
+| `odme generate poisson` | `odme generate poisson` |
+| `odme generate multinomial` | `odme generate multinomial` |
+| `odme generate poisson-multinomial` | `odme generate poisson-multinomial` |
+| `odme generate degree-events-me` | `odme generate degree-events-poisson` |
+| `odme generate strength-cost-me` | `odme generate strength-cost-poisson` |
+| `odme generate strength-edges-me` | `odme generate strength-edges-poisson` |
+| `odme generate strength-degree-me` | `odme generate strength-degree-poisson` |
+| `odme generate custom-pij` | `odme generate custom-poisson` |
+
+Filtering — same logic:
+
+| Current | Proposed |
+|---------|----------|
+| `odme filter fixed-strength` | `odme filter poisson` |
+| `odme filter strength-edges` | `odme filter strength-edges-poisson` |
+| `odme filter strength-degree` | `odme filter strength-degree-poisson` |
+| `odme filter strength-cost` | `odme filter strength-cost-poisson` |
+| `odme filter degree-events` | `odme filter degree-events-poisson` |
+| `odme filter custom-rates` | `odme filter custom-poisson` |
 
 #### Docs
 
