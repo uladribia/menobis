@@ -259,6 +259,28 @@ class TestDegreeEvents:
         assert len(result.absent_lower.edges) >= 0
 
 
+class TestPartialConstraints:
+    """Tests for partial-constraint filtering via custom rates."""
+
+    def test_partial_fit_feeds_custom_rates_filter(self) -> None:
+        """PartialFitResult feeds directly into filter_custom_rates_poisson."""
+        from odme.models.partial import fit_partial_strength_me
+
+        edges = _small_edges()
+        n = 3
+        s_out = np.zeros(n, dtype=np.float64)
+        s_in = np.zeros(n, dtype=np.float64)
+        np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
+        np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
+        known_src = np.array([0], dtype=np.uint64)
+        known_tgt = np.array([1], dtype=np.uint64)
+        known_rate = np.array([3.0], dtype=np.float64)
+        partial = fit_partial_strength_me(s_out, s_in, known_src, known_tgt, known_rate)
+        rates = partial.as_probability_table()
+        result = filter_custom_rates_poisson(edges, rates, alpha=0.05)
+        _assert_filter_partitions(result, len(edges))
+
+
 class TestSolveZtpRate:
     """Tests for the ZTP rate solver."""
 

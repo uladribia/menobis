@@ -43,6 +43,11 @@ Filtering supports all independent grand-canonical distributions:
 | strength-degree ME | ZIP/ZTP with fitted occupation and rate $x_i y_j$ |
 | degree-events ME | ZIP/ZTP with binary degree occupation and shared rate |
 
+| partial constraints | Poisson rates from combined known + free-pair rates |
+
+Partial-constraint filtering uses `filter_custom_rates_poisson` with the
+combined rate table from `PartialFitResult.as_probability_table()`.
+
 Canonical multinomial filters are intentionally out of scope because pair tests
 are coupled by the fixed total event count. Custom inputs therefore use
 independent Poisson rates, not fixed-total multinomial probabilities.

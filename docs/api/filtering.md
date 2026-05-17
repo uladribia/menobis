@@ -18,7 +18,7 @@ return a `FilterResult` with upper, lower, compatible, and absent-lower tables.
 | `filter_strength_edges_me` | ZIP, pre-fitted | edges, fit |
 | `filter_strength_degree_me` | ZIP, pre-fitted | edges, fit |
 | `filter_degree_events_me` | ZIP, manual | edges, x, y, rate |
-| `filter_custom_rates_poisson` | Poisson, user rates | edges, rates table |
+| `filter_custom_rates_poisson` | Poisson, user/partial rates | edges, rates table |
 
 ## Common options
 
