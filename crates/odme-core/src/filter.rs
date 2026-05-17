@@ -1,9 +1,8 @@
 //! Statistical filtering kernels for fitted ODME null models.
 
-use crate::distribution::PairDistribution;
+use crate::distribution::{PairDistribution, WeightFamily};
 use crate::pairs::{
-    row_ranges, CandidateSupport, DegreeEventsZipProvider, FixedStrengthBinomialProvider,
-    FixedStrengthGeometricProvider, FixedStrengthNegBinomialProvider, FixedStrengthPoissonProvider,
+    row_ranges, CandidateSupport, DegreeEventsZipProvider, FixedStrengthProvider,
     PairDistributionProvider, SparsePoissonRateMapProvider, SparsePoissonRateProvider,
     StrengthCostPoissonProvider, StrengthDegreeZipProvider, StrengthEdgesZipProvider,
     PARALLEL_PAIR_THRESHOLD, SPARSE_CHUNK_SIZE,
@@ -272,7 +271,8 @@ pub fn filter_fixed_strength_poisson(
         sources,
         targets,
         weights,
-        &FixedStrengthPoissonProvider {
+        &FixedStrengthProvider {
+            family: WeightFamily::Poisson,
             x,
             y,
             self_loops: true,
@@ -294,7 +294,12 @@ pub fn absent_fixed_strength_poisson(
     max_absent: Option<usize>,
 ) -> AbsentFilterResult {
     detect_absent_provider(
-        &FixedStrengthPoissonProvider { x, y, self_loops },
+        &FixedStrengthProvider {
+            family: WeightFamily::Poisson,
+            x,
+            y,
+            self_loops,
+        },
         sources,
         targets,
         AbsentFilterOptions {
@@ -608,7 +613,8 @@ pub fn filter_geometric(
         sources,
         targets,
         weights,
-        &FixedStrengthGeometricProvider {
+        &FixedStrengthProvider {
+            family: WeightFamily::Geometric,
             x,
             y,
             self_loops: true,
@@ -630,7 +636,12 @@ pub fn absent_geometric(
     max_absent: Option<usize>,
 ) -> AbsentFilterResult {
     detect_absent_provider(
-        &FixedStrengthGeometricProvider { x, y, self_loops },
+        &FixedStrengthProvider {
+            family: WeightFamily::Geometric,
+            x,
+            y,
+            self_loops,
+        },
         sources,
         targets,
         AbsentFilterOptions {
@@ -657,10 +668,10 @@ pub fn filter_binomial(
         sources,
         targets,
         weights,
-        &FixedStrengthBinomialProvider {
+        &FixedStrengthProvider {
+            family: WeightFamily::Binomial(layers),
             x,
             y,
-            layers,
             self_loops: true,
         },
     )
@@ -681,10 +692,10 @@ pub fn absent_binomial(
     max_absent: Option<usize>,
 ) -> AbsentFilterResult {
     detect_absent_provider(
-        &FixedStrengthBinomialProvider {
+        &FixedStrengthProvider {
+            family: WeightFamily::Binomial(layers),
             x,
             y,
-            layers,
             self_loops,
         },
         sources,
@@ -713,10 +724,10 @@ pub fn filter_neg_binomial(
         sources,
         targets,
         weights,
-        &FixedStrengthNegBinomialProvider {
+        &FixedStrengthProvider {
+            family: WeightFamily::NegBinomial(layers),
             x,
             y,
-            layers,
             self_loops: true,
         },
     )
@@ -737,10 +748,10 @@ pub fn absent_neg_binomial(
     max_absent: Option<usize>,
 ) -> AbsentFilterResult {
     detect_absent_provider(
-        &FixedStrengthNegBinomialProvider {
+        &FixedStrengthProvider {
+            family: WeightFamily::NegBinomial(layers),
             x,
             y,
-            layers,
             self_loops,
         },
         sources,

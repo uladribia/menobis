@@ -1,10 +1,8 @@
 //! Seeded network generation for node-factorized models.
 
-use crate::distribution::{zero_truncated_poisson_mean, PairDistribution};
+use crate::distribution::{zero_truncated_poisson_mean, PairDistribution, WeightFamily};
 use crate::pairs::{
-    chunk_seed, row_ranges, CandidateSupport, DegreeEventsZipProvider,
-    FixedStrengthBinomialProvider, FixedStrengthGeometricProvider,
-    FixedStrengthNegBinomialProvider, FixedStrengthPoissonProvider,
+    chunk_seed, row_ranges, CandidateSupport, DegreeEventsZipProvider, FixedStrengthProvider,
     NormalizedSparsePoissonProvider, PairDistributionProvider, StrengthCostPoissonProvider,
     StrengthDegreeZipProvider, StrengthEdgesZipProvider, PARALLEL_PAIR_THRESHOLD,
     SPARSE_CHUNK_SIZE,
@@ -312,13 +310,29 @@ pub fn sample_microcanonical(strength_out: &[u64], strength_in: &[u64], seed: u6
 /// Sample from independent Poisson(x_i * y_j) for all (i, j).
 #[must_use]
 pub fn sample_poisson(x: &[f64], y: &[f64], self_loops: bool, seed: u64) -> SampledEdges {
-    sample_provider(&FixedStrengthPoissonProvider { x, y, self_loops }, seed)
+    sample_provider(
+        &FixedStrengthProvider {
+            x,
+            y,
+            family: WeightFamily::Poisson,
+            self_loops,
+        },
+        seed,
+    )
 }
 
 /// Sample from independent Geometric(1 - x_i*y_j) for all (i, j).
 #[must_use]
 pub fn sample_geometric(x: &[f64], y: &[f64], self_loops: bool, seed: u64) -> SampledEdges {
-    sample_provider(&FixedStrengthGeometricProvider { x, y, self_loops }, seed)
+    sample_provider(
+        &FixedStrengthProvider {
+            x,
+            y,
+            family: WeightFamily::Geometric,
+            self_loops,
+        },
+        seed,
+    )
 }
 
 /// Sample from independent Binomial(M, x_i*y_j/(1+x_i*y_j)) for all (i, j).
@@ -331,10 +345,10 @@ pub fn sample_binomial(
     seed: u64,
 ) -> SampledEdges {
     sample_provider(
-        &FixedStrengthBinomialProvider {
+        &FixedStrengthProvider {
             x,
             y,
-            layers,
+            family: WeightFamily::Binomial(layers),
             self_loops,
         },
         seed,
@@ -351,10 +365,10 @@ pub fn sample_neg_binomial(
     seed: u64,
 ) -> SampledEdges {
     sample_provider(
-        &FixedStrengthNegBinomialProvider {
+        &FixedStrengthProvider {
             x,
             y,
-            layers,
+            family: WeightFamily::NegBinomial(layers),
             self_loops,
         },
         seed,

@@ -1,7 +1,7 @@
 //! Candidate pair providers shared by generation, filtering, and future stats.
 
 use crate::distribution::{
-    strength_degree_distribution, strength_edges_distribution, PairDistribution,
+    strength_degree_distribution, strength_edges_distribution, PairDistribution, WeightFamily,
 };
 use std::collections::HashMap;
 
@@ -58,13 +58,17 @@ fn splitmix64(mut value: u64) -> u64 {
     z ^ (z >> 31)
 }
 
-pub struct FixedStrengthPoissonProvider<'a> {
+/// Generic fixed-strength provider parameterized by weight family.
+///
+/// Computes `xy = x[source] * y[target]` and delegates to `family.distribution(xy)`.
+pub struct FixedStrengthProvider<'a> {
     pub x: &'a [f64],
     pub y: &'a [f64],
+    pub family: WeightFamily,
     pub self_loops: bool,
 }
 
-impl PairDistributionProvider for FixedStrengthPoissonProvider<'_> {
+impl PairDistributionProvider for FixedStrengthProvider<'_> {
     fn support(&self) -> CandidateSupport<'_> {
         CandidateSupport::AllPairs {
             node_count: self.x.len(),
@@ -76,8 +80,8 @@ impl PairDistributionProvider for FixedStrengthPoissonProvider<'_> {
         if !self.self_loops && source == target {
             return None;
         }
-        let rate = self.x[source] * self.y[target];
-        (rate > 0.0).then_some(PairDistribution::Poisson { rate })
+        let xy = self.x[source] * self.y[target];
+        (xy > 0.0).then(|| self.family.distribution(xy))
     }
 }
 
@@ -308,82 +312,5 @@ impl PairDistributionProvider for StrengthDegreeZipProvider<'_> {
             self.z[source],
             self.w[target],
         ))
-    }
-}
-
-pub struct FixedStrengthGeometricProvider<'a> {
-    pub x: &'a [f64],
-    pub y: &'a [f64],
-    pub self_loops: bool,
-}
-
-impl PairDistributionProvider for FixedStrengthGeometricProvider<'_> {
-    fn support(&self) -> CandidateSupport<'_> {
-        CandidateSupport::AllPairs {
-            node_count: self.x.len(),
-            self_loops: self.self_loops,
-        }
-    }
-
-    fn distribution(&self, source: usize, target: usize) -> Option<PairDistribution> {
-        if !self.self_loops && source == target {
-            return None;
-        }
-        let xy = self.x[source] * self.y[target];
-        (xy > 0.0).then_some(PairDistribution::GeometricDist { xy })
-    }
-}
-
-pub struct FixedStrengthBinomialProvider<'a> {
-    pub x: &'a [f64],
-    pub y: &'a [f64],
-    pub layers: u32,
-    pub self_loops: bool,
-}
-
-impl PairDistributionProvider for FixedStrengthBinomialProvider<'_> {
-    fn support(&self) -> CandidateSupport<'_> {
-        CandidateSupport::AllPairs {
-            node_count: self.x.len(),
-            self_loops: self.self_loops,
-        }
-    }
-
-    fn distribution(&self, source: usize, target: usize) -> Option<PairDistribution> {
-        if !self.self_loops && source == target {
-            return None;
-        }
-        let xy = self.x[source] * self.y[target];
-        (xy > 0.0).then_some(PairDistribution::BinomialDist {
-            xy,
-            layers: self.layers,
-        })
-    }
-}
-
-pub struct FixedStrengthNegBinomialProvider<'a> {
-    pub x: &'a [f64],
-    pub y: &'a [f64],
-    pub layers: u32,
-    pub self_loops: bool,
-}
-
-impl PairDistributionProvider for FixedStrengthNegBinomialProvider<'_> {
-    fn support(&self) -> CandidateSupport<'_> {
-        CandidateSupport::AllPairs {
-            node_count: self.x.len(),
-            self_loops: self.self_loops,
-        }
-    }
-
-    fn distribution(&self, source: usize, target: usize) -> Option<PairDistribution> {
-        if !self.self_loops && source == target {
-            return None;
-        }
-        let xy = self.x[source] * self.y[target];
-        (xy > 0.0).then_some(PairDistribution::NegBinomialDist {
-            xy,
-            layers: self.layers,
-        })
     }
 }
