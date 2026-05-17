@@ -418,11 +418,12 @@ TDD:
 - stdout for data, stderr for progress.
 - Remaining: additional subcommands as models are added.
 
-### Milestone 9: Documentation site — ✅ BUILDS
+### Milestone 9: Documentation site — ✅ COMPLETE
 
 - MkDocs Material site with concepts, API, CLI, decisions, scalability docs.
 - `mkdocs build --strict` passes.
-- Remaining: tutorials, thesis-equation mapping, fuller API docs.
+- Landing page, Python API reference, Rust API reference, testing guide, release process.
+- Remaining: thesis-equation mapping and tutorials (separate effort).
 
 ### Milestone 10: Performance and memory benchmarks — ✅ COMPLETE
 
