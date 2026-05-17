@@ -32,6 +32,7 @@ nav:
       - Analyze: cli/analyze.md
       - Fit: cli/fit.md
       - Generate: cli/generate.md
+      - Filter: cli/filter.md
       - Convert: cli/convert.md
   - Development:
       - Testing: development/testing.md

@@ -25,10 +25,12 @@ Initial filtering supports independent grand-canonical distributions:
 | Model | Distribution |
 |-------|--------------|
 | fixed-strength ME | Poisson($x_i y_j$) |
+| custom rates | Poisson($\lambda_{ij}$), where $\lambda_{ij}=T p_{ij}$ |
 | strength-edges ME | ZIP/ZTP with fitted occupation and rate $x_i y_j$ |
 
 Canonical multinomial filters are intentionally out of scope because pair tests
-are coupled by the fixed total event count.
+are coupled by the fixed total event count. Custom inputs therefore use
+independent Poisson rates, not fixed-total multinomial probabilities.
 
 ## Absent edges
 
@@ -57,3 +59,26 @@ result = filter_fixed_strength_me(
 
 `result.upper`, `result.lower`, `result.compatible`, and
 `result.absent_lower` contain sparse edge tables plus p-values.
+
+## CLI
+
+```bash
+odme filter fixed-strength edges.csv --output-prefix filtered/
+odme filter custom-rates edges.csv --rates rates.csv --output-prefix filtered/
+```
+
+The custom rates file must contain `source,target,rate`, where `rate` is the
+occupation number $T p_{ij}$.
+
+## Calibration benchmark
+
+![Filter calibration](../figures/filter_calibration.png)
+
+The calibration is conservative because p-values are discrete and the plotted
+fraction is measured over existing positive edges. Generate the calibration data
+and figure with:
+
+```bash
+uv run python benchmarks/bench_filter_calibration.py
+uv run python benchmarks/plot_filter_calibration.py
+```

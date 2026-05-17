@@ -1,7 +1,7 @@
 //! Statistical filtering kernels for fitted ODME null models.
 
 use rayon::prelude::*;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 const PARALLEL_PAIR_THRESHOLD: usize = 1_000_000;
 const ROW_CHUNK_SIZE: usize = 128;
@@ -231,6 +231,72 @@ pub fn absent_fixed_strength_poisson(
         max_absent,
         |i, j| NullDistribution::Poisson { rate: x[i] * y[j] },
     )
+}
+
+#[must_use]
+pub fn filter_custom_poisson_rates(
+    rate_sources: &[u64],
+    rate_targets: &[u64],
+    rates: &[f64],
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    let rate_map: HashMap<(usize, usize), f64> = rate_sources
+        .iter()
+        .zip(rate_targets.iter())
+        .zip(rates.iter())
+        .map(|((&source, &target), &rate)| ((source as usize, target as usize), rate))
+        .collect();
+    filter_observed_with(sources, targets, weights, |i, j| {
+        NullDistribution::Poisson {
+            rate: rate_map.get(&(i, j)).copied().unwrap_or(0.0),
+        }
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_custom_poisson_rates(
+    rate_sources: &[u64],
+    rate_targets: &[u64],
+    rates: &[f64],
+    observed_sources: &[u64],
+    observed_targets: &[u64],
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    let observed: HashSet<(u64, u64)> = observed_sources
+        .iter()
+        .zip(observed_targets.iter())
+        .map(|(&source, &target)| (source, target))
+        .collect();
+    let mut result = AbsentFilterResult::default();
+    for ((&source, &target), &rate) in rate_sources.iter().zip(rate_targets.iter()).zip(rates) {
+        if observed.contains(&(source, target)) {
+            continue;
+        }
+        let dist = NullDistribution::Poisson { rate };
+        let occupation = dist.occupation();
+        let expected = dist.expected();
+        if occupation < min_occupation || expected < min_expected {
+            continue;
+        }
+        let lower = dist.lower_pvalue(0);
+        if lower < alpha_lower {
+            result.sources.push(source);
+            result.targets.push(target);
+            result.lower_pvalues.push(lower);
+            result.expected.push(expected);
+            result.occupation.push(occupation);
+            if max_absent.is_some_and(|limit| result.sources.len() >= limit) {
+                break;
+            }
+        }
+    }
+    result
 }
 
 #[must_use]

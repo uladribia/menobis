@@ -7,7 +7,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 import odme._odme as _odme
-from odme.data.frames import EdgeTable
+from odme.data.frames import EdgeTable, ProbabilityTable
 from odme.models.fitting import StrengthEdgesMEFit, fit_fixed_strength_me
 
 Tail = Literal["upper", "lower", "two-sided"]
@@ -69,6 +69,57 @@ def filter_fixed_strength_me(
             edges.source.tolist(),
             edges.target.tolist(),
             self_loops,
+            _lower_alpha(alpha, tail),
+            min_occupation,
+            min_expected,
+            max_absent,
+        )
+    return _classify(
+        edges,
+        np.asarray(upper, dtype=np.float64),
+        np.asarray(lower, dtype=np.float64),
+        np.asarray(expected, dtype=np.float64),
+        np.asarray(occupation, dtype=np.float64),
+        absent,
+        alpha=alpha,
+        tail=tail,
+        correction=correction,
+    )
+
+
+def filter_custom_rates_poisson(
+    edges: EdgeTable,
+    rates: ProbabilityTable,
+    *,
+    alpha: float = 0.05,
+    tail: Tail = "two-sided",
+    correction: Correction = "none",
+    detect_absent: bool = False,
+    min_occupation: float = 0.5,
+    min_expected: float = 0.0,
+    max_absent: int | None = None,
+) -> FilterResult:
+    """Filter edges against user-supplied independent Poisson rates.
+
+    ``rates.probability`` is interpreted as the occupation number/rate
+    ``T p_ij`` rather than as a normalized probability.
+    """
+    upper, lower, expected, occupation = _odme.filter_custom_poisson_rates(
+        rates.source.tolist(),
+        rates.target.tolist(),
+        rates.probability.tolist(),
+        edges.source.tolist(),
+        edges.target.tolist(),
+        edges.weight.tolist(),
+    )
+    absent = None
+    if detect_absent:
+        absent = _odme.absent_custom_poisson_rates(
+            rates.source.tolist(),
+            rates.target.tolist(),
+            rates.probability.tolist(),
+            edges.source.tolist(),
+            edges.target.tolist(),
             _lower_alpha(alpha, tail),
             min_occupation,
             min_expected,
@@ -274,6 +325,7 @@ def _strengths(edges: EdgeTable, node_count: int) -> tuple[np.ndarray, np.ndarra
 __all__ = [
     "FilterResult",
     "FilteredEdges",
+    "filter_custom_rates_poisson",
     "filter_fixed_strength_me",
     "filter_strength_edges_me",
 ]

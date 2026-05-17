@@ -249,6 +249,29 @@ def absent_fixed_strength_poisson(
 ) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
 
 
+def filter_custom_poisson_rates(
+    rate_sources: list[int],
+    rate_targets: list[int],
+    rates: list[float],
+    sources: list[int],
+    targets: list[int],
+    weights: list[int],
+) -> tuple[list[float], list[float], list[float], list[float]]: ...
+
+
+def absent_custom_poisson_rates(
+    rate_sources: list[int],
+    rate_targets: list[int],
+    rates: list[float],
+    sources: list[int],
+    targets: list[int],
+    alpha_lower: float,
+    min_occupation: float,
+    min_expected: float,
+    max_absent: int | None,
+) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
+
+
 def filter_strength_edges_zip(
     x: list[float],
     y: list[float],
