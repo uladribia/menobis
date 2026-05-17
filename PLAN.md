@@ -467,6 +467,7 @@ pair-distribution provider abstraction:
 | `PairDistribution` | draw Poisson or ZIP weight | choose CDF/survival formula |
 | Rayon chunk runner | parallel sampling | parallel p-value computation |
 | sparse support provider | custom $p_{ij}$ generation | custom $p_{ij}$ filtering |
+| degree-events ZIP provider | conditional positive-weight sampling | future ZIP filtering |
 | no-self-loop mask | skip diagonal sampling | skip diagonal filtering |
 | known-pair mask | partial generation support | partial filtering support |
 

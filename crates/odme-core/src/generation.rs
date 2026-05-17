@@ -2,9 +2,10 @@
 
 use crate::distribution::{zero_truncated_poisson_mean, PairDistribution};
 use crate::pairs::{
-    chunk_seed, row_ranges, CandidateSupport, FixedStrengthPoissonProvider,
-    PairDistributionProvider, StrengthCostPoissonProvider, StrengthDegreeZipProvider,
-    StrengthEdgesZipProvider, PARALLEL_PAIR_THRESHOLD, SPARSE_CHUNK_SIZE,
+    chunk_seed, row_ranges, CandidateSupport, DegreeEventsZipProvider,
+    FixedStrengthPoissonProvider, NormalizedSparsePoissonProvider, PairDistributionProvider,
+    StrengthCostPoissonProvider, StrengthDegreeZipProvider, StrengthEdgesZipProvider,
+    PARALLEL_PAIR_THRESHOLD, SPARSE_CHUNK_SIZE,
 };
 use rand::rngs::StdRng;
 use rand::Rng;
@@ -84,21 +85,65 @@ where
             provider.distribution(i, j)
         }),
         CandidateSupport::SparsePairs { sources, targets } => {
-            let pairs = sources
-                .iter()
-                .zip(targets.iter())
-                .filter_map(|(&source, &target)| {
-                    provider
-                        .distribution(source as usize, target as usize)
-                        .map(|distribution| PairDraw {
-                            source,
-                            target,
-                            distribution,
-                        })
-                });
-            sample_independent_pairs(pairs, &mut StdRng::seed_from_u64(seed))
+            sample_sparse_provider(provider, sources, targets, seed)
         }
     }
+}
+
+fn sample_sparse_provider<P>(
+    provider: &P,
+    sources: &[u64],
+    targets: &[u64],
+    seed: u64,
+) -> SampledEdges
+where
+    P: PairDistributionProvider,
+{
+    if sources.len() < SPARSE_CHUNK_SIZE {
+        let pairs = sources.iter().zip(targets.iter()).enumerate().filter_map(
+            |(index, (&source, &target))| {
+                provider
+                    .distribution_at(index, source as usize, target as usize)
+                    .map(|distribution| PairDraw {
+                        source,
+                        target,
+                        distribution,
+                    })
+            },
+        );
+        return sample_independent_pairs(pairs, &mut StdRng::seed_from_u64(seed));
+    }
+
+    let chunks: Vec<SampledEdges> = (0..sources.len())
+        .step_by(SPARSE_CHUNK_SIZE)
+        .map(|start| (start, (start + SPARSE_CHUNK_SIZE).min(sources.len())))
+        .collect::<Vec<_>>()
+        .into_par_iter()
+        .enumerate()
+        .map(|(chunk_index, (start, end))| {
+            let mut rng = StdRng::seed_from_u64(chunk_seed(seed, chunk_index));
+            let mut result = SampledEdges::default();
+            for index in start..end {
+                if let Some(distribution) = provider.distribution_at(
+                    index,
+                    sources[index] as usize,
+                    targets[index] as usize,
+                ) {
+                    push_sampled_pair(
+                        &mut result,
+                        PairDraw {
+                            source: sources[index],
+                            target: targets[index],
+                            distribution,
+                        },
+                        &mut rng,
+                    );
+                }
+            }
+            result
+        })
+        .collect();
+    merge_samples(chunks)
 }
 
 fn sample_all_pairs_by_rows<F>(n: usize, self_loops: bool, seed: u64, pair_fn: F) -> SampledEdges
@@ -177,46 +222,16 @@ pub fn sample_custom_pij_events_poisson(
     if p_sum <= 0.0 {
         return SampledEdges::default();
     }
-    if probabilities.len() < SPARSE_CHUNK_SIZE {
-        let pairs = sources
-            .iter()
-            .zip(targets.iter())
-            .zip(probabilities.iter())
-            .map(|((&source, &target), &probability)| PairDraw {
-                source,
-                target,
-                distribution: PairDistribution::Poisson {
-                    rate: total_events as f64 * probability / p_sum,
-                },
-            });
-        return sample_independent_pairs(pairs, &mut StdRng::seed_from_u64(seed));
-    }
-    let chunks: Vec<SampledEdges> = (0..probabilities.len())
-        .step_by(SPARSE_CHUNK_SIZE)
-        .map(|start| (start, (start + SPARSE_CHUNK_SIZE).min(probabilities.len())))
-        .collect::<Vec<_>>()
-        .into_par_iter()
-        .enumerate()
-        .map(|(chunk_index, (start, end))| {
-            let mut rng = StdRng::seed_from_u64(chunk_seed(seed, chunk_index));
-            let mut result = SampledEdges::default();
-            for idx in start..end {
-                push_sampled_pair(
-                    &mut result,
-                    PairDraw {
-                        source: sources[idx],
-                        target: targets[idx],
-                        distribution: PairDistribution::Poisson {
-                            rate: total_events as f64 * probabilities[idx] / p_sum,
-                        },
-                    },
-                    &mut rng,
-                );
-            }
-            result
-        })
-        .collect();
-    merge_samples(chunks)
+    sample_provider(
+        &NormalizedSparsePoissonProvider {
+            sources,
+            targets,
+            probabilities,
+            total_events,
+            probability_sum: p_sum,
+        },
+        seed,
+    )
 }
 
 /// Sample custom p_ij canonical multinomial graph with fixed T.
@@ -378,14 +393,15 @@ pub fn sample_fixed_degree_events_me(
         1.0
     };
     let rate = solve_zero_truncated_poisson_rate(mean_existing_weight.max(1.0));
-    sample_all_pairs_by_rows(x.len(), self_loops, seed, |i, j| {
-        let z = x[i] * y[j];
-        let occupation_prob = z / (1.0 + z);
-        Some(PairDistribution::ZipPoisson {
-            occupation: occupation_prob,
-            rate,
-        })
-    })
+    sample_provider(
+        &DegreeEventsZipProvider {
+            x,
+            y,
+            positive_weight_rate: rate,
+            self_loops,
+        },
+        seed,
+    )
 }
 
 /// Sample from the exact ME fixed-strength-degree ZIP model.

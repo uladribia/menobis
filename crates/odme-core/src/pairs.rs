@@ -25,6 +25,15 @@ pub enum CandidateSupport<'a> {
 pub trait PairDistributionProvider: Sync {
     fn support(&self) -> CandidateSupport<'_>;
     fn distribution(&self, source: usize, target: usize) -> Option<PairDistribution>;
+
+    fn distribution_at(
+        &self,
+        _index: usize,
+        source: usize,
+        target: usize,
+    ) -> Option<PairDistribution> {
+        self.distribution(source, target)
+    }
 }
 
 /// Deterministic seed mixer for parallel chunks.
@@ -123,6 +132,76 @@ impl PairDistributionProvider for SparsePoissonRateProvider<'_> {
                     .then_some(PairDistribution::Poisson { rate })
             })
     }
+
+    fn distribution_at(
+        &self,
+        index: usize,
+        source: usize,
+        target: usize,
+    ) -> Option<PairDistribution> {
+        if self.sources.get(index).copied()? as usize != source
+            || self.targets.get(index).copied()? as usize != target
+        {
+            return None;
+        }
+        self.rates
+            .get(index)
+            .copied()
+            .filter(|&rate| rate > 0.0)
+            .map(|rate| PairDistribution::Poisson { rate })
+    }
+}
+
+pub struct NormalizedSparsePoissonProvider<'a> {
+    pub sources: &'a [u64],
+    pub targets: &'a [u64],
+    pub probabilities: &'a [f64],
+    pub total_events: u64,
+    pub probability_sum: f64,
+}
+
+impl PairDistributionProvider for NormalizedSparsePoissonProvider<'_> {
+    fn support(&self) -> CandidateSupport<'_> {
+        CandidateSupport::SparsePairs {
+            sources: self.sources,
+            targets: self.targets,
+        }
+    }
+
+    fn distribution(&self, source: usize, target: usize) -> Option<PairDistribution> {
+        self.sources
+            .iter()
+            .zip(self.targets.iter())
+            .zip(self.probabilities.iter())
+            .find_map(|((&src, &tgt), &probability)| {
+                (src as usize == source && tgt as usize == target && probability > 0.0).then_some(
+                    PairDistribution::Poisson {
+                        rate: self.total_events as f64 * probability / self.probability_sum,
+                    },
+                )
+            })
+    }
+
+    fn distribution_at(
+        &self,
+        index: usize,
+        source: usize,
+        target: usize,
+    ) -> Option<PairDistribution> {
+        if self.probability_sum <= 0.0
+            || self.sources.get(index).copied()? as usize != source
+            || self.targets.get(index).copied()? as usize != target
+        {
+            return None;
+        }
+        self.probabilities
+            .get(index)
+            .copied()
+            .filter(|&probability| probability > 0.0)
+            .map(|probability| PairDistribution::Poisson {
+                rate: self.total_events as f64 * probability / self.probability_sum,
+            })
+    }
 }
 
 pub struct SparsePoissonRateMapProvider<'a> {
@@ -145,6 +224,34 @@ impl PairDistributionProvider for SparsePoissonRateMapProvider<'_> {
             .copied()
             .filter(|&rate| rate > 0.0)
             .map(|rate| PairDistribution::Poisson { rate })
+    }
+}
+
+pub struct DegreeEventsZipProvider<'a> {
+    pub x: &'a [f64],
+    pub y: &'a [f64],
+    pub positive_weight_rate: f64,
+    pub self_loops: bool,
+}
+
+impl PairDistributionProvider for DegreeEventsZipProvider<'_> {
+    fn support(&self) -> CandidateSupport<'_> {
+        CandidateSupport::AllPairs {
+            node_count: self.x.len(),
+            self_loops: self.self_loops,
+        }
+    }
+
+    fn distribution(&self, source: usize, target: usize) -> Option<PairDistribution> {
+        if !self.self_loops && source == target {
+            return None;
+        }
+        let z = self.x[source] * self.y[target];
+        let occupation = z / (1.0 + z);
+        Some(PairDistribution::ZipPoisson {
+            occupation,
+            rate: self.positive_weight_rate,
+        })
     }
 }
 

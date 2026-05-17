@@ -28,8 +28,9 @@ Use reusable generation and filtering components:
 | Future stats sink | Accumulate expected/sample stats without edges |
 
 Python APIs call Rust kernels. The default path is streaming; dense matrix
-construction is not a prerequisite for sampling or filtering. New null models
-should implement one provider and reuse generation/filtering/stat sinks.
+construction is not a prerequisite for sampling or filtering. Custom sparse
+Poisson rates and degree-events ZIP also use providers, so new independent null
+models should implement one provider and reuse generation/filtering/stat sinks.
 
 ## Parallel strategy
 
