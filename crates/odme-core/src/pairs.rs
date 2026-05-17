@@ -1,7 +1,9 @@
 //! Candidate pair providers shared by generation, filtering, and future stats.
 
 use crate::distribution::{
-    strength_degree_distribution, strength_edges_distribution, PairDistribution, WeightFamily,
+    strength_degree_binomial_occupation, strength_degree_distribution,
+    strength_edges_binomial_occupation, strength_edges_distribution, PairDistribution,
+    WeightFamily,
 };
 use std::collections::HashMap;
 
@@ -85,15 +87,16 @@ impl PairDistributionProvider for FixedStrengthProvider<'_> {
     }
 }
 
-pub struct StrengthCostPoissonProvider<'a> {
+pub struct StrengthCostProvider<'a> {
     pub x: &'a [f64],
     pub y: &'a [f64],
     pub gamma: f64,
     pub costs: &'a HashMap<(usize, usize), f64>,
+    pub family: WeightFamily,
     pub self_loops: bool,
 }
 
-impl PairDistributionProvider for StrengthCostPoissonProvider<'_> {
+impl PairDistributionProvider for StrengthCostProvider<'_> {
     fn support(&self) -> CandidateSupport<'_> {
         CandidateSupport::AllPairs {
             node_count: self.x.len(),
@@ -105,10 +108,10 @@ impl PairDistributionProvider for StrengthCostPoissonProvider<'_> {
         if !self.self_loops && source == target {
             return None;
         }
-        let rate = self.x[source]
+        let xy = self.x[source]
             * self.y[target]
             * (-self.gamma * self.costs.get(&(source, target)).copied().unwrap_or(0.0)).exp();
-        (rate > 0.0).then_some(PairDistribution::Poisson { rate })
+        (xy > 0.0).then(|| self.family.distribution(xy))
     }
 }
 
@@ -231,14 +234,15 @@ impl PairDistributionProvider for SparsePoissonRateMapProvider<'_> {
     }
 }
 
-pub struct DegreeEventsPoissonProvider<'a> {
+pub struct DegreeEventsProvider<'a> {
     pub x: &'a [f64],
     pub y: &'a [f64],
     pub positive_weight_rate: f64,
+    pub family: WeightFamily,
     pub self_loops: bool,
 }
 
-impl PairDistributionProvider for DegreeEventsPoissonProvider<'_> {
+impl PairDistributionProvider for DegreeEventsProvider<'_> {
     fn support(&self) -> CandidateSupport<'_> {
         CandidateSupport::AllPairs {
             node_count: self.x.len(),
@@ -252,21 +256,22 @@ impl PairDistributionProvider for DegreeEventsPoissonProvider<'_> {
         }
         let z = self.x[source] * self.y[target];
         let occupation = z / (1.0 + z);
-        Some(PairDistribution::ZipPoisson {
-            occupation,
-            rate: self.positive_weight_rate,
-        })
+        Some(
+            self.family
+                .zip_distribution(occupation, self.positive_weight_rate),
+        )
     }
 }
 
-pub struct StrengthEdgesPoissonProvider<'a> {
+pub struct StrengthEdgesProvider<'a> {
     pub x: &'a [f64],
     pub y: &'a [f64],
     pub lambda: f64,
+    pub family: WeightFamily,
     pub self_loops: bool,
 }
 
-impl PairDistributionProvider for StrengthEdgesPoissonProvider<'_> {
+impl PairDistributionProvider for StrengthEdgesProvider<'_> {
     fn support(&self) -> CandidateSupport<'_> {
         CandidateSupport::AllPairs {
             node_count: self.x.len(),
@@ -278,23 +283,34 @@ impl PairDistributionProvider for StrengthEdgesPoissonProvider<'_> {
         if !self.self_loops && source == target {
             return None;
         }
-        Some(strength_edges_distribution(
-            self.x[source],
-            self.y[target],
-            self.lambda,
-        ))
+        let xi = self.x[source];
+        let yj = self.y[target];
+        let xy = xi * yj;
+        match self.family {
+            WeightFamily::Poisson => Some(strength_edges_distribution(xi, yj, self.lambda)),
+            WeightFamily::Binomial(m) => {
+                let occ = strength_edges_binomial_occupation(xy, self.lambda, m);
+                Some(PairDistribution::ZipBinomial {
+                    occupation: occ,
+                    xy,
+                    layers: m,
+                })
+            }
+            _ => Some(strength_edges_distribution(xi, yj, self.lambda)),
+        }
     }
 }
 
-pub struct StrengthDegreePoissonProvider<'a> {
+pub struct StrengthDegreeProvider<'a> {
     pub x: &'a [f64],
     pub y: &'a [f64],
     pub z: &'a [f64],
     pub w: &'a [f64],
+    pub family: WeightFamily,
     pub self_loops: bool,
 }
 
-impl PairDistributionProvider for StrengthDegreePoissonProvider<'_> {
+impl PairDistributionProvider for StrengthDegreeProvider<'_> {
     fn support(&self) -> CandidateSupport<'_> {
         CandidateSupport::AllPairs {
             node_count: self.x.len(),
@@ -306,11 +322,31 @@ impl PairDistributionProvider for StrengthDegreePoissonProvider<'_> {
         if !self.self_loops && source == target {
             return None;
         }
-        Some(strength_degree_distribution(
-            self.x[source],
-            self.y[target],
-            self.z[source],
-            self.w[target],
-        ))
+        let xi = self.x[source];
+        let yj = self.y[target];
+        let xy = xi * yj;
+        let vij = self.z[source] * self.w[target];
+        match self.family {
+            WeightFamily::Poisson => Some(strength_degree_distribution(
+                xi,
+                yj,
+                self.z[source],
+                self.w[target],
+            )),
+            WeightFamily::Binomial(m) => {
+                let occ = strength_degree_binomial_occupation(xy, vij, m);
+                Some(PairDistribution::ZipBinomial {
+                    occupation: occ,
+                    xy,
+                    layers: m,
+                })
+            }
+            _ => Some(strength_degree_distribution(
+                xi,
+                yj,
+                self.z[source],
+                self.w[target],
+            )),
+        }
     }
 }

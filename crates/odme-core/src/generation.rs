@@ -2,10 +2,9 @@
 
 use crate::distribution::{zero_truncated_poisson_mean, PairDistribution, WeightFamily};
 use crate::pairs::{
-    chunk_seed, row_ranges, CandidateSupport, DegreeEventsPoissonProvider, FixedStrengthProvider,
-    NormalizedSparsePoissonProvider, PairDistributionProvider, StrengthCostPoissonProvider,
-    StrengthDegreePoissonProvider, StrengthEdgesPoissonProvider, PARALLEL_PAIR_THRESHOLD,
-    SPARSE_CHUNK_SIZE,
+    chunk_seed, row_ranges, CandidateSupport, DegreeEventsProvider, FixedStrengthProvider,
+    NormalizedSparsePoissonProvider, PairDistributionProvider, StrengthCostProvider,
+    StrengthDegreeProvider, StrengthEdgesProvider, PARALLEL_PAIR_THRESHOLD, SPARSE_CHUNK_SIZE,
 };
 use rand::rngs::StdRng;
 use rand::Rng;
@@ -405,7 +404,8 @@ pub fn sample_strength_cost_poisson(
         .map(|((&source, &target), &cost)| ((source, target), cost))
         .collect();
     sample_provider(
-        &StrengthCostPoissonProvider {
+        &StrengthCostProvider {
+            family: WeightFamily::Poisson,
             x,
             y,
             gamma,
@@ -465,7 +465,8 @@ pub fn sample_degree_events_poisson(
     };
     let rate = solve_zero_truncated_poisson_rate(mean_existing_weight.max(1.0));
     sample_provider(
-        &DegreeEventsPoissonProvider {
+        &DegreeEventsProvider {
+            family: WeightFamily::Poisson,
             x,
             y,
             positive_weight_rate: rate,
@@ -486,7 +487,8 @@ pub fn sample_strength_degree_poisson(
     seed: u64,
 ) -> SampledEdges {
     sample_provider(
-        &StrengthDegreePoissonProvider {
+        &StrengthDegreeProvider {
+            family: WeightFamily::Poisson,
             x,
             y,
             z,
@@ -535,10 +537,110 @@ pub fn sample_strength_edges_poisson(
     seed: u64,
 ) -> SampledEdges {
     sample_provider(
-        &StrengthEdgesPoissonProvider {
+        &StrengthEdgesProvider {
+            family: WeightFamily::Poisson,
             x,
             y,
             lambda: lam,
+            self_loops,
+        },
+        seed,
+    )
+}
+
+/// Sample strength-cost binomial model: Bin(M, p) where p = xy/(1+xy) and xy = x_i y_j exp(-gamma d_ij).
+#[must_use]
+pub fn sample_strength_cost_binomial(
+    x: &[f64],
+    y: &[f64],
+    gamma: f64,
+    costs: &SparseCostEntries<'_>,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    let cost_map: HashMap<(usize, usize), f64> = costs
+        .sources
+        .iter()
+        .zip(costs.targets.iter())
+        .zip(costs.values.iter())
+        .map(|((&source, &target), &cost)| ((source, target), cost))
+        .collect();
+    sample_provider(
+        &StrengthCostProvider {
+            family: WeightFamily::Binomial(layers),
+            x,
+            y,
+            gamma,
+            costs: &cost_map,
+            self_loops,
+        },
+        seed,
+    )
+}
+
+/// Sample strength-edges binomial ZIP: Bernoulli occupation + ZTB(M, p).
+#[must_use]
+pub fn sample_strength_edges_binomial(
+    x: &[f64],
+    y: &[f64],
+    lam: f64,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    sample_provider(
+        &StrengthEdgesProvider {
+            family: WeightFamily::Binomial(layers),
+            x,
+            y,
+            lambda: lam,
+            self_loops,
+        },
+        seed,
+    )
+}
+
+/// Sample strength-degree binomial ZIP: Bernoulli occupation + ZTB(M, p).
+#[must_use]
+pub fn sample_strength_degree_binomial(
+    x: &[f64],
+    y: &[f64],
+    z: &[f64],
+    w: &[f64],
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    sample_provider(
+        &StrengthDegreeProvider {
+            family: WeightFamily::Binomial(layers),
+            x,
+            y,
+            z,
+            w,
+            self_loops,
+        },
+        seed,
+    )
+}
+
+/// Sample degree-events binomial ZIP: Bernoulli occupation + ZTB(M, mu).
+#[must_use]
+pub fn sample_degree_events_binomial(
+    x: &[f64],
+    y: &[f64],
+    positive_weight_rate: f64,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    sample_provider(
+        &DegreeEventsProvider {
+            family: WeightFamily::Binomial(layers),
+            x,
+            y,
+            positive_weight_rate,
             self_loops,
         },
         seed,
