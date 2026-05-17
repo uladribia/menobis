@@ -60,6 +60,65 @@ numbers.
 
 ### Future: legacy code removal
 
-Replace the old C/Python code (`1. Network analysis/`, `2. Model Fitting/`,
-`3. Model Generation/`) once ODME covers the full scientific scope. The legacy
-code is reference material, not a compatibility target.
+The three legacy directories can be removed once Milestone 7 is complete.
+Until then, they serve as reference for unported distribution variants.
+
+#### Inventory: what is ported vs what remains
+
+**`1. Network analysis/`** — C tool `MultiEdgeAnalyzer`. **Fully replaced.**
+All statistics (strengths, degrees, Y2, k_nn, s_nn, P(w), clustering) are
+implemented in Rust `odme-core` with Python wrappers. Safe to remove.
+
+**`2. Model Fitting/`** — Python 2 `multi_edge_fitter`. **Fully replaced.**
+
+| Legacy fitter | ODME equivalent | Status |
+|---------------|-----------------|--------|
+| `fitter_s.py` | `fit_fixed_strength_me` | ✅ ported |
+| `fitter_k.py` | `fit_fixed_degree_binary` | ✅ ported |
+| `fitter_sk.py` | `fit_strength_degree_me` | ✅ ported |
+| `fitter_E.py` | `fit_strength_edges_me` | ✅ ported |
+| `fitter_grav.py` | `fit_strength_cost_me` | ✅ ported |
+| `fitter_pij.py` | partial fitting (`fit_partial_*`) | ✅ ported |
+| `fitter_s_CVXOPT.py` | not needed (IPF solver used) | ✅ superseded |
+
+Safe to remove.
+
+**`3. Model Generation/`** — C tool `GenNetGen`. **Partially replaced.**
+
+| Legacy generator | ODME equivalent | Status |
+|------------------|-----------------|--------|
+| `fixeds_poisson_*` | `sample_poisson` | ✅ ported |
+| `fixeds_computational_*` | `sample_microcanonical` | ✅ ported |
+| `multinomial_*` | `sample_multinomial` | ✅ ported |
+| `poisson_multinomial_*` | `sample_poisson_multinomial` | ✅ ported |
+| `custompij_poisson_*` | `sample_custom_pij_events_poisson` | ✅ ported |
+| `custompij_ZIP_*` | `sample_strength_edges_me` | ✅ ported |
+| `custompij_ZIG_*` | — | ❌ Milestone 7 (geometric ZIP) |
+| `fixeds_geometric_*` | — | ❌ Milestone 7 |
+| `fixeds_binomial_*` | — | ❌ Milestone 7 |
+| `fixeds_negbinomial_*` | — | ❌ Milestone 7 |
+| `fixedk_poisson_*` | `sample_fixed_degree_events_me` | ✅ ported |
+| `fixedk_geometric_*` | — | ❌ Milestone 7 |
+| `fixedk_negbinom_*` | — | ❌ Milestone 7 |
+| `fixedk_binom_*` | — | ❌ Milestone 7 |
+| `fixedk_bernouilli_*` | `fit_fixed_degree_binary` (topology only) | ✅ ported |
+| `fixedEs_poisson_*` | `sample_strength_edges_me` | ✅ ported |
+| `fixedks_poisson_*` | `sample_strength_degree_me` | ✅ ported |
+| `fixedks_binomial_*` | — | ❌ Milestone 7 |
+| `gravity_poisson_*` | `sample_strength_cost_me` | ✅ ported |
+| `w_graph_seq_gravity_*` | — | ❌ Milestone 7 (sequential gravity) |
+| `w_graph_radiation_*` | — | ❌ Milestone 7 (radiation model) |
+
+#### Removal plan
+
+**Phase 1 (safe now):** Remove `1. Network analysis/` and `2. Model Fitting/`.
+Both are fully superseded. No Milestone 7 dependencies.
+
+**Phase 2 (after Milestone 7):** Remove `3. Model Generation/`. Keep it as
+reference until geometric, binomial, negative binomial, sequential gravity, and
+radiation generators are ported to Rust. The specific files to consult are:
+
+- `ula_null_models.c` lines 30–70: geometric/binomial/NB pair-level samplers
+- `others_null_models.c`: radiation and sequential-gravity models
+
+Do not remove Phase 2 files until Milestone 7 tests prove equivalence.
