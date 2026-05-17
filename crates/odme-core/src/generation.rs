@@ -3,9 +3,11 @@
 use crate::distribution::{zero_truncated_poisson_mean, PairDistribution};
 use crate::pairs::{
     chunk_seed, row_ranges, CandidateSupport, DegreeEventsZipProvider,
-    FixedStrengthPoissonProvider, NormalizedSparsePoissonProvider, PairDistributionProvider,
-    StrengthCostPoissonProvider, StrengthDegreeZipProvider, StrengthEdgesZipProvider,
-    PARALLEL_PAIR_THRESHOLD, SPARSE_CHUNK_SIZE,
+    FixedStrengthBinomialProvider, FixedStrengthGeometricProvider,
+    FixedStrengthNegBinomialProvider, FixedStrengthPoissonProvider,
+    NormalizedSparsePoissonProvider, PairDistributionProvider, StrengthCostPoissonProvider,
+    StrengthDegreeZipProvider, StrengthEdgesZipProvider, PARALLEL_PAIR_THRESHOLD,
+    SPARSE_CHUNK_SIZE,
 };
 use rand::rngs::StdRng;
 use rand::Rng;
@@ -311,6 +313,52 @@ pub fn sample_microcanonical(strength_out: &[u64], strength_in: &[u64], seed: u6
 #[must_use]
 pub fn sample_poisson(x: &[f64], y: &[f64], self_loops: bool, seed: u64) -> SampledEdges {
     sample_provider(&FixedStrengthPoissonProvider { x, y, self_loops }, seed)
+}
+
+/// Sample from independent Geometric(1 - x_i*y_j) for all (i, j).
+#[must_use]
+pub fn sample_geometric(x: &[f64], y: &[f64], self_loops: bool, seed: u64) -> SampledEdges {
+    sample_provider(&FixedStrengthGeometricProvider { x, y, self_loops }, seed)
+}
+
+/// Sample from independent Binomial(M, x_i*y_j/(1+x_i*y_j)) for all (i, j).
+#[must_use]
+pub fn sample_binomial(
+    x: &[f64],
+    y: &[f64],
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    sample_provider(
+        &FixedStrengthBinomialProvider {
+            x,
+            y,
+            layers,
+            self_loops,
+        },
+        seed,
+    )
+}
+
+/// Sample from independent NegBinomial(M, 1-x_i*y_j) for all (i, j).
+#[must_use]
+pub fn sample_neg_binomial(
+    x: &[f64],
+    y: &[f64],
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    sample_provider(
+        &FixedStrengthNegBinomialProvider {
+            x,
+            y,
+            layers,
+            self_loops,
+        },
+        seed,
+    )
 }
 
 /// Sample from independent Poisson(x_i * y_j * exp(-gamma d_ij)).

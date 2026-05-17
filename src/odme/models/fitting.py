@@ -445,11 +445,62 @@ def fit_fixed_degree_binary(
     return result
 
 
+def fit_binomial_strength(
+    strength_out: NDArray[np.integer],
+    strength_in: NDArray[np.integer],
+    *,
+    layers: int = 1,
+    self_loops: bool = True,
+    tolerance: float = 1e-8,
+    verbose: int = 0,
+    max_iterations: int = 10000,
+) -> FitResult:
+    """Fit Lagrange multipliers for the binomial(M) fixed-strength model.
+
+    E[t_ij] = M * x_i*y_j / (1 + x_i*y_j).
+
+    Args:
+        strength_out: Outgoing strength per node.
+        strength_in: Incoming strength per node.
+        layers: Number of binary layers M.
+        self_loops: Whether self loops are allowed.
+        tolerance: Convergence tolerance.
+        verbose: Logging level.
+        max_iterations: Maximum iterations.
+
+    Returns:
+        FitResult with node ids and x, y multipliers.
+    """
+    s_out = np.asarray(strength_out, dtype=np.float64)
+    s_in = np.asarray(strength_in, dtype=np.float64)
+    _validate_balanced_sequences(s_out, s_in, name="strength")
+    n = len(s_out)
+    t0 = time.perf_counter()
+    x_list, y_list, converged, iters = _odme.fit_binomial_strength(
+        s_out.tolist(), s_in.tolist(), layers, self_loops, tolerance, max_iterations
+    )
+    _log_fit_result(
+        "fit_binomial_strength",
+        converged,
+        iters,
+        time.perf_counter() - t0,
+        verbose,
+    )
+    return FitResult(
+        node=np.arange(n, dtype=np.uint64),
+        x=np.array(x_list),
+        y=np.array(y_list),
+        converged=converged,
+        iterations=iters,
+    )
+
+
 __all__ = [
     "FitResult",
     "StrengthCostMEFit",
     "StrengthDegreeMEFit",
     "StrengthEdgesMEFit",
+    "fit_binomial_strength",
     "fit_fixed_degree_binary",
     "fit_fixed_strength_me",
     "fit_strength_cost_me",

@@ -197,12 +197,59 @@ def sample_multinomial(
     return _edge_table_from_lists(sources, targets, weights)
 
 
+def sample_geometric(
+    x: NDArray[np.floating],
+    y: NDArray[np.floating],
+    *,
+    self_loops: bool = True,
+    seed: int = 0,
+) -> EdgeTable:
+    """Sample from independent Geometric(1 - x_i*y_j)."""
+    sources, targets, weights = _odme.sample_geometric(
+        x.tolist(), y.tolist(), self_loops, seed
+    )
+    return _edge_table_from_lists(sources, targets, weights)
+
+
+def sample_binomial(
+    x: NDArray[np.floating],
+    y: NDArray[np.floating],
+    *,
+    layers: int = 1,
+    self_loops: bool = True,
+    seed: int = 0,
+) -> EdgeTable:
+    """Sample from independent Binomial(M, x_i*y_j/(1+x_i*y_j))."""
+    sources, targets, weights = _odme.sample_binomial(
+        x.tolist(), y.tolist(), layers, self_loops, seed
+    )
+    return _edge_table_from_lists(sources, targets, weights)
+
+
+def sample_neg_binomial(
+    x: NDArray[np.floating],
+    y: NDArray[np.floating],
+    *,
+    layers: int = 1,
+    self_loops: bool = True,
+    seed: int = 0,
+) -> EdgeTable:
+    """Sample from independent NegBinomial(M, 1-x_i*y_j)."""
+    sources, targets, weights = _odme.sample_neg_binomial(
+        x.tolist(), y.tolist(), layers, self_loops, seed
+    )
+    return _edge_table_from_lists(sources, targets, weights)
+
+
 __all__ = [
+    "sample_binomial",
     "sample_custom_pij_events_multinomial",
     "sample_custom_pij_events_poisson",
     "sample_fixed_degree_events_me",
+    "sample_geometric",
     "sample_microcanonical",
     "sample_multinomial",
+    "sample_neg_binomial",
     "sample_poisson",
     "sample_poisson_multinomial",
     "sample_strength_cost_me",

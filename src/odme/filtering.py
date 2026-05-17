@@ -18,6 +18,8 @@ from odme.models.fitting import (
 
 Tail = Literal["upper", "lower", "two-sided"]
 Correction = Literal["none", "bonferroni", "fdr"]
+Tail = Literal["upper", "lower", "two-sided"]
+Correction = Literal["none", "bonferroni", "fdr"]
 
 
 @dataclass(frozen=True)
@@ -350,6 +352,156 @@ def filter_degree_events_me(
     )
 
 
+def filter_geometric(
+    edges: EdgeTable,
+    x: NDArray[np.float64],
+    y: NDArray[np.float64],
+    *,
+    alpha: float = 0.05,
+    tail: Tail = "two-sided",
+    correction: Correction = "none",
+    detect_absent: bool = False,
+    self_loops: bool = True,
+    min_occupation: float = 0.5,
+    min_expected: float = 0.0,
+    max_absent: int | None = None,
+) -> FilterResult:
+    """Filter edges against a geometric null model."""
+    upper, lower, expected, occupation = _odme.filter_geometric(
+        x.tolist(),
+        y.tolist(),
+        edges.source.tolist(),
+        edges.target.tolist(),
+        edges.weight.tolist(),
+    )
+    absent = None
+    if detect_absent:
+        absent = _odme.absent_geometric(
+            x.tolist(),
+            y.tolist(),
+            edges.source.tolist(),
+            edges.target.tolist(),
+            self_loops,
+            _lower_alpha(alpha, tail),
+            min_occupation,
+            min_expected,
+            max_absent,
+        )
+    return _classify(
+        edges,
+        np.asarray(upper),
+        np.asarray(lower),
+        np.asarray(expected),
+        np.asarray(occupation),
+        absent,
+        alpha=alpha,
+        tail=tail,
+        correction=correction,
+    )
+
+
+def filter_binomial(
+    edges: EdgeTable,
+    x: NDArray[np.float64],
+    y: NDArray[np.float64],
+    *,
+    layers: int = 1,
+    alpha: float = 0.05,
+    tail: Tail = "two-sided",
+    correction: Correction = "none",
+    detect_absent: bool = False,
+    self_loops: bool = True,
+    min_occupation: float = 0.5,
+    min_expected: float = 0.0,
+    max_absent: int | None = None,
+) -> FilterResult:
+    """Filter edges against a binomial(M) null model."""
+    upper, lower, expected, occupation = _odme.filter_binomial(
+        x.tolist(),
+        y.tolist(),
+        layers,
+        edges.source.tolist(),
+        edges.target.tolist(),
+        edges.weight.tolist(),
+    )
+    absent = None
+    if detect_absent:
+        absent = _odme.absent_binomial(
+            x.tolist(),
+            y.tolist(),
+            layers,
+            edges.source.tolist(),
+            edges.target.tolist(),
+            self_loops,
+            _lower_alpha(alpha, tail),
+            min_occupation,
+            min_expected,
+            max_absent,
+        )
+    return _classify(
+        edges,
+        np.asarray(upper),
+        np.asarray(lower),
+        np.asarray(expected),
+        np.asarray(occupation),
+        absent,
+        alpha=alpha,
+        tail=tail,
+        correction=correction,
+    )
+
+
+def filter_neg_binomial(
+    edges: EdgeTable,
+    x: NDArray[np.float64],
+    y: NDArray[np.float64],
+    *,
+    layers: int = 1,
+    alpha: float = 0.05,
+    tail: Tail = "two-sided",
+    correction: Correction = "none",
+    detect_absent: bool = False,
+    self_loops: bool = True,
+    min_occupation: float = 0.5,
+    min_expected: float = 0.0,
+    max_absent: int | None = None,
+) -> FilterResult:
+    """Filter edges against a negative binomial(M) null model."""
+    upper, lower, expected, occupation = _odme.filter_neg_binomial(
+        x.tolist(),
+        y.tolist(),
+        layers,
+        edges.source.tolist(),
+        edges.target.tolist(),
+        edges.weight.tolist(),
+    )
+    absent = None
+    if detect_absent:
+        absent = _odme.absent_neg_binomial(
+            x.tolist(),
+            y.tolist(),
+            layers,
+            edges.source.tolist(),
+            edges.target.tolist(),
+            self_loops,
+            _lower_alpha(alpha, tail),
+            min_occupation,
+            min_expected,
+            max_absent,
+        )
+    return _classify(
+        edges,
+        np.asarray(upper),
+        np.asarray(lower),
+        np.asarray(expected),
+        np.asarray(occupation),
+        absent,
+        alpha=alpha,
+        tail=tail,
+        correction=correction,
+    )
+
+
 def _classify(
     edges: EdgeTable,
     upper: NDArray[np.float64],
@@ -505,9 +657,12 @@ def _solve_ztp_rate(mean: float) -> float:
 __all__ = [
     "FilterResult",
     "FilteredEdges",
+    "filter_binomial",
     "filter_custom_rates_poisson",
     "filter_degree_events_me",
     "filter_fixed_strength_me",
+    "filter_geometric",
+    "filter_neg_binomial",
     "filter_strength_cost_me",
     "filter_strength_degree_me",
     "filter_strength_edges_me",

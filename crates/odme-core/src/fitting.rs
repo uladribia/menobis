@@ -1096,6 +1096,194 @@ pub fn balance_no_self_loops(
     }
 }
 
+/// Iterative proportional fitting for binomial(M) fixed-strength ME.
+///
+/// Solves: s_out_i = sum_j M * x_i*y_j / (1 + x_i*y_j)
+#[must_use]
+#[allow(clippy::needless_range_loop)]
+pub fn balance_binomial_strength(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    layers: u32,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> FitResult {
+    let n = strength_out.len();
+    let m = f64::from(layers);
+    let total: f64 = strength_out.iter().sum();
+    let sqrt_t = total.sqrt().max(1.0);
+    let mut x: Vec<f64> = strength_out
+        .iter()
+        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .collect();
+    let mut y: Vec<f64> = strength_in
+        .iter()
+        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .collect();
+    let k_in: Vec<f64> = strength_in.iter().map(|&s| s / m).collect();
+    let k_out: Vec<f64> = strength_out.iter().map(|&s| s / m).collect();
+
+    for iter in 0..max_iterations {
+        for j in 0..n {
+            if k_in[j] <= 0.0 {
+                continue;
+            }
+            let mut denom = 0.0;
+            for i in 0..n {
+                if !self_loops && i == j {
+                    continue;
+                }
+                denom += x[i] / (1.0 + x[i] * y[j]);
+            }
+            y[j] = if denom > 0.0 { k_in[j] / denom } else { 0.0 };
+        }
+        for i in 0..n {
+            if k_out[i] <= 0.0 {
+                continue;
+            }
+            let mut denom = 0.0;
+            for j in 0..n {
+                if !self_loops && i == j {
+                    continue;
+                }
+                denom += y[j] / (1.0 + x[i] * y[j]);
+            }
+            x[i] = if denom > 0.0 { k_out[i] / denom } else { 0.0 };
+        }
+
+        let mut max_err = 0.0_f64;
+        for i in 0..n {
+            let mut pred = 0.0;
+            for j in 0..n {
+                if !self_loops && i == j {
+                    continue;
+                }
+                pred += m * x[i] * y[j] / (1.0 + x[i] * y[j]);
+            }
+            max_err = max_err.max((pred - strength_out[i]).abs());
+        }
+        for j in 0..n {
+            let mut pred = 0.0;
+            for i in 0..n {
+                if !self_loops && i == j {
+                    continue;
+                }
+                pred += m * x[i] * y[j] / (1.0 + x[i] * y[j]);
+            }
+            max_err = max_err.max((pred - strength_in[j]).abs());
+        }
+        if max_err < tolerance {
+            return FitResult {
+                x,
+                y,
+                converged: true,
+                iterations: iter + 1,
+            };
+        }
+    }
+
+    FitResult {
+        x,
+        y,
+        converged: false,
+        iterations: max_iterations,
+    }
+}
+
+/// Masked binomial(M) IPF for partial-constraint fitting.
+#[must_use]
+#[allow(clippy::needless_range_loop)]
+pub fn balance_masked_binomial_strength(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    mask: &[bool],
+    layers: u32,
+    tolerance: f64,
+    max_iterations: usize,
+) -> FitResult {
+    let n = strength_out.len();
+    let m = f64::from(layers);
+    let total: f64 = strength_out.iter().sum();
+    let sqrt_t = total.sqrt().max(1.0);
+    let mut x: Vec<f64> = strength_out
+        .iter()
+        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .collect();
+    let mut y: Vec<f64> = strength_in
+        .iter()
+        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .collect();
+    let k_in: Vec<f64> = strength_in.iter().map(|&s| s / m).collect();
+    let k_out: Vec<f64> = strength_out.iter().map(|&s| s / m).collect();
+
+    for iter in 0..max_iterations {
+        for j in 0..n {
+            if k_in[j] <= 0.0 {
+                continue;
+            }
+            let mut denom = 0.0;
+            for i in 0..n {
+                if mask[i * n + j] {
+                    continue;
+                }
+                denom += x[i] / (1.0 + x[i] * y[j]);
+            }
+            y[j] = if denom > 0.0 { k_in[j] / denom } else { 0.0 };
+        }
+        for i in 0..n {
+            if k_out[i] <= 0.0 {
+                continue;
+            }
+            let mut denom = 0.0;
+            for j in 0..n {
+                if mask[i * n + j] {
+                    continue;
+                }
+                denom += y[j] / (1.0 + x[i] * y[j]);
+            }
+            x[i] = if denom > 0.0 { k_out[i] / denom } else { 0.0 };
+        }
+
+        let mut max_err = 0.0_f64;
+        for i in 0..n {
+            let mut pred = 0.0;
+            for j in 0..n {
+                if mask[i * n + j] {
+                    continue;
+                }
+                pred += m * x[i] * y[j] / (1.0 + x[i] * y[j]);
+            }
+            max_err = max_err.max((pred - strength_out[i]).abs());
+        }
+        for j in 0..n {
+            let mut pred = 0.0;
+            for i in 0..n {
+                if mask[i * n + j] {
+                    continue;
+                }
+                pred += m * x[i] * y[j] / (1.0 + x[i] * y[j]);
+            }
+            max_err = max_err.max((pred - strength_in[j]).abs());
+        }
+        if max_err < tolerance {
+            return FitResult {
+                x,
+                y,
+                converged: true,
+                iterations: iter + 1,
+            };
+        }
+    }
+
+    FitResult {
+        x,
+        y,
+        converged: false,
+        iterations: max_iterations,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{balance_binary_degrees, balance_no_self_loops, binary_probability};

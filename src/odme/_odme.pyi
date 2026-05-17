@@ -379,6 +379,122 @@ def absent_degree_events_zip(
 def benjamini_hochberg(pvalues: list[float], alpha: float) -> list[bool]: ...
 
 
+def sample_geometric(
+    x: list[float],
+    y: list[float],
+    self_loops: bool,
+    seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
+
+
+def sample_binomial(
+    x: list[float],
+    y: list[float],
+    layers: int,
+    self_loops: bool,
+    seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
+
+
+def sample_neg_binomial(
+    x: list[float],
+    y: list[float],
+    layers: int,
+    self_loops: bool,
+    seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
+
+
+def fit_binomial_strength(
+    strength_out: list[float],
+    strength_in: list[float],
+    layers: int,
+    self_loops: bool,
+    tolerance: float,
+    max_iterations: int,
+) -> tuple[list[float], list[float], bool, int]: ...
+
+
+def fit_masked_binomial_strength(
+    strength_out: list[float],
+    strength_in: list[float],
+    mask: list[bool],
+    layers: int,
+    tolerance: float,
+    max_iterations: int,
+) -> tuple[list[float], list[float], bool, int]: ...
+
+
+def filter_geometric(
+    x: list[float],
+    y: list[float],
+    sources: list[int],
+    targets: list[int],
+    weights: list[int],
+) -> tuple[list[float], list[float], list[float], list[float]]: ...
+
+
+def absent_geometric(
+    x: list[float],
+    y: list[float],
+    sources: list[int],
+    targets: list[int],
+    self_loops: bool,
+    alpha_lower: float,
+    min_occupation: float,
+    min_expected: float,
+    max_absent: int | None,
+) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
+
+
+def filter_binomial(
+    x: list[float],
+    y: list[float],
+    layers: int,
+    sources: list[int],
+    targets: list[int],
+    weights: list[int],
+) -> tuple[list[float], list[float], list[float], list[float]]: ...
+
+
+def absent_binomial(
+    x: list[float],
+    y: list[float],
+    layers: int,
+    sources: list[int],
+    targets: list[int],
+    self_loops: bool,
+    alpha_lower: float,
+    min_occupation: float,
+    min_expected: float,
+    max_absent: int | None,
+) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
+
+
+def filter_neg_binomial(
+    x: list[float],
+    y: list[float],
+    layers: int,
+    sources: list[int],
+    targets: list[int],
+    weights: list[int],
+) -> tuple[list[float], list[float], list[float], list[float]]: ...
+
+
+def absent_neg_binomial(
+    x: list[float],
+    y: list[float],
+    layers: int,
+    sources: list[int],
+    targets: list[int],
+    self_loops: bool,
+    alpha_lower: float,
+    min_occupation: float,
+    min_expected: float,
+    max_absent: int | None,
+) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
+
+
 def clustering_coefficients(
     node_count: int,
     sources: list[int],
