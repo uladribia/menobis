@@ -58,7 +58,7 @@ ODME currently uses a two-level structure:
 | Inner | IPF balancing | exact multiplicative structure for $x,y$ at fixed $\gamma$ |
 | Outer | adaptive scalar search | warm-started updates of $\gamma$ to match $C$ |
 
-The dual problem is convex under the usual feasible maximum-entropy setup, but
+The dual problem is convex under the usual feasible multi-edge setup, but
 the current implementation does **not** call a generic convex optimizer. It
 exploits separability/IPF and warm starts. Future work can replace the outer
 search with bracketed bisection/Brent or a gradient-based convex-dual solve.

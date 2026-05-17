@@ -1,4 +1,4 @@
-"""Lagrange multiplier fitting for ODME maximum-entropy models."""
+"""Lagrange multiplier fitting for ODME multi-edge models."""
 
 import time
 import warnings

@@ -1,25 +1,25 @@
 ---
-description: Maximum-entropy model constraints implemented by ODME.
+description: Multi-edge model constraints implemented by ODME.
 ---
 
-# Maximum entropy models
+# Multi-edge models
 
 ## TL;DR
 
-ODME implements directed multi-edge maximum-entropy models for selected thesis
-cases plus a fixed-strength baseline. Numbered thesis mappings are listed in
-[Thesis Cases](thesis-cases.md); this page uses ODME model names.
+ODME implements directed multi-edge models derived from maximum entropy
+principles. ME stands for **multi-edge** throughout this project.
+The taxonomy is documented in [Thesis Cases](thesis-cases.md).
 
 ## Implemented models
 
-| ODME model | Thesis case | Constraints | Python API |
-|------------|-------------|-------------|------------|
-| Fixed-strength ME | — | $s^{out}$, $s^{in}$ | `fit_strength_poisson` |
-| Custom probability ME | 1 | $p_{ij}$, $T$ | `sample_custom_pij_events_*` |
-| Strength-cost ME | 2 | $s^{out}$, $s^{in}$, $C$ | `fit_strength_cost_poisson` |
-| Strength-edges ME | 3 | $s^{out}$, $s^{in}$, $E$ | `fit_strength_edges_poisson` |
-| Strength-degree ME | 4 | $s^{out}$, $s^{in}$, $k^{out}$, $k^{in}$ | `fit_strength_degree_poisson` |
-| Degree-events ME | 5 | $k^{out}$, $k^{in}$, $T$ | `fit_degree_bernoulli` |
+| Model | Case | Constraints | Fit API |
+|-------|------|-------------|----------|
+| Fixed strength | — | $s^{out}$, $s^{in}$ | `fit_strength_poisson` |
+| Custom probability | 1 | $p_{ij}$, $T$ | `sample_custom_*` |
+| Strength-cost | 2 | $s^{out}$, $s^{in}$, $C$ | `fit_strength_cost_poisson` |
+| Strength-edges | 3 | $s^{out}$, $s^{in}$, $E$ | `fit_strength_edges_poisson` |
+| Strength-degree | 4 | $s^{out}$, $s^{in}$, $k^{out}$, $k^{in}$ | `fit_strength_degree_poisson` |
+| Degree-events | 5 | $k^{out}$, $k^{in}$, $T$ | `fit_degree_bernoulli` |
 
 All models support partial-constraint fitting except custom probability
 sampling; see [Partial Constraints](partial-constraints.md).
@@ -124,7 +124,7 @@ fit = fit_strength_degree_poisson(s_out, s_in, k_out, k_in)
 sample = sample_strength_degree_poisson(fit, seed=42)
 ```
 
-## Custom probability ME, thesis case 1
+## Custom probability, thesis case 1
 
 The supplied probabilities are normalized before sampling:
 

@@ -4,7 +4,7 @@ description: ODME — Origin-Destination Multi-Edge network models.
 
 # ODME
 
-ODME is a modern Rust + Python library for maximum-entropy multi-edge network
+ODME is a modern Rust + Python library for multi-edge network
 models. It implements the statistical mechanics framework from the
 [thesis](https://hdl.handle.net/10803/400560) with fast Rust kernels and
 ergonomic Python workflows.

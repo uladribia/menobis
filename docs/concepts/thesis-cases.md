@@ -1,104 +1,85 @@
 ---
-description: Mapping between numbered thesis cases, ODME model names, APIs, and equations.
+description: Taxonomy of ODME models, ensembles, and API mapping.
 ---
 
-# Thesis cases
+# Thesis cases and taxonomy
 
 ## TL;DR
 
-Use **thesis case** only for numbered cases from Sagarra [1]. Use **ODME
-model** for implementation names such as `fixed-strength ME`. ODME implements
-selected numbered thesis cases plus the unnumbered fixed-strength baseline.
+ODME models are organized by **constraint** (what is fixed), **ensemble type**
+(ME/W/B), and **distribution** (how weights are drawn). All public names follow
+`{operation}_{constraint}_{distribution}`.
 
-## Naming rules
+## Naming convention
 
-| Term | Meaning |
-|------|---------|
-| Thesis case | Numbered model family in the thesis and legacy docs |
-| ODME model | Public implementation/API name |
-| ME | Multi-edge directed weighted network with integer event counts |
-| $T$ | Total events: $T = \sum_{ij} t_{ij}$ |
-| $E$ | Binary edges: $E = \sum_{ij} \Theta(t_{ij})$ |
+```text
+{operation}_{constraint}_{distribution}
+```
+
+| Token | Values |
+|-------|--------|
+| operation | `fit`, `sample`, `filter` |
+| constraint | `strength`, `strength_edges`, `strength_degree`, `strength_cost`, `degree`, `custom` |
+| distribution | `poisson`, `geometric`, `binomial`, `neg_binomial`, `multinomial`, `microcanonical`, `bernoulli` |
+
+## Ensemble types
+
+The distribution name implies the ensemble type:
+
+| Ensemble | Legacy | Distributions | Weight support | Fitting |
+|----------|--------|---------------|----------------|---------|
+| ME (multi-edge) | `ME` | Poisson, Multinomial, Microcanonical | $\{0, 1, 2, \ldots\}$ | IPF |
+| W (weighted) | `W` | Geometric, Negative binomial | $\{0, 1, 2, \ldots\}$ | Bounded optimization |
+| B (binary layers) | `B` | Binomial, Bernoulli | $\{0, \ldots, M\}$ | IPF with correction |
+
+## Constraint × distribution matrix
+
+| Constraint | Poisson | Geometric | Binomial | Neg. binomial |
+|------------|---------|-----------|----------|---------------|
+| strength | ✅ | ✅ | ✅ | ✅ (no fit yet) |
+| strength-cost | ✅ | — | — | — |
+| strength-edges | ✅ (ZIP) | — | — | — |
+| strength-degree | ✅ (ZIP) | — | — | — |
+| degree | Bernoulli ✅ | — | — | — |
+| custom | ✅ | — | — | — |
 
 ## Case mapping
 
-| Thesis case | ODME model | Constraints | Main equation | Fit API | Sampler |
-|-------------|------------|-------------|---------------|---------|---------|
-| 0 | Radiation / sequential gravity | model-specific | not implemented | — | — |
-| 1 | Custom probability ME | $p_{ij}$, $T$ | $\mathbb{E}[t_{ij}] = T p_{ij}$ | — | `sample_custom_pij_events_*` |
-| 2 | Strength-cost ME | $s^{out}$, $s^{in}$, $C$ | $\mathbb{E}[t_{ij}] = x_i y_j e^{-\gamma d_{ij}}$ | `fit_strength_cost_poisson` | `sample_strength_cost_poisson` |
-| 3 | Strength-edges ME | $s^{out}$, $s^{in}$, $E$ | ZIP, see below | `fit_strength_edges_poisson` | `sample_strength_edges_poisson` |
-| 4 | Strength-degree ME | $s^{out}$, $s^{in}$, $k^{out}$, $k^{in}$ | ZIP, see below | `fit_strength_degree_poisson` | `sample_strength_degree_poisson` |
-| 5 | Degree-events ME | $k^{out}$, $k^{in}$, $T$ | binary occupation + weighted events | `fit_degree_bernoulli` | `sample_degree_events_poisson` |
-| — | Fixed-strength ME | $s^{out}$, $s^{in}$ | $\mathbb{E}[t_{ij}] = x_i y_j$ | `fit_strength_poisson` | `sample_strength_poisson`, `sample_strength_multinomial`, `sample_strength_microcanonical` |
+| Case | Constraint | Equation | Fit | Sample |
+|------|-----------|----------|-----|--------|
+| — | strength | $\mathbb{E}[t_{ij}] = x_i y_j$ | `fit_strength_poisson` | `sample_strength_poisson` |
+| 1 | custom | $\mathbb{E}[t_{ij}] = T p_{ij}$ | — | `sample_custom_poisson` |
+| 2 | strength-cost | $\mathbb{E}[t_{ij}] = x_i y_j e^{-\gamma d_{ij}}$ | `fit_strength_cost_poisson` | `sample_strength_cost_poisson` |
+| 3 | strength-edges | ZIP occupation + ZTP weight | `fit_strength_edges_poisson` | `sample_strength_edges_poisson` |
+| 4 | strength-degree | ZIP occupation + ZTP weight | `fit_strength_degree_poisson` | `sample_strength_degree_poisson` |
+| 5 | degree-events | Bernoulli occupation + ZTP weight | `fit_degree_bernoulli` | `sample_degree_events_poisson` |
 
-## Case 3: strength-edges ME
+Additional strength samplers for ensemble comparison:
 
-Let $u_{ij} = x_i y_j$. The binary occupation probability is:
-
-$$
-p_{ij} = P(t_{ij} > 0) =
-\frac{\lambda \left(e^{u_{ij}} - 1\right)}
-{1 + \lambda \left(e^{u_{ij}} - 1\right)}.
-$$
-
-Conditional on occupation, ODME samples a zero-truncated Poisson with rate
-$u_{ij}$. Therefore:
-
-$$
-\mathbb{E}[t_{ij}] =
-\frac{\lambda u_{ij} e^{u_{ij}}}
-{1 + \lambda \left(e^{u_{ij}} - 1\right)},
-\qquad
-E = \sum_{ij} p_{ij}.
-$$
-
-## Case 4: strength-degree ME
-
-Let $u_{ij} = x_i y_j$ and $v_{ij} = z_i w_j$. The binary occupation
-probability is:
-
-$$
-p_{ij} = P(t_{ij} > 0) =
-\frac{v_{ij} \left(e^{u_{ij}} - 1\right)}
-{1 + v_{ij} \left(e^{u_{ij}} - 1\right)}.
-$$
-
-The expected weight is:
-
-$$
-\mathbb{E}[t_{ij}] =
-\frac{v_{ij} u_{ij} e^{u_{ij}}}
-{1 + v_{ij} \left(e^{u_{ij}} - 1\right)}.
-$$
-
-## Case 5: degree-events ME
-
-ODME first fits binary degree multipliers:
-
-$$
-p_{ij} = \frac{x_i y_j}{1 + x_i y_j},
-\qquad
-\langle E \rangle = \sum_{ij} p_{ij}.
-$$
-
-Positive edges receive zero-truncated Poisson weights with common mean
-$T / \langle E \rangle$, so:
-
-$$
-\mathbb{E}[t_{ij}] = \frac{T}{\langle E \rangle} p_{ij}.
-$$
+| Sampler | Ensemble | Total weight |
+|---------|----------|-------------|
+| `sample_strength_multinomial` | canonical | exactly $T$ |
+| `sample_strength_microcanonical` | microcanonical | exactly $T$ |
+| `sample_strength_poisson_multinomial` | mixed | Poisson $T$ then multinomial |
 
 ## CLI mapping
 
-| Thesis case | `odme fit` | `odme generate` |
-|-------------|------------|-----------------|
-| 1 | — | `custom-pij` |
-| 2 | `strength-cost-me` | `strength-cost-me` |
-| 3 | `strength-edges-me` | `strength-edges-me` |
-| 4 | `strength-degree-me` | `strength-degree-me` |
-| 5 | `degrees` | `degree-events-me` |
-| — | `strengths` | `poisson`, `multinomial`, `poisson-multinomial` |
+| Constraint | `odme fit` | `odme generate` | `odme filter` |
+|-----------|------------|-----------------|---------------|
+| strength | `strength-poisson` | `strength-poisson` | `strength-poisson` |
+| strength (B) | — | — | — |
+| strength-cost | `strength-cost-poisson` | `strength-cost-poisson` | `strength-cost-poisson` |
+| strength-edges | `strength-edges-poisson` | `strength-edges-poisson` | `strength-edges-poisson` |
+| strength-degree | `strength-degree-poisson` | `strength-degree-poisson` | `strength-degree-poisson` |
+| degree | `degree-bernoulli` | `degree-events-poisson` | `degree-events-poisson` |
+| custom | — | `custom-poisson` | `custom-poisson` |
+
+## Zero-inflated models
+
+Cases 3, 4, and 5 use zero-inflated distributions: a Bernoulli occupation
+draw followed by a zero-truncated positive-weight draw. The occupation
+formula depends on the constraint; the positive-weight distribution is
+currently always Poisson (ZTP).
 
 ## Reference
 

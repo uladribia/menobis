@@ -17,7 +17,7 @@ Partition node pairs into:
 | Set | Meaning |
 |-----|---------|
 | $Q$ | known pairs with fixed expectation $\mathbb{E}[t_{ij}] = q_{ij}$ |
-| $\bar Q$ | free pairs fitted by a maximum-entropy model |
+| $\bar Q$ | free pairs fitted by a multi-edge model |
 
 Full outgoing strength is split as:
 

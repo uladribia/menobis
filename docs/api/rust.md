@@ -38,9 +38,9 @@ The public Rust API lives in the `odme-core` crate under `crates/odme-core/`.
 |----------|-------|--------------|
 | `FixedStrengthPoissonProvider` | fixed-strength | Poisson |
 | `StrengthCostPoissonProvider` | strength-cost | Poisson |
-| `StrengthEdgesZipProvider` | strength-edges | ZIP |
-| `StrengthDegreeZipProvider` | strength-degree | ZIP |
-| `DegreeEventsZipProvider` | degree-events | ZIP |
+| `StrengthEdgesPoissonProvider` | strength-edges | Poisson (ZIP) |
+| `StrengthDegreePoissonProvider` | strength-degree | Poisson (ZIP) |
+| `DegreeEventsPoissonProvider` | degree-events | Poisson (ZIP) |
 | `SparsePoissonRateProvider` | custom sparse | Poisson |
 | `NormalizedSparsePoissonProvider` | custom normalized | Poisson |
 

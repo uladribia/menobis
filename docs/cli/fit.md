@@ -1,48 +1,42 @@
 ---
-description: Fit ODME maximum-entropy model parameters from edge tables.
+description: Fit ODME model parameters from edge tables.
 ---
 
 # `odme fit`
 
 ## TL;DR
 
-Use `odme fit` to infer model multipliers from an observed weighted edge table.
-Data goes to stdout unless `--output` is set; progress goes to stderr unless
-`--quiet` or `--json` is used.
+Use `odme fit` to solve Lagrange multipliers from an observed edge table.
 
 ## Commands
 
-| Command | ODME model | Thesis case | Output columns |
-|---------|------------|-------------|----------------|
-| `strengths` | Fixed-strength ME | — | `node,x,y` |
-| `degrees` | Degree-events ME binary fit | 5 | `node,x,y` |
-| `strength-cost-me` | Strength-cost ME | 2 | `node,x,y,gamma` |
-| `strength-edges-me` | Strength-edges ME | 3 | `node,x,y,lambda` |
-| `strength-degree-me` | Strength-degree ME | 4 | `node,x,y,z,w` |
+| Command | Model | Case | Output columns |
+|---------|-------|------|----------------|
+| `strength-poisson` | Strength Poisson | — | `node,x,y` |
+| `degree-bernoulli` | Degree Bernoulli | 5 | `node,x,y` |
+| `strength-cost-poisson` | Strength-cost Poisson | 2 | `node,x,y,gamma` |
+| `strength-edges-poisson` | Strength-edges Poisson | 3 | `node,x,y,lambda` |
+| `strength-degree-poisson` | Strength-degree Poisson | 4 | `node,x,y,z,w` |
 
 ## Examples
 
 ```bash
-odme fit strengths edges.csv --output strength-fit.csv
-odme fit degrees edges.csv --json
-odme fit strength-cost-me edges.csv --costs costs.csv --target-cost 120.0
-odme fit strength-edges-me edges.csv --target-edges 500 --json
-odme fit strength-degree-me edges.csv --output strength-degree-fit.csv
+odme fit strength-poisson edges.csv --json
+odme fit strength-poisson edges.csv --output fit.csv
+odme fit strength-cost-poisson edges.csv --costs costs.csv --target-cost 120.0
+odme fit strength-edges-poisson edges.csv --target-edges 500
+odme fit strength-degree-poisson edges.csv --output fit.csv
+odme fit degree-bernoulli edges.csv --json
 ```
 
 ## Options
 
-| Option | Applies to | Meaning |
-|--------|------------|---------|
-| `--output`, `-o` | all | Write data to a file instead of stdout |
-| `--json` | all | Emit JSON instead of CSV |
-| `--quiet` | all | Suppress progress messages |
-| `--self-loops/--no-self-loops` | all except `strengths` | Include or exclude diagonal pairs |
-| `--target-edges` | `strength-edges-me` | Expected binary edge count; defaults to observed $E$ |
-| `--costs` | `strength-cost-me` | CSV with `source,target,cost` columns |
-| `--target-cost` | `strength-cost-me` | Expected total cost; defaults to observed $C$ |
-
-## Cost files
-
-For `strength-cost-me`, omitted cost pairs are treated as zero cost by the
-current implementation. Use a complete cost table unless that is intentional.
+| Option | Meaning |
+|--------|---------|
+| `--output`, `-o` | Write multipliers to CSV |
+| `--json` | Print JSON to stdout |
+| `--quiet` | Suppress progress |
+| `--self-loops/--no-self-loops` | Diagonal handling |
+| `--target-edges` | Target $E$ (strength-edges) |
+| `--target-cost` | Target $C$ (strength-cost) |
+| `--costs` | Cost CSV path (strength-cost) |

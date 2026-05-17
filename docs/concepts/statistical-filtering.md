@@ -36,12 +36,12 @@ Filtering supports all independent grand-canonical distributions:
 
 | Model | Distribution |
 |-------|--------------|
-| fixed-strength ME | Poisson($x_i y_j$) |
-| strength-cost ME | Poisson($x_i y_j e^{-\gamma d_{ij}}$) |
-| custom rates | Poisson($\lambda_{ij}$), where $\lambda_{ij}=T p_{ij}$ |
-| strength-edges ME | ZIP/ZTP with fitted occupation and rate $x_i y_j$ |
-| strength-degree ME | ZIP/ZTP with fitted occupation and rate $x_i y_j$ |
-| degree-events ME | ZIP/ZTP with binary degree occupation and shared rate |
+| strength Poisson | Poisson($x_i y_j$) |
+| strength-cost Poisson | Poisson($x_i y_j e^{-\gamma d_{ij}}$) |
+| custom Poisson | Poisson($\lambda_{ij}$), where $\lambda_{ij}=T p_{ij}$ |
+| strength-edges Poisson (ZIP) | ZIP/ZTP with fitted occupation and rate $x_i y_j$ |
+| strength-degree Poisson (ZIP) | ZIP/ZTP with fitted occupation and rate $x_i y_j$ |
+| degree-events Poisson (ZIP) | ZIP/ZTP with binary degree occupation and shared rate |
 
 | partial constraints | Poisson rates from combined known + free-pair rates |
 
@@ -91,15 +91,15 @@ result = filter_strength_poisson(
 ## CLI
 
 ```bash
-odme filter fixed-strength edges.csv --output-prefix filtered/
-odme filter strength-edges edges.csv --target-edges 500 --output-prefix filtered/
-odme filter strength-cost edges.csv --costs costs.csv --target-cost 1.5 --output-prefix filtered/
-odme filter strength-degree edges.csv --output-prefix filtered/
-odme filter degree-events edges.csv --output-prefix filtered/
-odme filter custom-rates edges.csv --rates rates.csv --output-prefix filtered/
+odme filter strength-poisson edges.csv --output-prefix filtered/
+odme filter strength-edges-poisson edges.csv --target-edges 500 --output-prefix filtered/
+odme filter strength-cost-poisson edges.csv --costs costs.csv --target-cost 1.5 --output-prefix filtered/
+odme filter strength-degree-poisson edges.csv --output-prefix filtered/
+odme filter degree-events-poisson edges.csv --output-prefix filtered/
+odme filter custom-poisson edges.csv --rates rates.csv --output-prefix filtered/
 ```
 
-The custom rates file must contain `source,target,rate`, where `rate` is the
+The custom Poisson file must contain `source,target,rate`, where `rate` is the
 occupation number $T p_{ij}$.
 
 ## Calibration benchmark

@@ -1,9 +1,9 @@
 """Partial-constraint fitting: some p_ij known, rest fitted from ME models.
 
-This implements a generalization of the thesis ``fitter_pij`` case. Given an
+This implements a generalization of the thesis ``custom probability`` case. Given an
 observed network, certain heavy edges (with ``t_ij > cutoff``) are treated as
 having known expected rates. The remaining pairs are fitted using a
-maximum-entropy model subject to the observed constraints minus the known-pair
+multi-edge model subject to the observed constraints minus the known-pair
 contributions.
 
 The procedure is:
@@ -26,7 +26,7 @@ appear as known pairs.
 
 **Normalization**: the returned ``PartialFitResult.rate`` values are
 **unnormalized expected counts** (not probabilities). The sampling functions
-``sample_custom_pij_events_*`` normalize internally. To obtain the
+``sample_custom_*`` normalize internally. To obtain the
 probability matrix, divide each rate by the sum of all rates.
 """
 
