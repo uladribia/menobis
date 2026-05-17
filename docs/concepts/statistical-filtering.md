@@ -7,8 +7,8 @@ description: Statistical filtering against ODME null models.
 ## TL;DR
 
 Filtering compares observed edge weights against an independent ODME null model.
-The default test is two-sided with split alpha. Absent edges are reported
-separately and are prefiltered by binary occupation probability.
+The default test is two-sided with split alpha. Rust streams provider-backed
+pair distributions into generic observed and absent filter sinks.
 
 ## Tail rules
 
@@ -17,6 +17,18 @@ separately and are prefiltered by binary occupation probability.
 | upper | flag if $P(T \ge t) < \alpha$ |
 | lower | flag if $P(T \le t) < \alpha$ |
 | two-sided | flag upper/lower independently with $\alpha/2$ |
+
+## Implementation pipeline
+
+Filtering shares the same pair-distribution abstraction as generation:
+
+```text
+model parameters -> PairDistributionProvider -> PairDistribution -> filter sink
+```
+
+`PairDistribution` computes expectations, occupation probabilities, and tail
+p-values. Providers expose either all pairs or sparse support, so filtering does
+not materialize dense $N^2$ rate matrices.
 
 ## Supported nulls
 
@@ -34,8 +46,9 @@ independent Poisson rates, not fixed-total multinomial probabilities.
 
 ## Absent edges
 
-Absent-edge filtering is opt-in. It streams candidate pairs with observed
-weight zero and keeps only pairs whose null occupation probability satisfies:
+Absent-edge filtering is opt-in. It streams provider candidate pairs with
+observed weight zero and keeps only pairs whose null occupation probability
+satisfies:
 
 $$
 P(t_{ij}>0) \ge \texttt{min\_occupation}.

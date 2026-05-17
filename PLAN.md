@@ -471,10 +471,10 @@ pair-distribution provider abstraction:
 | no-self-loop mask | skip diagonal sampling | skip diagonal filtering |
 | known-pair mask | partial generation support | partial filtering support |
 
-The filter adds sinks, not duplicated model math. Desired Rust shape:
+The filter now adds sinks, not duplicated model math. Rust shape:
 
 ```text
-provider -> filter sink -> significant/compatible sparse outputs
+provider -> observed/absent filter sinks -> significant/compatible sparse outputs
 ```
 
 The sink receives `(source, target, distribution, observed_weight)` and emits

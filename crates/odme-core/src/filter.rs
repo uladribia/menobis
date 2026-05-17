@@ -2,8 +2,9 @@
 
 use crate::distribution::PairDistribution;
 use crate::pairs::{
-    row_ranges, FixedStrengthPoissonProvider, PairDistributionProvider,
-    SparsePoissonRateMapProvider, StrengthEdgesZipProvider, PARALLEL_PAIR_THRESHOLD,
+    row_ranges, CandidateSupport, FixedStrengthPoissonProvider, PairDistributionProvider,
+    SparsePoissonRateMapProvider, SparsePoissonRateProvider, StrengthEdgesZipProvider,
+    PARALLEL_PAIR_THRESHOLD, SPARSE_CHUNK_SIZE,
 };
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -25,6 +26,15 @@ pub struct AbsentFilterResult {
     pub lower_pvalues: Vec<f64>,
     pub expected: Vec<f64>,
     pub occupation: Vec<f64>,
+}
+
+/// Options for provider-backed absent-edge detection.
+#[derive(Clone, Copy, Debug)]
+pub struct AbsentFilterOptions {
+    pub alpha_lower: f64,
+    pub min_occupation: f64,
+    pub min_expected: f64,
+    pub max_absent: Option<usize>,
 }
 
 #[must_use]
@@ -84,6 +94,124 @@ where
     result
 }
 
+#[must_use]
+pub fn detect_absent_provider<P>(
+    provider: &P,
+    observed_sources: &[u64],
+    observed_targets: &[u64],
+    options: AbsentFilterOptions,
+) -> AbsentFilterResult
+where
+    P: PairDistributionProvider,
+{
+    match provider.support() {
+        CandidateSupport::AllPairs {
+            node_count,
+            self_loops,
+        } => detect_absent_with(
+            node_count,
+            observed_sources,
+            observed_targets,
+            self_loops,
+            options.alpha_lower,
+            options.min_occupation,
+            options.min_expected,
+            options.max_absent,
+            |i, j| {
+                provider
+                    .distribution(i, j)
+                    .unwrap_or(PairDistribution::Poisson { rate: 0.0 })
+            },
+        ),
+        CandidateSupport::SparsePairs { sources, targets } => detect_absent_sparse_provider(
+            provider,
+            sources,
+            targets,
+            observed_sources,
+            observed_targets,
+            options,
+        ),
+    }
+}
+
+fn detect_absent_sparse_provider<P>(
+    provider: &P,
+    candidate_sources: &[u64],
+    candidate_targets: &[u64],
+    observed_sources: &[u64],
+    observed_targets: &[u64],
+    options: AbsentFilterOptions,
+) -> AbsentFilterResult
+where
+    P: PairDistributionProvider,
+{
+    let observed: HashSet<(u64, u64)> = observed_sources
+        .iter()
+        .zip(observed_targets.iter())
+        .map(|(&source, &target)| (source, target))
+        .collect();
+
+    let scan_range = |start: usize, end: usize| {
+        let mut local = AbsentFilterResult::default();
+        for index in start..end {
+            let source = candidate_sources[index];
+            let target = candidate_targets[index];
+            if observed.contains(&(source, target)) {
+                continue;
+            }
+            if let Some(dist) = provider.distribution_at(index, source as usize, target as usize) {
+                push_absent_if_significant(&mut local, source, target, dist, options);
+            }
+        }
+        local
+    };
+
+    let mut result = if candidate_sources.len() < SPARSE_CHUNK_SIZE {
+        scan_range(0, candidate_sources.len())
+    } else {
+        let chunks: Vec<AbsentFilterResult> = (0..candidate_sources.len())
+            .step_by(SPARSE_CHUNK_SIZE)
+            .map(|start| {
+                (
+                    start,
+                    (start + SPARSE_CHUNK_SIZE).min(candidate_sources.len()),
+                )
+            })
+            .collect::<Vec<_>>()
+            .into_par_iter()
+            .map(|(start, end)| scan_range(start, end))
+            .collect();
+        merge_absent(chunks)
+    };
+
+    if let Some(limit) = options.max_absent {
+        truncate_absent(&mut result, limit);
+    }
+    result
+}
+
+fn push_absent_if_significant(
+    result: &mut AbsentFilterResult,
+    source: u64,
+    target: u64,
+    dist: PairDistribution,
+    options: AbsentFilterOptions,
+) {
+    let occupation = dist.occupation_probability();
+    let expected = dist.expected();
+    if occupation < options.min_occupation || expected < options.min_expected {
+        return;
+    }
+    let lower = dist.lower_pvalue(0);
+    if lower < options.alpha_lower {
+        result.sources.push(source);
+        result.targets.push(target);
+        result.lower_pvalues.push(lower);
+        result.expected.push(expected);
+        result.occupation.push(occupation);
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn detect_absent_with<F>(
@@ -118,20 +246,18 @@ where
                 if (!self_loops && i == j) || observed.contains(&(i, j)) {
                     continue;
                 }
-                let dist = provider(i, j);
-                let occupation = dist.occupation_probability();
-                let expected = dist.expected();
-                if occupation < min_occupation || expected < min_expected {
-                    continue;
-                }
-                let lower = dist.lower_pvalue(0);
-                if lower < alpha_lower {
-                    local.sources.push(i as u64);
-                    local.targets.push(j as u64);
-                    local.lower_pvalues.push(lower);
-                    local.expected.push(expected);
-                    local.occupation.push(occupation);
-                }
+                push_absent_if_significant(
+                    &mut local,
+                    i as u64,
+                    j as u64,
+                    provider(i, j),
+                    AbsentFilterOptions {
+                        alpha_lower,
+                        min_occupation,
+                        min_expected,
+                        max_absent: None,
+                    },
+                );
             }
         }
         local
@@ -186,19 +312,15 @@ pub fn absent_fixed_strength_poisson(
     min_expected: f64,
     max_absent: Option<usize>,
 ) -> AbsentFilterResult {
-    detect_absent_with(
-        x.len(),
+    detect_absent_provider(
+        &FixedStrengthPoissonProvider { x, y, self_loops },
         sources,
         targets,
-        self_loops,
-        alpha_lower,
-        min_occupation,
-        min_expected,
-        max_absent,
-        |i, j| {
-            FixedStrengthPoissonProvider { x, y, self_loops }
-                .distribution(i, j)
-                .unwrap_or(PairDistribution::Poisson { rate: 0.0 })
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
         },
     )
 }
@@ -243,35 +365,21 @@ pub fn absent_custom_poisson_rates(
     min_expected: f64,
     max_absent: Option<usize>,
 ) -> AbsentFilterResult {
-    let observed: HashSet<(u64, u64)> = observed_sources
-        .iter()
-        .zip(observed_targets.iter())
-        .map(|(&source, &target)| (source, target))
-        .collect();
-    let mut result = AbsentFilterResult::default();
-    for ((&source, &target), &rate) in rate_sources.iter().zip(rate_targets.iter()).zip(rates) {
-        if observed.contains(&(source, target)) {
-            continue;
-        }
-        let dist = PairDistribution::Poisson { rate };
-        let occupation = dist.occupation_probability();
-        let expected = dist.expected();
-        if occupation < min_occupation || expected < min_expected {
-            continue;
-        }
-        let lower = dist.lower_pvalue(0);
-        if lower < alpha_lower {
-            result.sources.push(source);
-            result.targets.push(target);
-            result.lower_pvalues.push(lower);
-            result.expected.push(expected);
-            result.occupation.push(occupation);
-            if max_absent.is_some_and(|limit| result.sources.len() >= limit) {
-                break;
-            }
-        }
-    }
-    result
+    detect_absent_provider(
+        &SparsePoissonRateProvider {
+            sources: rate_sources,
+            targets: rate_targets,
+            rates,
+        },
+        observed_sources,
+        observed_targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
 }
 
 #[must_use]
@@ -310,24 +418,20 @@ pub fn absent_strength_edges_zip(
     min_expected: f64,
     max_absent: Option<usize>,
 ) -> AbsentFilterResult {
-    detect_absent_with(
-        x.len(),
+    detect_absent_provider(
+        &StrengthEdgesZipProvider {
+            x,
+            y,
+            lambda: lam,
+            self_loops,
+        },
         sources,
         targets,
-        self_loops,
-        alpha_lower,
-        min_occupation,
-        min_expected,
-        max_absent,
-        |i, j| {
-            StrengthEdgesZipProvider {
-                x,
-                y,
-                lambda: lam,
-                self_loops,
-            }
-            .distribution(i, j)
-            .unwrap_or(PairDistribution::Poisson { rate: 0.0 })
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
         },
     )
 }
@@ -414,6 +518,23 @@ mod tests {
             .iter()
             .zip(absent.targets.iter())
             .all(|pair| pair != (&0, &1)));
+    }
+
+    #[test]
+    fn sparse_absent_provider_preserves_support_order_and_limit() {
+        let absent = absent_custom_poisson_rates(
+            &[2, 0, 1],
+            &[0, 1, 2],
+            &[10.0, 10.0, 10.0],
+            &[0],
+            &[1],
+            0.1,
+            0.0,
+            0.0,
+            Some(2),
+        );
+        assert_eq!(absent.sources, vec![2, 1]);
+        assert_eq!(absent.targets, vec![0, 2]);
     }
 
     #[test]

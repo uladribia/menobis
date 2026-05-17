@@ -43,9 +43,10 @@ models should implement one provider and reuse generation/filtering/stat sinks.
 | sparse custom multinomial | sparse-entry chunks | chunk totals sampled first |
 | microcanonical | not parallelized yet | stub shuffle dominates |
 
-All-pairs generation switches to row chunks for large supports. Sparse custom
-probability generation switches to entry chunks for large sparse supports.
-Chunks are merged in deterministic chunk order.
+All-pairs generation and absent-edge filtering switch to row chunks for large
+supports. Sparse custom probability generation and sparse-support absent
+filtering switch to entry chunks for large sparse supports. Chunks are merged in
+deterministic chunk order.
 
 ## Reproducibility
 
@@ -73,7 +74,7 @@ avoid near-infinite loops.
 - Sparse custom $p_{ij}$ inputs stay sparse and do not imply $N^2$ storage.
 - All-pairs models still require $O(N^2)$ time.
 - Large generators use all Rayon worker threads by default.
-- Future generators should implement a provider, not a dense matrix builder.
+- Future generators and filters should implement a provider, not a dense matrix builder.
 
 ## Validation
 
