@@ -2,7 +2,8 @@
 
 use crate::distribution::PairDistribution;
 use crate::pairs::{
-    row_ranges, CandidateSupport, DegreeEventsZipProvider, FixedStrengthPoissonProvider,
+    row_ranges, CandidateSupport, DegreeEventsZipProvider, FixedStrengthBinomialProvider,
+    FixedStrengthGeometricProvider, FixedStrengthNegBinomialProvider, FixedStrengthPoissonProvider,
     PairDistributionProvider, SparsePoissonRateMapProvider, SparsePoissonRateProvider,
     StrengthCostPoissonProvider, StrengthDegreeZipProvider, StrengthEdgesZipProvider,
     PARALLEL_PAIR_THRESHOLD, SPARSE_CHUNK_SIZE,
@@ -580,6 +581,166 @@ pub fn absent_degree_events_zip(
             x,
             y,
             positive_weight_rate,
+            self_loops,
+        },
+        sources,
+        targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
+}
+
+// --- Geometric family ---
+
+#[must_use]
+pub fn filter_geometric(
+    x: &[f64],
+    y: &[f64],
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &FixedStrengthGeometricProvider {
+            x,
+            y,
+            self_loops: true,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_geometric(
+    x: &[f64],
+    y: &[f64],
+    sources: &[u64],
+    targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    detect_absent_provider(
+        &FixedStrengthGeometricProvider { x, y, self_loops },
+        sources,
+        targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
+}
+
+// --- Binomial family ---
+
+#[must_use]
+pub fn filter_binomial(
+    x: &[f64],
+    y: &[f64],
+    layers: u32,
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &FixedStrengthBinomialProvider {
+            x,
+            y,
+            layers,
+            self_loops: true,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_binomial(
+    x: &[f64],
+    y: &[f64],
+    layers: u32,
+    sources: &[u64],
+    targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    detect_absent_provider(
+        &FixedStrengthBinomialProvider {
+            x,
+            y,
+            layers,
+            self_loops,
+        },
+        sources,
+        targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
+}
+
+// --- Negative binomial family ---
+
+#[must_use]
+pub fn filter_neg_binomial(
+    x: &[f64],
+    y: &[f64],
+    layers: u32,
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &FixedStrengthNegBinomialProvider {
+            x,
+            y,
+            layers,
+            self_loops: true,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_neg_binomial(
+    x: &[f64],
+    y: &[f64],
+    layers: u32,
+    sources: &[u64],
+    targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    detect_absent_provider(
+        &FixedStrengthNegBinomialProvider {
+            x,
+            y,
+            layers,
             self_loops,
         },
         sources,

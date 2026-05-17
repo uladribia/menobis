@@ -310,3 +310,80 @@ impl PairDistributionProvider for StrengthDegreeZipProvider<'_> {
         ))
     }
 }
+
+pub struct FixedStrengthGeometricProvider<'a> {
+    pub x: &'a [f64],
+    pub y: &'a [f64],
+    pub self_loops: bool,
+}
+
+impl PairDistributionProvider for FixedStrengthGeometricProvider<'_> {
+    fn support(&self) -> CandidateSupport<'_> {
+        CandidateSupport::AllPairs {
+            node_count: self.x.len(),
+            self_loops: self.self_loops,
+        }
+    }
+
+    fn distribution(&self, source: usize, target: usize) -> Option<PairDistribution> {
+        if !self.self_loops && source == target {
+            return None;
+        }
+        let xy = self.x[source] * self.y[target];
+        (xy > 0.0).then_some(PairDistribution::GeometricDist { xy })
+    }
+}
+
+pub struct FixedStrengthBinomialProvider<'a> {
+    pub x: &'a [f64],
+    pub y: &'a [f64],
+    pub layers: u32,
+    pub self_loops: bool,
+}
+
+impl PairDistributionProvider for FixedStrengthBinomialProvider<'_> {
+    fn support(&self) -> CandidateSupport<'_> {
+        CandidateSupport::AllPairs {
+            node_count: self.x.len(),
+            self_loops: self.self_loops,
+        }
+    }
+
+    fn distribution(&self, source: usize, target: usize) -> Option<PairDistribution> {
+        if !self.self_loops && source == target {
+            return None;
+        }
+        let xy = self.x[source] * self.y[target];
+        (xy > 0.0).then_some(PairDistribution::BinomialDist {
+            xy,
+            layers: self.layers,
+        })
+    }
+}
+
+pub struct FixedStrengthNegBinomialProvider<'a> {
+    pub x: &'a [f64],
+    pub y: &'a [f64],
+    pub layers: u32,
+    pub self_loops: bool,
+}
+
+impl PairDistributionProvider for FixedStrengthNegBinomialProvider<'_> {
+    fn support(&self) -> CandidateSupport<'_> {
+        CandidateSupport::AllPairs {
+            node_count: self.x.len(),
+            self_loops: self.self_loops,
+        }
+    }
+
+    fn distribution(&self, source: usize, target: usize) -> Option<PairDistribution> {
+        if !self.self_loops && source == target {
+            return None;
+        }
+        let xy = self.x[source] * self.y[target];
+        (xy > 0.0).then_some(PairDistribution::NegBinomialDist {
+            xy,
+            layers: self.layers,
+        })
+    }
+}
