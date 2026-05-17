@@ -108,20 +108,13 @@ where
         CandidateSupport::AllPairs {
             node_count,
             self_loops,
-        } => detect_absent_with(
+        } => detect_absent_all_pairs_provider(
+            provider,
             node_count,
+            self_loops,
             observed_sources,
             observed_targets,
-            self_loops,
-            options.alpha_lower,
-            options.min_occupation,
-            options.min_expected,
-            options.max_absent,
-            |i, j| {
-                provider
-                    .distribution(i, j)
-                    .unwrap_or(PairDistribution::Poisson { rate: 0.0 })
-            },
+            options,
         ),
         CandidateSupport::SparsePairs { sources, targets } => detect_absent_sparse_provider(
             provider,
@@ -132,6 +125,59 @@ where
             options,
         ),
     }
+}
+
+fn detect_absent_all_pairs_provider<P>(
+    provider: &P,
+    node_count: usize,
+    self_loops: bool,
+    observed_sources: &[u64],
+    observed_targets: &[u64],
+    options: AbsentFilterOptions,
+) -> AbsentFilterResult
+where
+    P: PairDistributionProvider,
+{
+    let observed: HashSet<(usize, usize)> = observed_sources
+        .iter()
+        .zip(observed_targets.iter())
+        .map(|(&source, &target)| (source as usize, target as usize))
+        .collect();
+    let candidate_pairs = if self_loops {
+        node_count.saturating_mul(node_count)
+    } else {
+        node_count.saturating_mul(node_count.saturating_sub(1))
+    };
+
+    let scan_range = |start: usize, end: usize| {
+        let mut local = AbsentFilterResult::default();
+        for i in start..end {
+            for j in 0..node_count {
+                if (!self_loops && i == j) || observed.contains(&(i, j)) {
+                    continue;
+                }
+                if let Some(dist) = provider.distribution(i, j) {
+                    push_absent_if_significant(&mut local, i as u64, j as u64, dist, options);
+                }
+            }
+        }
+        local
+    };
+
+    let mut result = if candidate_pairs < PARALLEL_PAIR_THRESHOLD {
+        scan_range(0, node_count)
+    } else {
+        let chunks: Vec<AbsentFilterResult> = row_ranges(node_count)
+            .into_par_iter()
+            .map(|(start, end)| scan_range(start, end))
+            .collect();
+        merge_absent(chunks)
+    };
+
+    if let Some(limit) = options.max_absent {
+        truncate_absent(&mut result, limit);
+    }
+    result
 }
 
 fn detect_absent_sparse_provider<P>(
@@ -210,73 +256,6 @@ fn push_absent_if_significant(
         result.expected.push(expected);
         result.occupation.push(occupation);
     }
-}
-
-#[allow(clippy::too_many_arguments)]
-#[must_use]
-pub fn detect_absent_with<F>(
-    n: usize,
-    observed_sources: &[u64],
-    observed_targets: &[u64],
-    self_loops: bool,
-    alpha_lower: f64,
-    min_occupation: f64,
-    min_expected: f64,
-    max_absent: Option<usize>,
-    provider: F,
-) -> AbsentFilterResult
-where
-    F: Fn(usize, usize) -> PairDistribution + Sync,
-{
-    let observed: HashSet<(usize, usize)> = observed_sources
-        .iter()
-        .zip(observed_targets.iter())
-        .map(|(&source, &target)| (source as usize, target as usize))
-        .collect();
-    let candidate_pairs = if self_loops {
-        n.saturating_mul(n)
-    } else {
-        n.saturating_mul(n.saturating_sub(1))
-    };
-
-    let scan_range = |start: usize, end: usize| {
-        let mut local = AbsentFilterResult::default();
-        for i in start..end {
-            for j in 0..n {
-                if (!self_loops && i == j) || observed.contains(&(i, j)) {
-                    continue;
-                }
-                push_absent_if_significant(
-                    &mut local,
-                    i as u64,
-                    j as u64,
-                    provider(i, j),
-                    AbsentFilterOptions {
-                        alpha_lower,
-                        min_occupation,
-                        min_expected,
-                        max_absent: None,
-                    },
-                );
-            }
-        }
-        local
-    };
-
-    let mut result = if candidate_pairs < PARALLEL_PAIR_THRESHOLD {
-        scan_range(0, n)
-    } else {
-        let chunks: Vec<AbsentFilterResult> = row_ranges(n)
-            .into_par_iter()
-            .map(|(start, end)| scan_range(start, end))
-            .collect();
-        merge_absent(chunks)
-    };
-
-    if let Some(limit) = max_absent {
-        truncate_absent(&mut result, limit);
-    }
-    result
 }
 
 #[must_use]
@@ -518,6 +497,18 @@ mod tests {
             .iter()
             .zip(absent.targets.iter())
             .all(|pair| pair != (&0, &1)));
+    }
+
+    #[test]
+    fn all_pairs_absent_provider_respects_self_loop_mask() {
+        let x = vec![10.0, 10.0];
+        let y = vec![10.0, 10.0];
+        let absent = absent_fixed_strength_poisson(&x, &y, &[], &[], false, 0.1, 0.0, 0.0, None);
+        assert!(absent
+            .sources
+            .iter()
+            .zip(absent.targets.iter())
+            .all(|(&source, &target)| source != target));
     }
 
     #[test]

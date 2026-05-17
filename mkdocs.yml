@@ -42,6 +42,7 @@ nav:
   - Decisions:
       - Rust and Python Architecture: decisions/0001-rust-python-architecture.md
       - Streaming Generation: decisions/0002-streaming-generation.md
+      - Provider Pipeline: decisions/0003-provider-pipeline.md
 
 plugins:
   - search
