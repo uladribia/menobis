@@ -2,8 +2,9 @@
 
 use crate::distribution::PairDistribution;
 use crate::pairs::{
-    row_ranges, CandidateSupport, FixedStrengthPoissonProvider, PairDistributionProvider,
-    SparsePoissonRateMapProvider, SparsePoissonRateProvider, StrengthEdgesZipProvider,
+    row_ranges, CandidateSupport, DegreeEventsZipProvider, FixedStrengthPoissonProvider,
+    PairDistributionProvider, SparsePoissonRateMapProvider, SparsePoissonRateProvider,
+    StrengthCostPoissonProvider, StrengthDegreeZipProvider, StrengthEdgesZipProvider,
     PARALLEL_PAIR_THRESHOLD, SPARSE_CHUNK_SIZE,
 };
 use rayon::prelude::*;
@@ -413,6 +414,196 @@ pub fn absent_strength_edges_zip(
             max_absent,
         },
     )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn filter_strength_cost_poisson(
+    x: &[f64],
+    y: &[f64],
+    gamma: f64,
+    cost_sources: &[usize],
+    cost_targets: &[usize],
+    cost_values: &[f64],
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    let costs = build_cost_map(cost_sources, cost_targets, cost_values);
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &StrengthCostPoissonProvider {
+            x,
+            y,
+            gamma,
+            costs: &costs,
+            self_loops: true,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_strength_cost_poisson(
+    x: &[f64],
+    y: &[f64],
+    gamma: f64,
+    cost_sources: &[usize],
+    cost_targets: &[usize],
+    cost_values: &[f64],
+    observed_sources: &[u64],
+    observed_targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    let costs = build_cost_map(cost_sources, cost_targets, cost_values);
+    detect_absent_provider(
+        &StrengthCostPoissonProvider {
+            x,
+            y,
+            gamma,
+            costs: &costs,
+            self_loops,
+        },
+        observed_sources,
+        observed_targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
+}
+
+#[must_use]
+pub fn filter_strength_degree_zip(
+    x: &[f64],
+    y: &[f64],
+    z: &[f64],
+    w: &[f64],
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &StrengthDegreeZipProvider {
+            x,
+            y,
+            z,
+            w,
+            self_loops: true,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_strength_degree_zip(
+    x: &[f64],
+    y: &[f64],
+    z: &[f64],
+    w: &[f64],
+    sources: &[u64],
+    targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    detect_absent_provider(
+        &StrengthDegreeZipProvider {
+            x,
+            y,
+            z,
+            w,
+            self_loops,
+        },
+        sources,
+        targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
+}
+
+#[must_use]
+pub fn filter_degree_events_zip(
+    x: &[f64],
+    y: &[f64],
+    positive_weight_rate: f64,
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &DegreeEventsZipProvider {
+            x,
+            y,
+            positive_weight_rate,
+            self_loops: true,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_degree_events_zip(
+    x: &[f64],
+    y: &[f64],
+    positive_weight_rate: f64,
+    sources: &[u64],
+    targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    detect_absent_provider(
+        &DegreeEventsZipProvider {
+            x,
+            y,
+            positive_weight_rate,
+            self_loops,
+        },
+        sources,
+        targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
+}
+
+fn build_cost_map(
+    cost_sources: &[usize],
+    cost_targets: &[usize],
+    cost_values: &[f64],
+) -> HashMap<(usize, usize), f64> {
+    cost_sources
+        .iter()
+        .zip(cost_targets.iter())
+        .zip(cost_values.iter())
+        .map(|((&s, &t), &v)| ((s, t), v))
+        .collect()
 }
 
 fn merge_absent(chunks: Vec<AbsentFilterResult>) -> AbsentFilterResult {

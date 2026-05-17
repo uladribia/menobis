@@ -15,8 +15,25 @@ from odme.filtering import (
     FilteredEdges,
     FilterResult,
     Tail,
+    _solve_ztp_rate,
     filter_custom_rates_poisson,
+    filter_degree_events_me,
     filter_fixed_strength_me,
+    filter_strength_cost_me,
+    filter_strength_degree_me,
+    filter_strength_edges_me,
+)
+from odme.models.fitting import (
+    fit_fixed_degree_binary,
+)
+from odme.models.fitting import (
+    fit_strength_cost_me as fit_strength_cost,
+)
+from odme.models.fitting import (
+    fit_strength_degree_me as fit_strength_degree,
+)
+from odme.models.fitting import (
+    fit_strength_edges_me as fit_strength_edges,
 )
 
 app = Typer(no_args_is_help=True)
@@ -113,6 +130,258 @@ def fixed_strength(
         min_occupation=min_occupation,
         max_absent=max_absent,
         self_loops=self_loops,
+    )
+    _write_outputs(result, output_prefix)
+
+
+@app.command("strength-edges")
+def strength_edges(
+    input_path: Path,
+    output_prefix: Annotated[
+        Path, Option("--output-prefix", help="Prefix/directory for output CSV files.")
+    ],
+    target_edges: Annotated[
+        float, Option("--target-edges", help="Target number of edges for fitting.")
+    ],
+    alpha: Annotated[float, Option("--alpha", help="Significance level.")] = 0.05,
+    tail: Annotated[
+        Tail, Option("--tail", help="upper, lower, or two-sided.")
+    ] = "two-sided",
+    correction: Annotated[
+        Correction, Option("--correction", help="none, bonferroni, or fdr.")
+    ] = "none",
+    detect_absent: Annotated[
+        bool, Option("--detect-absent", help="Detect significant absent pairs.")
+    ] = False,
+    min_occupation: Annotated[
+        float, Option("--min-occupation", help="Absent-edge occupation threshold.")
+    ] = 0.5,
+    min_expected: Annotated[
+        float,
+        Option("--min-expected", help="Absent expected-weight threshold."),
+    ] = 0.0,
+    max_absent: Annotated[
+        int | None, Option("--max-absent", help="Maximum absent pairs to output.")
+    ] = None,
+    self_loops: Annotated[
+        bool, Option("--self-loops/--no-self-loops", help="Include diagonal pairs.")
+    ] = True,
+) -> None:
+    """Fit strength-edges ME, then filter against its ZIP null."""
+    edges = read_edges(input_path)
+    node_count = int(max(edges.source.max(), edges.target.max())) + 1
+    s_out = np.zeros(node_count, dtype=np.float64)
+    s_in = np.zeros(node_count, dtype=np.float64)
+    np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
+    np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
+    fit = fit_strength_edges(s_out, s_in, target_edges, self_loops=self_loops)
+    result = filter_strength_edges_me(
+        edges,
+        fit,
+        alpha=alpha,
+        tail=tail,
+        correction=correction,
+        detect_absent=detect_absent,
+        min_occupation=min_occupation,
+        min_expected=min_expected,
+        max_absent=max_absent,
+    )
+    _write_outputs(result, output_prefix)
+
+
+@app.command("strength-cost")
+def strength_cost(
+    input_path: Path,
+    costs_path: Annotated[
+        Path, Option("--costs", help="CSV with source,target,cost columns.")
+    ],
+    target_cost: Annotated[
+        float, Option("--target-cost", help="Target average cost for fitting.")
+    ],
+    output_prefix: Annotated[
+        Path, Option("--output-prefix", help="Prefix/directory for output CSV files.")
+    ],
+    alpha: Annotated[float, Option("--alpha", help="Significance level.")] = 0.05,
+    tail: Annotated[
+        Tail, Option("--tail", help="upper, lower, or two-sided.")
+    ] = "two-sided",
+    correction: Annotated[
+        Correction, Option("--correction", help="none, bonferroni, or fdr.")
+    ] = "none",
+    detect_absent: Annotated[
+        bool, Option("--detect-absent", help="Detect significant absent pairs.")
+    ] = False,
+    min_occupation: Annotated[
+        float, Option("--min-occupation", help="Absent-edge occupation threshold.")
+    ] = 0.5,
+    min_expected: Annotated[
+        float,
+        Option("--min-expected", help="Absent expected-weight threshold."),
+    ] = 0.0,
+    max_absent: Annotated[
+        int | None, Option("--max-absent", help="Maximum absent pairs to output.")
+    ] = None,
+    self_loops: Annotated[
+        bool, Option("--self-loops/--no-self-loops", help="Include diagonal pairs.")
+    ] = True,
+) -> None:
+    """Fit strength-cost ME, then filter against its Poisson null."""
+    edges = read_edges(input_path)
+    cost_table = pa_csv.read_csv(costs_path)
+    cost_sources = cost_table.column("source").to_numpy().astype(np.uint64)
+    cost_targets = cost_table.column("target").to_numpy().astype(np.uint64)
+    cost_values = cost_table.column("cost").to_numpy().astype(np.float64)
+    node_count = int(max(edges.source.max(), edges.target.max())) + 1
+    s_out = np.zeros(node_count, dtype=np.float64)
+    s_in = np.zeros(node_count, dtype=np.float64)
+    np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
+    np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
+    fit = fit_strength_cost(
+        s_out,
+        s_in,
+        cost_sources,
+        cost_targets,
+        cost_values,
+        target_cost,
+        self_loops=self_loops,
+    )
+    result = filter_strength_cost_me(
+        edges,
+        fit,
+        cost_sources,
+        cost_targets,
+        cost_values,
+        alpha=alpha,
+        tail=tail,
+        correction=correction,
+        detect_absent=detect_absent,
+        min_occupation=min_occupation,
+        min_expected=min_expected,
+        max_absent=max_absent,
+    )
+    _write_outputs(result, output_prefix)
+
+
+@app.command("strength-degree")
+def strength_degree(
+    input_path: Path,
+    output_prefix: Annotated[
+        Path, Option("--output-prefix", help="Prefix/directory for output CSV files.")
+    ],
+    alpha: Annotated[float, Option("--alpha", help="Significance level.")] = 0.05,
+    tail: Annotated[
+        Tail, Option("--tail", help="upper, lower, or two-sided.")
+    ] = "two-sided",
+    correction: Annotated[
+        Correction, Option("--correction", help="none, bonferroni, or fdr.")
+    ] = "none",
+    detect_absent: Annotated[
+        bool, Option("--detect-absent", help="Detect significant absent pairs.")
+    ] = False,
+    min_occupation: Annotated[
+        float, Option("--min-occupation", help="Absent-edge occupation threshold.")
+    ] = 0.5,
+    min_expected: Annotated[
+        float,
+        Option("--min-expected", help="Absent expected-weight threshold."),
+    ] = 0.0,
+    max_absent: Annotated[
+        int | None, Option("--max-absent", help="Maximum absent pairs to output.")
+    ] = None,
+    self_loops: Annotated[
+        bool, Option("--self-loops/--no-self-loops", help="Include diagonal pairs.")
+    ] = True,
+) -> None:
+    """Fit strength-degree ME, then filter against its ZIP null."""
+    edges = read_edges(input_path)
+    node_count = int(max(edges.source.max(), edges.target.max())) + 1
+    s_out = np.zeros(node_count, dtype=np.float64)
+    s_in = np.zeros(node_count, dtype=np.float64)
+    d_out = np.zeros(node_count, dtype=np.float64)
+    d_in = np.zeros(node_count, dtype=np.float64)
+    np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
+    np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
+    for src in edges.source:
+        d_out[src] += 1
+    for tgt in edges.target:
+        d_in[tgt] += 1
+    fit = fit_strength_degree(s_out, s_in, d_out, d_in, self_loops=self_loops)
+    result = filter_strength_degree_me(
+        edges,
+        fit,
+        alpha=alpha,
+        tail=tail,
+        correction=correction,
+        detect_absent=detect_absent,
+        min_occupation=min_occupation,
+        min_expected=min_expected,
+        max_absent=max_absent,
+    )
+    _write_outputs(result, output_prefix)
+
+
+@app.command("degree-events")
+def degree_events(
+    input_path: Path,
+    output_prefix: Annotated[
+        Path, Option("--output-prefix", help="Prefix/directory for output CSV files.")
+    ],
+    alpha: Annotated[float, Option("--alpha", help="Significance level.")] = 0.05,
+    tail: Annotated[
+        Tail, Option("--tail", help="upper, lower, or two-sided.")
+    ] = "two-sided",
+    correction: Annotated[
+        Correction, Option("--correction", help="none, bonferroni, or fdr.")
+    ] = "none",
+    detect_absent: Annotated[
+        bool, Option("--detect-absent", help="Detect significant absent pairs.")
+    ] = False,
+    min_occupation: Annotated[
+        float, Option("--min-occupation", help="Absent-edge occupation threshold.")
+    ] = 0.5,
+    min_expected: Annotated[
+        float,
+        Option("--min-expected", help="Absent expected-weight threshold."),
+    ] = 0.0,
+    max_absent: Annotated[
+        int | None, Option("--max-absent", help="Maximum absent pairs to output.")
+    ] = None,
+    self_loops: Annotated[
+        bool, Option("--self-loops/--no-self-loops", help="Include diagonal pairs.")
+    ] = True,
+) -> None:
+    """Fit degree-events ME, then filter against its ZIP null."""
+    edges = read_edges(input_path)
+    node_count = int(max(edges.source.max(), edges.target.max())) + 1
+    d_out = np.zeros(node_count, dtype=np.float64)
+    d_in = np.zeros(node_count, dtype=np.float64)
+    for src in edges.source:
+        d_out[src] += 1
+    for tgt in edges.target:
+        d_in[tgt] += 1
+    fit = fit_fixed_degree_binary(d_out, d_in, self_loops=self_loops)
+    total_events = int(edges.weight.sum())
+    expected_edges = sum(
+        fit.x[i] * fit.y[j] / (1.0 + fit.x[i] * fit.y[j])
+        for i in range(node_count)
+        for j in range(node_count)
+        if self_loops or i != j
+    )
+    mean_pos_weight = total_events / expected_edges if expected_edges > 0 else 1.0
+    positive_weight_rate = _solve_ztp_rate(max(mean_pos_weight, 1.0))
+    result = filter_degree_events_me(
+        edges,
+        fit.x,
+        fit.y,
+        positive_weight_rate,
+        alpha=alpha,
+        tail=tail,
+        correction=correction,
+        detect_absent=detect_absent,
+        self_loops=self_loops,
+        min_occupation=min_occupation,
+        min_expected=min_expected,
+        max_absent=max_absent,
     )
     _write_outputs(result, output_prefix)
 

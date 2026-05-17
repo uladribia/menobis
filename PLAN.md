@@ -434,7 +434,7 @@ TDD:
 - Dense $N^2$ probability matrices are not used for generation.
 - Remaining future work: add Criterion microbenchmarks for Rust kernels and CI-friendly regression thresholds.
 
-### Milestone 11: Statistical filtering module — ❌ NOT STARTED
+### Milestone 11: Statistical filtering module — ✅ COMPLETE
 
 Given an observed weighted network and a chosen ME null model, the filtering
 module identifies pairs whose observed weight is statistically incompatible

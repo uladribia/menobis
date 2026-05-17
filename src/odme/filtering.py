@@ -1,5 +1,6 @@
 """Statistical filtering for ODME null models."""
 
+import math
 from dataclasses import dataclass
 from typing import Literal
 
@@ -8,7 +9,12 @@ from numpy.typing import NDArray
 
 import odme._odme as _odme
 from odme.data.frames import EdgeTable, ProbabilityTable
-from odme.models.fitting import StrengthEdgesMEFit, fit_fixed_strength_me
+from odme.models.fitting import (
+    StrengthCostMEFit,
+    StrengthDegreeMEFit,
+    StrengthEdgesMEFit,
+    fit_fixed_strength_me,
+)
 
 Tail = Literal["upper", "lower", "two-sided"]
 Correction = Literal["none", "bonferroni", "fdr"]
@@ -186,6 +192,164 @@ def filter_strength_edges_me(
     )
 
 
+def filter_strength_cost_me(
+    edges: EdgeTable,
+    fit: StrengthCostMEFit,
+    cost_sources: NDArray[np.uint64],
+    cost_targets: NDArray[np.uint64],
+    cost_values: NDArray[np.float64],
+    *,
+    alpha: float = 0.05,
+    tail: Tail = "two-sided",
+    correction: Correction = "none",
+    detect_absent: bool = False,
+    min_occupation: float = 0.5,
+    min_expected: float = 0.0,
+    max_absent: int | None = None,
+) -> FilterResult:
+    """Filter edges against a fitted strength-cost Poisson null model."""
+    upper, lower, expected, occupation = _odme.filter_strength_cost_poisson(
+        fit.x.tolist(),
+        fit.y.tolist(),
+        fit.gamma,
+        cost_sources.tolist(),
+        cost_targets.tolist(),
+        cost_values.tolist(),
+        edges.source.tolist(),
+        edges.target.tolist(),
+        edges.weight.tolist(),
+    )
+    absent = None
+    if detect_absent:
+        absent = _odme.absent_strength_cost_poisson(
+            fit.x.tolist(),
+            fit.y.tolist(),
+            fit.gamma,
+            cost_sources.tolist(),
+            cost_targets.tolist(),
+            cost_values.tolist(),
+            edges.source.tolist(),
+            edges.target.tolist(),
+            fit.self_loops,
+            _lower_alpha(alpha, tail),
+            min_occupation,
+            min_expected,
+            max_absent,
+        )
+    return _classify(
+        edges,
+        np.asarray(upper, dtype=np.float64),
+        np.asarray(lower, dtype=np.float64),
+        np.asarray(expected, dtype=np.float64),
+        np.asarray(occupation, dtype=np.float64),
+        absent,
+        alpha=alpha,
+        tail=tail,
+        correction=correction,
+    )
+
+
+def filter_strength_degree_me(
+    edges: EdgeTable,
+    fit: StrengthDegreeMEFit,
+    *,
+    alpha: float = 0.05,
+    tail: Tail = "two-sided",
+    correction: Correction = "none",
+    detect_absent: bool = False,
+    min_occupation: float = 0.5,
+    min_expected: float = 0.0,
+    max_absent: int | None = None,
+) -> FilterResult:
+    """Filter edges against a fitted strength-degree ZIP null model."""
+    upper, lower, expected, occupation = _odme.filter_strength_degree_zip(
+        fit.x.tolist(),
+        fit.y.tolist(),
+        fit.z.tolist(),
+        fit.w.tolist(),
+        edges.source.tolist(),
+        edges.target.tolist(),
+        edges.weight.tolist(),
+    )
+    absent = None
+    if detect_absent:
+        absent = _odme.absent_strength_degree_zip(
+            fit.x.tolist(),
+            fit.y.tolist(),
+            fit.z.tolist(),
+            fit.w.tolist(),
+            edges.source.tolist(),
+            edges.target.tolist(),
+            fit.self_loops,
+            _lower_alpha(alpha, tail),
+            min_occupation,
+            min_expected,
+            max_absent,
+        )
+    return _classify(
+        edges,
+        np.asarray(upper, dtype=np.float64),
+        np.asarray(lower, dtype=np.float64),
+        np.asarray(expected, dtype=np.float64),
+        np.asarray(occupation, dtype=np.float64),
+        absent,
+        alpha=alpha,
+        tail=tail,
+        correction=correction,
+    )
+
+
+def filter_degree_events_me(
+    edges: EdgeTable,
+    x: NDArray[np.float64],
+    y: NDArray[np.float64],
+    positive_weight_rate: float,
+    *,
+    alpha: float = 0.05,
+    tail: Tail = "two-sided",
+    correction: Correction = "none",
+    detect_absent: bool = False,
+    self_loops: bool = True,
+    min_occupation: float = 0.5,
+    min_expected: float = 0.0,
+    max_absent: int | None = None,
+) -> FilterResult:
+    """Filter edges against a fitted degree-events ZIP null model."""
+    upper, lower, expected, occupation = _odme.filter_degree_events_zip(
+        x.tolist(),
+        y.tolist(),
+        positive_weight_rate,
+        edges.source.tolist(),
+        edges.target.tolist(),
+        edges.weight.tolist(),
+    )
+    absent = None
+    if detect_absent:
+        absent = _odme.absent_degree_events_zip(
+            x.tolist(),
+            y.tolist(),
+            positive_weight_rate,
+            edges.source.tolist(),
+            edges.target.tolist(),
+            self_loops,
+            _lower_alpha(alpha, tail),
+            min_occupation,
+            min_expected,
+            max_absent,
+        )
+    return _classify(
+        edges,
+        np.asarray(upper, dtype=np.float64),
+        np.asarray(lower, dtype=np.float64),
+        np.asarray(expected, dtype=np.float64),
+        np.asarray(occupation, dtype=np.float64),
+        absent,
+        alpha=alpha,
+        tail=tail,
+        correction=correction,
+    )
+
+
 def _classify(
     edges: EdgeTable,
     upper: NDArray[np.float64],
@@ -322,10 +486,29 @@ def _strengths(edges: EdgeTable, node_count: int) -> tuple[np.ndarray, np.ndarra
     return out, incoming
 
 
+def _solve_ztp_rate(mean: float) -> float:
+    """Solve for the zero-truncated Poisson rate given the mean."""
+    if mean <= 1.0:
+        return 0.0
+    low, high = 0.0, max(mean, 1.0)
+    while high / (1.0 - math.exp(-high)) < mean:
+        high *= 2.0
+    for _ in range(100):
+        mid = 0.5 * (low + high)
+        if mid / (1.0 - math.exp(-mid)) < mean:
+            low = mid
+        else:
+            high = mid
+    return 0.5 * (low + high)
+
+
 __all__ = [
     "FilterResult",
     "FilteredEdges",
     "filter_custom_rates_poisson",
+    "filter_degree_events_me",
     "filter_fixed_strength_me",
+    "filter_strength_cost_me",
+    "filter_strength_degree_me",
     "filter_strength_edges_me",
 ]

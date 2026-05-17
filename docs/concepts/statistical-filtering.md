@@ -32,13 +32,16 @@ not materialize dense $N^2$ rate matrices.
 
 ## Supported nulls
 
-Initial filtering supports independent grand-canonical distributions:
+Filtering supports all independent grand-canonical distributions:
 
 | Model | Distribution |
 |-------|--------------|
 | fixed-strength ME | Poisson($x_i y_j$) |
+| strength-cost ME | Poisson($x_i y_j e^{-\gamma d_{ij}}$) |
 | custom rates | Poisson($\lambda_{ij}$), where $\lambda_{ij}=T p_{ij}$ |
 | strength-edges ME | ZIP/ZTP with fitted occupation and rate $x_i y_j$ |
+| strength-degree ME | ZIP/ZTP with fitted occupation and rate $x_i y_j$ |
+| degree-events ME | ZIP/ZTP with binary degree occupation and shared rate |
 
 Canonical multinomial filters are intentionally out of scope because pair tests
 are coupled by the fixed total event count. Custom inputs therefore use
@@ -59,7 +62,14 @@ For Poisson models, $P(t_{ij}>0)=1-e^{-\lambda_{ij}}$.
 ## Python API
 
 ```python
-from odme.filtering import filter_fixed_strength_me
+from odme.filtering import (
+    filter_fixed_strength_me,
+    filter_strength_cost_me,
+    filter_strength_degree_me,
+    filter_strength_edges_me,
+    filter_degree_events_me,
+    filter_custom_rates_poisson,
+)
 
 result = filter_fixed_strength_me(
     edges,
@@ -77,6 +87,10 @@ result = filter_fixed_strength_me(
 
 ```bash
 odme filter fixed-strength edges.csv --output-prefix filtered/
+odme filter strength-edges edges.csv --target-edges 500 --output-prefix filtered/
+odme filter strength-cost edges.csv --costs costs.csv --target-cost 1.5 --output-prefix filtered/
+odme filter strength-degree edges.csv --output-prefix filtered/
+odme filter degree-events edges.csv --output-prefix filtered/
 odme filter custom-rates edges.csv --rates rates.csv --output-prefix filtered/
 ```
 

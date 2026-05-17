@@ -28,6 +28,7 @@ nav:
   - API:
       - Python: api/python.md
       - Rust: api/rust.md
+      - Filtering: api/filtering.md
   - CLI:
       - Analyze: cli/analyze.md
       - Fit: cli/fit.md
