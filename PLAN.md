@@ -15,7 +15,8 @@ Scientific reference: <https://hdl.handle.net/10803/400560>.
 | 6 | Remaining ME models (Cases 1–5 + cost + partial) |
 | 7a | Distribution variants: geometric, binomial, negative binomial |
 | 7b | Binomial family IPF fitting |
-| 7b+ | Ensemble equivalence validation |
+| 7b+ | Binomial sampling/filtering for all constraints (cost, edges, degree, degree-events) |
+| 7b++ | Ensemble equivalence validation |
 | 8 | Modern CLI (analyze, fit, generate, filter, convert) |
 | 9 | Documentation site |
 | 10 | Performance benchmarks with regression baselines |

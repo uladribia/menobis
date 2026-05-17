@@ -37,10 +37,11 @@ The distribution name implies the ensemble type:
 | Constraint | Poisson | Geometric | Binomial | Neg. binomial |
 |------------|---------|-----------|----------|---------------|
 | strength | ✅ | ✅ | ✅ | ✅ (no fit yet) |
-| strength-cost | ✅ | — | — | — |
-| strength-edges | ✅ (ZIP) | — | — | — |
-| strength-degree | ✅ (ZIP) | — | — | — |
+| strength-cost | ✅ | — | ✅ | — |
+| strength-edges | ✅ (ZIP) | — | ✅ (ZIP) | — |
+| strength-degree | ✅ (ZIP) | — | ✅ (ZIP) | — |
 | degree | Bernoulli ✅ | — | — | — |
+| degree-events | ✅ (ZIP) | — | ✅ (ZIP) | — |
 | custom | ✅ | — | — | — |
 
 ## Case mapping
