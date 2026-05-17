@@ -23,6 +23,7 @@ B binomial) across constraint types through `N = 20000`.
 | `custom_multinomial_sparse` | ME | custom | Multinomial |
 | `degree_events_poisson` | ME | degree-events | ZIP/Poisson |
 | `strength_cost_poisson` | ME | strength-cost | Poisson |
+| `strength_cost_binomial` | B | strength-cost | Binomial(M) |
 | `strength_edges_poisson` | ME | strength-edges | ZIP/Poisson |
 | `strength_edges_binomial` | B | strength-edges | ZIP/Binomial(M) |
 | `strength_degree_poisson` | ME | strength-degree | ZIP/Poisson |
