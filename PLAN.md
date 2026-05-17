@@ -476,7 +476,7 @@ A second tutorial `docs/tutorials/partial-constraints.md` should cover:
 - Peak RSS remains below 270 MiB for the benchmark setup.
 - Parallel generation uses Rayon row/sparse-entry chunks with deterministic per-chunk seeds.
 - Dense $N^2$ probability matrices are not used for generation.
-- Remaining future work: add Criterion microbenchmarks for Rust kernels and CI-friendly regression thresholds.
+- Remaining future work: add Criterion microbenchmarks for Rust kernels.
 
 ### Milestone 11: Statistical filtering module — ✅ COMPLETE
 
