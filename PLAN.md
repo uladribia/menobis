@@ -149,11 +149,24 @@ The codebase uses inconsistent naming. Fix all public names to follow:
 where:
 - **operation**: `fit`, `sample`, `filter`, `absent`
 - **constraint**: `strength`, `strength_edges`, `strength_degree`, `strength_cost`, `degree`, `custom`
-- **distribution**: `poisson`, `geometric`, `binomial`, `neg_binomial`, `multinomial`, `microcanonical`
+- **distribution**: `poisson`, `geometric`, `binomial`, `neg_binomial`, `multinomial`, `microcanonical`, `bernoulli`
 
-The `_me` suffix is **removed**. ME stands for multi-edge (the project name),
-not maximum entropy. It adds no information to function names inside the ODME
-package itself.
+The distribution name implies the ensemble type:
+
+| Ensemble | Legacy case | Distributions | Fitting method |
+|----------|-------------|---------------|----------------|
+| ME (multi-edge) | `ME` | Poisson, Multinomial, Microcanonical | IPF (analytical for self-loops) |
+| W (weighted) | `W` | Geometric, Negative binomial | Bounded optimization (TNC/L-BFGS-B) |
+| B (binary layers) | `B` | Binomial, Bernoulli | IPF with correction factor |
+
+The `_me` suffix is **removed** from function names. ME stands for multi-edge
+(the project name), not maximum entropy. The models ARE maximum entropy, but
+`_me` in function names inside the ODME package is redundant and was
+incorrectly interpreted as "maximum entropy" in some docstrings.
+
+The `_zip` suffix is also removed — ZIP describes the inflation structure,
+not the distribution. The positive-weight distribution is still Poisson (or
+will be geometric/binomial in future ZIP variants).
 
 #### Rust renames (crates/odme-core)
 
@@ -188,8 +201,8 @@ package itself.
 | `balance_binomial_strength` | `balance_strength_binomial` |
 | `balance_masked_binomial_strength` | `balance_masked_strength_binomial` |
 | `balance_no_self_loops` | `balance_strength_poisson_no_self_loops` |
-| `balance_binary_degrees` | `balance_degree_binary` |
-| `balance_masked_binary_degrees` | `balance_masked_degree_binary` |
+| `balance_binary_degrees` | `balance_degree_bernoulli` |
+| `balance_masked_binary_degrees` | `balance_masked_degree_bernoulli` |
 | `balance_masked_strength` | `balance_masked_strength_poisson` |
 
 #### Python renames (src/odme)
@@ -197,7 +210,7 @@ package itself.
 | Current | Proposed |
 |---------|----------|
 | `fit_fixed_strength_me` | `fit_strength_poisson` |
-| `fit_fixed_degree_binary` | `fit_degree_binary` |
+| `fit_fixed_degree_binary` | `fit_degree_bernoulli` |
 | `fit_strength_edges_me` | `fit_strength_edges_poisson` |
 | `fit_strength_degree_me` | `fit_strength_degree_poisson` |
 | `fit_strength_cost_me` | `fit_strength_cost_poisson` |
@@ -233,7 +246,7 @@ package itself.
 | Current | Proposed |
 |---------|----------|
 | `odme fit strengths` | `odme fit strength-poisson` |
-| `odme fit degrees` | `odme fit degree-binary` |
+| `odme fit degrees` | `odme fit degree-bernoulli` |
 | `odme fit strength-cost-me` | `odme fit strength-cost-poisson` |
 | `odme fit strength-edges-me` | `odme fit strength-edges-poisson` |
 | `odme fit strength-degree-me` | `odme fit strength-degree-poisson` |
@@ -264,9 +277,11 @@ package itself.
 
 #### Docs
 
-- Replace "maximum entropy" with "multi-edge" where ME is expanded
-  incorrectly. The models ARE maximum entropy, but ME in ODME means
-  multi-edge.
+- Replace "maximum entropy" with "multi-edge" where ME abbreviation is
+  expanded incorrectly. The models ARE derived from maximum entropy
+  principles, but ME in ODME stands for multi-edge.
+- Document the three ensemble types (ME/W/B) and which distributions
+  belong to each in `docs/concepts/thesis-cases.md`.
 - Update all function references in concept/API/CLI docs.
 
 #### Scope
