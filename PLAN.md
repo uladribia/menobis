@@ -69,19 +69,24 @@ Until then, they serve as reference for unported distribution variants.
 All statistics (strengths, degrees, Y2, k_nn, s_nn, P(w), clustering) are
 implemented in Rust `odme-core` with Python wrappers. Safe to remove.
 
-**`2. Model Fitting/`** — Python 2 `multi_edge_fitter`. **Fully replaced.**
+**`2. Model Fitting/`** — Python 2 `multi_edge_fitter`. **Partially replaced.**
 
 | Legacy fitter | ODME equivalent | Status |
 |---------------|-----------------|--------|
-| `fitter_s.py` | `fit_fixed_strength_me` | ✅ ported |
+| `fitter_s.py` case `ME` | `fit_fixed_strength_me` | ✅ ported |
+| `fitter_s.py` case `B` (binomial, M layers) | — | ❌ Milestone 7 |
+| `fitter_s.py` case `W` (geometric) | — | ❌ Milestone 7 |
 | `fitter_k.py` | `fit_fixed_degree_binary` | ✅ ported |
-| `fitter_sk.py` | `fit_strength_degree_me` | ✅ ported |
-| `fitter_E.py` | `fit_strength_edges_me` | ✅ ported |
+| `fitter_sk.py` (ME mode) | `fit_strength_degree_me` | ✅ ported |
+| `fitter_sk.py` (`agg=True`, M layers) | — | ❌ Milestone 7 |
+| `fitter_E.py` (ME mode) | `fit_strength_edges_me` | ✅ ported |
+| `fitter_E.py` (`agg=True`, M layers) | — | ❌ Milestone 7 |
 | `fitter_grav.py` | `fit_strength_cost_me` | ✅ ported |
 | `fitter_pij.py` | partial fitting (`fit_partial_*`) | ✅ ported |
 | `fitter_s_CVXOPT.py` | not needed (IPF solver used) | ✅ superseded |
 
-Safe to remove.
+Keep until Milestone 7 ports the binomial (`B`) and geometric (`W`) fitting
+variants, including the aggregated-layers (`agg=True`, `M`) parameter.
 
 **`3. Model Generation/`** — C tool `GenNetGen`. **Partially replaced.**
 
@@ -111,13 +116,13 @@ Safe to remove.
 
 #### Removal plan
 
-**Phase 1 (safe now):** Remove `1. Network analysis/` and `2. Model Fitting/`.
-Both are fully superseded. No Milestone 7 dependencies.
+**Phase 1 (safe now):** Remove `1. Network analysis/` only. Fully superseded.
 
-**Phase 2 (after Milestone 7):** Remove `3. Model Generation/`. Keep it as
-reference until geometric, binomial, negative binomial, sequential gravity, and
-radiation generators are ported to Rust. The specific files to consult are:
+**Phase 2 (after Milestone 7):** Remove `2. Model Fitting/` and
+`3. Model Generation/`. Both contain unported distribution variants:
 
+- `fitter_s.py` cases `B` and `W`: binomial/geometric IPF with layers parameter
+- `fitter_sk.py` and `fitter_E.py` with `agg=True`: aggregated-layer variants
 - `ula_null_models.c` lines 30–70: geometric/binomial/NB pair-level samplers
 - `others_null_models.c`: radiation and sequential-gravity models
 
