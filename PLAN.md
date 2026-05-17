@@ -23,7 +23,10 @@ Total: 145 Python tests, 27 Rust tests, all checks green.
 
 ## Remaining work
 
-### Milestone 7: Additional distribution families — ❌ NOT STARTED
+### Milestone 7: Additional distribution families — IN PROGRESS
+
+Steps 7a (distributions/providers/generation/filtering) and 7b (binomial IPF)
+are complete. Steps 7c (geometric/NB fitting) and 7d (mobility models) remain.
 
 The current ODME implements only the **Poisson** (ME) and **ZIP/ZTP**
 distribution families. The thesis and legacy code support three additional
@@ -134,6 +137,142 @@ place before the fitting solver is useful.
 
 These are standalone models, not ME distribution variants. Implement after
 the distribution families are complete.
+
+### Future: naming cleanup
+
+The codebase uses inconsistent naming. Fix all public names to follow:
+
+```text
+{operation}_{constraint}_{distribution}
+```
+
+where:
+- **operation**: `fit`, `sample`, `filter`, `absent`
+- **constraint**: `strength`, `strength_edges`, `strength_degree`, `strength_cost`, `degree`, `custom`
+- **distribution**: `poisson`, `geometric`, `binomial`, `neg_binomial`, `multinomial`, `microcanonical`
+
+The `_me` suffix is **removed**. ME stands for multi-edge (the project name),
+not maximum entropy. It adds no information to function names inside the ODME
+package itself.
+
+#### Rust renames (crates/odme-core)
+
+| Current | Proposed |
+|---------|----------|
+| `sample_poisson` | `sample_strength_poisson` |
+| `sample_geometric` | `sample_strength_geometric` |
+| `sample_binomial` | `sample_strength_binomial` |
+| `sample_neg_binomial` | `sample_strength_neg_binomial` |
+| `sample_microcanonical` | `sample_strength_microcanonical` |
+| `sample_multinomial` | `sample_strength_multinomial` |
+| `sample_poisson_multinomial` | `sample_strength_poisson_multinomial` |
+| `sample_strength_edges_me` | `sample_strength_edges_poisson` |
+| `sample_strength_degree_me` | `sample_strength_degree_poisson` |
+| `sample_strength_cost_me` | `sample_strength_cost_poisson` |
+| `sample_fixed_degree_events_me` | `sample_degree_events_poisson` |
+| `sample_custom_pij_events_poisson` | `sample_custom_poisson` |
+| `sample_custom_pij_events_multinomial` | `sample_custom_multinomial` |
+| `filter_fixed_strength_poisson` | `filter_strength_poisson` |
+| `filter_geometric` | `filter_strength_geometric` |
+| `filter_binomial` | `filter_strength_binomial` |
+| `filter_neg_binomial` | `filter_strength_neg_binomial` |
+| `filter_strength_edges_zip` | `filter_strength_edges_poisson` |
+| `filter_strength_degree_zip` | `filter_strength_degree_poisson` |
+| `filter_strength_cost_poisson` | unchanged |
+| `filter_degree_events_zip` | `filter_degree_events_poisson` |
+| `filter_custom_poisson_rates` | `filter_custom_poisson` |
+| `absent_*` | same pattern as `filter_*` |
+| `balance_strength_edges_me` | `balance_strength_edges_poisson` |
+| `balance_strength_degree_me` | `balance_strength_degree_poisson` |
+| `balance_masked_strength_degree_me` | `balance_masked_strength_degree_poisson` |
+| `balance_binomial_strength` | `balance_strength_binomial` |
+| `balance_masked_binomial_strength` | `balance_masked_strength_binomial` |
+| `balance_no_self_loops` | `balance_strength_poisson_no_self_loops` |
+| `balance_binary_degrees` | `balance_degree_binary` |
+| `balance_masked_binary_degrees` | `balance_masked_degree_binary` |
+| `balance_masked_strength` | `balance_masked_strength_poisson` |
+
+#### Python renames (src/odme)
+
+| Current | Proposed |
+|---------|----------|
+| `fit_fixed_strength_me` | `fit_strength_poisson` |
+| `fit_fixed_degree_binary` | `fit_degree_binary` |
+| `fit_strength_edges_me` | `fit_strength_edges_poisson` |
+| `fit_strength_degree_me` | `fit_strength_degree_poisson` |
+| `fit_strength_cost_me` | `fit_strength_cost_poisson` |
+| `fit_binomial_strength` | `fit_strength_binomial` |
+| `StrengthCostMEFit` | `StrengthCostFit` |
+| `StrengthEdgesMEFit` | `StrengthEdgesFit` |
+| `StrengthDegreeMEFit` | `StrengthDegreeFit` |
+| `filter_fixed_strength_me` | `filter_strength_poisson` |
+| `filter_strength_edges_me` | `filter_strength_edges_poisson` |
+| `filter_strength_degree_me` | `filter_strength_degree_poisson` |
+| `filter_strength_cost_me` | `filter_strength_cost_poisson` |
+| `filter_degree_events_me` | `filter_degree_events_poisson` |
+| `filter_custom_rates_poisson` | `filter_custom_poisson` |
+| `filter_geometric` | `filter_strength_geometric` |
+| `filter_binomial` | `filter_strength_binomial` |
+| `filter_neg_binomial` | `filter_strength_neg_binomial` |
+| `sample_poisson` | `sample_strength_poisson` |
+| `sample_microcanonical` | `sample_strength_microcanonical` |
+| `sample_multinomial` | `sample_strength_multinomial` |
+| `sample_poisson_multinomial` | `sample_strength_poisson_multinomial` |
+| `sample_strength_edges_me` | `sample_strength_edges_poisson` |
+| `sample_strength_degree_me` | `sample_strength_degree_poisson` |
+| `sample_strength_cost_me` | `sample_strength_cost_poisson` |
+| `sample_fixed_degree_events_me` | `sample_degree_events_poisson` |
+| `sample_custom_pij_events_poisson` | `sample_custom_poisson` |
+| `sample_custom_pij_events_multinomial` | `sample_custom_multinomial` |
+| `sample_geometric` | `sample_strength_geometric` |
+| `sample_binomial` | `sample_strength_binomial` |
+| `sample_neg_binomial` | `sample_strength_neg_binomial` |
+
+#### CLI renames
+
+| Current | Proposed |
+|---------|----------|
+| `odme fit strengths` | `odme fit strength-poisson` |
+| `odme fit degrees` | `odme fit degree-binary` |
+| `odme fit strength-cost-me` | `odme fit strength-cost-poisson` |
+| `odme fit strength-edges-me` | `odme fit strength-edges-poisson` |
+| `odme fit strength-degree-me` | `odme fit strength-degree-poisson` |
+| `odme generate poisson` | `odme generate strength-poisson` |
+| `odme generate multinomial` | `odme generate strength-multinomial` |
+| `odme generate poisson-multinomial` | `odme generate strength-poisson-multinomial` |
+| `odme generate degree-events-me` | `odme generate degree-events-poisson` |
+| `odme generate strength-cost-me` | `odme generate strength-cost-poisson` |
+| `odme generate strength-edges-me` | `odme generate strength-edges-poisson` |
+| `odme generate strength-degree-me` | `odme generate strength-degree-poisson` |
+| `odme generate custom-pij` | `odme generate custom-poisson` |
+| `odme filter fixed-strength` | `odme filter strength-poisson` |
+| `odme filter strength-edges` | `odme filter strength-edges-poisson` |
+| `odme filter strength-degree` | `odme filter strength-degree-poisson` |
+| `odme filter strength-cost` | `odme filter strength-cost-poisson` |
+| `odme filter degree-events` | `odme filter degree-events-poisson` |
+| `odme filter custom-rates` | `odme filter custom-poisson` |
+
+#### Partial fitter renames
+
+| Current | Proposed |
+|---------|----------|
+| `fit_partial_strength_me` | `fit_partial_strength_poisson` |
+| `fit_partial_strength_edges_me` | `fit_partial_strength_edges_poisson` |
+| `fit_partial_strength_degree_me` | `fit_partial_strength_degree_poisson` |
+| `fit_partial_strength_cost_me` | `fit_partial_strength_cost_poisson` |
+| `fit_partial_degree_me` | `fit_partial_degree_poisson` |
+
+#### Docs
+
+- Replace "maximum entropy" with "multi-edge" where ME is expanded
+  incorrectly. The models ARE maximum entropy, but ME in ODME means
+  multi-edge.
+- Update all function references in concept/API/CLI docs.
+
+#### Scope
+
+Mechanical rename across ~40 files. One dedicated branch, one commit.
+Full test suite before and after.
 
 ### Future: thesis-equation mapping
 
