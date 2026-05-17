@@ -502,6 +502,224 @@ def filter_strength_neg_binomial(
     )
 
 
+def filter_strength_cost_binomial(
+    edges: EdgeTable,
+    fit: "StrengthCostFit",
+    cost_sources: NDArray[np.uint64],
+    cost_targets: NDArray[np.uint64],
+    cost_values: NDArray[np.float64],
+    *,
+    layers: int = 1,
+    alpha: float = 0.05,
+    tail: Tail = "two-sided",
+    correction: Correction = "none",
+    detect_absent: bool = False,
+    min_occupation: float = 0.5,
+    min_expected: float = 0.0,
+    max_absent: int | None = None,
+) -> FilterResult:
+    """Filter edges against a strength-cost binomial null model."""
+    upper, lower, expected, occupation = _odme.filter_strength_cost_binomial(
+        fit.x.tolist(),
+        fit.y.tolist(),
+        fit.gamma,
+        cost_sources.tolist(),
+        cost_targets.tolist(),
+        cost_values.tolist(),
+        layers,
+        edges.source.tolist(),
+        edges.target.tolist(),
+        edges.weight.tolist(),
+    )
+    absent = None
+    if detect_absent:
+        absent = _odme.absent_strength_cost_binomial(
+            fit.x.tolist(),
+            fit.y.tolist(),
+            fit.gamma,
+            cost_sources.tolist(),
+            cost_targets.tolist(),
+            cost_values.tolist(),
+            layers,
+            edges.source.tolist(),
+            edges.target.tolist(),
+            fit.self_loops,
+            _lower_alpha(alpha, tail),
+            min_occupation,
+            min_expected,
+            max_absent,
+        )
+    return _classify(
+        edges,
+        np.asarray(upper),
+        np.asarray(lower),
+        np.asarray(expected),
+        np.asarray(occupation),
+        absent,
+        alpha=alpha,
+        tail=tail,
+        correction=correction,
+    )
+
+
+def filter_strength_edges_binomial(
+    edges: EdgeTable,
+    fit: "StrengthEdgesFit",
+    *,
+    layers: int = 1,
+    alpha: float = 0.05,
+    tail: Tail = "two-sided",
+    correction: Correction = "none",
+    detect_absent: bool = False,
+    min_occupation: float = 0.5,
+    min_expected: float = 0.0,
+    max_absent: int | None = None,
+) -> FilterResult:
+    """Filter edges against a strength-edges binomial ZIP null model."""
+    upper, lower, expected, occupation = _odme.filter_strength_edges_binomial(
+        fit.x.tolist(),
+        fit.y.tolist(),
+        fit.lam,
+        layers,
+        edges.source.tolist(),
+        edges.target.tolist(),
+        edges.weight.tolist(),
+    )
+    absent = None
+    if detect_absent:
+        absent = _odme.absent_strength_edges_binomial(
+            fit.x.tolist(),
+            fit.y.tolist(),
+            fit.lam,
+            layers,
+            edges.source.tolist(),
+            edges.target.tolist(),
+            fit.self_loops,
+            _lower_alpha(alpha, tail),
+            min_occupation,
+            min_expected,
+            max_absent,
+        )
+    return _classify(
+        edges,
+        np.asarray(upper),
+        np.asarray(lower),
+        np.asarray(expected),
+        np.asarray(occupation),
+        absent,
+        alpha=alpha,
+        tail=tail,
+        correction=correction,
+    )
+
+
+def filter_strength_degree_binomial(
+    edges: EdgeTable,
+    fit: "StrengthDegreeFit",
+    *,
+    layers: int = 1,
+    alpha: float = 0.05,
+    tail: Tail = "two-sided",
+    correction: Correction = "none",
+    detect_absent: bool = False,
+    min_occupation: float = 0.5,
+    min_expected: float = 0.0,
+    max_absent: int | None = None,
+) -> FilterResult:
+    """Filter edges against a strength-degree binomial ZIP null model."""
+    upper, lower, expected, occupation = _odme.filter_strength_degree_binomial(
+        fit.x.tolist(),
+        fit.y.tolist(),
+        fit.z.tolist(),
+        fit.w.tolist(),
+        layers,
+        edges.source.tolist(),
+        edges.target.tolist(),
+        edges.weight.tolist(),
+    )
+    absent = None
+    if detect_absent:
+        absent = _odme.absent_strength_degree_binomial(
+            fit.x.tolist(),
+            fit.y.tolist(),
+            fit.z.tolist(),
+            fit.w.tolist(),
+            layers,
+            edges.source.tolist(),
+            edges.target.tolist(),
+            fit.self_loops,
+            _lower_alpha(alpha, tail),
+            min_occupation,
+            min_expected,
+            max_absent,
+        )
+    return _classify(
+        edges,
+        np.asarray(upper),
+        np.asarray(lower),
+        np.asarray(expected),
+        np.asarray(occupation),
+        absent,
+        alpha=alpha,
+        tail=tail,
+        correction=correction,
+    )
+
+
+def filter_degree_events_binomial(
+    edges: EdgeTable,
+    x: NDArray[np.float64],
+    y: NDArray[np.float64],
+    positive_weight_rate: float,
+    *,
+    layers: int = 1,
+    alpha: float = 0.05,
+    tail: Tail = "two-sided",
+    correction: Correction = "none",
+    detect_absent: bool = False,
+    self_loops: bool = True,
+    min_occupation: float = 0.5,
+    min_expected: float = 0.0,
+    max_absent: int | None = None,
+) -> FilterResult:
+    """Filter edges against a degree-events binomial ZIP null model."""
+    upper, lower, expected, occupation = _odme.filter_degree_events_binomial(
+        x.tolist(),
+        y.tolist(),
+        positive_weight_rate,
+        layers,
+        edges.source.tolist(),
+        edges.target.tolist(),
+        edges.weight.tolist(),
+    )
+    absent = None
+    if detect_absent:
+        absent = _odme.absent_degree_events_binomial(
+            x.tolist(),
+            y.tolist(),
+            positive_weight_rate,
+            layers,
+            edges.source.tolist(),
+            edges.target.tolist(),
+            self_loops,
+            _lower_alpha(alpha, tail),
+            min_occupation,
+            min_expected,
+            max_absent,
+        )
+    return _classify(
+        edges,
+        np.asarray(upper),
+        np.asarray(lower),
+        np.asarray(expected),
+        np.asarray(occupation),
+        absent,
+        alpha=alpha,
+        tail=tail,
+        correction=correction,
+    )
+
+
 def _classify(
     edges: EdgeTable,
     upper: NDArray[np.float64],
@@ -658,10 +876,14 @@ __all__ = [
     "FilterResult",
     "FilteredEdges",
     "filter_custom_poisson",
+    "filter_degree_events_binomial",
     "filter_degree_events_poisson",
     "filter_strength_binomial",
+    "filter_strength_cost_binomial",
     "filter_strength_cost_poisson",
+    "filter_strength_degree_binomial",
     "filter_strength_degree_poisson",
+    "filter_strength_edges_binomial",
     "filter_strength_edges_poisson",
     "filter_strength_geometric",
     "filter_strength_neg_binomial",
