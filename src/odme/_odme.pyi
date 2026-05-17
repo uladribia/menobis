@@ -509,3 +509,75 @@ def weighted_clustering_coefficients(
     targets: list[int],
     weights: list[int],
 ) -> list[float]: ...
+
+
+def sample_strength_cost_binomial(
+    x: list[float], y: list[float], gamma: float,
+    cost_sources: list[int], cost_targets: list[int], cost_values: list[float],
+    layers: int, self_loops: bool, seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
+
+def sample_strength_edges_binomial(
+    x: list[float], y: list[float], lam: float, layers: int,
+    self_loops: bool, seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
+
+def sample_strength_degree_binomial(
+    x: list[float], y: list[float], z: list[float], w: list[float],
+    layers: int, self_loops: bool, seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
+
+def sample_degree_events_binomial(
+    x: list[float], y: list[float], positive_weight_rate: float,
+    layers: int, self_loops: bool, seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
+
+def filter_strength_cost_binomial(
+    x: list[float], y: list[float], gamma: float,
+    cost_sources: list[int], cost_targets: list[int], cost_values: list[float],
+    layers: int, sources: list[int], targets: list[int], weights: list[int],
+) -> tuple[list[float], list[float], list[float], list[float]]: ...
+
+def absent_strength_cost_binomial(
+    x: list[float], y: list[float], gamma: float,
+    cost_sources: list[int], cost_targets: list[int], cost_values: list[float],
+    layers: int, sources: list[int], targets: list[int], self_loops: bool,
+    alpha_lower: float, min_occupation: float, min_expected: float,
+    max_absent: int | None,
+) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
+
+def filter_strength_edges_binomial(
+    x: list[float], y: list[float], lam: float, layers: int,
+    sources: list[int], targets: list[int], weights: list[int],
+) -> tuple[list[float], list[float], list[float], list[float]]: ...
+
+def absent_strength_edges_binomial(
+    x: list[float], y: list[float], lam: float, layers: int,
+    sources: list[int], targets: list[int], self_loops: bool,
+    alpha_lower: float, min_occupation: float, min_expected: float,
+    max_absent: int | None,
+) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
+
+def filter_strength_degree_binomial(
+    x: list[float], y: list[float], z: list[float], w: list[float],
+    layers: int, sources: list[int], targets: list[int], weights: list[int],
+) -> tuple[list[float], list[float], list[float], list[float]]: ...
+
+def absent_strength_degree_binomial(
+    x: list[float], y: list[float], z: list[float], w: list[float],
+    layers: int, sources: list[int], targets: list[int], self_loops: bool,
+    alpha_lower: float, min_occupation: float, min_expected: float,
+    max_absent: int | None,
+) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
+
+def filter_degree_events_binomial(
+    x: list[float], y: list[float], positive_weight_rate: float, layers: int,
+    sources: list[int], targets: list[int], weights: list[int],
+) -> tuple[list[float], list[float], list[float], list[float]]: ...
+
+def absent_degree_events_binomial(
+    x: list[float], y: list[float], positive_weight_rate: float, layers: int,
+    sources: list[int], targets: list[int], self_loops: bool,
+    alpha_lower: float, min_occupation: float, min_expected: float,
+    max_absent: int | None,
+) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
