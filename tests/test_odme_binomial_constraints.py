@@ -254,3 +254,30 @@ def test_zip_binomial_weight_bounded(layers: int, xy: float) -> None:
     _src, _tgt, wgt = _odme.sample_strength_edges_binomial(x, y, 0.5, layers, True, 42)
     for w in wgt:
         assert w <= layers, f"weight {w} > layers {layers}"
+
+
+def test_binomial_total_weight_bounded_by_layers_times_pairs() -> None:
+    """Total weight T <= M * candidate_pairs for binomial models."""
+    n = 10
+    layers = 5
+    x = [0.9] * n
+    y = [0.9] * n
+    _src, _tgt, wgt = _odme.sample_strength_binomial(x, y, layers, True, 42)
+    max_t = layers * n * n  # with self-loops
+    assert sum(wgt) <= max_t
+
+
+def test_binomial_occupation_converges_with_layers() -> None:
+    """As M grows, more pairs are occupied, converging to full occupation."""
+    n = 5
+    x = [0.5] * n
+    y = [0.5] * n
+    candidate_pairs = n * n
+    prev_edges = 0
+    for layers in [1, 5, 20, 100]:
+        _src, _tgt, wgt = _odme.sample_strength_binomial(x, y, layers, True, 42)
+        n_edges = len(wgt)
+        assert n_edges >= prev_edges or layers == 1
+        prev_edges = n_edges
+    # At M=100, nearly all pairs should be occupied
+    assert prev_edges >= candidate_pairs * 0.9

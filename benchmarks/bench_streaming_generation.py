@@ -32,27 +32,31 @@ from odme.models import (
     sample_custom_multinomial,
     sample_custom_poisson,
     sample_degree_events_poisson,
+    sample_strength_binomial,
+    sample_strength_cost_poisson,
+    sample_strength_degree_poisson,
+    sample_strength_edges_binomial,
+    sample_strength_edges_poisson,
     sample_strength_microcanonical,
     sample_strength_multinomial,
     sample_strength_poisson,
     sample_strength_poisson_multinomial,
-    sample_strength_cost_poisson,
-    sample_strength_degree_poisson,
-    sample_strength_edges_poisson,
 )
 
 DEFAULT_NODES = [10, 100, 500, 1000, 5000, 10000, 20000, 30000]
 DEFAULT_CASES = [
-    "fixed_strength_poisson",
-    "fixed_strength_multinomial",
-    "fixed_strength_poisson_multinomial",
-    "fixed_strength_microcanonical",
-    "custom_pij_poisson_sparse",
-    "custom_pij_multinomial_sparse",
-    "degree_events_zip",
+    "strength_poisson",
+    "strength_multinomial",
+    "strength_poisson_multinomial",
+    "strength_microcanonical",
+    "strength_binomial",
+    "custom_poisson_sparse",
+    "custom_multinomial_sparse",
+    "degree_events_poisson",
     "strength_cost_poisson",
-    "strength_edges_zip",
-    "strength_degree_zip",
+    "strength_edges_poisson",
+    "strength_edges_binomial",
+    "strength_degree_poisson",
 ]
 app = typer.Typer(help="Verbose streaming-generation benchmark for ODME model cases.")
 
@@ -202,38 +206,44 @@ def _case_functions(inputs: Inputs, seed: int) -> dict[str, Callable[[], EdgeTab
     empty_u64 = np.array([], dtype=np.uint64)
     empty_f64 = np.array([], dtype=np.float64)
     return {
-        "fixed_strength_poisson": lambda: sample_strength_poisson(
+        "strength_poisson": lambda: sample_strength_poisson(
             inputs.x_strength,
             inputs.y_strength,
             seed=seed,
         ),
-        "fixed_strength_multinomial": lambda: sample_strength_multinomial(
+        "strength_multinomial": lambda: sample_strength_multinomial(
             inputs.x_strength,
             inputs.y_strength,
             total_events=inputs.total_events,
             seed=seed,
         ),
-        "fixed_strength_poisson_multinomial": lambda: sample_strength_poisson_multinomial(
+        "strength_poisson_multinomial": lambda: sample_strength_poisson_multinomial(
             inputs.x_strength,
             inputs.y_strength,
             seed=seed,
         ),
-        "fixed_strength_microcanonical": lambda: sample_strength_microcanonical(
+        "strength_microcanonical": lambda: sample_strength_microcanonical(
             inputs.strength_out,
             inputs.strength_in,
             seed=seed,
         ),
-        "custom_pij_poisson_sparse": lambda: sample_custom_poisson(
+        "strength_binomial": lambda: sample_strength_binomial(
+            inputs.x_strength,
+            inputs.y_strength,
+            layers=10,
+            seed=seed,
+        ),
+        "custom_poisson_sparse": lambda: sample_custom_poisson(
             inputs.custom_probabilities,
             total_events=inputs.total_events,
             seed=seed,
         ),
-        "custom_pij_multinomial_sparse": lambda: sample_custom_multinomial(
+        "custom_multinomial_sparse": lambda: sample_custom_multinomial(
             inputs.custom_probabilities,
             total_events=inputs.total_events,
             seed=seed,
         ),
-        "degree_events_zip": lambda: sample_degree_events_poisson(
+        "degree_events_poisson": lambda: sample_degree_events_poisson(
             inputs.degree_fit,
             total_events=inputs.total_events,
             seed=seed,
@@ -245,11 +255,16 @@ def _case_functions(inputs: Inputs, seed: int) -> dict[str, Callable[[], EdgeTab
             empty_f64,
             seed=seed,
         ),
-        "strength_edges_zip": lambda: sample_strength_edges_poisson(
+        "strength_edges_poisson": lambda: sample_strength_edges_poisson(
             inputs.strength_edges_fit,
             seed=seed,
         ),
-        "strength_degree_zip": lambda: sample_strength_degree_poisson(
+        "strength_edges_binomial": lambda: sample_strength_edges_binomial(
+            inputs.strength_edges_fit,
+            layers=10,
+            seed=seed,
+        ),
+        "strength_degree_poisson": lambda: sample_strength_degree_poisson(
             inputs.strength_degree_fit,
             seed=seed,
         ),
