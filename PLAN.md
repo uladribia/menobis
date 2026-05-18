@@ -48,16 +48,28 @@ Use the objective only with stable kernels and residual diagnostics.
 
 Implementation plan:
 
-1. Implement scalar kernels for Bose-Einstein terms: `neg_ln_1m_exp_neg(r)`,
+1. Use `cvxrust` as the preferred Rust convex-modeling path. Do not write a
+   custom optimizer unless the external-library spike proves impossible.
+
+   | Library | Role | Decision |
+   |---------|------|----------|
+   | `cvxrust` | convex modeling layer | Preferred API for the first implementation spike. |
+   | `clarabel` | conic interior-point solver | Use as backend/fallback if CVXRust exposes or targets it. |
+   | `argmin` | nonlinear optimizer toolkit | Fallback only if conic modeling is infeasible. |
+   | `nlopt` / `ipopt` bindings | nonlinear solvers | Last resort because of external C dependencies. |
+
+2. CVXRust feasibility study: express
+   $t_{ij}\ge -\log(1-\exp(-r_{ij}))$ using exponential-cone epigraphs and
+   benchmark the lifted problem. Verify that CVXRust supports the required cone
+   directly or can target a solver that does. This may require $O(N^2)$ auxiliary
+   variables, so it may be suitable for validation but not large all-pairs fits.
+3. If CVXRust cannot express or solve the exponential-cone formulation, stop and
+   document the blocker before considering `argmin`; do not silently fall back to
+   a hand-rolled optimizer.
+4. Implement scalar kernels for Bose-Einstein terms: `neg_ln_1m_exp_neg(r)`,
    `mean=M/expm1(r)`, and curvature `mean*(1+mean/M)`, with small-`r` series.
-2. Implement matrix-free residuals and Hessian-vector products from these
-   kernels; avoid naive `log(1-exp(...))` and `1/(exp(...)-1)` calls.
-3. Solve the stationarity equations with safeguarded Newton-CG using residual
-   norm as the primary convergence signal and stable objective as a merit check.
-4. Enforce feasibility with maximum-step control so all allowed $r_{ij}$ stay
-   above a machine-safe margin; classify smaller required margins as boundary.
 5. Remove the scale nullspace (`a += c`, `b -= c`) by recentering or fixing one
-   gauge variable.
+   gauge variable before handing variables to any solver.
 6. Initialize from fixed-strength ME multipliers translated to feasible
    inverse-fitness variables; fall back to uniform interior starts.
 7. Support `self_loops=False` and masks by skipping forbidden pairs.
@@ -66,8 +78,9 @@ Implementation plan:
 9. Defer W strength-edges and strength-degree fitting until fixed-strength W is
    stable; legacy `fitter_E.py agg=True` and `fitter_sk.py agg=True` remain
    references, not direct ports.
-10. TDD: scalar kernels, tiny hand cases, boundary rejection, finite-difference
-   gradient, Hessian-vector checks, legacy comparison, and property tests.
+10. TDD: solver-library smoke tests, scalar kernels, tiny hand cases, boundary
+   rejection, finite-difference gradient checks, legacy comparison, and property
+   tests.
 
 ### Milestone 7d: Legacy mobility benchmarks — NOT STARTED
 
