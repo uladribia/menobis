@@ -385,40 +385,20 @@ def fit_strength_poisson(
 
     _validate_balanced_sequences(s_out, s_in, name="strength")
 
-    total_out = s_out.sum()
     n = len(s_out)
-    if total_out == 0:
-        return FitResult(
-            node=np.arange(n, dtype=np.uint64),
-            x=np.zeros(n),
-            y=np.zeros(n),
-        )
-
-    if self_loops:
-        sqrt_t = np.sqrt(total_out)
-        x = s_out / sqrt_t
-        y = s_in / sqrt_t
-    else:
-        t0 = time.perf_counter()
-        x_list, y_list, converged, iters = _odme.fit_strength_poisson_no_self_loops(
-            s_out.tolist(), s_in.tolist(), tolerance, max_iterations
-        )
-        x = np.array(x_list)
-        y = np.array(y_list)
-        _log_fit_result(
-            "fit_strength_poisson",
-            converged,
-            iters,
-            time.perf_counter() - t0,
-            verbose,
-        )
-
+    t0 = time.perf_counter()
+    x_list, y_list, converged, iters = _odme.fit_strength_poisson(
+        s_out.tolist(), s_in.tolist(), self_loops, tolerance, max_iterations
+    )
+    _log_fit_result(
+        "fit_strength_poisson", converged, iters, time.perf_counter() - t0, verbose
+    )
     return FitResult(
         node=np.arange(n, dtype=np.uint64),
-        x=x,
-        y=y,
-        converged=converged if not self_loops else True,
-        iterations=iters if not self_loops else 0,
+        x=np.array(x_list),
+        y=np.array(y_list),
+        converged=converged,
+        iterations=iters,
     )
 
 

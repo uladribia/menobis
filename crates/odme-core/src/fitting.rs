@@ -1096,6 +1096,42 @@ pub fn balance_strength_poisson(
     }
 }
 
+/// Fit fixed-strength Poisson ME model (both self-loops and no-self-loops).
+///
+/// With self-loops the solution is analytic: `x = s_out / sqrt(T)`,
+/// `y = s_in / sqrt(T)`. Without self-loops uses iterative balancing.
+#[must_use]
+pub fn fit_strength_poisson(
+    s_out: &[f64],
+    s_in: &[f64],
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> FitResult {
+    let total: f64 = s_out.iter().sum();
+    if total <= 0.0 {
+        return FitResult {
+            x: vec![0.0; s_out.len()],
+            y: vec![0.0; s_in.len()],
+            converged: true,
+            iterations: 0,
+        };
+    }
+    if self_loops {
+        let sqrt_t = total.sqrt();
+        let x: Vec<f64> = s_out.iter().map(|&s| s / sqrt_t).collect();
+        let y: Vec<f64> = s_in.iter().map(|&s| s / sqrt_t).collect();
+        FitResult {
+            x,
+            y,
+            converged: true,
+            iterations: 0,
+        }
+    } else {
+        balance_strength_poisson(s_out, s_in, tolerance, max_iterations)
+    }
+}
+
 /// Iterative proportional fitting for binomial(M) fixed-strength ME.
 ///
 /// Solves: s_out_i = sum_j M * x_i*y_j / (1 + x_i*y_j)

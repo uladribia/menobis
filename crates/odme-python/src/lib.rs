@@ -51,6 +51,7 @@ use odme_core::fitting::{
     balance_strength_poisson, balance_weighted_factors,
     fit_degree_events_geometric as core_fit_degree_events_geometric,
     fit_degree_events_neg_binomial as core_fit_degree_events_neg_binomial,
+    fit_strength_poisson as core_fit_strength_poisson,
 };
 use odme_core::generation::{
     sample_custom_multinomial as core_sample_custom_multinomial,
@@ -449,6 +450,23 @@ fn fit_weighted_factors(
         tolerance,
         max_iterations,
     );
+    Ok((result.x, result.y, result.converged, result.iterations))
+}
+
+#[pyfunction]
+fn fit_strength_poisson(
+    s_out: Vec<f64>,
+    s_in: Vec<f64>,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<FitPair> {
+    if s_out.len() != s_in.len() {
+        return Err(PyValueError::new_err(
+            "s_out and s_in must have the same length",
+        ));
+    }
+    let result = core_fit_strength_poisson(&s_out, &s_in, self_loops, tolerance, max_iterations);
     Ok((result.x, result.y, result.converged, result.iterations))
 }
 
@@ -2125,6 +2143,7 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(fit_strength_edges_poisson, module)?)?;
     module.add_function(wrap_pyfunction!(fit_strength_degree_poisson, module)?)?;
     module.add_function(wrap_pyfunction!(fit_weighted_factors, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_strength_poisson, module)?)?;
     module.add_function(wrap_pyfunction!(
         fit_strength_poisson_no_self_loops,
         module
