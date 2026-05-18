@@ -7,8 +7,8 @@ description: Performance benchmarks and scaling characteristics.
 ## TL;DR
 
 ODME generation streams pair distributions and uses Rayon parallel chunks for
-large supports. Benchmarks cover all distribution families (ME Poisson,
-B binomial) across constraint types through `N = 20000`.
+large supports. Use one command to run the benchmark and generate figures.
+Strength-degree fitting is the slowest step and runs last.
 
 ## Generation cases
 
@@ -22,11 +22,13 @@ B binomial) across constraint types through `N = 20000`.
 | `custom_poisson_sparse` | ME | custom | Poisson |
 | `custom_multinomial_sparse` | ME | custom | Multinomial |
 | `degree_events_poisson` | ME | degree-events | ZIP/Poisson |
+| `degree_events_binomial` | B | degree-events | ZIP/Binomial(M) |
 | `strength_cost_poisson` | ME | strength-cost | Poisson |
 | `strength_cost_binomial` | B | strength-cost | Binomial(M) |
 | `strength_edges_poisson` | ME | strength-edges | ZIP/Poisson |
 | `strength_edges_binomial` | B | strength-edges | ZIP/Binomial(M) |
 | `strength_degree_poisson` | ME | strength-degree | ZIP/Poisson |
+| `strength_degree_binomial` | B | strength-degree | ZIP/Binomial(M) |
 
 ## Scaling characteristics
 
@@ -77,9 +79,30 @@ $T \le M \times N^2$ (with self-loops).
 
 ## Running benchmarks
 
+Run the full streaming-generation benchmark and regenerate figures with one
+copy-pasteable command:
+
 ```bash
-uv run maturin develop --release
-uv run python benchmarks/bench_streaming_generation.py
+uv run maturin develop --release && \
+uv run python benchmarks/bench_streaming_generation.py \
+  --nodes 10,100,500,1000,5000,10000 --repeats 3 \
+  --progress-interval 30 --output-dir benchmarks/results && \
+uv run python benchmarks/plot_streaming_generation.py
+```
+
+The plot command reads the newest `benchmarks/results/streaming_generation_*.csv`
+file and writes:
+
+| Figure | Output |
+|--------|--------|
+| runtime by case | `docs/figures/streaming_generation_time.png` |
+| peak RSS by N | `docs/figures/streaming_generation_rss.png` |
+
+For a quick smoke run plus figures:
+
+```bash
+uv run python benchmarks/bench_streaming_generation.py \
+  --nodes 100 --repeats 1 --progress-interval 0 && \
 uv run python benchmarks/plot_streaming_generation.py
 ```
 
@@ -87,9 +110,13 @@ For a focused run with specific cases:
 
 ```bash
 uv run python benchmarks/bench_streaming_generation.py \
-  --nodes 100,1000,5000,10000,20000 --repeats 3 \
+  --nodes 100,1000,5000 --repeats 3 \
   --cases strength_poisson,strength_binomial,strength_edges_poisson,strength_edges_binomial
 ```
+
+`strength_degree_poisson` and `strength_degree_binomial` are always run last.
+They require a four-multiplier fit with repeated all-pairs sweeps, so test large
+N values separately before adding `N=20000` to a full matrix.
 
 ## Regression tests
 

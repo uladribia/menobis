@@ -145,6 +145,15 @@ def validate_strength_degree_constraints(
     if np.any(s_out < k_out) or np.any(s_in < k_in):
         msg = "each node strength must be greater than or equal to its degree"
         raise ValueError(msg)
+    if np.any((k_out > 0.0) & (s_out == k_out)) or np.any(
+        (k_in > 0.0) & (s_in == k_in)
+    ):
+        msg = (
+            "fixed-strength-degree fitting received boundary constraints; "
+            "positive degrees with strength equal to degree require divergent "
+            "multipliers"
+        )
+        raise ValueError(msg)
 
 
 def fit_strength_cost_poisson(
@@ -429,6 +438,13 @@ def fit_degree_bernoulli(
     max_degree = float(n if self_loops else max(n - 1, 0))
     if np.any(k_out > max_degree) or np.any(k_in > max_degree):
         msg = "fixed-degree fitting received infeasible degree constraints"
+        raise ValueError(msg)
+    if np.any(k_out == max_degree) or np.any(k_in == max_degree):
+        msg = (
+            "fixed-degree fitting received boundary degree constraints; "
+            "degrees equal to the candidate-pair capacity require divergent "
+            "multipliers"
+        )
         raise ValueError(msg)
 
     if k_out.sum() == 0:
