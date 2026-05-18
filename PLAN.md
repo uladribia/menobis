@@ -52,8 +52,10 @@ Implementation plan:
 ### Milestone 7d: Legacy mobility benchmarks — NOT STARTED
 
 The modern ODME rewrite will **not** implement the thesis-era mobility models.
-Keep them as legacy reference code only, and benchmark them explicitly before
-legacy removal so their behavior and performance are documented.
+Keep them as legacy reference code only during modernization, and benchmark
+them explicitly before removal so their behavior and performance are documented.
+At the end of the process, preserve the legacy code on a separate branch rather
+than in the main ODME rewrite branch.
 
 | Legacy model | Required action | New implementation |
 |--------------|-----------------|--------------------|
@@ -73,12 +75,15 @@ Requires careful verification against the thesis PDF.
 1. `docs/tutorials/filter-workflow.md` — end-to-end walkthrough.
 2. `docs/tutorials/partial-constraints.md` — partial-constraint workflow.
 
-### Future: legacy code removal
+### Future: legacy code archiving and removal
+
+Before deleting legacy directories from the main rewrite branch, create a
+separate archival branch that stores the thesis-era code for reference.
 
 **Phase 1 (safe now):** Remove `1. Network analysis/`. Fully replaced.
 
-**Phase 2 (after Milestone 7c):** Remove `2. Model Fitting/` and
-`3. Model Generation/`. Unported items:
+**Phase 2 (after Milestone 7c and legacy benchmark capture):** Remove
+`2. Model Fitting/` and `3. Model Generation/`. Unported items:
 
 | Legacy | What remains |
 |--------|-------------|
