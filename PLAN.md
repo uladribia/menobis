@@ -23,6 +23,7 @@ Scientific reference: <https://hdl.handle.net/10803/400560>.
 | 11 | Statistical filtering (all models + absent edges) |
 | — | Naming cleanup: `{operation}_{constraint}_{distribution}` |
 | — | Provider unification: `WeightFamily` enum + `FixedStrengthProvider` |
+| — | Final project rename from ODME to MENoBiS |
 
 Total: 157 Python tests, 34 Rust tests, all checks green.
 
@@ -65,10 +66,32 @@ than in the main ODME rewrite branch.
 These are standalone mobility/null models, not ME distribution variants. Do not
 add Rust/Python ODME APIs for them unless the project scope changes.
 
+### Final milestone: project rename to MENoBiS — NOT STARTED
+
+After the scientific refactor is complete, rename the project from ODME
+(Origin-Destination Multi-Edge) to **MENoBiS**:
+**Maximum Entropy Non-Binary Null Model Suite**.
+
+The rename makes sense because the modern scope is broader and clearer than the
+old ODME name: it covers maximum-entropy null models for non-binary weighted
+networks, including multi-edge and binomial families. Treat this as the final
+polish step, not an active refactor task, to avoid churn while APIs are still
+settling.
+
+Rename scope:
+
+| Item | Target |
+|------|--------|
+| Python package | decide final import name near release |
+| CLI | decide final command name near release |
+| Docs/site title | MENoBiS |
+| Repository/package metadata | MENoBiS |
+| Historical references | keep ODME as legacy/thesis-era name |
+
 ### Future: thesis-equation mapping
 
-Create `docs/thesis-context.md` mapping thesis equations to ODME code paths.
-Requires careful verification against the thesis PDF.
+Create `docs/thesis-context.md` mapping thesis equations to ODME/MENoBiS code
+paths. Requires careful verification against the thesis PDF.
 
 ### Future: tutorials
 
