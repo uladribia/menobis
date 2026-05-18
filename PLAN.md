@@ -49,14 +49,19 @@ Implementation plan:
 5. Add masked/partial variants.
 6. TDD: convergence, domain-violation detection, comparison with legacy.
 
-### Milestone 7d: Mobility models — NOT STARTED
+### Milestone 7d: Legacy mobility benchmarks — NOT STARTED
 
-| Model | Status |
-|-------|--------|
-| Sequential gravity (Bernoulli + multinomial) | ❌ |
-| Radiation model (stochastic + multinomial) | ❌ |
+The modern ODME rewrite will **not** implement the thesis-era mobility models.
+Keep them as legacy reference code only, and benchmark them explicitly before
+legacy removal so their behavior and performance are documented.
 
-Standalone models, not ME distribution variants. Implement after 7c.
+| Legacy model | Required action | New implementation |
+|--------------|-----------------|--------------------|
+| Sequential gravity (Bernoulli + multinomial) | Benchmark legacy code | ❌ No |
+| Radiation model (stochastic + multinomial) | Benchmark legacy code | ❌ No |
+
+These are standalone mobility/null models, not ME distribution variants. Do not
+add Rust/Python ODME APIs for them unless the project scope changes.
 
 ### Future: thesis-equation mapping
 
@@ -81,4 +86,4 @@ Requires careful verification against the thesis PDF.
 | `fitter_sk.py` `agg=True` | W fitting for strength-degree |
 | `fitter_E.py` `agg=True` | W fitting for strength-edges |
 | `ula_null_models.c` | geometric/binomial/NB samplers (done in 7a) |
-| `others_null_models.c` | radiation, sequential gravity (7d) |
+| `others_null_models.c` | benchmark radiation and sequential gravity before removal; do not port |
