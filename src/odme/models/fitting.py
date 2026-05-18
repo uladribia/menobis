@@ -538,28 +538,6 @@ def fit_strength_binomial(
     )
 
 
-def _solve_ztg_q(avg_weight: float) -> float:
-    """Solve q from ZTG mean = 1/(1-q) = avg_weight."""
-    return 1.0 - 1.0 / avg_weight
-
-
-def _solve_ztnb_q(avg_weight: float, layers: int) -> float:
-    """Solve q from ZTNB(M) mean via bisection. Kept for reference only."""
-    low, high = 1e-15, 1.0 - 1e-15
-    m = float(layers)
-    for _ in range(200):
-        mid = 0.5 * (low + high)
-        p0 = (1.0 - mid) ** layers
-        val = m * mid / ((1.0 - mid) * (1.0 - p0))
-        if val < avg_weight:
-            low = mid
-        else:
-            high = mid
-        if high - low < 1e-15:
-            break
-    return 0.5 * (low + high)
-
-
 def fit_degree_events_geometric(
     degree_out: NDArray[np.floating],
     degree_in: NDArray[np.floating],
