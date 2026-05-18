@@ -48,24 +48,25 @@ Use the objective only with stable kernels and residual diagnostics.
 
 Implementation plan:
 
-1. Use `cvxrust` as the preferred Rust convex-modeling path. Do not write a
-   custom optimizer unless the external-library spike proves impossible.
+1. Use `cvxrust` for convex modeling. Do not write a custom optimizer unless
+   the external-library spike proves impossible.
 
    | Library | Role | Decision |
    |---------|------|----------|
-   | `cvxrust` | convex modeling layer | Preferred API for the first implementation spike. |
-   | `clarabel` | conic interior-point solver | Use as backend/fallback if CVXRust exposes or targets it. |
+   | `cvxrust` | modeling layer | First choice for problem construction and API shape. |
+   | `clarabel` | conic solver | Explicit fallback/backend when CVXRust needs a solver or lacks coverage. |
    | `argmin` | nonlinear optimizer toolkit | Fallback only if conic modeling is infeasible. |
    | `nlopt` / `ipopt` bindings | nonlinear solvers | Last resort because of external C dependencies. |
 
 2. CVXRust feasibility study: express
    $t_{ij}\ge -\log(1-\exp(-r_{ij}))$ using exponential-cone epigraphs and
-   benchmark the lifted problem. Verify that CVXRust supports the required cone
-   directly or can target a solver that does. This may require $O(N^2)$ auxiliary
-   variables, so it may be suitable for validation but not large all-pairs fits.
-3. If CVXRust cannot express or solve the exponential-cone formulation, stop and
-   document the blocker before considering `argmin`; do not silently fall back to
-   a hand-rolled optimizer.
+   benchmark the lifted problem. If CVXRust cannot solve it directly, export or
+   translate the model to Clarabel rather than changing the formulation. This
+   may require $O(N^2)$ auxiliary variables, so it may be suitable for validation
+   but not large all-pairs fits.
+3. If CVXRust plus Clarabel cannot express or solve the exponential-cone
+   formulation, stop and document the blocker before considering `argmin`; do
+   not silently fall back to a hand-rolled optimizer.
 4. Implement scalar kernels for Bose-Einstein terms: `neg_ln_1m_exp_neg(r)`,
    `mean=M/expm1(r)`, and curvature `mean*(1+mean/M)`, with small-`r` series.
 5. Remove the scale nullspace (`a += c`, `b -= c`) by recentering or fixing one
