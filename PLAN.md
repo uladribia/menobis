@@ -36,37 +36,40 @@ preconditioning plus CVXOPT interior points. Do **not** port CVXOPT. Implement a
 Rust-native convex optimizer after reparameterizing $x_i=\exp(u_i)$ and
 $y_j=\exp(v_j)$.
 
-Key observation: in raw $(x,y)$ variables the domain $x_i y_j < 1$ is awkward.
-In log variables it becomes linear: $u_i+v_j<0$. The negative log-likelihood is
-convex on this domain:
+Equation review: the legacy W log-likelihood maximizes
+$M\sum_{ij}\log(1-x_i y_j)+\sum_i s^{out}_i\log x_i+
+\sum_j s^{in}_j\log y_j$. With $x_i=\exp(u_i)$ and $y_j=\exp(v_j)$, define
+$z_{ij}=u_i+v_j<0$ and minimize:
 
-$$
-F(u,v) = -M \sum_{ij}\log(1-\exp(u_i+v_j))
-         - \sum_i s^{out}_i u_i - \sum_j s^{in}_j v_j .
-$$
+$$F(u,v)=-M\sum_{ij}\log(1-\exp(z_{ij}))
+-\sum_i s^{out}_i u_i-\sum_j s^{in}_j v_j.$$
+
+This is convex because $\phi(z)=-\log(1-e^z)$ has
+$\phi''(z)=e^z/(1-e^z)^2>0$ for $z<0$. The stationarity equations recover the
+strength constraints with expected weight $M e^{z_{ij}}/(1-e^{z_{ij}})$.
+The log transform fixes the non-convex raw domain, but not ill-conditioning
+when many $z_{ij}$ are close to zero.
 
 Implementation plan:
 
-1. Create a Rust module for W-family fitting with matrix-free objective,
-   gradient, Hessian-vector product, and constraint residuals.
-2. Use a feasible-interior optimizer: damped Newton-CG with backtracking line
-   search, or L-BFGS with an explicit maximum feasible step to keep
-   `max(u_i+v_j) <= -margin`.
-3. Remove the scale nullspace by recentering after each step
-   (`u += c`, `v -= c`) or by fixing one gauge variable.
-4. Initialize from fixed-strength ME multipliers, globally scaled so all
-   products are safely below one; fall back to uniform feasible starts.
-5. Support `self_loops=False` and masked/partial variants by skipping forbidden
-   pairs in objective, gradient, and Hessian-vector products.
-6. Expose `fit_strength_geometric` (`M=1`) and
-   `fit_strength_neg_binomial(layers=M)` in Python, returning convergence,
-   iterations, final max product, and max strength residuals.
-7. Defer W-family strength-edges and strength-degree fitting until the fixed
-   strength W fitter is stable; legacy `fitter_E.py agg=True` and
-   `fitter_sk.py agg=True` remain references, not direct ports.
-8. TDD order: hand-solved tiny networks, domain-boundary rejection,
-   finite-difference gradients, Hessian-vector checks, seeded legacy comparison,
-   and property tests for recovered strengths within documented tolerances.
+1. Implement matrix-free objective, gradient, Hessian-vector product, and
+   residuals from the equations above.
+2. Use damped Newton-CG first; keep L-BFGS with feasible step control as a
+   fallback if Newton-CG is too costly.
+3. Enforce feasibility by computing the maximum step such that all allowed
+   $u_i+v_j \le -\epsilon$; then use Armijo backtracking.
+4. Remove the scale nullspace (`u += c`, `v -= c`) by recentering after each
+   step or fixing one gauge variable.
+5. Initialize from fixed-strength ME multipliers, scaled into the interior;
+   fall back to uniform feasible starts.
+6. Support `self_loops=False` and masks by skipping forbidden pairs.
+7. Expose `fit_strength_geometric` and `fit_strength_neg_binomial(layers=M)`
+   with convergence, iterations, max product, and strength residuals.
+8. Defer W strength-edges and strength-degree fitting until fixed-strength W is
+   stable; legacy `fitter_E.py agg=True` and `fitter_sk.py agg=True` remain
+   references, not direct ports.
+9. TDD: tiny hand cases, domain-boundary rejection, finite-difference gradient,
+   Hessian-vector checks, legacy comparison, and property tests.
 
 ### Milestone 7d: Legacy mobility benchmarks — NOT STARTED
 
