@@ -31,24 +31,42 @@ Total: 157 Python tests, 34 Rust tests, all checks green.
 
 ### Milestone 7c: Geometric / negative binomial fitting — NOT STARTED
 
-The W-ensemble (geometric, negative binomial) fitting does NOT use IPF.
-The legacy code uses bounded scipy optimization (TNC) with explicit
-log-likelihood, gradient, and sparse Hessian.
+The W-ensemble (geometric, negative binomial) fitter replaces legacy SciPy TNC
+preconditioning plus CVXOPT interior points. Do **not** port CVXOPT. Implement a
+Rust-native convex optimizer after reparameterizing $x_i=\exp(u_i)$ and
+$y_j=\exp(v_j)$.
+
+Key observation: in raw $(x,y)$ variables the domain $x_i y_j < 1$ is awkward.
+In log variables it becomes linear: $u_i+v_j<0$. The negative log-likelihood is
+convex on this domain:
+
+$$
+F(u,v) = -M \sum_{ij}\log(1-\exp(u_i+v_j))
+         - \sum_i s^{out}_i u_i - \sum_j s^{in}_j v_j .
+$$
 
 Implementation plan:
 
-1. Implement log-likelihood, gradient, and Hessian in Rust for the geometric
-   family (`crates/odme-core/src/fitting.rs` or new file).
-   Formulas from legacy `fitter_s.py` case `W`:
-   - $\mathcal{L} = M \sum_{ij} \log(1 - x_i y_j) + \sum_i s^{out}_i \log x_i + \sum_j s^{in}_j \log y_j$
-   - Domain constraint: $x_i y_j < 1$ for all pairs
-2. Implement a bounded optimizer in Rust (L-BFGS-B or TNC).
-   Options: `argmin` crate, or custom implementation.
-3. The negative binomial case is geometric with $M > 1$ layers
-   (same log-likelihood structure).
-4. Add `fit_strength_geometric` and `fit_strength_neg_binomial` Python wrappers.
-5. Add masked/partial variants.
-6. TDD: convergence, domain-violation detection, comparison with legacy.
+1. Create a Rust module for W-family fitting with matrix-free objective,
+   gradient, Hessian-vector product, and constraint residuals.
+2. Use a feasible-interior optimizer: damped Newton-CG with backtracking line
+   search, or L-BFGS with an explicit maximum feasible step to keep
+   `max(u_i+v_j) <= -margin`.
+3. Remove the scale nullspace by recentering after each step
+   (`u += c`, `v -= c`) or by fixing one gauge variable.
+4. Initialize from fixed-strength ME multipliers, globally scaled so all
+   products are safely below one; fall back to uniform feasible starts.
+5. Support `self_loops=False` and masked/partial variants by skipping forbidden
+   pairs in objective, gradient, and Hessian-vector products.
+6. Expose `fit_strength_geometric` (`M=1`) and
+   `fit_strength_neg_binomial(layers=M)` in Python, returning convergence,
+   iterations, final max product, and max strength residuals.
+7. Defer W-family strength-edges and strength-degree fitting until the fixed
+   strength W fitter is stable; legacy `fitter_E.py agg=True` and
+   `fitter_sk.py agg=True` remain references, not direct ports.
+8. TDD order: hand-solved tiny networks, domain-boundary rejection,
+   finite-difference gradients, Hessian-vector checks, seeded legacy comparison,
+   and property tests for recovered strengths within documented tolerances.
 
 ### Milestone 7d: Legacy mobility benchmarks — NOT STARTED
 
