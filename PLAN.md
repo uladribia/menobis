@@ -32,56 +32,111 @@ Total: 157 Python tests, 34 Rust tests, all checks green.
 ### Milestone 7c: Geometric / negative binomial fitting — NOT STARTED
 
 The W-ensemble fitter replaces legacy SciPy TNC preconditioning plus CVXOPT
-interior points. Do **not** port CVXOPT, and do **not** assume that a log
-transform makes the loss numerically benign.
+interior points. Do **not** port CVXOPT and do **not** write a custom solver.
+Use `cvxrust` for convex modeling, then use Clarabel as the explicit conic
+solver/backend if CVXRust cannot solve the model directly.
 
-Equation review: the legacy W likelihood uses $q_{ij}=x_i y_j<1$ and expected
-weight $M q_{ij}/(1-q_{ij})$. Prefer inverse-fitness variables
-$x_i=\exp(-a_i)$ and $y_j=\exp(-b_j)$, with $r_{ij}=a_i+b_j>0$:
+Current implementation facts:
 
-$$F(a,b)=\sum_i s^{out}_i a_i+\sum_j s^{in}_j b_j
--M\sum_{ij}\log(1-\exp(-r_{ij})).$$
+- `odme-core::distribution::WeightFamily` already supports `Geometric` and
+  `NegBinomial(M)` sampling with pair parameter `q_ij = x_i y_j`.
+- `PairDistribution::expected()` implements `q/(1-q)` and `M q/(1-q)` and
+  returns infinity if `q >= 1`.
+- Rust and PyO3 expose samplers for geometric/NB strength models, but no fitter
+  exists yet; Python package exports should be completed with the fitter.
+- Existing ME/B fitters live in `crates/odme-core/src/fitting.rs`; W fitting
+  should be added in a new module (for example `w_fitting.rs`) and re-exported.
 
-This form is convex, but the barrier term still diverges as $r_{ij}\to0^+$.
-That divergence is intrinsic to the W model, not solved by reparameterization.
-Use the objective only with stable kernels and residual diagnostics.
+Equations:
 
-Implementation plan:
+Let `P` be the allowed pair set after self-loop/mask filtering. For geometric
+`M=1`; for negative binomial use integer layers `M > 1`. The legacy likelihood
+uses
 
-1. Use `cvxrust` for convex modeling. Do not write a custom optimizer unless
-   the external-library spike proves impossible.
+$$q_{ij}=x_i y_j,\quad 0 \le q_{ij}<1,\quad
+\mathbb{E}[t_{ij}] = \frac{M q_{ij}}{1-q_{ij}}.$$
 
-   | Library | Role | Decision |
-   |---------|------|----------|
-   | `cvxrust` | modeling layer | First choice for problem construction and API shape. |
-   | `clarabel` | conic solver | Explicit fallback/backend when CVXRust needs a solver or lacks coverage. |
-   | `argmin` | nonlinear optimizer toolkit | Fallback only if conic modeling is infeasible. |
-   | `nlopt` / `ipopt` bindings | nonlinear solvers | Last resort because of external C dependencies. |
+Up to constants, maximize
 
-2. CVXRust feasibility study: express
-   $t_{ij}\ge -\log(1-\exp(-r_{ij}))$ using exponential-cone epigraphs and
-   benchmark the lifted problem. If CVXRust cannot solve it directly, export or
-   translate the model to Clarabel rather than changing the formulation. This
-   may require $O(N^2)$ auxiliary variables, so it may be suitable for validation
-   but not large all-pairs fits.
-3. If CVXRust plus Clarabel cannot express or solve the exponential-cone
-   formulation, stop and document the blocker before considering `argmin`; do
-   not silently fall back to a hand-rolled optimizer.
-4. Implement scalar kernels for Bose-Einstein terms: `neg_ln_1m_exp_neg(r)`,
-   `mean=M/expm1(r)`, and curvature `mean*(1+mean/M)`, with small-`r` series.
-5. Remove the scale nullspace (`a += c`, `b -= c`) by recentering or fixing one
-   gauge variable before handing variables to any solver.
-6. Initialize from fixed-strength ME multipliers translated to feasible
-   inverse-fitness variables; fall back to uniform interior starts.
-7. Support `self_loops=False` and masks by skipping forbidden pairs.
-8. Expose `fit_strength_geometric` and `fit_strength_neg_binomial(layers=M)`
-   with convergence, iterations, minimum margin, and strength residuals.
-9. Defer W strength-edges and strength-degree fitting until fixed-strength W is
-   stable; legacy `fitter_E.py agg=True` and `fitter_sk.py agg=True` remain
-   references, not direct ports.
-10. TDD: solver-library smoke tests, scalar kernels, tiny hand cases, boundary
-   rejection, finite-difference gradient checks, legacy comparison, and property
-   tests.
+$$\ell(x,y)=M\sum_{(i,j)\in P}\log(1-x_i y_j)
++\sum_i s_i^{out}\log x_i+\sum_j s_j^{in}\log y_j.$$
+
+Use inverse-fitness variables
+
+$$x_i=e^{-a_i},\quad y_j=e^{-b_j},\quad r_{ij}=a_i+b_j>0.$$
+
+Then minimize the convex objective
+
+$$F(a,b)=\sum_i s_i^{out}a_i+\sum_j s_j^{in}b_j
+-M\sum_{(i,j)\in P}\log(1-e^{-r_{ij}}).$$
+
+The barrier term diverges as `r_ij -> 0+`; this is intrinsic, not a numerical
+artifact. Stable residuals are
+
+$$\hat{s}^{out}_i=M\sum_{j:(i,j)\in P}\frac{1}{\exp(r_{ij})-1},\quad
+\hat{s}^{in}_j=M\sum_{i:(i,j)\in P}\frac{1}{\exp(r_{ij})-1}.$$
+
+Stationarity is `s_out = ŝ_out` and `s_in = ŝ_in`. Curvature per pair is
+
+$$h_{ij}=M\frac{\exp(r_{ij})}{(\exp(r_{ij})-1)^2}
+=\mu_{ij}\left(1+\frac{\mu_{ij}}{M}\right),$$
+
+where `mu_ij = M / expm1(r_ij)`.
+
+Conic model for CVXRust/Clarabel:
+
+Introduce variables `a_i`, `b_j`, and for every allowed pair `(i,j)` auxiliary
+`t_ij,u_ij,v_ij`. Minimize the linear objective
+
+$$\sum_i s_i^{out}a_i+\sum_j s_j^{in}b_j+M\sum_{(i,j)\in P}t_{ij}.$$
+
+Represent `t_ij >= -log(1-exp(-r_ij))` as
+
+$$\exp(-t_{ij})+\exp(-r_{ij}) \le 1,$$
+
+using two exponential-cone epigraphs and one linear constraint:
+
+- `(-t_ij, 1, u_ij) in K_exp`  implies `exp(-t_ij) <= u_ij`;
+- `(-a_i-b_j, 1, v_ij) in K_exp` implies `exp(-r_ij) <= v_ij`;
+- `u_ij + v_ij <= 1`.
+
+Add one gauge constraint, for example `sum(a) - sum(b) = 0`, because
+`a += c, b -= c` leaves all `r_ij` unchanged. After solving, recover
+`x_i = exp(-a_i)` and `y_j = exp(-b_j)` with a gauge recentering that avoids
+large individual multipliers while preserving products.
+
+Implementation sequence:
+
+1. Dependency spike: add `cvxrust` in Rust only on a feature branch; verify crate
+   maturity, exponential-cone support, sparse assembly, solver status reporting,
+   and whether Clarabel can be selected as backend.
+2. If CVXRust lacks direct solve support, build the same conic problem and pass
+   it to Clarabel explicitly. Do not change the model to fit a weaker solver.
+3. Start with fixed-strength all-pairs W fitting only; masked and no-self-loop
+   support are just pair-set changes once the all-pairs formulation works.
+4. Implement scalar diagnostic kernels in Rust: `neg_ln_1m_exp_neg(r)`,
+   `mean = M / expm1(r)`, and `curvature = mean * (1 + mean/M)` using small-`r`
+   series and large-`r` branches. These are for validation/residual reporting,
+   not a hand-written optimizer.
+5. Validate inputs at the Python boundary: balanced non-negative strengths,
+   positive layer count for NB, feasible support for nonzero strengths, and
+   boundary warnings when solved `min(r_ij)` is near machine-safe limits.
+6. Add core result type with `x`, `y`, `converged`, `iterations`, solver status,
+   objective value, `min_margin = min(r_ij)`, `max_product`, and max/total
+   strength residuals.
+7. Add PyO3 functions `fit_strength_geometric` and
+   `fit_strength_neg_binomial`; add Python dataclass/wrapper and export existing
+   geometric/NB samplers from `odme.models` at the same time.
+8. TDD order: scalar kernel tests; 1-node and homogeneous-network analytic
+   cases; no-self-loop feasibility tests; CVXRust/Clarabel smoke solve; residual
+   recovery tests; seeded comparison with legacy `fitter_s.py`; property tests
+   for balanced strengths and `max(x_i y_j) < 1`.
+9. Performance gate: benchmark lifted conic variable count and memory. The
+   formulation uses O(|P|) cones and auxiliaries, so document practical N limits.
+   Do not promise large all-pairs W fits until measured.
+10. Defer W strength-edges and W strength-degree fitting until fixed-strength W
+    is stable; legacy `fitter_E.py agg=True` and `fitter_sk.py agg=True` remain
+    references, not direct ports.
 
 ### Milestone 7d: Legacy mobility benchmarks — NOT STARTED
 
