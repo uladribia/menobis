@@ -44,13 +44,19 @@ use odme_core::generation::{
     sample_custom_multinomial as core_sample_custom_multinomial,
     sample_custom_poisson as core_sample_custom_poisson,
     sample_degree_events_binomial as core_sample_degree_events_binomial,
+    sample_degree_events_geometric as core_sample_degree_events_geometric,
+    sample_degree_events_neg_binomial as core_sample_degree_events_neg_binomial,
     sample_degree_events_poisson as core_sample_degree_events_poisson,
     sample_strength_binomial as core_sample_strength_binomial,
     sample_strength_cost_binomial as core_sample_strength_cost_binomial,
     sample_strength_cost_poisson as core_sample_strength_cost_poisson,
     sample_strength_degree_binomial as core_sample_strength_degree_binomial,
+    sample_strength_degree_geometric as core_sample_strength_degree_geometric,
+    sample_strength_degree_neg_binomial as core_sample_strength_degree_neg_binomial,
     sample_strength_degree_poisson as core_sample_strength_degree_poisson,
     sample_strength_edges_binomial as core_sample_strength_edges_binomial,
+    sample_strength_edges_geometric as core_sample_strength_edges_geometric,
+    sample_strength_edges_neg_binomial as core_sample_strength_edges_neg_binomial,
     sample_strength_edges_poisson as core_sample_strength_edges_poisson,
     sample_strength_geometric as core_sample_strength_geometric,
     sample_strength_microcanonical as core_sample_strength_microcanonical,
@@ -655,6 +661,90 @@ fn sample_degree_events_binomial(
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let edges =
         core_sample_degree_events_binomial(&x, &y, positive_weight_rate, layers, self_loops, seed);
+    (edges.sources, edges.targets, edges.weights)
+}
+
+#[pyfunction]
+fn sample_strength_edges_geometric(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    lam: f64,
+    self_loops: bool,
+    seed: u64,
+) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
+    let edges = core_sample_strength_edges_geometric(&x, &y, lam, self_loops, seed);
+    (edges.sources, edges.targets, edges.weights)
+}
+
+#[pyfunction]
+fn sample_strength_edges_neg_binomial(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    lam: f64,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
+    let edges = core_sample_strength_edges_neg_binomial(&x, &y, lam, layers, self_loops, seed);
+    (edges.sources, edges.targets, edges.weights)
+}
+
+#[pyfunction]
+fn sample_strength_degree_geometric(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    z: Vec<f64>,
+    w: Vec<f64>,
+    self_loops: bool,
+    seed: u64,
+) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
+    let edges = core_sample_strength_degree_geometric(&x, &y, &z, &w, self_loops, seed);
+    (edges.sources, edges.targets, edges.weights)
+}
+
+#[pyfunction]
+fn sample_strength_degree_neg_binomial(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    z: Vec<f64>,
+    w: Vec<f64>,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
+    let edges = core_sample_strength_degree_neg_binomial(&x, &y, &z, &w, layers, self_loops, seed);
+    (edges.sources, edges.targets, edges.weights)
+}
+
+#[pyfunction]
+fn sample_degree_events_geometric(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    positive_weight_rate: f64,
+    self_loops: bool,
+    seed: u64,
+) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
+    let edges = core_sample_degree_events_geometric(&x, &y, positive_weight_rate, self_loops, seed);
+    (edges.sources, edges.targets, edges.weights)
+}
+
+#[pyfunction]
+fn sample_degree_events_neg_binomial(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    positive_weight_rate: f64,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
+    let edges = core_sample_degree_events_neg_binomial(
+        &x,
+        &y,
+        positive_weight_rate,
+        layers,
+        self_loops,
+        seed,
+    );
     (edges.sources, edges.targets, edges.weights)
 }
 
@@ -1654,8 +1744,20 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(sample_strength_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(sample_strength_cost_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(sample_strength_edges_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_edges_geometric, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        sample_strength_edges_neg_binomial,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(sample_strength_degree_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_degree_geometric, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        sample_strength_degree_neg_binomial,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(sample_degree_events_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_degree_events_geometric, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_degree_events_neg_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(sample_strength_neg_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(fit_strength_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(fit_masked_strength_binomial, module)?)?;

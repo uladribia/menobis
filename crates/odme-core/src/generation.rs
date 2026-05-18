@@ -647,6 +647,139 @@ pub fn sample_degree_events_binomial(
     )
 }
 
+/// Sample strength-edges geometric ZIP: Bernoulli occupation + ZTG.
+#[must_use]
+pub fn sample_strength_edges_geometric(
+    x: &[f64],
+    y: &[f64],
+    lam: f64,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    sample_provider(
+        &StrengthEdgesProvider {
+            family: WeightFamily::Geometric,
+            x,
+            y,
+            lambda: lam,
+            self_loops,
+        },
+        seed,
+    )
+}
+
+/// Sample strength-edges negative binomial ZIP: Bernoulli occupation + ZTNB(M).
+#[must_use]
+pub fn sample_strength_edges_neg_binomial(
+    x: &[f64],
+    y: &[f64],
+    lam: f64,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    sample_provider(
+        &StrengthEdgesProvider {
+            family: WeightFamily::NegBinomial(layers),
+            x,
+            y,
+            lambda: lam,
+            self_loops,
+        },
+        seed,
+    )
+}
+
+/// Sample strength-degree geometric ZIP: Bernoulli occupation + ZTG.
+#[must_use]
+pub fn sample_strength_degree_geometric(
+    x: &[f64],
+    y: &[f64],
+    z: &[f64],
+    w: &[f64],
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    sample_provider(
+        &StrengthDegreeProvider {
+            family: WeightFamily::Geometric,
+            x,
+            y,
+            z,
+            w,
+            self_loops,
+        },
+        seed,
+    )
+}
+
+/// Sample strength-degree negative binomial ZIP: Bernoulli occupation + ZTNB(M).
+#[must_use]
+pub fn sample_strength_degree_neg_binomial(
+    x: &[f64],
+    y: &[f64],
+    z: &[f64],
+    w: &[f64],
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    sample_provider(
+        &StrengthDegreeProvider {
+            family: WeightFamily::NegBinomial(layers),
+            x,
+            y,
+            z,
+            w,
+            self_loops,
+        },
+        seed,
+    )
+}
+
+/// Sample degree-events geometric ZIP: Bernoulli occupation + ZTG.
+#[must_use]
+pub fn sample_degree_events_geometric(
+    x: &[f64],
+    y: &[f64],
+    positive_weight_rate: f64,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    sample_provider(
+        &DegreeEventsProvider {
+            family: WeightFamily::Geometric,
+            x,
+            y,
+            positive_weight_rate,
+            self_loops,
+        },
+        seed,
+    )
+}
+
+/// Sample degree-events negative binomial ZIP: Bernoulli occupation + ZTNB(M).
+#[must_use]
+pub fn sample_degree_events_neg_binomial(
+    x: &[f64],
+    y: &[f64],
+    positive_weight_rate: f64,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    sample_provider(
+        &DegreeEventsProvider {
+            family: WeightFamily::NegBinomial(layers),
+            x,
+            y,
+            positive_weight_rate,
+            self_loops,
+        },
+        seed,
+    )
+}
+
 /// Multinomial sampling with node-factorized probabilities.
 #[must_use]
 pub fn sample_strength_multinomial(
