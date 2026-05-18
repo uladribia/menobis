@@ -48,28 +48,38 @@ This is convex because $\phi(z)=-\log(1-e^z)$ has
 $\phi''(z)=e^z/(1-e^z)^2>0$ for $z<0$. The stationarity equations recover the
 strength constraints with expected weight $M e^{z_{ij}}/(1-e^{z_{ij}})$.
 The log transform fixes the non-convex raw domain, but not ill-conditioning
-when many $z_{ij}$ are close to zero.
+when many $z_{ij}$ are close to zero. The term `log(1 - exp(z))` is numerically
+hazardous: it suffers catastrophic cancellation near zero and underflow far from
+zero. Implement it only through stable primitives such as `ln_1m_exp(z)`:
+use `log1p(-exp(z))` for moderately negative `z`, and `log(-expm1(z))` close to
+zero.
 
 Implementation plan:
 
-1. Implement matrix-free objective, gradient, Hessian-vector product, and
-   residuals from the equations above.
-2. Use damped Newton-CG first; keep L-BFGS with feasible step control as a
+1. Implement and test stable scalar kernels: `ln_1m_exp(z)`,
+   `exp_over_1m_exp(z)`, and their derivative/Hessian terms.
+2. Implement matrix-free objective, gradient, Hessian-vector product, and
+   residuals from the equations above using only those stable kernels.
+3. Use damped Newton-CG first; keep L-BFGS with feasible step control as a
    fallback if Newton-CG is too costly.
-3. Enforce feasibility by computing the maximum step such that all allowed
+4. Enforce feasibility by computing the maximum step such that all allowed
    $u_i+v_j \le -\epsilon$; then use Armijo backtracking.
-4. Remove the scale nullspace (`u += c`, `v -= c`) by recentering after each
+5. Reject or regularize near-boundary problems when the required margin would
+   be below machine-safe limits; report this as a boundary/infeasible diagnostic,
+   not as ordinary non-convergence.
+6. Remove the scale nullspace (`u += c`, `v -= c`) by recentering after each
    step or fixing one gauge variable.
-5. Initialize from fixed-strength ME multipliers, scaled into the interior;
+7. Initialize from fixed-strength ME multipliers, scaled into the interior;
    fall back to uniform feasible starts.
-6. Support `self_loops=False` and masks by skipping forbidden pairs.
-7. Expose `fit_strength_geometric` and `fit_strength_neg_binomial(layers=M)`
+8. Support `self_loops=False` and masks by skipping forbidden pairs.
+9. Expose `fit_strength_geometric` and `fit_strength_neg_binomial(layers=M)`
    with convergence, iterations, max product, and strength residuals.
-8. Defer W strength-edges and strength-degree fitting until fixed-strength W is
+10. Defer W strength-edges and strength-degree fitting until fixed-strength W is
    stable; legacy `fitter_E.py agg=True` and `fitter_sk.py agg=True` remain
    references, not direct ports.
-9. TDD: tiny hand cases, domain-boundary rejection, finite-difference gradient,
-   Hessian-vector checks, legacy comparison, and property tests.
+11. TDD: scalar numerical kernels, tiny hand cases, domain-boundary rejection,
+   finite-difference gradient, Hessian-vector checks, legacy comparison, and
+   property tests.
 
 ### Milestone 7d: Legacy mobility benchmarks — NOT STARTED
 
