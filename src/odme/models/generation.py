@@ -265,6 +265,58 @@ def sample_strength_cost_binomial(
     return _edge_table_from_lists(sources, targets, weights)
 
 
+def sample_strength_cost_geometric(
+    fit: "StrengthCostFit",
+    cost_sources: NDArray[np.integer],
+    cost_targets: NDArray[np.integer],
+    cost_values: NDArray[np.floating],
+    *,
+    seed: int = 0,
+) -> EdgeTable:
+    """Sample strength-cost geometric: Geometric with cost-modulated rates."""
+    c_src = np.asarray(cost_sources, dtype=np.int64)
+    c_tgt = np.asarray(cost_targets, dtype=np.int64)
+    c_val = np.asarray(cost_values, dtype=np.float64)
+    sources, targets, weights = _odme.sample_strength_cost_geometric(
+        fit.x.tolist(),
+        fit.y.tolist(),
+        fit.gamma,
+        c_src.tolist(),
+        c_tgt.tolist(),
+        c_val.tolist(),
+        fit.self_loops,
+        seed,
+    )
+    return _edge_table_from_lists(sources, targets, weights)
+
+
+def sample_strength_cost_neg_binomial(
+    fit: "StrengthCostFit",
+    cost_sources: NDArray[np.integer],
+    cost_targets: NDArray[np.integer],
+    cost_values: NDArray[np.floating],
+    *,
+    layers: int = 1,
+    seed: int = 0,
+) -> EdgeTable:
+    """Sample strength-cost negative binomial: NB(M) with cost-modulated rates."""
+    c_src = np.asarray(cost_sources, dtype=np.int64)
+    c_tgt = np.asarray(cost_targets, dtype=np.int64)
+    c_val = np.asarray(cost_values, dtype=np.float64)
+    sources, targets, weights = _odme.sample_strength_cost_neg_binomial(
+        fit.x.tolist(),
+        fit.y.tolist(),
+        fit.gamma,
+        c_src.tolist(),
+        c_tgt.tolist(),
+        c_val.tolist(),
+        layers,
+        fit.self_loops,
+        seed,
+    )
+    return _edge_table_from_lists(sources, targets, weights)
+
+
 def sample_strength_edges_binomial(
     fit: "StrengthEdgesFit",
     *,
@@ -439,6 +491,8 @@ __all__ = [
     "sample_degree_events_poisson",
     "sample_strength_binomial",
     "sample_strength_cost_binomial",
+    "sample_strength_cost_geometric",
+    "sample_strength_cost_neg_binomial",
     "sample_strength_cost_poisson",
     "sample_strength_degree_binomial",
     "sample_strength_degree_geometric",

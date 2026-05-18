@@ -49,6 +49,8 @@ use odme_core::generation::{
     sample_degree_events_poisson as core_sample_degree_events_poisson,
     sample_strength_binomial as core_sample_strength_binomial,
     sample_strength_cost_binomial as core_sample_strength_cost_binomial,
+    sample_strength_cost_geometric as core_sample_strength_cost_geometric,
+    sample_strength_cost_neg_binomial as core_sample_strength_cost_neg_binomial,
     sample_strength_cost_poisson as core_sample_strength_cost_poisson,
     sample_strength_degree_binomial as core_sample_strength_degree_binomial,
     sample_strength_degree_geometric as core_sample_strength_degree_geometric,
@@ -620,6 +622,50 @@ fn sample_strength_cost_binomial(
         values: &cost_values,
     };
     let edges = core_sample_strength_cost_binomial(&x, &y, gamma, &costs, layers, self_loops, seed);
+    (edges.sources, edges.targets, edges.weights)
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn sample_strength_cost_geometric(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    gamma: f64,
+    cost_sources: Vec<usize>,
+    cost_targets: Vec<usize>,
+    cost_values: Vec<f64>,
+    self_loops: bool,
+    seed: u64,
+) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
+    let costs = SparseCostEntries {
+        sources: &cost_sources,
+        targets: &cost_targets,
+        values: &cost_values,
+    };
+    let edges = core_sample_strength_cost_geometric(&x, &y, gamma, &costs, self_loops, seed);
+    (edges.sources, edges.targets, edges.weights)
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn sample_strength_cost_neg_binomial(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    gamma: f64,
+    cost_sources: Vec<usize>,
+    cost_targets: Vec<usize>,
+    cost_values: Vec<f64>,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
+    let costs = SparseCostEntries {
+        sources: &cost_sources,
+        targets: &cost_targets,
+        values: &cost_values,
+    };
+    let edges =
+        core_sample_strength_cost_neg_binomial(&x, &y, gamma, &costs, layers, self_loops, seed);
     (edges.sources, edges.targets, edges.weights)
 }
 
@@ -1743,6 +1789,8 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(sample_strength_geometric, module)?)?;
     module.add_function(wrap_pyfunction!(sample_strength_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(sample_strength_cost_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_cost_geometric, module)?)?;
+    module.add_function(wrap_pyfunction!(sample_strength_cost_neg_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(sample_strength_edges_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(sample_strength_edges_geometric, module)?)?;
     module.add_function(wrap_pyfunction!(

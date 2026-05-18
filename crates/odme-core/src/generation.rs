@@ -579,6 +579,67 @@ pub fn sample_strength_cost_binomial(
     )
 }
 
+/// Sample strength-cost geometric: Geometric with cost-modulated rates.
+#[must_use]
+pub fn sample_strength_cost_geometric(
+    x: &[f64],
+    y: &[f64],
+    gamma: f64,
+    costs: &SparseCostEntries<'_>,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    let cost_map: HashMap<(usize, usize), f64> = costs
+        .sources
+        .iter()
+        .zip(costs.targets.iter())
+        .zip(costs.values.iter())
+        .map(|((&source, &target), &cost)| ((source, target), cost))
+        .collect();
+    sample_provider(
+        &StrengthCostProvider {
+            family: WeightFamily::Geometric,
+            x,
+            y,
+            gamma,
+            costs: &cost_map,
+            self_loops,
+        },
+        seed,
+    )
+}
+
+/// Sample strength-cost negative binomial: NB(M) with cost-modulated rates.
+#[must_use]
+pub fn sample_strength_cost_neg_binomial(
+    x: &[f64],
+    y: &[f64],
+    gamma: f64,
+    costs: &SparseCostEntries<'_>,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    let cost_map: HashMap<(usize, usize), f64> = costs
+        .sources
+        .iter()
+        .zip(costs.targets.iter())
+        .zip(costs.values.iter())
+        .map(|((&source, &target), &cost)| ((source, target), cost))
+        .collect();
+    sample_provider(
+        &StrengthCostProvider {
+            family: WeightFamily::NegBinomial(layers),
+            x,
+            y,
+            gamma,
+            costs: &cost_map,
+            self_loops,
+        },
+        seed,
+    )
+}
+
 /// Sample strength-edges binomial ZIP: Bernoulli occupation + ZTB(M, p).
 #[must_use]
 pub fn sample_strength_edges_binomial(

@@ -10,6 +10,8 @@ from odme.models import (
 from odme.models.generation import (
     sample_degree_events_geometric,
     sample_degree_events_neg_binomial,
+    sample_strength_cost_geometric,
+    sample_strength_cost_neg_binomial,
     sample_strength_degree_geometric,
     sample_strength_degree_neg_binomial,
     sample_strength_edges_geometric,
@@ -156,5 +158,72 @@ class TestDegreeEventsNegBinomial:
         )
         b = sample_degree_events_neg_binomial(
             fit, positive_weight_rate=0.5, layers=3, seed=99
+        )
+        np.testing.assert_array_equal(a.weight, b.weight)
+
+
+def _strength_cost_fit():
+    """Build a mock StrengthCostFit."""
+    from odme.models.fitting import StrengthCostFit
+
+    return StrengthCostFit(
+        node=np.array([0, 1], dtype=np.uint64),
+        x=np.array([0.5, 0.8]),
+        y=np.array([0.6, 0.7]),
+        gamma=0.1,
+        converged=True,
+        iterations=10,
+        self_loops=True,
+    )
+
+
+class TestStrengthCostGeometric:
+    """Tests for strength-cost geometric sampling."""
+
+    def test_produces_edges(self) -> None:
+        """Sampler returns a valid EdgeTable."""
+        fit = _strength_cost_fit()
+        c_src = np.array([0, 1], dtype=np.int64)
+        c_tgt = np.array([1, 0], dtype=np.int64)
+        c_val = np.array([1.0, 2.0])
+        sample = sample_strength_cost_geometric(fit, c_src, c_tgt, c_val, seed=42)
+        assert sample.num_edges >= 0
+
+    def test_seeded_reproducibility(self) -> None:
+        """Same seed gives same result."""
+        fit = _strength_cost_fit()
+        c_src = np.array([0, 1], dtype=np.int64)
+        c_tgt = np.array([1, 0], dtype=np.int64)
+        c_val = np.array([1.0, 2.0])
+        a = sample_strength_cost_geometric(fit, c_src, c_tgt, c_val, seed=99)
+        b = sample_strength_cost_geometric(fit, c_src, c_tgt, c_val, seed=99)
+        np.testing.assert_array_equal(a.weight, b.weight)
+
+
+class TestStrengthCostNegBinomial:
+    """Tests for strength-cost negative binomial sampling."""
+
+    def test_produces_edges(self) -> None:
+        """Sampler returns a valid EdgeTable."""
+        fit = _strength_cost_fit()
+        c_src = np.array([0, 1], dtype=np.int64)
+        c_tgt = np.array([1, 0], dtype=np.int64)
+        c_val = np.array([1.0, 2.0])
+        sample = sample_strength_cost_neg_binomial(
+            fit, c_src, c_tgt, c_val, layers=3, seed=42
+        )
+        assert sample.num_edges >= 0
+
+    def test_seeded_reproducibility(self) -> None:
+        """Same seed gives same result."""
+        fit = _strength_cost_fit()
+        c_src = np.array([0, 1], dtype=np.int64)
+        c_tgt = np.array([1, 0], dtype=np.int64)
+        c_val = np.array([1.0, 2.0])
+        a = sample_strength_cost_neg_binomial(
+            fit, c_src, c_tgt, c_val, layers=3, seed=99
+        )
+        b = sample_strength_cost_neg_binomial(
+            fit, c_src, c_tgt, c_val, layers=3, seed=99
         )
         np.testing.assert_array_equal(a.weight, b.weight)
