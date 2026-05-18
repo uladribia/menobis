@@ -51,8 +51,15 @@ impl WeightFamily {
                 xy: rate,
                 layers: m,
             },
-            // Future: ZipGeometric, ZipNegBinomial
-            _ => PairDistribution::ZipPoisson { occupation, rate },
+            Self::Geometric => PairDistribution::ZipGeometric {
+                occupation,
+                xy: rate,
+            },
+            Self::NegBinomial(m) => PairDistribution::ZipNegBinomial {
+                occupation,
+                xy: rate,
+                layers: m,
+            },
         }
     }
 
@@ -82,6 +89,14 @@ pub enum PairDistribution {
     NegBinomial { xy: f64, layers: u32 },
     /// Zero-inflated binomial: Bernoulli occupation + ZTB(M, p) positive weight.
     ZipBinomial {
+        occupation: f64,
+        xy: f64,
+        layers: u32,
+    },
+    /// Zero-inflated geometric: Bernoulli occupation + ZTG positive weight.
+    ZipGeometric { occupation: f64, xy: f64 },
+    /// Zero-inflated negative binomial: Bernoulli occupation + ZTNB(M) positive weight.
+    ZipNegBinomial {
         occupation: f64,
         xy: f64,
         layers: u32,
@@ -128,6 +143,28 @@ impl PairDistribution {
                 };
                 occupation.max(0.0) * ztb_mean
             }
+            Self::ZipGeometric { occupation, xy } => {
+                // ZTG mean = 1/(1-q) where q = xy.
+                let q = xy.clamp(0.0, 1.0 - 1e-15);
+                let ztg_mean = 1.0 / (1.0 - q);
+                occupation.max(0.0) * ztg_mean
+            }
+            Self::ZipNegBinomial {
+                occupation,
+                xy,
+                layers,
+            } => {
+                // ZTNB mean = Mq / ((1-q)(1-(1-q)^M)).
+                let q = xy.clamp(0.0, 1.0 - 1e-15);
+                let m = f64::from(layers);
+                let p0 = (1.0 - q).powi(layers as i32);
+                let ztnb_mean = if p0 >= 1.0 {
+                    1.0
+                } else {
+                    m * q / ((1.0 - q) * (1.0 - p0))
+                };
+                occupation.max(0.0) * ztnb_mean
+            }
         }
     }
 
@@ -146,6 +183,8 @@ impl PairDistribution {
                 1.0 - (1.0 - xy.max(0.0)).max(0.0).powi(layers as i32)
             }
             Self::ZipBinomial { occupation, .. } => occupation.clamp(0.0, 1.0),
+            Self::ZipGeometric { occupation, .. } => occupation.clamp(0.0, 1.0),
+            Self::ZipNegBinomial { occupation, .. } => occupation.clamp(0.0, 1.0),
         }
     }
 
@@ -178,6 +217,40 @@ impl PairDistribution {
                     (1.0 - p) + p * ztb_cdf(weight, bin_p, layers)
                 }
             }
+            Self::ZipGeometric { occupation, xy } => {
+                let p = occupation.clamp(0.0, 1.0);
+                if weight == 0 {
+                    1.0 - p
+                } else {
+                    // ZTG CDF: P(K<=k|K>=1) = (Geo_CDF(k) - Geo_PMF(0)) / (1 - Geo_PMF(0))
+                    // Geo_CDF(k) = 1 - q^{k+1}, Geo_PMF(0) = 1-q, so
+                    // ZTG_CDF(k) = (1 - q^{k+1} - (1-q)) / q = (q - q^{k+1})/q = 1 - q^k
+                    let q = xy.clamp(0.0, 1.0 - 1e-15);
+                    let ztg_cdf = 1.0 - q.powi(weight as i32);
+                    (1.0 - p) + p * ztg_cdf
+                }
+            }
+            Self::ZipNegBinomial {
+                occupation,
+                xy,
+                layers,
+            } => {
+                let p = occupation.clamp(0.0, 1.0);
+                if weight == 0 {
+                    1.0 - p
+                } else {
+                    // ZTNB CDF: (NB_CDF(k) - NB_PMF(0)) / (1 - NB_PMF(0))
+                    let q = xy.clamp(0.0, 1.0 - 1e-15);
+                    let p0 = (1.0 - q).powi(layers as i32);
+                    let nb_cdf = neg_binomial_cdf(weight, q, layers);
+                    let ztnb_cdf = if p0 >= 1.0 {
+                        1.0
+                    } else {
+                        (nb_cdf - p0) / (1.0 - p0)
+                    };
+                    (1.0 - p) + p * ztnb_cdf.clamp(0.0, 1.0)
+                }
+            }
         }
         .clamp(0.0, 1.0)
     }
@@ -208,6 +281,27 @@ impl PairDistribution {
                 let p = occupation.clamp(0.0, 1.0);
                 let bin_p = (xy / (1.0 + xy)).clamp(0.0, 1.0);
                 (p * ztb_sf_inclusive(weight, bin_p, layers)).clamp(0.0, 1.0)
+            }
+            Self::ZipGeometric { occupation, xy } => {
+                // P(K>=k|K>=1) = 1 - ZTG_CDF(k-1) = q^{k-1}
+                let p = occupation.clamp(0.0, 1.0);
+                let q = xy.clamp(0.0, 1.0 - 1e-15);
+                (p * q.powi((weight - 1) as i32)).clamp(0.0, 1.0)
+            }
+            Self::ZipNegBinomial {
+                occupation,
+                xy,
+                layers,
+            } => {
+                let p = occupation.clamp(0.0, 1.0);
+                let q = xy.clamp(0.0, 1.0 - 1e-15);
+                let p0 = (1.0 - q).powi(layers as i32);
+                if p0 >= 1.0 {
+                    return 0.0;
+                }
+                let nb_cdf_prev = neg_binomial_cdf(weight - 1, q, layers);
+                let ztnb_sf = (1.0 - (nb_cdf_prev - p0) / (1.0 - p0)).clamp(0.0, 1.0);
+                (p * ztnb_sf).clamp(0.0, 1.0)
             }
         }
         .clamp(0.0, 1.0)
@@ -248,6 +342,38 @@ impl PairDistribution {
                 };
                 if present {
                     sample_ztb(xy, layers, rng)
+                } else {
+                    0
+                }
+            }
+            Self::ZipGeometric { occupation, xy } => {
+                if occupation <= 0.0 {
+                    return 0;
+                }
+                let present = match Bernoulli::new(occupation.min(1.0)) {
+                    Ok(dist) => dist.sample(rng),
+                    Err(_) => false,
+                };
+                if present {
+                    sample_zt_geometric(xy, rng)
+                } else {
+                    0
+                }
+            }
+            Self::ZipNegBinomial {
+                occupation,
+                xy,
+                layers,
+            } => {
+                if occupation <= 0.0 {
+                    return 0;
+                }
+                let present = match Bernoulli::new(occupation.min(1.0)) {
+                    Ok(dist) => dist.sample(rng),
+                    Err(_) => false,
+                };
+                if present {
+                    sample_zt_neg_binomial(xy, layers, rng)
                 } else {
                     0
                 }
@@ -491,6 +617,48 @@ fn sample_ztb(xy: f64, layers: u32, rng: &mut StdRng) -> u64 {
     1
 }
 
+/// Sample from zero-truncated Geometric(1-q) by rejection.
+fn sample_zt_geometric(xy: f64, rng: &mut StdRng) -> u64 {
+    // Geometric P(k) = (1-q)*q^k for k>=0. Condition on k>=1.
+    // Efficient: sample from Geometric and add 1, since P(k>=1) follows
+    // the same Geometric shifted. Actually P(K>=1|K>=0) ~ Geo shifted by 1.
+    // Simpler: just rejection.
+    let q = xy.clamp(0.0, 1.0 - 1e-15);
+    if q <= 0.0 {
+        return 1;
+    }
+    let p = 1.0 - q;
+    let dist = match Geometric::new(p) {
+        Ok(d) => d,
+        Err(_) => return 1,
+    };
+    // For Geometric(p), P(0) = p = 1-q. For q < 1, P(K>=1) = q.
+    // Rejection is efficient when q is not tiny.
+    for _ in 0..10000 {
+        let v = dist.sample(rng);
+        if v > 0 {
+            return v;
+        }
+    }
+    1
+}
+
+/// Sample from zero-truncated NegBinomial(M, 1-q) by rejection.
+fn sample_zt_neg_binomial(xy: f64, layers: u32, rng: &mut StdRng) -> u64 {
+    let q = xy.clamp(0.0, 1.0 - 1e-15);
+    if q <= 0.0 {
+        return 1;
+    }
+    // P(0) = (1-q)^M. Rejection rate = (1-q)^M which is acceptable for moderate q/M.
+    for _ in 0..10000 {
+        let v = sample_neg_binomial(q, layers, rng);
+        if v > 0 {
+            return v;
+        }
+    }
+    1
+}
+
 /// Occupation probability for strength-edges binomial ZIP.
 /// Uses (1+xy)^M - 1 instead of exp(xy) - 1.
 #[must_use]
@@ -671,6 +839,110 @@ mod tests {
         let expected = 0.5 * factor / (1.0 + 0.5 * factor);
         let actual = super::strength_edges_binomial_occupation(0.3, 0.5, 4);
         assert!((actual - expected).abs() < 1e-12);
+    }
+
+    #[test]
+    fn zip_geometric_expected_value() {
+        // ZipGeometric: occupation * ZTG mean.
+        // ZTG(q) mean = q / ((1-q) * (1 - (1-q))) = q / ((1-q)*q) = 1/(1-q).
+        // Wait: Geometric P(k) = (1-q)*q^k for k>=0. ZTG conditions on k>=1:
+        // P(k|k>=1) = (1-q)*q^k / q = (1-q)*q^{k-1} for k>=1. Mean = 1/(1-q).
+        // So ZipGeometric expected = occupation * 1/(1-q).
+        let occ = 0.7;
+        let xy = 0.4; // q = xy
+        let ztg_mean = 1.0 / (1.0 - xy);
+        let dist = PairDistribution::ZipGeometric {
+            occupation: occ,
+            xy,
+        };
+        assert!((dist.expected() - occ * ztg_mean).abs() < 1e-12);
+    }
+
+    #[test]
+    fn zip_geometric_zero_probability() {
+        let dist = PairDistribution::ZipGeometric {
+            occupation: 0.6,
+            xy: 0.3,
+        };
+        assert!((dist.lower_pvalue(0) - 0.4).abs() < 1e-12);
+        assert!((dist.upper_pvalue(0) - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn zip_geometric_samples_are_non_negative() {
+        use rand::SeedableRng;
+        let dist = PairDistribution::ZipGeometric {
+            occupation: 0.8,
+            xy: 0.5,
+        };
+        let mut rng = StdRng::seed_from_u64(99);
+        let mut has_zero = false;
+        let mut has_positive = false;
+        for _ in 0..1000 {
+            let w = dist.sample(&mut rng);
+            if w == 0 {
+                has_zero = true;
+            } else {
+                has_positive = true;
+            }
+        }
+        assert!(has_zero, "expected some zeros from ZipGeometric");
+        assert!(
+            has_positive,
+            "expected some positive weights from ZipGeometric"
+        );
+    }
+
+    #[test]
+    fn zip_neg_binomial_expected_value() {
+        // ZipNegBinomial: occupation * ZTNB mean.
+        // NB(M, 1-q) has P(k=0) = (1-q)^M. Mean = Mq/(1-q).
+        // ZTNB mean = Mq/((1-q)*(1-(1-q)^M)).
+        // ZipNB expected = occupation * ZTNB_mean.
+        let occ = 0.8;
+        let xy = 0.4; // q = xy
+        let m = 3_u32;
+        let ztnb_mean = (m as f64) * xy / ((1.0 - xy) * (1.0 - (1.0 - xy).powi(m as i32)));
+        let dist = PairDistribution::ZipNegBinomial {
+            occupation: occ,
+            xy,
+            layers: m,
+        };
+        assert!((dist.expected() - occ * ztnb_mean).abs() < 1e-10);
+    }
+
+    #[test]
+    fn zip_neg_binomial_zero_probability() {
+        let dist = PairDistribution::ZipNegBinomial {
+            occupation: 0.5,
+            xy: 0.3,
+            layers: 2,
+        };
+        assert!((dist.lower_pvalue(0) - 0.5).abs() < 1e-12);
+        assert!((dist.upper_pvalue(0) - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn zip_neg_binomial_samples_are_non_negative() {
+        use rand::SeedableRng;
+        let dist = PairDistribution::ZipNegBinomial {
+            occupation: 0.7,
+            xy: 0.4,
+            layers: 3,
+        };
+        let mut rng = StdRng::seed_from_u64(123);
+        let mut has_zero = false;
+        let mut has_positive = false;
+        for _ in 0..1000 {
+            let w = dist.sample(&mut rng);
+            if w == 0 {
+                has_zero = true;
+            } else {
+                has_positive = true;
+            }
+        }
+        assert!(has_zero, "expected some zeros from ZipNegBinomial");
+        assert!(has_positive, "expected some positive from ZipNegBinomial");
     }
 
     #[test]

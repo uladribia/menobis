@@ -296,7 +296,37 @@ impl PairDistributionProvider for StrengthEdgesProvider<'_> {
                     layers: m,
                 })
             }
-            _ => Some(strength_edges_distribution(xi, yj, self.lambda)),
+            WeightFamily::Geometric => {
+                // G_1(q) = q/(1-q), occupation = lam*G / (1+lam*G)
+                let q = xy.clamp(0.0, 1.0 - 1e-15);
+                let g = q / (1.0 - q);
+                let den = 1.0 + self.lambda * g;
+                let occ = if den > 0.0 {
+                    self.lambda * g / den
+                } else {
+                    0.0
+                };
+                Some(PairDistribution::ZipGeometric {
+                    occupation: occ,
+                    xy: q,
+                })
+            }
+            WeightFamily::NegBinomial(m) => {
+                // G_M(q) = (1-q)^{-M} - 1
+                let q = xy.clamp(0.0, 1.0 - 1e-15);
+                let g = (1.0 - q).powi(-(m as i32)) - 1.0;
+                let den = 1.0 + self.lambda * g;
+                let occ = if den > 0.0 {
+                    self.lambda * g / den
+                } else {
+                    0.0
+                };
+                Some(PairDistribution::ZipNegBinomial {
+                    occupation: occ,
+                    xy: q,
+                    layers: m,
+                })
+            }
         }
     }
 }
@@ -341,12 +371,28 @@ impl PairDistributionProvider for StrengthDegreeProvider<'_> {
                     layers: m,
                 })
             }
-            _ => Some(strength_degree_distribution(
-                xi,
-                yj,
-                self.z[source],
-                self.w[target],
-            )),
+            WeightFamily::Geometric => {
+                // G_1(q) = q/(1-q), occupation = v*G/(1+v*G)
+                let q = xy.clamp(0.0, 1.0 - 1e-15);
+                let g = q / (1.0 - q);
+                let den = 1.0 + vij * g;
+                let occ = if den > 0.0 { vij * g / den } else { 0.0 };
+                Some(PairDistribution::ZipGeometric {
+                    occupation: occ,
+                    xy: q,
+                })
+            }
+            WeightFamily::NegBinomial(m) => {
+                let q = xy.clamp(0.0, 1.0 - 1e-15);
+                let g = (1.0 - q).powi(-(m as i32)) - 1.0;
+                let den = 1.0 + vij * g;
+                let occ = if den > 0.0 { vij * g / den } else { 0.0 };
+                Some(PairDistribution::ZipNegBinomial {
+                    occupation: occ,
+                    xy: q,
+                    layers: m,
+                })
+            }
         }
     }
 }

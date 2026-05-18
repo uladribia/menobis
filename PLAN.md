@@ -29,114 +29,228 @@ Total: 157 Python tests, 34 Rust tests, all checks green.
 
 ## Remaining work
 
-### Milestone 7c: Geometric / negative binomial fitting — NOT STARTED
+### Milestone 7c: Complete W ensemble — NOT STARTED
 
-The W-ensemble fitter replaces legacy SciPy TNC preconditioning plus CVXOPT
-interior points. Do **not** port CVXOPT and do **not** write a custom solver.
-Use `cvxrust` for convex modeling, then use Clarabel as the explicit conic
-solver/backend if CVXRust cannot solve the model directly.
+The W ensemble covers geometric (`M = 1`) and negative binomial (`M > 1`)
+weighted null models for every W-capable constraint in this package. The final
+scope is **sampling + filtering + fitting** for fixed strengths, fixed degrees
+plus total events, fixed strengths plus total edges, fixed degrees and
+strengths, and fixed strengths plus cost.
 
-Current implementation facts:
+Do **not** port CVXOPT and do **not** write a custom nonlinear optimizer. Use
+`cvxrust` for convex modeling, then use Clarabel explicitly if CVXRust cannot
+solve the conic model directly. Legacy SciPy/CVXOPT code is reference material
+only.
 
-- `odme-core::distribution::WeightFamily` already supports `Geometric` and
-  `NegBinomial(M)` sampling with pair parameter `q_ij = x_i y_j`.
-- `PairDistribution::expected()` implements `q/(1-q)` and `M q/(1-q)` and
-  returns infinity if `q >= 1`.
-- Rust and PyO3 expose samplers for geometric/NB strength models, but no fitter
-  exists yet; Python package exports should be completed with the fitter.
-- Existing ME/B fitters live in `crates/odme-core/src/fitting.rs`; W fitting
-  should be added in a new module (for example `w_fitting.rs`) and re-exported.
+#### Public W scope
 
-Equations:
+| Constraint | Geometric API | Negative-binomial API | Sampling/filtering work |
+|------------|---------------|-----------------------|-------------------------|
+| strengths | `fit_strength_geometric` | `fit_strength_neg_binomial` | Audit existing `sample_*/filter_*` exports. |
+| degrees + total events | `fit_degree_events_geometric` | `fit_degree_events_neg_binomial` | Add exact zero-truncated W samplers/filters if missing. |
+| strengths + total edges | `fit_strength_edges_geometric` | `fit_strength_edges_neg_binomial` | Add exact zero-inflated W samplers/filters if missing. |
+| strengths + degrees | `fit_strength_degree_geometric` | `fit_strength_degree_neg_binomial` | Add exact zero-inflated W samplers/filters if missing. |
+| strengths + cost | `fit_strength_cost_geometric` | `fit_strength_cost_neg_binomial` | Add cost-modulated W samplers/filters if missing. |
 
-Let `P` be the allowed pair set after self-loop/mask filtering. For geometric
-`M=1`; for negative binomial use integer layers `M > 1`. The legacy likelihood
-uses
+There is no standalone W fixed-degree model without a total-event constraint:
+degrees determine occupation probabilities, while `T` determines the positive
+weight distribution.
 
-$$q_{ij}=x_i y_j,\quad 0 \le q_{ij}<1,\quad
-\mathbb{E}[t_{ij}] = \frac{M q_{ij}}{1-q_{ij}}.$$
+Current implementation facts to verify before fitting:
 
-Up to constants, maximize
+- `WeightFamily::{Geometric, NegBinomial(M)}` and independent fixed-strength
+  samplers/filters already exist.
+- `StrengthCostProvider` is family-parameterized, but Python/PyO3 W cost
+  sampler/filter wrappers may still be missing.
+- `WeightFamily::zip_distribution`, `StrengthEdgesProvider`,
+  `StrengthDegreeProvider`, and `DegreeEventsProvider` currently need an audit:
+  they must produce exact zero-inflated geometric/NB distributions, not fall
+  back to ZIP Poisson.
+- Existing ME/B fitters live in `crates/odme-core/src/fitting.rs`; add W fitting
+  in `crates/odme-core/src/w_fitting.rs` and re-export it.
 
-$$\ell(x,y)=M\sum_{(i,j)\in P}\log(1-x_i y_j)
-+\sum_i s_i^{out}\log x_i+\sum_j s_j^{in}\log y_j.$$
+Validate feasibility at the Python boundary before invoking the solver:
 
-Use inverse-fitness variables
+- strengths are finite, non-negative, length-matched, and balanced;
+- degrees are finite, non-negative, length-matched, balanced, and within support
+  capacity (`N` or `N-1` depending on self-loops);
+- strength-degree inputs satisfy `s_out >= k_out`, `s_in >= k_in`, and
+  `sum(s_out) >= sum(k_out)`;
+- strength-edges inputs satisfy `0 <= E <= |P|` and `E <= T`;
+- degree-events inputs satisfy `T >= E = sum(k_out) = sum(k_in)`;
+- cost inputs are finite, non-negative, aligned sparse triples with finite target
+  `C`, and their missing-pair semantics match generation/filtering;
+- NB `layers` is a positive integer, and public NB APIs should reject `M = 1`
+  if geometric is the intended spelling.
 
-$$x_i=e^{-a_i},\quad y_j=e^{-b_j},\quad r_{ij}=a_i+b_j>0.$$
+#### Common W equations
 
-Then minimize the convex objective
+Let `P` be the allowed pair set after self-loop and mask filtering. Use `M = 1`
+for geometric and integer `M > 1` for negative binomial. Define
 
-$$F(a,b)=\sum_i s_i^{out}a_i+\sum_j s_j^{in}b_j
--M\sum_{(i,j)\in P}\log(1-e^{-r_{ij}}).$$
+$$q_{ij}=e^{-r_{ij}},\quad 0 \le q_{ij}<1,$$
 
-The barrier term diverges as `r_ij -> 0+`; this is intrinsic, not a numerical
-artifact. Stable residuals are
+$$A_M(r)=(1-e^{-r})^{-M},\quad G_M(r)=A_M(r)-1.$$
 
-$$\hat{s}^{out}_i=M\sum_{j:(i,j)\in P}\frac{1}{\exp(r_{ij})-1},\quad
-\hat{s}^{in}_j=M\sum_{i:(i,j)\in P}\frac{1}{\exp(r_{ij})-1}.$$
+Independent W pairs have partition `A_M(r)` and expectation
 
-Stationarity is `s_out = ŝ_out` and `s_in = ŝ_in`. Curvature per pair is
+$$\mu_{ij}=\frac{M}{\exp(r_{ij})-1}.$$
 
-$$h_{ij}=M\frac{\exp(r_{ij})}{(\exp(r_{ij})-1)^2}
-=\mu_{ij}\left(1+\frac{\mu_{ij}}{M}\right),$$
+Zero-inflated W pairs with occupation multiplier `v_ij > 0` have partition
 
-where `mu_ij = M / expm1(r_ij)`.
+$$Z_{ij}=1+v_{ij}G_M(r_{ij}),$$
 
-Conic model for CVXRust/Clarabel:
+occupation probability and expected weight
 
-Introduce variables `a_i`, `b_j`, and for every allowed pair `(i,j)` auxiliary
-`t_ij,u_ij,v_ij`. Minimize the linear objective
+$$\pi_{ij}=\frac{v_{ij}G_M(r_{ij})}{Z_{ij}},\quad
+\mu_{ij}=\frac{v_{ij}M e^{-r_{ij}}(1-e^{-r_{ij}})^{-M-1}}{Z_{ij}}.$$
 
-$$\sum_i s_i^{out}a_i+\sum_j s_j^{in}b_j+M\sum_{(i,j)\in P}t_{ij}.$$
+The conditional positive-weight mean used by degree-events models is
 
-Represent `t_ij >= -log(1-exp(-r_ij))` as
+$$m_+(q,M)=\frac{M q}{(1-q)(1-(1-q)^M)}.$$
 
-$$\exp(-t_{ij})+\exp(-r_{ij}) \le 1,$$
+#### Why balancing fails for most W constraints
 
-using two exponential-cone epigraphs and one linear constraint:
+IPF/balancing converges for ME and B because expected weights are linear or
+monotone-ratio functions of multipliers with unbounded domains. For W, the
+expected weight `M xy/(1-xy)` has a pole at `xy = 1`, and the balancing update
+`x_i = s_i / sum(...)` is implicit (x_i appears inside the denominator). Naïve
+iteration either diverges or requires aggressive clamping that destroys
+convergence guarantees. The legacy code confirms this: `fitter_s.py` case W
+uses TNC+CVXOPT rather than `balance_xy`. Therefore all W constraints involving
+strength fitting (strengths, strengths+cost, strengths+edges,
+strengths+degrees) require the conic solver. Only the degrees+events case
+avoids this because its `q` is a single global scalar solved by root-finding,
+and the remaining occupation IPF has no barrier.
 
-- `(-t_ij, 1, u_ij) in K_exp`  implies `exp(-t_ij) <= u_ij`;
-- `(-a_i-b_j, 1, v_ij) in K_exp` implies `exp(-r_ij) <= v_ij`;
-- `u_ij + v_ij <= 1`.
+#### Convex fitting objectives
 
-Add one gauge constraint, for example `sum(a) - sum(b) = 0`, because
-`a += c, b -= c` leaves all `r_ij` unchanged. After solving, recover
-`x_i = exp(-a_i)` and `y_j = exp(-b_j)` with a gauge recentering that avoids
-large individual multipliers while preserving products.
+Use inverse/log variables and add gauge constraints for non-identifiable node
+multipliers. Always recover finite `x`, `y`, `z`, `w`, and scalar multipliers by
+recentering gauges after solving.
 
-Implementation sequence:
+1. **Strengths:** `r_ij = a_i + b_j`, `x_i=e^{-a_i}`, `y_j=e^{-b_j}`.
 
-1. Dependency spike: add `cvxrust` in Rust only on a feature branch; verify crate
-   maturity, exponential-cone support, sparse assembly, solver status reporting,
-   and whether Clarabel can be selected as backend.
-2. If CVXRust lacks direct solve support, build the same conic problem and pass
-   it to Clarabel explicitly. Do not change the model to fit a weaker solver.
-3. Start with fixed-strength all-pairs W fitting only; masked and no-self-loop
-   support are just pair-set changes once the all-pairs formulation works.
-4. Implement scalar diagnostic kernels in Rust: `neg_ln_1m_exp_neg(r)`,
-   `mean = M / expm1(r)`, and `curvature = mean * (1 + mean/M)` using small-`r`
-   series and large-`r` branches. These are for validation/residual reporting,
-   not a hand-written optimizer.
-5. Validate inputs at the Python boundary: balanced non-negative strengths,
-   positive layer count for NB, feasible support for nonzero strengths, and
-   boundary warnings when solved `min(r_ij)` is near machine-safe limits.
-6. Add core result type with `x`, `y`, `converged`, `iterations`, solver status,
-   objective value, `min_margin = min(r_ij)`, `max_product`, and max/total
-   strength residuals.
-7. Add PyO3 functions `fit_strength_geometric` and
-   `fit_strength_neg_binomial`; add Python dataclass/wrapper and export existing
-   geometric/NB samplers from `odme.models` at the same time.
-8. TDD order: scalar kernel tests; 1-node and homogeneous-network analytic
-   cases; no-self-loop feasibility tests; CVXRust/Clarabel smoke solve; residual
-   recovery tests; seeded comparison with legacy `fitter_s.py`; property tests
-   for balanced strengths and `max(x_i y_j) < 1`.
-9. Performance gate: benchmark lifted conic variable count and memory. The
-   formulation uses O(|P|) cones and auxiliaries, so document practical N limits.
-   Do not promise large all-pairs W fits until measured.
-10. Defer W strength-edges and W strength-degree fitting until fixed-strength W
-    is stable; legacy `fitter_E.py agg=True` and `fitter_sk.py agg=True` remain
-    references, not direct ports.
+   $$F=\sum_i s_i^{out}a_i+\sum_j s_j^{in}b_j
+   -M\sum_{(i,j)\in P}\log(1-e^{-r_{ij}}).$$
+
+   Gauge: `sum(a) - sum(b) = 0`.
+
+2. **Strengths + cost:** `r_ij = a_i + b_j + gamma d_ij`.
+
+   $$F=\sum_i s_i^{out}a_i+\sum_j s_j^{in}b_j+\gamma C
+   -M\sum_{(i,j)\in P}\log(1-e^{-r_{ij}}).$$
+
+   Validate non-negative finite costs, target cost `C`, and `r_ij > 0` for all
+   pairs with missing costs treated exactly as the sampler/filter treats them.
+
+3. **Strengths + total edges:** use `eta = log(lambda)` and
+   `r_ij = a_i + b_j`.
+
+   $$F=\sum_i s_i^{out}a_i+\sum_j s_j^{in}b_j-E\eta
+   +\sum_{(i,j)\in P}\log(1+\exp(\eta)G_M(r_{ij})).$$
+
+   Residuals must recover strengths and `sum(pi_ij) = E`.
+
+4. **Strengths + degrees:** use `c_i = log(z_i)`, `d_j = log(w_j)`,
+   `v_ij = exp(c_i+d_j)`, and `r_ij = a_i + b_j`.
+
+   $$F=\sum_i s_i^{out}a_i+\sum_j s_j^{in}b_j
+   -\sum_i k_i^{out}c_i-\sum_j k_j^{in}d_j
+   +\sum_{(i,j)\in P}\log(1+\exp(c_i+d_j)G_M(r_{ij})).$$
+
+   Gauges: `sum(a)-sum(b)=0` and `sum(c)-sum(d)=0`. Residuals must recover
+   strengths and directed degrees.
+
+5. **Degrees + total events:** use global `rho = -log(q) > 0` and
+   `v_ij = exp(c_i+d_j)`.
+
+   $$F=T\rho-\sum_i k_i^{out}c_i-\sum_j k_j^{in}d_j
+   +\sum_{(i,j)\in P}\log(1+\exp(c_i+d_j)G_M(\rho)).$$
+
+   Because `G_M(rho)` is common, implementation **must** solve `q` from
+   `m_+(q,M)=T/E` via Brent's method, then reuse `balance_degree_bernoulli`
+   with effective multipliers `z_i' = z_i sqrt(G_M(rho))`,
+   `w_j' = w_j sqrt(G_M(rho))`. This is the only W constraint where IPF
+   balancing works reliably, because the nonlinearity is isolated in a single
+   global scalar and the remaining structure is identical to Bernoulli IPF. The
+   exposed W result must include `q`, `positive_mean`, and total-event
+   residuals. Reject `T < E` and infeasible degree supports.
+
+#### Conic modeling details
+
+- Implement stable scalar kernels first: `neg_ln_1m_exp_neg(r)`, `w_a(r,M)`,
+  `w_g(r,M)`, `w_log_g(r,M)`, `w_mean(r,M)`, `w_occupation(v,r,M)`,
+  `w_zip_mean(v,r,M)`, `w_positive_mean(q,M)`, and curvature/residual helpers.
+- For independent strengths/cost, represent
+  `t >= -log(1-exp(-r))` with two exponential-cone epigraphs and `u+v <= 1`.
+- For zero-inflated models, model
+  `log(1+exp(theta) G_M(r))` exactly. For `M=1`, use
+  `log G_1(r) = -r - log(1-exp(-r))` and a log-sum-exp epigraph. For `M>1`, use
+  exact CVXRust atoms or Clarabel exponential/power cones for
+  `G_M(r)=(1-exp(-r))^{-M}-1`; do not approximate it with the geometric case.
+- Track lifted problem size: number of original variables, auxiliary variables,
+  exponential cones, power cones, linear constraints, and sparse nonzeros.
+
+#### Implementation sequence
+
+1. Create a dedicated feature branch and add `cvxrust`/Clarabel behind the Rust
+   fitting implementation only. Verify sparse assembly, exponential cones,
+   power-cone support, solver status, infeasibility reporting, and warm starts.
+2. Complete W sampling/filtering coverage before declaring W fitting done:
+   add `ZipGeometric` and `ZipNegBinomial` pair distributions; update providers;
+   add Rust, PyO3, Python wrappers; and add p-value/absent-edge tests.
+3. Implement `w_fitting.rs` result structs with solver status, objective,
+   `iterations`, `min_margin = min(r_ij)`, `max_q`, fitted scalar multipliers,
+   max/total residuals for every active constraint, and lifted problem metrics.
+4. Fit strengths first, then strengths+cost, because both use independent W
+   pairs and share the barrier term.
+5. Fit degrees+events next. This is the only W constraint where balancing works:
+   solve `q` from the scalar equation `m_+(q,M) = T/E` via Brent's method, then
+   reuse the existing `balance_degree_bernoulli` IPF with effective multipliers
+   scaled by `sqrt(G_M(rho))`. Do **not** use the conic solver for this case.
+   Add a smoke test confirming that the IPF result matches the conic objective
+   value on tiny graphs.
+6. Fit strengths+edges, then strengths+degrees. These require exact
+   zero-inflated W partition terms and should reuse the same pair kernels as
+   sampling/filtering.
+7. Add PyO3 functions and Python dataclasses/wrappers for every API in the
+   public W scope table; export them from `odme.models` and update stubs.
+8. Update docs for public API and thesis terminology: concepts, API, CLI if W
+   commands are exposed, and a decision record for the conic formulation.
+
+#### TDD checklist
+
+1. Scalar kernel tests for limiting cases (`r -> 0+`, large `r`, `M=1`, `M>1`).
+2. Pair-distribution tests for means, occupations, CDF/SF, absent-edge p-values,
+   seeded sampling, and non-negative integer weights.
+3. Analytic 1-node and homogeneous-network fits for all five W constraints.
+4. No-self-loop and mask feasibility tests for zero and nonzero constraints.
+5. Residual recovery tests for strengths, degrees, edges, total events, and cost.
+6. Property tests: balanced strengths, graphical degree supports,
+   `max(q_ij) < 1`, non-negative multipliers after gauge recentering, and seeded
+   reproducibility.
+7. Legacy comparisons where meaningful: `fitter_s.py` W, `fitter_k.py`
+   `rho_calculator(indist=True)`, and generation/filtering distributions from
+   `ula_null_models.c`. Do not require compatibility with legacy convergence
+   behavior.
+
+#### Benchmark update
+
+- Add W fitting benchmarks separate from streaming generation, for example
+  `benchmarks/bench_w_fitting.py`, with `N={10, 25, 50, 100}` initially and a
+  hard cap that prevents accidental dense all-pairs conic solves at large `N`.
+- Benchmark all ten W fitting APIs: geometric and NB for strengths,
+  degree-events, strength-cost, strength-edges, and strength-degree.
+- Record wall time, iterations, solver status, objective, max residuals,
+  `min_margin`, `max_q`, variables, cones, linear constraints, sparse nonzeros,
+  and max RSS.
+- Extend `benchmarks/bench_quick.py` with tiny W smoke timings and extend
+  `benchmarks/bench_streaming_generation.py` only for W sampling/filtering cases
+  whose fit has already been produced at safe `N`.
+- Update `benchmarks/regression_baselines.json` with conservative smoke
+  thresholds, not large-scale promises. Document practical W fitting limits in
+  `docs/development/benchmarking.md` after measurements.
 
 ### Milestone 7d: Legacy mobility benchmarks — NOT STARTED
 
@@ -198,8 +312,10 @@ separate archival branch that stores the thesis-era code for reference.
 
 | Legacy | What remains |
 |--------|-------------|
-| `fitter_s.py` cases `B`, `W` | W fitting (7c); B fitting done |
-| `fitter_sk.py` `agg=True` | W fitting for strength-degree |
-| `fitter_E.py` `agg=True` | W fitting for strength-edges |
-| `ula_null_models.c` | geometric/binomial/NB samplers (done in 7a) |
-| `others_null_models.c` | benchmark radiation and sequential gravity before removal; do not port |
+| `fitter_s.py` case `W` | W fixed-strength fitting (7c) |
+| `fitter_k.py` `rho_calculator(indist=True)` | W degree-events fitting (7c) |
+| `fitter_grav.py` + thesis equations | W strength-cost fitting (7c) |
+| `fitter_E.py` / thesis equations | W strength-edges fitting (7c) |
+| `fitter_sk.py` / thesis equations | W strength-degree fitting (7c) |
+| `ula_null_models.c` | Audit/complete W samplers and filters for all constraints (7c) |
+| `others_null_models.c` | Benchmark radiation and sequential gravity before removal; do not port |
