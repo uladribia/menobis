@@ -93,6 +93,23 @@ class FitResult:
     iterations: int = 0
 
 
+@dataclass(frozen=True)
+class DegreeEventsFit:
+    """Fitting result for degree-events W models (geometric/NB).
+
+    The model factorizes into occupation (Bernoulli via x, y) and
+    positive-weight distribution (ZTG or ZTNB with parameter q).
+    """
+
+    node: NDArray[np.uint64]
+    x: NDArray[np.float64]
+    y: NDArray[np.float64]
+    q: float
+    positive_mean: float
+    converged: bool = True
+    iterations: int = 0
+
+
 def _validate_balanced_sequences(
     out_sequence: NDArray[np.float64],
     in_sequence: NDArray[np.float64],
@@ -521,12 +538,157 @@ def fit_strength_binomial(
     )
 
 
+def _solve_ztg_q(avg_weight: float) -> float:
+    """Solve q from ZTG mean = 1/(1-q) = avg_weight."""
+    return 1.0 - 1.0 / avg_weight
+
+
+def _solve_ztnb_q(avg_weight: float, layers: int) -> float:
+    """Solve q from ZTNB(M) mean via bisection. Kept for reference only."""
+    low, high = 1e-15, 1.0 - 1e-15
+    m = float(layers)
+    for _ in range(200):
+        mid = 0.5 * (low + high)
+        p0 = (1.0 - mid) ** layers
+        val = m * mid / ((1.0 - mid) * (1.0 - p0))
+        if val < avg_weight:
+            low = mid
+        else:
+            high = mid
+        if high - low < 1e-15:
+            break
+    return 0.5 * (low + high)
+
+
+def fit_degree_events_geometric(
+    degree_out: NDArray[np.floating],
+    degree_in: NDArray[np.floating],
+    total_events: int,
+    *,
+    self_loops: bool = True,
+    tolerance: float = 1e-8,
+    max_iterations: int = 10000,
+    verbose: int = 0,
+) -> DegreeEventsFit:
+    """Fit the W degree-events geometric model.
+
+    Decomposes into:
+    1. Solve q from ZTG mean = T/E (analytic: q = 1 - E/T).
+    2. Fit occupation via standard Bernoulli degree IPF (in Rust).
+
+    Args:
+        degree_out: Outgoing degree per node.
+        degree_in: Incoming degree per node.
+        total_events: Total weight T.
+        self_loops: Whether self-loops are allowed.
+        tolerance: Convergence tolerance for IPF.
+        max_iterations: Maximum IPF iterations.
+        verbose: Logging level.
+
+    Returns:
+        DegreeEventsFit with x, y, q, and positive_mean.
+    """
+    k_out = np.asarray(degree_out, dtype=np.float64)
+    k_in = np.asarray(degree_in, dtype=np.float64)
+    _validate_balanced_sequences(k_out, k_in, name="degree")
+    e = float(k_out.sum())
+    t = float(total_events)
+    if t < e:
+        msg = "total_events must be >= sum(degree_out)"
+        raise ValueError(msg)
+    n = len(k_out)
+    t0 = time.perf_counter()
+    x_list, y_list, q, positive_mean, converged, iters = (
+        _odme.fit_degree_events_geometric(
+            k_out.tolist(), k_in.tolist(), int(total_events),
+            self_loops, tolerance, max_iterations,
+        )
+    )
+    _log_fit_result(
+        "fit_degree_events_geometric", converged, iters,
+        time.perf_counter() - t0, verbose,
+    )
+    return DegreeEventsFit(
+        node=np.arange(n, dtype=np.uint64),
+        x=np.array(x_list),
+        y=np.array(y_list),
+        q=q,
+        positive_mean=positive_mean,
+        converged=converged,
+        iterations=iters,
+    )
+
+
+def fit_degree_events_neg_binomial(
+    degree_out: NDArray[np.floating],
+    degree_in: NDArray[np.floating],
+    total_events: int,
+    *,
+    layers: int = 3,
+    self_loops: bool = True,
+    tolerance: float = 1e-8,
+    max_iterations: int = 10000,
+    verbose: int = 0,
+) -> DegreeEventsFit:
+    """Fit the W degree-events negative binomial(M) model.
+
+    Decomposes into:
+    1. Solve q from ZTNB(M) mean = T/E via bisection (in Rust).
+    2. Fit occupation via standard Bernoulli degree IPF (in Rust).
+
+    Args:
+        degree_out: Outgoing degree per node.
+        degree_in: Incoming degree per node.
+        total_events: Total weight T.
+        layers: Number of NB layers M.
+        self_loops: Whether self-loops are allowed.
+        tolerance: Convergence tolerance for IPF.
+        max_iterations: Maximum IPF iterations.
+        verbose: Logging level.
+
+    Returns:
+        DegreeEventsFit with x, y, q, and positive_mean.
+    """
+    k_out = np.asarray(degree_out, dtype=np.float64)
+    k_in = np.asarray(degree_in, dtype=np.float64)
+    _validate_balanced_sequences(k_out, k_in, name="degree")
+    e = float(k_out.sum())
+    t = float(total_events)
+    if t < e:
+        msg = "total_events must be >= sum(degree_out)"
+        raise ValueError(msg)
+    n = len(k_out)
+    t0 = time.perf_counter()
+    x_list, y_list, q, positive_mean, converged, iters = (
+        _odme.fit_degree_events_neg_binomial(
+            k_out.tolist(), k_in.tolist(), int(total_events),
+            layers, self_loops, tolerance, max_iterations,
+        )
+    )
+    _log_fit_result(
+        "fit_degree_events_neg_binomial", converged, iters,
+        time.perf_counter() - t0, verbose,
+    )
+    return DegreeEventsFit(
+        node=np.arange(n, dtype=np.uint64),
+        x=np.array(x_list),
+        y=np.array(y_list),
+        q=q,
+        positive_mean=positive_mean,
+        converged=converged,
+        iterations=iters,
+    )
+
+
 __all__ = [
+    "DegreeEventsFit",
     "FitResult",
     "StrengthCostFit",
     "StrengthDegreeFit",
     "StrengthEdgesFit",
     "fit_degree_bernoulli",
+    "fit_degree_events_geometric",
+    "fit_degree_events_neg_binomial",
     "fit_strength_binomial",
     "fit_strength_cost_poisson",
     "fit_strength_degree_poisson",

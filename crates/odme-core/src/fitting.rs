@@ -1284,9 +1284,111 @@ pub fn balance_masked_strength_binomial(
     }
 }
 
+/// Result for degree-events W fitting (geometric or negative binomial).
+#[derive(Clone, Debug)]
+pub struct DegreeEventsFitResult {
+    pub x: Vec<f64>,
+    pub y: Vec<f64>,
+    pub q: f64,
+    pub positive_mean: f64,
+    pub converged: bool,
+    pub iterations: usize,
+}
+
+/// Solve q from ZTG mean = 1/(1-q) = avg_weight.
+fn solve_ztg_q(avg_weight: f64) -> f64 {
+    // ZTG mean = 1/(1-q), so q = 1 - 1/avg_weight
+    (1.0 - 1.0 / avg_weight).clamp(0.0, 1.0 - 1e-15)
+}
+
+/// Solve q from ZTNB(M) mean = Mq/((1-q)(1-(1-q)^M)) = avg_weight via bisection.
+fn solve_ztnb_q(avg_weight: f64, layers: u32) -> f64 {
+    let m = f64::from(layers);
+    let mut low = 1e-15_f64;
+    let mut high = 1.0 - 1e-15_f64;
+    for _ in 0..200 {
+        let mid = 0.5 * (low + high);
+        let p0 = (1.0 - mid).powi(layers as i32);
+        let val = m * mid / ((1.0 - mid) * (1.0 - p0));
+        if val < avg_weight {
+            low = mid;
+        } else {
+            high = mid;
+        }
+        if high - low < 1e-15 {
+            break;
+        }
+    }
+    0.5 * (low + high)
+}
+
+/// Fit the W degree-events geometric model.
+///
+/// Decomposes into:
+/// 1. Solve q from ZTG mean = T/E (analytic).
+/// 2. Fit occupation via standard Bernoulli degree IPF.
+#[must_use]
+pub fn fit_degree_events_geometric(
+    degree_out: &[f64],
+    degree_in: &[f64],
+    total_events: u64,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> DegreeEventsFitResult {
+    let e: f64 = degree_out.iter().sum();
+    let t = total_events as f64;
+    let avg_weight = if e > 0.0 { t / e } else { 1.0 };
+    let q = solve_ztg_q(avg_weight);
+    let fit =
+        balance_degree_bernoulli(degree_out, degree_in, self_loops, tolerance, max_iterations);
+    DegreeEventsFitResult {
+        x: fit.x,
+        y: fit.y,
+        q,
+        positive_mean: avg_weight,
+        converged: fit.converged,
+        iterations: fit.iterations,
+    }
+}
+
+/// Fit the W degree-events negative binomial(M) model.
+///
+/// Decomposes into:
+/// 1. Solve q from ZTNB(M) mean = T/E via bisection.
+/// 2. Fit occupation via standard Bernoulli degree IPF.
+#[must_use]
+pub fn fit_degree_events_neg_binomial(
+    degree_out: &[f64],
+    degree_in: &[f64],
+    total_events: u64,
+    layers: u32,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> DegreeEventsFitResult {
+    let e: f64 = degree_out.iter().sum();
+    let t = total_events as f64;
+    let avg_weight = if e > 0.0 { t / e } else { 1.0 };
+    let q = solve_ztnb_q(avg_weight, layers);
+    let fit =
+        balance_degree_bernoulli(degree_out, degree_in, self_loops, tolerance, max_iterations);
+    DegreeEventsFitResult {
+        x: fit.x,
+        y: fit.y,
+        q,
+        positive_mean: avg_weight,
+        converged: fit.converged,
+        iterations: fit.iterations,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{balance_degree_bernoulli, balance_strength_poisson, binary_probability};
+    use super::{
+        balance_degree_bernoulli, balance_strength_poisson, binary_probability,
+        fit_degree_events_geometric, fit_degree_events_neg_binomial,
+    };
 
     #[test]
     fn recovers_binary_degrees() {
@@ -1338,5 +1440,32 @@ mod tests {
                 "s_in[{j}]: expected {s_in_j}, got {col_sum}",
             );
         }
+    }
+
+    #[test]
+    fn degree_events_geometric_recovers_q() {
+        let k_out = vec![2.0, 1.0, 1.0];
+        let k_in = vec![1.0, 2.0, 1.0];
+        let result = fit_degree_events_geometric(&k_out, &k_in, 10, true, 1e-10, 50000);
+        assert!(result.converged);
+        // avg_weight = 10/4 = 2.5, q = 1 - 1/2.5 = 0.6
+        assert!((result.q - 0.6).abs() < 1e-12);
+        assert!((result.positive_mean - 2.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn degree_events_neg_binomial_q_in_range() {
+        let k_out = vec![2.0, 1.0, 1.0];
+        let k_in = vec![1.0, 2.0, 1.0];
+        let result = fit_degree_events_neg_binomial(&k_out, &k_in, 12, 3, true, 1e-10, 50000);
+        assert!(result.converged);
+        assert!(result.q > 0.0);
+        assert!(result.q < 1.0);
+        // Verify ZTNB mean matches
+        let q = result.q;
+        let m = 3.0;
+        let p0 = (1.0 - q).powi(3);
+        let ztnb_mean = m * q / ((1.0 - q) * (1.0 - p0));
+        assert!((ztnb_mean - result.positive_mean).abs() < 1e-8);
     }
 }

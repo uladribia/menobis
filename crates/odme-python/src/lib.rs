@@ -49,6 +49,8 @@ use odme_core::fitting::{
     balance_masked_strength_degree_poisson, balance_masked_strength_poisson,
     balance_strength_binomial, balance_strength_degree_poisson, balance_strength_edges_poisson,
     balance_strength_poisson, balance_weighted_factors,
+    fit_degree_events_geometric as core_fit_degree_events_geometric,
+    fit_degree_events_neg_binomial as core_fit_degree_events_neg_binomial,
 };
 use odme_core::generation::{
     sample_custom_multinomial as core_sample_custom_multinomial,
@@ -834,6 +836,64 @@ fn fit_strength_binomial(
         max_iterations,
     );
     (result.x, result.y, result.converged, result.iterations)
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn fit_degree_events_geometric(
+    degree_out: Vec<f64>,
+    degree_in: Vec<f64>,
+    total_events: u64,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> (Vec<f64>, Vec<f64>, f64, f64, bool, usize) {
+    let result = core_fit_degree_events_geometric(
+        &degree_out,
+        &degree_in,
+        total_events,
+        self_loops,
+        tolerance,
+        max_iterations,
+    );
+    (
+        result.x,
+        result.y,
+        result.q,
+        result.positive_mean,
+        result.converged,
+        result.iterations,
+    )
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn fit_degree_events_neg_binomial(
+    degree_out: Vec<f64>,
+    degree_in: Vec<f64>,
+    total_events: u64,
+    layers: u32,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> (Vec<f64>, Vec<f64>, f64, f64, bool, usize) {
+    let result = core_fit_degree_events_neg_binomial(
+        &degree_out,
+        &degree_in,
+        total_events,
+        layers,
+        self_loops,
+        tolerance,
+        max_iterations,
+    );
+    (
+        result.x,
+        result.y,
+        result.q,
+        result.positive_mean,
+        result.converged,
+        result.iterations,
+    )
 }
 
 #[pyfunction]
@@ -2104,6 +2164,8 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(sample_degree_events_neg_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(sample_strength_neg_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(fit_strength_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_degree_events_geometric, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_degree_events_neg_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(fit_masked_strength_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(filter_strength_poisson, module)?)?;
     module.add_function(wrap_pyfunction!(absent_strength_poisson, module)?)?;
