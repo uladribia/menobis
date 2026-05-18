@@ -558,13 +558,20 @@ def fit_degree_events_geometric(
     t0 = time.perf_counter()
     x_list, y_list, q, positive_mean, converged, iters = (
         _odme.fit_degree_events_geometric(
-            k_out.tolist(), k_in.tolist(), int(total_events),
-            self_loops, tolerance, max_iterations,
+            k_out.tolist(),
+            k_in.tolist(),
+            int(total_events),
+            self_loops,
+            tolerance,
+            max_iterations,
         )
     )
     _log_fit_result(
-        "fit_degree_events_geometric", converged, iters,
-        time.perf_counter() - t0, verbose,
+        "fit_degree_events_geometric",
+        converged,
+        iters,
+        time.perf_counter() - t0,
+        verbose,
     )
     return DegreeEventsFit(
         node=np.arange(n, dtype=np.uint64),
@@ -619,13 +626,21 @@ def fit_degree_events_neg_binomial(
     t0 = time.perf_counter()
     x_list, y_list, q, positive_mean, converged, iters = (
         _odme.fit_degree_events_neg_binomial(
-            k_out.tolist(), k_in.tolist(), int(total_events),
-            layers, self_loops, tolerance, max_iterations,
+            k_out.tolist(),
+            k_in.tolist(),
+            int(total_events),
+            layers,
+            self_loops,
+            tolerance,
+            max_iterations,
         )
     )
     _log_fit_result(
-        "fit_degree_events_neg_binomial", converged, iters,
-        time.perf_counter() - t0, verbose,
+        "fit_degree_events_neg_binomial",
+        converged,
+        iters,
+        time.perf_counter() - t0,
+        verbose,
     )
     return DegreeEventsFit(
         node=np.arange(n, dtype=np.uint64),

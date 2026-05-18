@@ -25,11 +25,51 @@ Scientific reference: <https://hdl.handle.net/10803/400560>.
 | — | Provider unification: `WeightFamily` enum + `FixedStrengthProvider` |
 | — | Final project rename from ODME to MENoBiS |
 
-Total: 157 Python tests, 34 Rust tests, all checks green.
+Total: 191 Python tests, 46 Rust tests, all checks green.
 
 ## Remaining work
 
-### Milestone 7c: Complete W ensemble — NOT STARTED
+### Milestone 7c: Complete W ensemble — IN PROGRESS
+
+**Done:**
+
+- `ZipGeometric` and `ZipNegBinomial` pair distributions with full
+  `expected()`, `occupation_probability()`, `lower_pvalue()`, `upper_pvalue()`,
+  and `sample()` implementations.
+- All providers (`StrengthEdgesProvider`, `StrengthDegreeProvider`,
+  `DegreeEventsProvider`, `StrengthCostProvider`) produce exact ZIP W
+  distributions for Geometric/NegBinomial families (no Poisson fallback).
+- Sampling for all 5 W constraints × 2 families = 10 new Rust samplers +
+  PyO3 bindings + Python wrappers.
+- Rust filter functions for all W ZIP constraint types (8 filter + 4 absent)
+  with PyO3 bindings.
+- Degree-events W fitting (geometric + NB) fully in Rust: Brent bisection
+  for `q` + reuse of `balance_degree_bernoulli`.
+- Unified `fit_strength_poisson` in Rust (analytic self-loops + IPF
+  no-self-loops in one function). All Python fitting code is now a thin
+  validation/logging shell over Rust.
+
+**Remaining:**
+
+- Python-level filter wrappers in `src/odme/filtering.py` for the W ZIP models
+  (PyO3 bindings exist, Python convenience wrappers pending).
+- W **strength fitting** (geometric/NB) — requires conic solver
+  (cvxrust/Clarabel).
+- W **strength-cost fitting** — same conic approach + gamma variable.
+- W **strength-edges fitting** — conic with eta = log(lambda).
+- W **strength-degree fitting** — conic with c, d variables.
+- Scalar kernel helpers for validation/residuals.
+- Documentation updates (API, concepts, decisions).
+- Benchmark additions (`bench_w_fitting.py`).
+
+**Known technical debt (pre-existing, not blocking 7c):**
+
+- `src/odme/models/partial.py` `_build_result()` has an `O(N²)` Python double
+  loop that evaluates per-pair rate lambdas after masked fitting. Should be a
+  Rust kernel for large networks.
+- 3 pre-existing test failures in `TestStrengthDegree` and
+  `test_validate_strength_degree_constraints_accepts_valid_sequences` due to
+  overly strict boundary validation (positive degrees with `s == k`).
 
 The W ensemble covers geometric (`M = 1`) and negative binomial (`M > 1`)
 weighted null models for every W-capable constraint in this package. The final

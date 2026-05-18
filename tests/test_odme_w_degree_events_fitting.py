@@ -2,9 +2,6 @@
 
 import numpy as np
 
-from odme.models import fit_degree_bernoulli
-from odme.models.fitting import FitResult
-
 
 def test_fit_degree_events_geometric_recovers_degrees() -> None:
     """Geometric degree-events fitter recovers expected degrees."""
