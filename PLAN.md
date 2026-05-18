@@ -31,55 +31,43 @@ Total: 157 Python tests, 34 Rust tests, all checks green.
 
 ### Milestone 7c: Geometric / negative binomial fitting — NOT STARTED
 
-The W-ensemble (geometric, negative binomial) fitter replaces legacy SciPy TNC
-preconditioning plus CVXOPT interior points. Do **not** port CVXOPT. Implement a
-Rust-native convex optimizer after reparameterizing $x_i=\exp(u_i)$ and
-$y_j=\exp(v_j)$.
+The W-ensemble fitter replaces legacy SciPy TNC preconditioning plus CVXOPT
+interior points. Do **not** port CVXOPT, and do **not** assume that a log
+transform makes the loss numerically benign.
 
-Equation review: the legacy W log-likelihood maximizes
-$M\sum_{ij}\log(1-x_i y_j)+\sum_i s^{out}_i\log x_i+
-\sum_j s^{in}_j\log y_j$. With $x_i=\exp(u_i)$ and $y_j=\exp(v_j)$, define
-$z_{ij}=u_i+v_j<0$ and minimize:
+Equation review: the legacy W likelihood uses $q_{ij}=x_i y_j<1$ and expected
+weight $M q_{ij}/(1-q_{ij})$. Prefer inverse-fitness variables
+$x_i=\exp(-a_i)$ and $y_j=\exp(-b_j)$, with $r_{ij}=a_i+b_j>0$:
 
-$$F(u,v)=-M\sum_{ij}\log(1-\exp(z_{ij}))
--\sum_i s^{out}_i u_i-\sum_j s^{in}_j v_j.$$
+$$F(a,b)=\sum_i s^{out}_i a_i+\sum_j s^{in}_j b_j
+-M\sum_{ij}\log(1-\exp(-r_{ij})).$$
 
-This is convex because $\phi(z)=-\log(1-e^z)$ has
-$\phi''(z)=e^z/(1-e^z)^2>0$ for $z<0$. The stationarity equations recover the
-strength constraints with expected weight $M e^{z_{ij}}/(1-e^{z_{ij}})$.
-The log transform fixes the non-convex raw domain, but not ill-conditioning
-when many $z_{ij}$ are close to zero. The term `log(1 - exp(z))` is numerically
-hazardous: it suffers catastrophic cancellation near zero and underflow far from
-zero. Implement it only through stable primitives such as `ln_1m_exp(z)`:
-use `log1p(-exp(z))` for moderately negative `z`, and `log(-expm1(z))` close to
-zero.
+This form is convex, but the barrier term still diverges as $r_{ij}\to0^+$.
+That divergence is intrinsic to the W model, not solved by reparameterization.
+Use the objective only with stable kernels and residual diagnostics.
 
 Implementation plan:
 
-1. Implement and test stable scalar kernels: `ln_1m_exp(z)`,
-   `exp_over_1m_exp(z)`, and their derivative/Hessian terms.
-2. Implement matrix-free objective, gradient, Hessian-vector product, and
-   residuals from the equations above using only those stable kernels.
-3. Use damped Newton-CG first; keep L-BFGS with feasible step control as a
-   fallback if Newton-CG is too costly.
-4. Enforce feasibility by computing the maximum step such that all allowed
-   $u_i+v_j \le -\epsilon$; then use Armijo backtracking.
-5. Reject or regularize near-boundary problems when the required margin would
-   be below machine-safe limits; report this as a boundary/infeasible diagnostic,
-   not as ordinary non-convergence.
-6. Remove the scale nullspace (`u += c`, `v -= c`) by recentering after each
-   step or fixing one gauge variable.
-7. Initialize from fixed-strength ME multipliers, scaled into the interior;
-   fall back to uniform feasible starts.
-8. Support `self_loops=False` and masks by skipping forbidden pairs.
-9. Expose `fit_strength_geometric` and `fit_strength_neg_binomial(layers=M)`
-   with convergence, iterations, max product, and strength residuals.
-10. Defer W strength-edges and strength-degree fitting until fixed-strength W is
+1. Implement scalar kernels for Bose-Einstein terms: `neg_ln_1m_exp_neg(r)`,
+   `mean=M/expm1(r)`, and curvature `mean*(1+mean/M)`, with small-`r` series.
+2. Implement matrix-free residuals and Hessian-vector products from these
+   kernels; avoid naive `log(1-exp(...))` and `1/(exp(...)-1)` calls.
+3. Solve the stationarity equations with safeguarded Newton-CG using residual
+   norm as the primary convergence signal and stable objective as a merit check.
+4. Enforce feasibility with maximum-step control so all allowed $r_{ij}$ stay
+   above a machine-safe margin; classify smaller required margins as boundary.
+5. Remove the scale nullspace (`a += c`, `b -= c`) by recentering or fixing one
+   gauge variable.
+6. Initialize from fixed-strength ME multipliers translated to feasible
+   inverse-fitness variables; fall back to uniform interior starts.
+7. Support `self_loops=False` and masks by skipping forbidden pairs.
+8. Expose `fit_strength_geometric` and `fit_strength_neg_binomial(layers=M)`
+   with convergence, iterations, minimum margin, and strength residuals.
+9. Defer W strength-edges and strength-degree fitting until fixed-strength W is
    stable; legacy `fitter_E.py agg=True` and `fitter_sk.py agg=True` remain
    references, not direct ports.
-11. TDD: scalar numerical kernels, tiny hand cases, domain-boundary rejection,
-   finite-difference gradient, Hessian-vector checks, legacy comparison, and
-   property tests.
+10. TDD: scalar kernels, tiny hand cases, boundary rejection, finite-difference
+   gradient, Hessian-vector checks, legacy comparison, and property tests.
 
 ### Milestone 7d: Legacy mobility benchmarks — NOT STARTED
 
