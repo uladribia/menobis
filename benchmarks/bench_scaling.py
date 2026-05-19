@@ -3,74 +3,40 @@
 Generates figures in docs/figures/ showing time and memory scaling.
 """
 
-import gc
-import time
-from pathlib import Path
-
 import matplotlib
-import numpy as np
-
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from benchmarks.common import (
+    FIGURES_DIR,
+    complete_euclidean_costs,
+    pareto_strength_network,
+    time_call,
+)
 from odme.analysis import directed_degrees, directed_strengths
 from odme.analysis.stats import compute_all_stats
 from odme.data.frames import EdgeTable
 from odme.models import (
     fit_degree_bernoulli,
-    fit_strength_poisson,
     fit_strength_cost_poisson,
     fit_strength_degree_poisson,
     fit_strength_edges_poisson,
-    sample_strength_microcanonical,
+    fit_strength_poisson,
     sample_strength_multinomial,
     sample_strength_poisson,
-    sample_strength_degree_poisson,
-    sample_strength_edges_poisson,
+    sample_strength_stub_matching,
 )
-
-FIGURES_DIR = Path(__file__).resolve().parent.parent / "docs" / "figures"
-FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
 N_VALUES = [50, 100, 500, 1000, 2000, 5000, 10000]
 AVERAGE_STRENGTH = 100  # average s_out per node
 
 
-def _generate_pareto_network(n: int, avg_s: int, seed: int = 42) -> EdgeTable:
-    """Generate a Pareto-like directed weighted network with N nodes."""
-    rng = np.random.default_rng(seed)
-    # Pareto-like strength profile.
-    raw = rng.pareto(1.5, size=n) + 1.0
-    p_out = raw / raw.sum()
-    raw = rng.pareto(1.5, size=n) + 1.0
-    p_in = raw / raw.sum()
-    total = n * avg_s
-    s_out = np.round(p_out * total).astype(np.uint64)
-    s_in = np.round(p_in * total).astype(np.uint64)
-    # Balance.
-    diff = int(s_out.sum()) - int(s_in.sum())
-    if diff > 0:
-        s_in[np.argmax(s_in)] += abs(diff)
-    elif diff < 0:
-        s_out[np.argmax(s_out)] += abs(diff)
-    # Sample a network from fixed-strength ME.
-    fit = fit_strength_poisson(s_out, s_in)
-    return sample_strength_poisson(fit.x, fit.y, seed=seed)
-
-
-def _time_fn(fn, *args, **kwargs) -> float:
-    gc.collect()
-    start = time.perf_counter()
-    fn(*args, **kwargs)
-    return time.perf_counter() - start
-
-
 def benchmark_analysis(edges: EdgeTable) -> dict[str, float]:
     """Benchmark analysis operations."""
     return {
-        "directed_strengths": _time_fn(directed_strengths, edges),
-        "directed_degrees": _time_fn(directed_degrees, edges),
-        "compute_all_stats": _time_fn(compute_all_stats, edges),
+        "directed_strengths": time_call(directed_strengths, edges),
+        "directed_degrees": time_call(directed_degrees, edges),
+        "compute_all_stats": time_call(compute_all_stats, edges),
     }
 
 
@@ -80,25 +46,23 @@ def benchmark_fitting(edges: EdgeTable) -> dict[str, float]:
     k = directed_degrees(edges)
     n = int(max(edges.source.max(), edges.target.max())) + 1
     results = {}
-    results["fit_strength_poisson"] = _time_fn(
-        fit_strength_poisson, s.out, s.incoming
-    )
+    results["fit_strength_poisson"] = time_call(fit_strength_poisson, s.out, s.incoming)
     if n <= 1000:
-        results["fit_degree_bernoulli"] = _time_fn(
+        results["fit_degree_bernoulli"] = time_call(
             fit_degree_bernoulli,
             k.out.astype(float),
             k.incoming.astype(float),
         )
     # Only run expensive fitters for small N.
     if n <= 1000:
-        results["fit_strength_edges_poisson"] = _time_fn(
+        results["fit_strength_edges_poisson"] = time_call(
             fit_strength_edges_poisson,
             s.out.astype(float),
             s.incoming.astype(float),
             float(edges.num_edges),
         )
     if n <= 100:
-        results["fit_strength_degree_poisson"] = _time_fn(
+        results["fit_strength_degree_poisson"] = time_call(
             fit_strength_degree_poisson,
             s.out.astype(float),
             s.incoming.astype(float),
@@ -106,44 +70,15 @@ def benchmark_fitting(edges: EdgeTable) -> dict[str, float]:
             k.incoming.astype(float),
         )
     if n <= 1000:
-        # Build cost matrix for strength-cost benchmark.
-        rng = np.random.default_rng(99)
-        positions = rng.uniform(0.0, 10.0, size=(n, 2))
-        c_src: list[int] = []
-        c_tgt: list[int] = []
-        c_val: list[float] = []
-        for ii in range(n):
-            for jj in range(n):
-                if ii == jj:
-                    continue
-                c_src.append(ii)
-                c_tgt.append(jj)
-                c_val.append(
-                    float(np.linalg.norm(positions[ii] - positions[jj]))
-                )
-        cost_src = np.array(c_src)
-        cost_tgt = np.array(c_tgt)
-        cost_val = np.array(c_val)
-        cost_map = {
-            (int(cs), int(ct)): float(cv)
-            for cs, ct, cv in zip(cost_src, cost_tgt, cost_val, strict=True)
-        }
-        target_cost = sum(
-            float(w) * cost_map.get((int(sv), int(tv)), 0.0)
-            for sv, tv, w in zip(
-                edges.source, edges.target, edges.weight, strict=True
-            )
-        )
-        from odme.models import fit_strength_cost_poisson
-
-        results["fit_strength_cost_poisson"] = _time_fn(
+        costs = complete_euclidean_costs(edges, n)
+        results["fit_strength_cost_poisson"] = time_call(
             fit_strength_cost_poisson,
             s.out.astype(float),
             s.incoming.astype(float),
-            cost_src,
-            cost_tgt,
-            cost_val,
-            target_cost,
+            costs.source,
+            costs.target,
+            costs.value,
+            costs.target_cost,
         )
     return results
 
@@ -154,12 +89,14 @@ def benchmark_generation(edges: EdgeTable) -> dict[str, float]:
     fit = fit_strength_poisson(s.out, s.incoming)
     total = edges.total_events
     results = {}
-    results["sample_strength_poisson"] = _time_fn(sample_strength_poisson, fit.x, fit.y, seed=0)
-    results["sample_strength_multinomial"] = _time_fn(
+    results["sample_strength_poisson"] = time_call(
+        sample_strength_poisson, fit.x, fit.y, seed=0
+    )
+    results["sample_strength_multinomial"] = time_call(
         sample_strength_multinomial, fit.x, fit.y, total_events=total, seed=0
     )
-    results["sample_strength_microcanonical"] = _time_fn(
-        sample_strength_microcanonical, s.out, s.incoming, seed=0
+    results["sample_strength_stub_matching"] = time_call(
+        sample_strength_stub_matching, s.out, s.incoming, seed=0
     )
     return results
 
@@ -173,7 +110,7 @@ def run_benchmarks() -> dict[str, dict[int, dict[str, float]]]:
     }
     for n in N_VALUES:
         print(f"  N={n}...", end=" ", flush=True)
-        edges = _generate_pareto_network(n, AVERAGE_STRENGTH)
+        edges = pareto_strength_network(n, AVERAGE_STRENGTH)
         print(f"E={edges.num_edges}, T={edges.total_events}", end=" ", flush=True)
         all_results["analysis"][n] = benchmark_analysis(edges)
         all_results["fitting"][n] = benchmark_fitting(edges)

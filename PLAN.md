@@ -25,7 +25,7 @@ Scientific reference: <https://hdl.handle.net/10803/400560>.
 | — | Provider unification: `WeightFamily` enum + `FixedStrengthProvider` |
 | — | Final project rename from ODME to MENoBiS |
 
-Total: 194 Python tests, 46 Rust tests, all checks green.
+Total: 202 Python tests, 46 Rust tests, all checks green.
 
 ## Remaining work
 
@@ -33,17 +33,17 @@ Total: 194 Python tests, 46 Rust tests, all checks green.
 
 **Done:**
 
-- `ZipGeometric` and `ZipNegBinomial` pair distributions with full
+- `ZeroInflatedGeometric` and `ZeroInflatedNegativeBinomial` pair distributions with full
   `expected()`, `occupation_probability()`, `lower_pvalue()`, `upper_pvalue()`,
   and `sample()` implementations.
 - All providers (`StrengthEdgesProvider`, `StrengthDegreeProvider`,
-  `DegreeEventsProvider`, `StrengthCostProvider`) produce exact ZIP W
-  distributions for Geometric/NegBinomial families (no Poisson fallback).
+  `DegreeEventsProvider`, `StrengthCostProvider`) produce exact zero-inflated W
+  distributions for geometric/negative binomial families (no Poisson fallback).
 - Sampling for all 5 W constraints × 2 families = 10 new Rust samplers +
   PyO3 bindings + Python wrappers.
-- Rust filter functions for all W ZIP constraint types (8 filter + 4 absent)
+- Rust filter functions for all W zero-inflated constraint types (8 filter + 4 absent)
   with PyO3 bindings.
-- Degree-events W fitting (geometric + NB) fully in Rust: Brent bisection
+- Degree-events W fitting (geometric + negative binomial) fully in Rust: Brent bisection
   for `q` + reuse of `balance_degree_bernoulli`.
 - Unified `fit_strength_poisson` in Rust (analytic self-loops + IPF
   no-self-loops in one function). All Python fitting code is now a thin
@@ -56,9 +56,9 @@ Total: 194 Python tests, 46 Rust tests, all checks green.
 
 **Remaining:**
 
-- Python-level filter wrappers in `src/odme/filtering.py` for the W ZIP models
-  (PyO3 bindings exist, Python convenience wrappers pending).
-- W **strength fitting** (geometric/NB) — requires conic solver
+- W zero-inflated absent-edge wrappers for strength-edges, strength-degree, and
+  degree-events if/when native absent-edge bindings are added.
+- W **strength fitting** (geometric/negative binomial) — requires conic solver
   (cvxrust/Clarabel).
 - W **strength-cost fitting** — same conic approach + gamma variable.
 - W **strength-edges fitting** — conic with eta = log(lambda).
@@ -86,11 +86,11 @@ only.
 
 | Constraint | Geometric API | Negative-binomial API | Sampling/filtering work |
 |------------|---------------|-----------------------|-------------------------|
-| strengths | `fit_strength_geometric` | `fit_strength_neg_binomial` | Audit existing `sample_*/filter_*` exports. |
-| degrees + total events | `fit_degree_events_geometric` | `fit_degree_events_neg_binomial` | Add exact zero-truncated W samplers/filters if missing. |
-| strengths + total edges | `fit_strength_edges_geometric` | `fit_strength_edges_neg_binomial` | Add exact zero-inflated W samplers/filters if missing. |
-| strengths + degrees | `fit_strength_degree_geometric` | `fit_strength_degree_neg_binomial` | Add exact zero-inflated W samplers/filters if missing. |
-| strengths + cost | `fit_strength_cost_geometric` | `fit_strength_cost_neg_binomial` | Add cost-modulated W samplers/filters if missing. |
+| strengths | `fit_strength_geometric` | `fit_strength_negative_binomial` | Audit existing `sample_*/filter_*` exports. |
+| degrees + total events | `fit_degree_events_geometric` | `fit_degree_events_negative_binomial` | Add exact zero-inflated W samplers/filters if missing. |
+| strengths + total edges | `fit_strength_edges_geometric` | `fit_strength_edges_negative_binomial` | Add exact zero-inflated W samplers/filters if missing. |
+| strengths + degrees | `fit_strength_degree_geometric` | `fit_strength_degree_negative_binomial` | Add exact zero-inflated W samplers/filters if missing. |
+| strengths + cost | `fit_strength_cost_geometric` | `fit_strength_cost_negative_binomial` | Add cost-modulated W samplers/filters if missing. |
 
 There is no standalone W fixed-degree model without a total-event constraint:
 degrees determine occupation probabilities, while `T` determines the positive
@@ -98,14 +98,14 @@ weight distribution.
 
 Current implementation facts to verify before fitting:
 
-- `WeightFamily::{Geometric, NegBinomial(M)}` and independent fixed-strength
+- `WeightFamily::{Geometric, negative binomial(M)}` and independent fixed-strength
   samplers/filters already exist.
 - `StrengthCostProvider` is family-parameterized, but Python/PyO3 W cost
   sampler/filter wrappers may still be missing.
 - `WeightFamily::zip_distribution`, `StrengthEdgesProvider`,
   `StrengthDegreeProvider`, and `DegreeEventsProvider` currently need an audit:
-  they must produce exact zero-inflated geometric/NB distributions, not fall
-  back to ZIP Poisson.
+  they must produce exact zero-inflated geometric/negative binomial distributions, not fall
+  back to zero-inflated Poisson.
 - Existing ME/B fitters live in `crates/odme-core/src/fitting.rs`; add W fitting
   in `crates/odme-core/src/w_fitting.rs` and re-export it.
 
@@ -120,7 +120,7 @@ Validate feasibility at the Python boundary before invoking the solver:
 - degree-events inputs satisfy `T >= E = sum(k_out) = sum(k_in)`;
 - cost inputs are finite, non-negative, aligned sparse triples with finite target
   `C`, and their missing-pair semantics match generation/filtering;
-- NB `layers` is a positive integer, and public NB APIs should reject `M = 1`
+- negative binomial `layers` is a positive integer, and public negative binomial APIs should reject `M = 1`
   if geometric is the intended spelling.
 
 #### Common W equations
@@ -238,7 +238,7 @@ recentering gauges after solving.
    fitting implementation only. Verify sparse assembly, exponential cones,
    power-cone support, solver status, infeasibility reporting, and warm starts.
 2. Complete W sampling/filtering coverage before declaring W fitting done:
-   add `ZipGeometric` and `ZipNegBinomial` pair distributions; update providers;
+   add `ZeroInflatedGeometric` and `ZeroInflatedNegativeBinomial` pair distributions; update providers;
    add Rust, PyO3, Python wrappers; and add p-value/absent-edge tests.
 3. Implement `w_fitting.rs` result structs with solver status, objective,
    `iterations`, `min_margin = min(r_ij)`, `max_q`, fitted scalar multipliers,
@@ -280,7 +280,7 @@ recentering gauges after solving.
 - Add W fitting benchmarks separate from streaming generation, for example
   `benchmarks/bench_w_fitting.py`, with `N={10, 25, 50, 100}` initially and a
   hard cap that prevents accidental dense all-pairs conic solves at large `N`.
-- Benchmark all ten W fitting APIs: geometric and NB for strengths,
+- Benchmark all ten W fitting APIs: geometric and negative binomial for strengths,
   degree-events, strength-cost, strength-edges, and strength-degree.
 - Record wall time, iterations, solver status, objective, max residuals,
   `min_margin`, `max_q`, variables, cones, linear constraints, sparse nonzeros,
@@ -291,6 +291,217 @@ recentering gauges after solving.
 - Update `benchmarks/regression_baselines.json` with conservative smoke
   thresholds, not large-scale promises. Document practical W fitting limits in
   `docs/development/benchmarking.md` after measurements.
+
+### Refactor: ontology-driven sampling and filtering — DONE
+
+Goal: remove repetitive boilerplate from sampling/filtering while preserving
+explicit public APIs and keeping fitting algorithms readable.
+
+Implemented:
+
+- Rust sampling now has an internal `SamplingModel` dispatcher over provider-
+  backed constraints and `WeightFamily`.
+- Cost-map construction is centralized for Rust sampling.
+- Public API names use `stub_matching` for the exact-strength stub sampler.
+- Public API names now use `negative_binomial` instead of old abbreviated names.
+- Python W zero-inflated filtering wrappers exist for strength-cost, strength-edges,
+  strength-degree, and degree-events geometric/negative-binomial models.
+- Tests cover the new sampling names and the W zero-inflated filtering wrappers.
+- Benchmark scripts share common synthetic-network/cost/timing helpers in
+  `benchmarks/common.py`; old generated benchmark result artifacts were
+  removed from `benchmarks/results/`.
+
+Deferred:
+
+- A public `sample_model(...)` API remains intentionally private.
+- Full Rust filtering dispatcher remains future cleanup; existing filtering
+  already reuses `PairDistributionProvider`, and this pass focused on Python
+  coverage and naming consistency.
+- Degree-events samplers/filters still accept positive-weight parameters where
+  the fit object does not fully encode all needed distribution parameters.
+
+#### Scope
+
+| Area | Refactor target | Public API impact |
+|------|-----------------|-------------------|
+| Rust sampling | One generic internal dispatcher over constraint + weight family | Keep existing named functions initially |
+| Rust filtering | Same provider-dispatch pattern as sampling | Keep existing named functions initially |
+| PyO3 wrappers | Thin wrappers route through shared helpers | Keep existing exported names initially |
+| Python sampling | One internal factory/dispatcher; named functions become adapters | Keep existing named functions initially |
+| Python filtering | Same internal factory/dispatcher as sampling | Add missing W zero-inflated convenience wrappers through the factory |
+| Fitting | Only share validation, logging, result wrapping, and fixed-degree balancing reuse | No broad solver abstraction |
+| Naming | Use consistent `stub_matching` and `negative_binomial` terminology | Breaking rename completed |
+
+#### Ontology to encode explicitly
+
+Introduce small typed enums/specs instead of encoding every combination only in
+function names.
+
+| Concept | Values |
+|---------|--------|
+| `Case` | `ME`, `W`, `B` |
+| `Constraint` | `strength`, `strength_edges`, `strength_degree`, `degree_events`, `strength_cost`, `custom_probability` |
+| `WeightFamily` | `poisson`, `geometric`, `negative_binomial`, `binomial` |
+| `Statistic` | `independent`, `poisson_multinomial`, `multinomial`, `stub_matching` |
+| `Inflation` | `none`, `zero_inflated` where pair occupation is constrained separately |
+
+Notes:
+
+- Keep `WeightFamily` in Rust as the canonical pair-family selector.
+- Treat `negative_binomial(layers=M)` and `binomial(layers=M)` as parameterized
+  families; validate `M` at API boundaries.
+- Use `stub_matching` for the exact-strength sampler. It is a stub-matching
+  algorithm over distinguishable events, not a generic uniform sampler over all
+  integer matrices.
+- Use zero-inflated model names for public APIs. Internally, pair samplers may
+  describe the positive edge-weight draw as conditioned on edge existence.
+
+#### Rust sampling design
+
+Current good foundation:
+
+- `WeightFamily` chooses the pair distribution family.
+- `PairDistribution` handles expected value, occupation, p-values, and sampling.
+- `PairDistributionProvider` abstracts candidate-pair support and per-pair
+  distribution construction.
+- `sample_provider()` already samples any provider.
+
+Refactor plan:
+
+1. Add an internal `SamplingSpec`/`ModelSpec` enum that combines constraint and
+   family without replacing the existing public functions.
+2. Add a single internal dispatcher, e.g. `sample_model(spec, seed)`, that
+   builds the appropriate provider and calls `sample_provider()`.
+3. Replace repeated `sample_strength_*_*` bodies with one-line adapters that
+   construct a spec.
+4. Factor repeated cost-map construction into a helper used by all cost
+   sampling/filtering code.
+5. Keep multinomial, Poisson-multinomial, and `stub_matching` as explicit
+   non-provider samplers because they do not reduce to independent pair draws in
+   the same way.
+6. Do not hide mathematically different positive-weight-rate calculations. For
+   example, degree-events Poisson still needs the positive-edge Poisson rate
+   solve; W degree-events receives/uses the W positive-rate parameter. However, abstract away the zero inflated cases, since the mechanics are the same for sampling. First draw the edge binary probability according to model spec, then draw the other statistic according also to model spec. But the core can be reused.
+
+#### Rust filtering design
+
+Filtering should mirror sampling almost exactly:
+
+1. Reuse `PairDistributionProvider` for all edge p-values and absent-edge
+   filtering.
+2. Add an internal filtering dispatcher over the same model spec/family enums.
+3. Replace repeated `filter_*` and `filter_absent_*` functions with thin named
+   adapters.
+4. Add the missing W zero-inflated Python-level wrappers by routing through the generic
+   filtering dispatcher.
+5. Keep sparse custom-probability filtering separate if its support semantics do
+   not match all-pairs constraints. It should not in principle.
+
+#### PyO3 design
+
+The native extension currently amplifies boilerplate because every public Python
+function maps to a dedicated Rust wrapper.
+
+Plan:
+
+1. Keep named PyO3 functions for backward compatibility and clear `.pyi` stubs.
+2. Internally route them to shared helper functions that accept:
+   - constraint kind;
+   - family kind + layers;
+   - common arrays/multipliers;
+   - self-loop flag;
+   - seed or filtering thresholds.
+3. Use small helper structs for parsed inputs instead of long repeated argument
+   conversion blocks.
+4. Generate or centralize `.pyi` declarations only after the internal shape is
+   stable; do not mix stub churn with the first behavior-preserving refactor.
+
+#### Python sampling/filtering design
+
+Python should remain a thin, typed shell over Rust.
+
+1. Add internal specs in `src/odme/models/generation.py` and
+   `src/odme/filtering.py` only if they reduce wrapper duplication without
+   making public docs harder to read.
+2. Preserve explicit public functions such as
+   `sample_strength_edges_geometric(...)`; each should delegate to a shared
+   private helper.
+3. Centralize conversions to lists/arrays and `EdgeTable` construction.
+4. Use `sample_strength_stub_matching(...)` as the exact-strength sampler name.
+   Breaking API changes are acceptable when they keep the module conceptually
+   healthy.
+5. Use the same family names in Python and Rust, spelled consistently as
+   `negative_binomial`. Names in all modules should be consistent across Python,
+   Rust interfaces, and CLI.
+
+#### Fitting boundaries
+
+Do not force the fitting module into the same factory abstraction.
+
+Allowed cleanup:
+
+- common feasibility checks for balanced strengths/degrees, support capacity,
+  non-negative finite costs, target edge/event ranges, and `layers` validation;
+- common logging/convergence warning wrapper;
+- common result construction helpers for `FitResult`, `StrengthEdgesFit`,
+  `StrengthDegreeFit`, `StrengthCostFit`, and `DegreeEventsFit`;
+- shared fixed-degree Bernoulli balancing, including W degree-events where the
+  plan already says the W scalar solve reduces to Bernoulli occupation IPF.
+
+Avoid:
+
+- a universal `fit_model()` solver abstraction for all constraints;
+- hiding conic W fitting behind Poisson/binomial-like IPF names;
+- over-generalizing fixed strength-cost fitting when Poisson/B/W objectives
+  differ enough that explicit code is easier to audit scientifically.
+
+#### Tests for the refactor
+
+Use characterization tests before touching implementation:
+
+1. For every existing public sampling function, compare old vs refactored output
+   exactly for fixed seeds on small fixtures.
+2. For filtering, compare p-values/decisions exactly for a small graph across
+   all currently exported families and constraints.
+3. Add coverage for the new `stub_matching` name.
+4. Add enum/spec validation tests: invalid family/constraint combinations fail
+   with clear errors.
+5. Keep scientific invariant tests unchanged: non-negative integer weights,
+   seeded reproducibility, expected occupied-edge semantics, and no-self-loop
+   behavior.
+
+#### Migration sequence
+
+1. Write characterization tests around current sampling and filtering wrappers.
+2. Introduce Rust helper/spec types without changing public functions.
+3. Convert Rust sampling adapters to the internal dispatcher.
+4. Convert Rust filtering adapters to the internal dispatcher.
+5. Convert PyO3 wrapper bodies to shared helpers.
+6. Convert Python sampling/filtering wrappers to shared private helpers.
+7. Add `stub_matching` naming in Python/Rust/docs and remove old aliases during
+   the transition.
+8. Run the full Python/Rust test suites, then update API/concept docs.
+
+#### Questions before implementation
+
+1. Old exact-strength sampler aliases should not remain. Do not be afraid of
+   breaking API changes if the entire suite is adapted.
+2. Should a generic public API such as `sample_model(spec, seed=...)` be exposed,
+   or should the spec/factory remain private while public named functions stay
+   the main API? The factory should be private, but docs should be written to explain how to easily extend to new cases (only the independent family cases, with fixed W-B-ME types, but different constraints). This only affects the fitter module mostly, since it changes the saddle point equations, not the rest of the code (or it would be easy to adapt).
+3. Should `negative_binomial` replace old abbreviated names everywhere in public names,
+   or only inside the internal ontology? It should be consistent, so yes. Also, geometric and negative binomial with one layer are the same, so avoid unnecessary repetition, only keep the difference in the public facing methods.
+4. Should `Case` values be public Python enums (`Case.ME`, `Case.W`, `Case.B`),
+   or Rust/Python-private implementation details for now? Not now, they do not add value.
+5. For W degree-events, should public wrappers accept `positive_weight_rate` as
+   today, or should they accept the fitted `DegreeEventsFit` with `q` and derive
+   the sampler parameter internally? In all cases, not only W, derive from the Fit. Add a Fit class for custom qij provided statistics across all cases to make it all conformant. "q" is not the positive weight rate, but the product of lagrange strength/event related multipliers, that map to the parameters of each distribution in the independent case. Be careful with this, not to mix both.
+6. Should custom-probability Poisson/multinomial models be included in the same
+   ontology as constraints, or kept as a separate utility family? Implement them as constraint.custom probability.
+7. Should filtering and sampling share one exact `ModelSpec`, or should they use
+   separate specs with a common lower-level family/constraint enum? Share model description, separate operation options.
+8. What deprecation policy do you want for old names while the final MENoBiS
+   rename is still pending? Rename immidiately. Perform all naming changes that belong in this refactor (not the MENOBIS renaming). Do not be afraid to break the API externally.
 
 ### Milestone 7d: Legacy mobility benchmarks — NOT STARTED
 

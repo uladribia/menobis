@@ -27,16 +27,18 @@ def test_fit_degree_events_geometric_recovers_degrees() -> None:
     np.testing.assert_allclose(expected_k_out, k_out, atol=0.1)
 
 
-def test_fit_degree_events_neg_binomial_recovers_degrees() -> None:
+def test_fit_degree_events_negative_binomial_recovers_degrees() -> None:
     """Negative binomial degree-events fitter recovers expected degrees."""
-    from odme.models.fitting import fit_degree_events_neg_binomial
+    from odme.models.fitting import fit_degree_events_negative_binomial
 
     k_out = np.array([2.0, 1.0, 1.0])
     k_in = np.array([1.0, 2.0, 1.0])
     total_events = 12
     layers = 3
 
-    result = fit_degree_events_neg_binomial(k_out, k_in, total_events, layers=layers)
+    result = fit_degree_events_negative_binomial(
+        k_out, k_in, total_events, layers=layers
+    )
 
     assert result.converged
     assert result.q > 0.0

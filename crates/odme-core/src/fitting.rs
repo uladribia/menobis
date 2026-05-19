@@ -135,7 +135,7 @@ fn expected_edges_strength_edges(x: &[f64], y: &[f64], lam: f64, self_loops: boo
     total
 }
 
-/// Fit exact grand-canonical ME fixed-strength-and-edge-count ZIP constraints.
+/// Fit exact grand-canonical ME fixed-strength-and-edge-count zero-inflated constraints.
 #[must_use]
 pub fn balance_strength_edges_poisson(
     strength_out: &[f64],
@@ -214,7 +214,7 @@ pub fn balance_strength_edges_poisson(
     }
 }
 
-/// Fit exact grand-canonical ME fixed-strength-and-degree ZIP constraints.
+/// Fit exact grand-canonical ME fixed-strength-and-degree zero-inflated constraints.
 ///
 /// The model is the thesis case 4 ME equation:
 /// E[t_ij] = z_i w_j x_i y_j exp(x_i y_j) / (1 + z_i w_j(exp(x_i y_j)-1)).
@@ -1331,13 +1331,13 @@ pub struct DegreeEventsFitResult {
     pub iterations: usize,
 }
 
-/// Solve q from ZTG mean = 1/(1-q) = avg_weight.
+/// Solve q from positive geometric mean = 1/(1-q) = avg_weight.
 fn solve_ztg_q(avg_weight: f64) -> f64 {
-    // ZTG mean = 1/(1-q), so q = 1 - 1/avg_weight
+    // positive geometric mean = 1/(1-q), so q = 1 - 1/avg_weight
     (1.0 - 1.0 / avg_weight).clamp(0.0, 1.0 - 1e-15)
 }
 
-/// Solve q from ZTNB(M) mean = Mq/((1-q)(1-(1-q)^M)) = avg_weight via bisection.
+/// Solve q from positive negative binomial(M) mean = Mq/((1-q)(1-(1-q)^M)) = avg_weight via bisection.
 fn solve_ztnb_q(avg_weight: f64, layers: u32) -> f64 {
     let m = f64::from(layers);
     let mut low = 1e-15_f64;
@@ -1361,7 +1361,7 @@ fn solve_ztnb_q(avg_weight: f64, layers: u32) -> f64 {
 /// Fit the W degree-events geometric model.
 ///
 /// Decomposes into:
-/// 1. Solve q from ZTG mean = T/E (analytic).
+/// 1. Solve q from positive geometric mean = T/E (analytic).
 /// 2. Fit occupation via standard Bernoulli degree IPF.
 #[must_use]
 pub fn fit_degree_events_geometric(
@@ -1391,10 +1391,10 @@ pub fn fit_degree_events_geometric(
 /// Fit the W degree-events negative binomial(M) model.
 ///
 /// Decomposes into:
-/// 1. Solve q from ZTNB(M) mean = T/E via bisection.
+/// 1. Solve q from positive negative binomial(M) mean = T/E via bisection.
 /// 2. Fit occupation via standard Bernoulli degree IPF.
 #[must_use]
-pub fn fit_degree_events_neg_binomial(
+pub fn fit_degree_events_negative_binomial(
     degree_out: &[f64],
     degree_in: &[f64],
     total_events: u64,
@@ -1423,7 +1423,7 @@ pub fn fit_degree_events_neg_binomial(
 mod tests {
     use super::{
         balance_degree_bernoulli, balance_strength_poisson, binary_probability,
-        fit_degree_events_geometric, fit_degree_events_neg_binomial,
+        fit_degree_events_geometric, fit_degree_events_negative_binomial,
     };
 
     #[test]
@@ -1490,14 +1490,14 @@ mod tests {
     }
 
     #[test]
-    fn degree_events_neg_binomial_q_in_range() {
+    fn degree_events_negative_binomial_q_in_range() {
         let k_out = vec![2.0, 1.0, 1.0];
         let k_in = vec![1.0, 2.0, 1.0];
-        let result = fit_degree_events_neg_binomial(&k_out, &k_in, 12, 3, true, 1e-10, 50000);
+        let result = fit_degree_events_negative_binomial(&k_out, &k_in, 12, 3, true, 1e-10, 50000);
         assert!(result.converged);
         assert!(result.q > 0.0);
         assert!(result.q < 1.0);
-        // Verify ZTNB mean matches
+        // Verify positive negative binomial mean matches
         let q = result.q;
         let m = 3.0;
         let p0 = (1.0 - q).powi(3);

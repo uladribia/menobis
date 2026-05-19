@@ -4,7 +4,7 @@
 
 ODME generation defaults to **streaming pair rates** and uses Rayon parallel
 chunks for large candidate supports. It does not materialize an $N^2$
-probability matrix for independent grand-canonical models, ZIP-Poisson models,
+probability matrix for independent grand-canonical models, zero-inflated Poisson models,
 or canonical multinomial sampling.
 
 ## Default execution model
@@ -25,7 +25,7 @@ stores only non-zero sampled edges or accumulates statistics.
 | Operation | Default memory | Notes |
 |-----------|----------------|-------|
 | Poisson generation | $O(E_s)$ | parallel chunks for large supports |
-| ZIP-Poisson generation | $O(E_s)$ | parallel occupation and weight draws |
+| zero-inflated Poisson generation | $O(E_s)$ | parallel occupation and weight draws |
 | Factorized multinomial | $O(N + E_s)$ | row totals, then parallel non-empty rows |
 | Sparse custom $p_{ij}$ Poisson | $O(E_p + E_s)$ | parallel sparse chunks |
 | Sparse custom $p_{ij}$ multinomial | $O(E_p + E_s)$ | chunk totals, then parallel chunks |
@@ -41,13 +41,13 @@ stores only non-zero sampled edges or accumulates statistics.
 | Custom probability ME | stream supplied sparse $p_{ij}$ entries |
 | Degree-events ME | stream Bernoulli occupation + conditional weight |
 | Strength-cost ME | stream $x_i y_j e^{-\gamma d_{ij}}$ |
-| Strength-edges ME | stream ZIP occupation + zero-truncated Poisson |
-| Strength-degree ME | stream ZIP occupation + zero-truncated Poisson |
+| Strength-edges ME | stream zero-inflated occupation + positive-edge Poisson |
+| Strength-degree ME | stream zero-inflated occupation + positive-edge Poisson |
 | Partial constraints | stream free pairs plus known rates |
 
 ## Parallelism and reproducibility
 
-Independent Poisson and ZIP-Poisson models are parallelized by deterministic
+Independent Poisson and zero-inflated Poisson models are parallelized by deterministic
 row chunks. Sparse custom probability inputs are parallelized by deterministic
 entry chunks. Each chunk gets a seed derived from the global seed and chunk id,
 so execution avoids shared RNG locks and is independent of thread scheduling.

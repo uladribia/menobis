@@ -17,18 +17,18 @@ Strength-degree fitting is the slowest step and runs last.
 | `strength_poisson` | ME | strength | Poisson |
 | `strength_multinomial` | ME | strength | Multinomial |
 | `strength_poisson_multinomial` | ME | strength | Poisson-multinomial |
-| `strength_microcanonical` | ME | strength | Microcanonical |
+| `strength_stub_matching` | ME | strength | Stub matching |
 | `strength_binomial` | B | strength | Binomial(M) |
 | `custom_poisson_sparse` | ME | custom | Poisson |
 | `custom_multinomial_sparse` | ME | custom | Multinomial |
-| `degree_events_poisson` | ME | degree-events | ZIP/Poisson |
-| `degree_events_binomial` | B | degree-events | ZIP/Binomial(M) |
+| `degree_events_poisson` | ME | degree-events | zero-inflated Poisson |
+| `degree_events_binomial` | B | degree-events | zero-inflated Binomial(M) |
 | `strength_cost_poisson` | ME | strength-cost | Poisson |
 | `strength_cost_binomial` | B | strength-cost | Binomial(M) |
-| `strength_edges_poisson` | ME | strength-edges | ZIP/Poisson |
-| `strength_edges_binomial` | B | strength-edges | ZIP/Binomial(M) |
-| `strength_degree_poisson` | ME | strength-degree | ZIP/Poisson |
-| `strength_degree_binomial` | B | strength-degree | ZIP/Binomial(M) |
+| `strength_edges_poisson` | ME | strength-edges | zero-inflated Poisson |
+| `strength_edges_binomial` | B | strength-edges | zero-inflated Binomial(M) |
+| `strength_degree_poisson` | ME | strength-degree | zero-inflated Poisson |
+| `strength_degree_binomial` | B | strength-degree | zero-inflated Binomial(M) |
 
 ## Scaling characteristics
 
@@ -36,12 +36,12 @@ Strength-degree fitting is the slowest step and runs last.
 |------|-------:|--------:|--------:|-------|
 | strength Poisson | 0.07 s | 0.22 s | 0.89 s | all-pairs $O(N^2)$ |
 | strength binomial (M=10) | 0.21 s | 0.65 s | 2.16 s | denser output |
-| strength-edges Poisson | 0.07 s | 0.25 s | 0.98 s | ZIP occupation |
+| strength-edges Poisson | 0.07 s | 0.25 s | 0.98 s | zero-inflated occupation |
 | strength-edges binomial (M=10) | 2.2 s | 7.4 s | — | dense B-ensemble |
 | strength-cost Poisson | 0.10 s | 0.38 s | 1.65 s | cost-modulated |
-| strength-degree Poisson | 0.07 s | 0.25 s | 0.98 s | 4-multiplier ZIP |
-| degree-events Poisson | 0.07 s | 0.26 s | 0.99 s | Bernoulli + ZTP |
-| microcanonical | 0.02 s | 0.04 s | 0.08 s | $O(T)$ stubs |
+| strength-degree Poisson | 0.07 s | 0.25 s | 0.98 s | 4-multiplier zero-inflated |
+| degree-events Poisson | 0.07 s | 0.26 s | 0.99 s | Bernoulli + positive Poisson |
+| stub_matching | 0.02 s | 0.04 s | 0.08 s | $O(T)$ stubs |
 | custom Poisson (sparse) | 0.02 s | 0.03 s | 0.06 s | $O(E_p)$ only |
 
 Binomial cases produce more edges per pair (up to M per pair), leading to
@@ -58,7 +58,7 @@ Memory is dominated by:
 | multipliers | $O(N)$ |
 | sparse custom support | $O(E_p)$ |
 | sampled output edge list | $O(E_s)$ |
-| microcanonical stubs | $O(T)$ |
+| stub_matching stubs | $O(T)$ |
 
 For binomial cases, $E_s$ can approach $N^2$ when $M$ is large and
 multiplier products are high. The total weight is bounded by

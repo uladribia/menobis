@@ -290,7 +290,7 @@ impl PairDistributionProvider for StrengthEdgesProvider<'_> {
             WeightFamily::Poisson => Some(strength_edges_distribution(xi, yj, self.lambda)),
             WeightFamily::Binomial(m) => {
                 let occ = strength_edges_binomial_occupation(xy, self.lambda, m);
-                Some(PairDistribution::ZipBinomial {
+                Some(PairDistribution::ZeroInflatedBinomial {
                     occupation: occ,
                     xy,
                     layers: m,
@@ -306,12 +306,12 @@ impl PairDistributionProvider for StrengthEdgesProvider<'_> {
                 } else {
                     0.0
                 };
-                Some(PairDistribution::ZipGeometric {
+                Some(PairDistribution::ZeroInflatedGeometric {
                     occupation: occ,
                     xy: q,
                 })
             }
-            WeightFamily::NegBinomial(m) => {
+            WeightFamily::NegativeBinomial(m) => {
                 // G_M(q) = (1-q)^{-M} - 1
                 let q = xy.clamp(0.0, 1.0 - 1e-15);
                 let g = (1.0 - q).powi(-(m as i32)) - 1.0;
@@ -321,7 +321,7 @@ impl PairDistributionProvider for StrengthEdgesProvider<'_> {
                 } else {
                     0.0
                 };
-                Some(PairDistribution::ZipNegBinomial {
+                Some(PairDistribution::ZeroInflatedNegativeBinomial {
                     occupation: occ,
                     xy: q,
                     layers: m,
@@ -365,7 +365,7 @@ impl PairDistributionProvider for StrengthDegreeProvider<'_> {
             )),
             WeightFamily::Binomial(m) => {
                 let occ = strength_degree_binomial_occupation(xy, vij, m);
-                Some(PairDistribution::ZipBinomial {
+                Some(PairDistribution::ZeroInflatedBinomial {
                     occupation: occ,
                     xy,
                     layers: m,
@@ -377,17 +377,17 @@ impl PairDistributionProvider for StrengthDegreeProvider<'_> {
                 let g = q / (1.0 - q);
                 let den = 1.0 + vij * g;
                 let occ = if den > 0.0 { vij * g / den } else { 0.0 };
-                Some(PairDistribution::ZipGeometric {
+                Some(PairDistribution::ZeroInflatedGeometric {
                     occupation: occ,
                     xy: q,
                 })
             }
-            WeightFamily::NegBinomial(m) => {
+            WeightFamily::NegativeBinomial(m) => {
                 let q = xy.clamp(0.0, 1.0 - 1e-15);
                 let g = (1.0 - q).powi(-(m as i32)) - 1.0;
                 let den = 1.0 + vij * g;
                 let occ = if den > 0.0 { vij * g / den } else { 0.0 };
-                Some(PairDistribution::ZipNegBinomial {
+                Some(PairDistribution::ZeroInflatedNegativeBinomial {
                     occupation: occ,
                     xy: q,
                     layers: m,

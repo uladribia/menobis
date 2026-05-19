@@ -61,10 +61,10 @@ class StrengthDegreeFit:
 
 @dataclass(frozen=True)
 class DegreeEventsFit:
-    """Fitting result for degree-events W models (geometric/NB).
+    """Fitting result for degree-events W models (geometric/negative binomial).
 
     The model factorizes into occupation (Bernoulli via x, y) and
-    positive-weight distribution (ZTG or ZTNB with parameter q).
+    positive-weight distribution (geometric or negative binomial with q).
     """
 
     node: NDArray[np.uint64]

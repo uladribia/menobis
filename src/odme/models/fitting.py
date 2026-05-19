@@ -460,7 +460,7 @@ def fit_degree_events_geometric(
     """Fit the W degree-events geometric model.
 
     Decomposes into:
-    1. Solve q from ZTG mean = T/E (analytic: q = 1 - E/T).
+    1. Solve q from positive geometric mean = T/E (analytic: q = 1 - E/T).
     2. Fit occupation via standard Bernoulli degree IPF (in Rust).
 
     Args:
@@ -513,7 +513,7 @@ def fit_degree_events_geometric(
     )
 
 
-def fit_degree_events_neg_binomial(
+def fit_degree_events_negative_binomial(
     degree_out: NDArray[np.floating],
     degree_in: NDArray[np.floating],
     total_events: int,
@@ -527,14 +527,14 @@ def fit_degree_events_neg_binomial(
     """Fit the W degree-events negative binomial(M) model.
 
     Decomposes into:
-    1. Solve q from ZTNB(M) mean = T/E via bisection (in Rust).
+    1. Solve q from positive negative binomial(M) mean = T/E via bisection (in Rust).
     2. Fit occupation via standard Bernoulli degree IPF (in Rust).
 
     Args:
         degree_out: Outgoing degree per node.
         degree_in: Incoming degree per node.
         total_events: Total weight T.
-        layers: Number of NB layers M.
+        layers: Number of negative binomial layers M.
         self_loops: Whether self-loops are allowed.
         tolerance: Convergence tolerance for IPF.
         max_iterations: Maximum IPF iterations.
@@ -554,7 +554,7 @@ def fit_degree_events_neg_binomial(
     n = len(k_out)
     t0 = time.perf_counter()
     x_list, y_list, q, positive_mean, converged, iters = (
-        _odme.fit_degree_events_neg_binomial(
+        _odme.fit_degree_events_negative_binomial(
             k_out.tolist(),
             k_in.tolist(),
             int(total_events),
@@ -565,7 +565,7 @@ def fit_degree_events_neg_binomial(
         )
     )
     _log_fit_result(
-        "fit_degree_events_neg_binomial",
+        "fit_degree_events_negative_binomial",
         converged,
         iters,
         time.perf_counter() - t0,
@@ -590,7 +590,7 @@ __all__ = [
     "StrengthEdgesFit",
     "fit_degree_bernoulli",
     "fit_degree_events_geometric",
-    "fit_degree_events_neg_binomial",
+    "fit_degree_events_negative_binomial",
     "fit_strength_binomial",
     "fit_strength_cost_poisson",
     "fit_strength_degree_poisson",

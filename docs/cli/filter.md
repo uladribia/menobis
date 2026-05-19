@@ -15,9 +15,9 @@ lower-significant, or compatible with an independent ODME null model.
 |---------|------------|-------|
 | `strength-poisson` | fit strength Poisson | edge table |
 | `strength-cost-poisson` | fit strength-cost Poisson | edge table + costs CSV |
-| `strength-edges-poisson` | fit strength-edges Poisson (ZIP) | edge table |
-| `strength-degree-poisson` | fit strength-degree Poisson (ZIP) | edge table |
-| `degree-events-poisson` | fit degree-events Poisson (ZIP) | edge table |
+| `strength-edges-poisson` | fit strength-edges Poisson (zero-inflated) | edge table |
+| `strength-degree-poisson` | fit strength-degree Poisson (zero-inflated) | edge table |
+| `degree-events-poisson` | fit degree-events Poisson (zero-inflated) | edge table |
 | `custom-poisson` | user-supplied Poisson rates | edge table + rates CSV |
 
 ## Examples

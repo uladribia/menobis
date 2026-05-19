@@ -17,7 +17,7 @@ relative to $T$ as total events grow.
 |----------------|----------|---------------|------------|
 | Grand-canonical | `sample_strength_poisson` | nothing | $s^{out}$, $s^{in}$, $T$ |
 | Canonical | `sample_strength_multinomial` | $T$ | $s^{out}$, $s^{in}$ |
-| Stub-matched exact strength | `sample_strength_microcanonical` | $s^{out}$, $s^{in}$, $T$ | edge weights only |
+| Stub-matched exact strength | `sample_strength_stub_matching` | $s^{out}$, $s^{in}$, $T$ | edge weights only |
 
 All three have the same target marginal expectation:
 

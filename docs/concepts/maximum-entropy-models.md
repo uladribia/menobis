@@ -58,7 +58,7 @@ Sampler variants:
 |----------|----------|---------------|
 | Grand-canonical | `sample_strength_poisson(fit.x, fit.y)` | nothing |
 | Canonical | `sample_strength_multinomial(fit.x, fit.y, total_events=T)` | $T$ |
-| Stub-matched | `sample_strength_microcanonical(s_out, s_in)` | $s^{out}$, $s^{in}$, $T$ |
+| Stub-matched | `sample_strength_stub_matching(s_out, s_in)` | $s^{out}$, $s^{in}$, $T$ |
 
 ## Degree-events ME, thesis case 5
 

@@ -3,13 +3,13 @@
 //! Taxonomy: `WeightFamily` selects the pair-level weight distribution.
 //! `PairDistribution` is the concrete distribution for one `(i,j)` pair.
 //! Zero-inflated variants combine a Bernoulli occupation draw with a
-//! zero-truncated positive-weight distribution.
+//! positive-weight conditional distribution.
 
 use rand::rngs::StdRng;
 use rand::Rng;
 use rand_distr::{Bernoulli, Binomial, Distribution, Geometric, Poisson};
 
-const ZTP_REJECTION_MIN_RATE: f64 = 0.05;
+const POSITIVE_POISSON_REJECTION_MIN_RATE: f64 = 0.05;
 
 // ---------------------------------------------------------------------------
 // Weight family enum — selects the distribution type
@@ -24,8 +24,8 @@ pub enum WeightFamily {
     Geometric,
     /// Binomial(M, p/(1+p)). E[t] = M·p/(1+p).
     Binomial(u32),
-    /// NegBinomial(M, 1−p). E[t] = M·p/(1−p).
-    NegBinomial(u32),
+    /// NegativeBinomial(M, 1−p). E[t] = M·p/(1−p).
+    NegativeBinomial(u32),
 }
 
 impl WeightFamily {
@@ -36,7 +36,7 @@ impl WeightFamily {
             Self::Poisson => PairDistribution::Poisson { rate: xy },
             Self::Geometric => PairDistribution::Geometric { xy },
             Self::Binomial(m) => PairDistribution::Binomial { xy, layers: m },
-            Self::NegBinomial(m) => PairDistribution::NegBinomial { xy, layers: m },
+            Self::NegativeBinomial(m) => PairDistribution::NegativeBinomial { xy, layers: m },
         }
     }
 
@@ -45,17 +45,17 @@ impl WeightFamily {
     #[must_use]
     pub fn zip_distribution(self, occupation: f64, rate: f64) -> PairDistribution {
         match self {
-            Self::Poisson => PairDistribution::ZipPoisson { occupation, rate },
-            Self::Binomial(m) => PairDistribution::ZipBinomial {
+            Self::Poisson => PairDistribution::ZeroInflatedPoisson { occupation, rate },
+            Self::Binomial(m) => PairDistribution::ZeroInflatedBinomial {
                 occupation,
                 xy: rate,
                 layers: m,
             },
-            Self::Geometric => PairDistribution::ZipGeometric {
+            Self::Geometric => PairDistribution::ZeroInflatedGeometric {
                 occupation,
                 xy: rate,
             },
-            Self::NegBinomial(m) => PairDistribution::ZipNegBinomial {
+            Self::NegativeBinomial(m) => PairDistribution::ZeroInflatedNegativeBinomial {
                 occupation,
                 xy: rate,
                 layers: m,
@@ -79,24 +79,24 @@ impl WeightFamily {
 pub enum PairDistribution {
     /// Independent Poisson. E[t] = rate.
     Poisson { rate: f64 },
-    /// Zero-inflated Poisson (Bernoulli occupation + ZTP positive weight).
-    ZipPoisson { occupation: f64, rate: f64 },
+    /// Zero-inflated Poisson (Bernoulli occupation + positive Poisson positive weight).
+    ZeroInflatedPoisson { occupation: f64, rate: f64 },
     /// Geometric with param xy. E[t] = xy/(1−xy).
     Geometric { xy: f64 },
     /// Binomial(M, xy/(1+xy)). E[t] = M·xy/(1+xy).
     Binomial { xy: f64, layers: u32 },
-    /// NegBinomial(M, 1−xy). E[t] = M·xy/(1−xy).
-    NegBinomial { xy: f64, layers: u32 },
-    /// Zero-inflated binomial: Bernoulli occupation + ZTB(M, p) positive weight.
-    ZipBinomial {
+    /// NegativeBinomial(M, 1−xy). E[t] = M·xy/(1−xy).
+    NegativeBinomial { xy: f64, layers: u32 },
+    /// Zero-inflated binomial: Bernoulli occupation + positive binomial(M, p) positive weight.
+    ZeroInflatedBinomial {
         occupation: f64,
         xy: f64,
         layers: u32,
     },
-    /// Zero-inflated geometric: Bernoulli occupation + ZTG positive weight.
-    ZipGeometric { occupation: f64, xy: f64 },
-    /// Zero-inflated negative binomial: Bernoulli occupation + ZTNB(M) positive weight.
-    ZipNegBinomial {
+    /// Zero-inflated geometric: Bernoulli occupation + positive geometric positive weight.
+    ZeroInflatedGeometric { occupation: f64, xy: f64 },
+    /// Zero-inflated negative binomial: Bernoulli occupation + positive negative binomial(M) positive weight.
+    ZeroInflatedNegativeBinomial {
         occupation: f64,
         xy: f64,
         layers: u32,
@@ -109,8 +109,8 @@ impl PairDistribution {
     pub fn expected(self) -> f64 {
         match self {
             Self::Poisson { rate } => rate.max(0.0),
-            Self::ZipPoisson { occupation, rate } => {
-                occupation.max(0.0) * zero_truncated_poisson_mean(rate)
+            Self::ZeroInflatedPoisson { occupation, rate } => {
+                occupation.max(0.0) * positive_edge_poisson_mean(rate)
             }
             Self::Geometric { xy } => {
                 let xy = xy.max(0.0);
@@ -121,7 +121,7 @@ impl PairDistribution {
                 }
             }
             Self::Binomial { xy, layers } => f64::from(layers) * (xy / (1.0 + xy)).clamp(0.0, 1.0),
-            Self::NegBinomial { xy, layers } => {
+            Self::NegativeBinomial { xy, layers } => {
                 let xy = xy.max(0.0);
                 if xy >= 1.0 {
                     f64::INFINITY
@@ -129,32 +129,32 @@ impl PairDistribution {
                     f64::from(layers) * xy / (1.0 - xy)
                 }
             }
-            Self::ZipBinomial {
+            Self::ZeroInflatedBinomial {
                 occupation,
                 xy,
                 layers,
             } => {
                 let p = (xy / (1.0 + xy)).clamp(0.0, 1.0);
                 let m = f64::from(layers);
-                let ztb_mean = if (1.0 - p).powi(layers as i32) >= 1.0 {
+                let positive_binomial_mean = if (1.0 - p).powi(layers as i32) >= 1.0 {
                     1.0
                 } else {
                     m * p / (1.0 - (1.0 - p).powi(layers as i32))
                 };
-                occupation.max(0.0) * ztb_mean
+                occupation.max(0.0) * positive_binomial_mean
             }
-            Self::ZipGeometric { occupation, xy } => {
-                // ZTG mean = 1/(1-q) where q = xy.
+            Self::ZeroInflatedGeometric { occupation, xy } => {
+                // positive geometric mean = 1/(1-q) where q = xy.
                 let q = xy.clamp(0.0, 1.0 - 1e-15);
                 let ztg_mean = 1.0 / (1.0 - q);
                 occupation.max(0.0) * ztg_mean
             }
-            Self::ZipNegBinomial {
+            Self::ZeroInflatedNegativeBinomial {
                 occupation,
                 xy,
                 layers,
             } => {
-                // ZTNB mean = Mq / ((1-q)(1-(1-q)^M)).
+                // positive negative binomial mean = Mq / ((1-q)(1-(1-q)^M)).
                 let q = xy.clamp(0.0, 1.0 - 1e-15);
                 let m = f64::from(layers);
                 let p0 = (1.0 - q).powi(layers as i32);
@@ -173,18 +173,18 @@ impl PairDistribution {
     pub fn occupation_probability(self) -> f64 {
         match self {
             Self::Poisson { rate } => 1.0 - (-rate.max(0.0)).exp(),
-            Self::ZipPoisson { occupation, .. } => occupation.clamp(0.0, 1.0),
+            Self::ZeroInflatedPoisson { occupation, .. } => occupation.clamp(0.0, 1.0),
             Self::Geometric { xy } => xy.clamp(0.0, 1.0),
             Self::Binomial { xy, layers } => {
                 let p = (xy / (1.0 + xy)).clamp(0.0, 1.0);
                 1.0 - (1.0 - p).powi(layers as i32)
             }
-            Self::NegBinomial { xy, layers } => {
+            Self::NegativeBinomial { xy, layers } => {
                 1.0 - (1.0 - xy.max(0.0)).max(0.0).powi(layers as i32)
             }
-            Self::ZipBinomial { occupation, .. } => occupation.clamp(0.0, 1.0),
-            Self::ZipGeometric { occupation, .. } => occupation.clamp(0.0, 1.0),
-            Self::ZipNegBinomial { occupation, .. } => occupation.clamp(0.0, 1.0),
+            Self::ZeroInflatedBinomial { occupation, .. } => occupation.clamp(0.0, 1.0),
+            Self::ZeroInflatedGeometric { occupation, .. } => occupation.clamp(0.0, 1.0),
+            Self::ZeroInflatedNegativeBinomial { occupation, .. } => occupation.clamp(0.0, 1.0),
         }
     }
 
@@ -193,18 +193,18 @@ impl PairDistribution {
     pub fn lower_pvalue(self, weight: u64) -> f64 {
         match self {
             Self::Poisson { rate } => poisson_cdf(weight, rate),
-            Self::ZipPoisson { occupation, rate } => {
+            Self::ZeroInflatedPoisson { occupation, rate } => {
                 let p = occupation.clamp(0.0, 1.0);
                 if weight == 0 {
                     1.0 - p
                 } else {
-                    (1.0 - p) + p * zero_truncated_poisson_cdf(weight, rate)
+                    (1.0 - p) + p * positive_edge_poisson_cdf(weight, rate)
                 }
             }
             Self::Geometric { xy } => geometric_cdf(weight, xy),
             Self::Binomial { xy, layers } => binomial_cdf(weight, xy / (1.0 + xy), layers),
-            Self::NegBinomial { xy, layers } => neg_binomial_cdf(weight, xy, layers),
-            Self::ZipBinomial {
+            Self::NegativeBinomial { xy, layers } => negative_binomial_cdf(weight, xy, layers),
+            Self::ZeroInflatedBinomial {
                 occupation,
                 xy,
                 layers,
@@ -214,23 +214,23 @@ impl PairDistribution {
                     1.0 - p
                 } else {
                     let bin_p = (xy / (1.0 + xy)).clamp(0.0, 1.0);
-                    (1.0 - p) + p * ztb_cdf(weight, bin_p, layers)
+                    (1.0 - p) + p * positive_binomial_cdf(weight, bin_p, layers)
                 }
             }
-            Self::ZipGeometric { occupation, xy } => {
+            Self::ZeroInflatedGeometric { occupation, xy } => {
                 let p = occupation.clamp(0.0, 1.0);
                 if weight == 0 {
                     1.0 - p
                 } else {
-                    // ZTG CDF: P(K<=k|K>=1) = (Geo_CDF(k) - Geo_PMF(0)) / (1 - Geo_PMF(0))
+                    // positive geometric CDF: P(K<=k|K>=1) = (Geo_CDF(k) - Geo_PMF(0)) / (1 - Geo_PMF(0))
                     // Geo_CDF(k) = 1 - q^{k+1}, Geo_PMF(0) = 1-q, so
-                    // ZTG_CDF(k) = (1 - q^{k+1} - (1-q)) / q = (q - q^{k+1})/q = 1 - q^k
+                    // positive geometric_CDF(k) = (1 - q^{k+1} - (1-q)) / q = (q - q^{k+1})/q = 1 - q^k
                     let q = xy.clamp(0.0, 1.0 - 1e-15);
                     let ztg_cdf = 1.0 - q.powi(weight as i32);
                     (1.0 - p) + p * ztg_cdf
                 }
             }
-            Self::ZipNegBinomial {
+            Self::ZeroInflatedNegativeBinomial {
                 occupation,
                 xy,
                 layers,
@@ -239,10 +239,10 @@ impl PairDistribution {
                 if weight == 0 {
                     1.0 - p
                 } else {
-                    // ZTNB CDF: (NB_CDF(k) - NB_PMF(0)) / (1 - NB_PMF(0))
+                    // positive negative binomial CDF: (negative_binomial_cdf(k) - negative_binomial_pmf(0)) / (1 - negative_binomial_pmf(0))
                     let q = xy.clamp(0.0, 1.0 - 1e-15);
                     let p0 = (1.0 - q).powi(layers as i32);
-                    let nb_cdf = neg_binomial_cdf(weight, q, layers);
+                    let nb_cdf = negative_binomial_cdf(weight, q, layers);
                     let ztnb_cdf = if p0 >= 1.0 {
                         1.0
                     } else {
@@ -263,32 +263,32 @@ impl PairDistribution {
         }
         match self {
             Self::Poisson { rate } => poisson_sf_inclusive(weight, rate),
-            Self::ZipPoisson { occupation, rate } => {
-                occupation.clamp(0.0, 1.0) * zero_truncated_poisson_sf_inclusive(weight, rate)
+            Self::ZeroInflatedPoisson { occupation, rate } => {
+                occupation.clamp(0.0, 1.0) * positive_edge_poisson_sf_inclusive(weight, rate)
             }
             Self::Geometric { xy } => (1.0 - geometric_cdf(weight - 1, xy)).clamp(0.0, 1.0),
             Self::Binomial { xy, layers } => {
                 (1.0 - binomial_cdf(weight - 1, xy / (1.0 + xy), layers)).clamp(0.0, 1.0)
             }
-            Self::NegBinomial { xy, layers } => {
-                (1.0 - neg_binomial_cdf(weight - 1, xy, layers)).clamp(0.0, 1.0)
+            Self::NegativeBinomial { xy, layers } => {
+                (1.0 - negative_binomial_cdf(weight - 1, xy, layers)).clamp(0.0, 1.0)
             }
-            Self::ZipBinomial {
+            Self::ZeroInflatedBinomial {
                 occupation,
                 xy,
                 layers,
             } => {
                 let p = occupation.clamp(0.0, 1.0);
                 let bin_p = (xy / (1.0 + xy)).clamp(0.0, 1.0);
-                (p * ztb_sf_inclusive(weight, bin_p, layers)).clamp(0.0, 1.0)
+                (p * positive_binomial_sf_inclusive(weight, bin_p, layers)).clamp(0.0, 1.0)
             }
-            Self::ZipGeometric { occupation, xy } => {
-                // P(K>=k|K>=1) = 1 - ZTG_CDF(k-1) = q^{k-1}
+            Self::ZeroInflatedGeometric { occupation, xy } => {
+                // P(K>=k|K>=1) = 1 - positive geometric_CDF(k-1) = q^{k-1}
                 let p = occupation.clamp(0.0, 1.0);
                 let q = xy.clamp(0.0, 1.0 - 1e-15);
                 (p * q.powi((weight - 1) as i32)).clamp(0.0, 1.0)
             }
-            Self::ZipNegBinomial {
+            Self::ZeroInflatedNegativeBinomial {
                 occupation,
                 xy,
                 layers,
@@ -299,7 +299,7 @@ impl PairDistribution {
                 if p0 >= 1.0 {
                     return 0.0;
                 }
-                let nb_cdf_prev = neg_binomial_cdf(weight - 1, q, layers);
+                let nb_cdf_prev = negative_binomial_cdf(weight - 1, q, layers);
                 let ztnb_sf = (1.0 - (nb_cdf_prev - p0) / (1.0 - p0)).clamp(0.0, 1.0);
                 (p * ztnb_sf).clamp(0.0, 1.0)
             }
@@ -311,7 +311,7 @@ impl PairDistribution {
     pub fn sample(self, rng: &mut StdRng) -> u64 {
         match self {
             Self::Poisson { rate } => sample_poisson(rate, rng),
-            Self::ZipPoisson { occupation, rate } => {
+            Self::ZeroInflatedPoisson { occupation, rate } => {
                 if occupation <= 0.0 {
                     return 0;
                 }
@@ -320,15 +320,15 @@ impl PairDistribution {
                     Err(_) => false,
                 };
                 if present {
-                    sample_zero_truncated_poisson(rate, rng)
+                    sample_positive_edge_poisson(rate, rng)
                 } else {
                     0
                 }
             }
             Self::Geometric { xy } => sample_geometric(xy, rng),
             Self::Binomial { xy, layers } => sample_binomial(xy, layers, rng),
-            Self::NegBinomial { xy, layers } => sample_neg_binomial(xy, layers, rng),
-            Self::ZipBinomial {
+            Self::NegativeBinomial { xy, layers } => sample_negative_binomial(xy, layers, rng),
+            Self::ZeroInflatedBinomial {
                 occupation,
                 xy,
                 layers,
@@ -341,12 +341,12 @@ impl PairDistribution {
                     Err(_) => false,
                 };
                 if present {
-                    sample_ztb(xy, layers, rng)
+                    sample_positive_binomial(xy, layers, rng)
                 } else {
                     0
                 }
             }
-            Self::ZipGeometric { occupation, xy } => {
+            Self::ZeroInflatedGeometric { occupation, xy } => {
                 if occupation <= 0.0 {
                     return 0;
                 }
@@ -355,12 +355,12 @@ impl PairDistribution {
                     Err(_) => false,
                 };
                 if present {
-                    sample_zt_geometric(xy, rng)
+                    sample_positive_geometric(xy, rng)
                 } else {
                     0
                 }
             }
-            Self::ZipNegBinomial {
+            Self::ZeroInflatedNegativeBinomial {
                 occupation,
                 xy,
                 layers,
@@ -373,7 +373,7 @@ impl PairDistribution {
                     Err(_) => false,
                 };
                 if present {
-                    sample_zt_neg_binomial(xy, layers, rng)
+                    sample_positive_negative_binomial(xy, layers, rng)
                 } else {
                     0
                 }
@@ -383,20 +383,20 @@ impl PairDistribution {
 }
 
 // ---------------------------------------------------------------------------
-// ZIP distribution constructors (constraint-specific)
+// zero-inflated distribution constructors (constraint-specific)
 // ---------------------------------------------------------------------------
 
-/// Strength-edges ZIP: Bernoulli(p) + ZTP(rate) where rate = x_i * y_j.
+/// Strength-edges zero-inflated: Bernoulli(p) + positive Poisson(rate) where rate = x_i * y_j.
 #[must_use]
 pub fn strength_edges_distribution(xi: f64, yj: f64, lam: f64) -> PairDistribution {
     let rate = xi * yj;
     let expm1 = rate.exp_m1();
     let den = 1.0 + lam * expm1;
     let occupation = if den > 0.0 { lam * expm1 / den } else { 0.0 };
-    PairDistribution::ZipPoisson { occupation, rate }
+    PairDistribution::ZeroInflatedPoisson { occupation, rate }
 }
 
-/// Strength-degree ZIP: Bernoulli(p) + ZTP(rate) where rate = x_i * y_j.
+/// Strength-degree zero-inflated: Bernoulli(p) + positive Poisson(rate) where rate = x_i * y_j.
 #[must_use]
 pub fn strength_degree_distribution(xi: f64, yj: f64, zi: f64, wj: f64) -> PairDistribution {
     let rate = xi * yj;
@@ -404,16 +404,16 @@ pub fn strength_degree_distribution(xi: f64, yj: f64, zi: f64, wj: f64) -> PairD
     let expm1 = rate.exp_m1();
     let den = 1.0 + v * expm1;
     let occupation = if den > 0.0 { v * expm1 / den } else { 0.0 };
-    PairDistribution::ZipPoisson { occupation, rate }
+    PairDistribution::ZeroInflatedPoisson { occupation, rate }
 }
 
 // ---------------------------------------------------------------------------
 // Poisson helpers
 // ---------------------------------------------------------------------------
 
-/// Zero-truncated Poisson mean.
+/// Positive Poisson mean conditional on edge existence.
 #[must_use]
-pub fn zero_truncated_poisson_mean(rate: f64) -> f64 {
+pub fn positive_edge_poisson_mean(rate: f64) -> f64 {
     if rate <= 0.0 {
         1.0
     } else {
@@ -448,7 +448,7 @@ pub fn poisson_sf_inclusive(weight: u64, rate: f64) -> f64 {
 }
 
 #[must_use]
-pub fn zero_truncated_poisson_cdf(weight: u64, rate: f64) -> f64 {
+pub fn positive_edge_poisson_cdf(weight: u64, rate: f64) -> f64 {
     if weight == 0 {
         return 0.0;
     }
@@ -461,7 +461,7 @@ pub fn zero_truncated_poisson_cdf(weight: u64, rate: f64) -> f64 {
 }
 
 #[must_use]
-pub fn zero_truncated_poisson_sf_inclusive(weight: u64, rate: f64) -> f64 {
+pub fn positive_edge_poisson_sf_inclusive(weight: u64, rate: f64) -> f64 {
     if weight <= 1 && rate <= 0.0 {
         return 1.0;
     }
@@ -535,7 +535,7 @@ fn sample_binomial(xy: f64, layers: u32, rng: &mut StdRng) -> u64 {
 // Negative binomial helpers
 // ---------------------------------------------------------------------------
 
-fn neg_binomial_cdf(weight: u64, xy: f64, layers: u32) -> f64 {
+fn negative_binomial_cdf(weight: u64, xy: f64, layers: u32) -> f64 {
     let xy = xy.clamp(0.0, 1.0 - 1e-15);
     let p_success = 1.0 - xy;
     if p_success >= 1.0 || xy <= 0.0 {
@@ -557,7 +557,7 @@ fn neg_binomial_cdf(weight: u64, xy: f64, layers: u32) -> f64 {
     sum.clamp(0.0, 1.0)
 }
 
-fn sample_neg_binomial(xy: f64, layers: u32, rng: &mut StdRng) -> u64 {
+fn sample_negative_binomial(xy: f64, layers: u32, rng: &mut StdRng) -> u64 {
     let xy = xy.clamp(0.0, 1.0 - 1e-15);
     if xy <= 0.0 {
         return 0;
@@ -573,11 +573,11 @@ fn sample_neg_binomial(xy: f64, layers: u32, rng: &mut StdRng) -> u64 {
 }
 
 // ---------------------------------------------------------------------------
-// Zero-truncated binomial helpers
+// Positive binomial helpers conditional on edge existence
 // ---------------------------------------------------------------------------
 
-/// ZTB CDF: P(T <= k | T > 0) = (Bin_CDF(k) - Bin_PMF(0)) / (1 - Bin_PMF(0)).
-fn ztb_cdf(weight: u64, p: f64, layers: u32) -> f64 {
+/// positive binomial CDF: P(T <= k | T > 0) = (Bin_CDF(k) - Bin_PMF(0)) / (1 - Bin_PMF(0)).
+fn positive_binomial_cdf(weight: u64, p: f64, layers: u32) -> f64 {
     if weight == 0 {
         return 0.0;
     }
@@ -590,16 +590,16 @@ fn ztb_cdf(weight: u64, p: f64, layers: u32) -> f64 {
     (num / den).clamp(0.0, 1.0)
 }
 
-/// ZTB survival: P(T >= k | T > 0).
-fn ztb_sf_inclusive(weight: u64, p: f64, layers: u32) -> f64 {
+/// positive binomial survival: P(T >= k | T > 0).
+fn positive_binomial_sf_inclusive(weight: u64, p: f64, layers: u32) -> f64 {
     if weight <= 1 {
         return 1.0;
     }
-    (1.0 - ztb_cdf(weight - 1, p, layers)).clamp(0.0, 1.0)
+    (1.0 - positive_binomial_cdf(weight - 1, p, layers)).clamp(0.0, 1.0)
 }
 
-/// Sample from zero-truncated Bin(M, p) by rejection.
-fn sample_ztb(xy: f64, layers: u32, rng: &mut StdRng) -> u64 {
+/// Sample from positive-edge Bin(M, p) by rejection.
+fn sample_positive_binomial(xy: f64, layers: u32, rng: &mut StdRng) -> u64 {
     let p = (xy / (1.0 + xy)).clamp(0.0, 1.0);
     if p <= 0.0 {
         return 1;
@@ -617,8 +617,8 @@ fn sample_ztb(xy: f64, layers: u32, rng: &mut StdRng) -> u64 {
     1
 }
 
-/// Sample from zero-truncated Geometric(1-q) by rejection.
-fn sample_zt_geometric(xy: f64, rng: &mut StdRng) -> u64 {
+/// Sample from positive-edge Geometric(1-q) by rejection.
+fn sample_positive_geometric(xy: f64, rng: &mut StdRng) -> u64 {
     // Geometric P(k) = (1-q)*q^k for k>=0. Condition on k>=1.
     // Efficient: sample from Geometric and add 1, since P(k>=1) follows
     // the same Geometric shifted. Actually P(K>=1|K>=0) ~ Geo shifted by 1.
@@ -643,15 +643,15 @@ fn sample_zt_geometric(xy: f64, rng: &mut StdRng) -> u64 {
     1
 }
 
-/// Sample from zero-truncated NegBinomial(M, 1-q) by rejection.
-fn sample_zt_neg_binomial(xy: f64, layers: u32, rng: &mut StdRng) -> u64 {
+/// Sample from positive-edge NegativeBinomial(M, 1-q) by rejection.
+fn sample_positive_negative_binomial(xy: f64, layers: u32, rng: &mut StdRng) -> u64 {
     let q = xy.clamp(0.0, 1.0 - 1e-15);
     if q <= 0.0 {
         return 1;
     }
     // P(0) = (1-q)^M. Rejection rate = (1-q)^M which is acceptable for moderate q/M.
     for _ in 0..10000 {
-        let v = sample_neg_binomial(q, layers, rng);
+        let v = sample_negative_binomial(q, layers, rng);
         if v > 0 {
             return v;
         }
@@ -659,7 +659,7 @@ fn sample_zt_neg_binomial(xy: f64, layers: u32, rng: &mut StdRng) -> u64 {
     1
 }
 
-/// Occupation probability for strength-edges binomial ZIP.
+/// Occupation probability for strength-edges binomial zero-inflated.
 /// Uses (1+xy)^M - 1 instead of exp(xy) - 1.
 #[must_use]
 pub fn strength_edges_binomial_occupation(xy: f64, lam: f64, layers: u32) -> f64 {
@@ -672,7 +672,7 @@ pub fn strength_edges_binomial_occupation(xy: f64, lam: f64, layers: u32) -> f64
     }
 }
 
-/// Occupation probability for strength-degree binomial ZIP.
+/// Occupation probability for strength-degree binomial zero-inflated.
 #[must_use]
 pub fn strength_degree_binomial_occupation(xy: f64, vij: f64, layers: u32) -> f64 {
     let factor = (1.0 + xy).powi(layers as i32) - 1.0;
@@ -698,12 +698,12 @@ fn sample_poisson(rate: f64, rng: &mut StdRng) -> u64 {
     }
 }
 
-/// Draw from a zero-truncated Poisson distribution.
-pub fn sample_zero_truncated_poisson(rate: f64, rng: &mut StdRng) -> u64 {
+/// Draw from a positive-edge Poisson distribution.
+pub fn sample_positive_edge_poisson(rate: f64, rng: &mut StdRng) -> u64 {
     if rate <= 0.0 || !rate.is_finite() {
         return 1;
     }
-    if rate < ZTP_REJECTION_MIN_RATE {
+    if rate < POSITIVE_POISSON_REJECTION_MIN_RATE {
         let normalizer = -rate.exp_m1();
         if normalizer <= 0.0 {
             return 1;
@@ -746,7 +746,7 @@ mod tests {
 
     #[test]
     fn zip_zero_probability_is_one_minus_occupation() {
-        let dist = PairDistribution::ZipPoisson {
+        let dist = PairDistribution::ZeroInflatedPoisson {
             occupation: 0.7,
             rate: 2.0,
         };
@@ -783,14 +783,14 @@ mod tests {
     }
 
     #[test]
-    fn neg_binomial_expected_value() {
-        let dist = PairDistribution::NegBinomial { xy: 0.4, layers: 3 };
+    fn negative_binomial_expected_value() {
+        let dist = PairDistribution::NegativeBinomial { xy: 0.4, layers: 3 };
         assert!((dist.expected() - 2.0).abs() < 1e-12);
     }
 
     #[test]
-    fn neg_binomial_cdf_at_zero() {
-        let dist = PairDistribution::NegBinomial { xy: 0.4, layers: 3 };
+    fn negative_binomial_cdf_at_zero() {
+        let dist = PairDistribution::NegativeBinomial { xy: 0.4, layers: 3 };
         assert!((dist.lower_pvalue(0) - 0.216).abs() < 1e-10);
     }
 
@@ -798,18 +798,18 @@ mod tests {
     fn zip_binomial_expected_value() {
         let p: f64 = 0.5 / 1.5;
         let m: f64 = 5.0;
-        let ztb_mean = m * p / (1.0 - (1.0 - p).powi(5));
-        let dist = PairDistribution::ZipBinomial {
+        let positive_binomial_mean = m * p / (1.0 - (1.0 - p).powi(5));
+        let dist = PairDistribution::ZeroInflatedBinomial {
             occupation: 0.8,
             xy: 0.5,
             layers: 5,
         };
-        assert!((dist.expected() - 0.8 * ztb_mean).abs() < 1e-8);
+        assert!((dist.expected() - 0.8 * positive_binomial_mean).abs() < 1e-8);
     }
 
     #[test]
     fn zip_binomial_zero_probability() {
-        let dist = PairDistribution::ZipBinomial {
+        let dist = PairDistribution::ZeroInflatedBinomial {
             occupation: 0.6,
             xy: 0.5,
             layers: 5,
@@ -821,7 +821,7 @@ mod tests {
     #[test]
     fn zip_binomial_weights_bounded_by_layers() {
         use rand::SeedableRng;
-        let dist = PairDistribution::ZipBinomial {
+        let dist = PairDistribution::ZeroInflatedBinomial {
             occupation: 0.9,
             xy: 0.8,
             layers: 5,
@@ -843,15 +843,15 @@ mod tests {
 
     #[test]
     fn zip_geometric_expected_value() {
-        // ZipGeometric: occupation * ZTG mean.
-        // ZTG(q) mean = q / ((1-q) * (1 - (1-q))) = q / ((1-q)*q) = 1/(1-q).
-        // Wait: Geometric P(k) = (1-q)*q^k for k>=0. ZTG conditions on k>=1:
+        // ZeroInflatedGeometric: occupation * positive geometric mean.
+        // positive geometric(q) mean = q / ((1-q) * (1 - (1-q))) = q / ((1-q)*q) = 1/(1-q).
+        // Wait: Geometric P(k) = (1-q)*q^k for k>=0. positive geometric conditions on k>=1:
         // P(k|k>=1) = (1-q)*q^k / q = (1-q)*q^{k-1} for k>=1. Mean = 1/(1-q).
-        // So ZipGeometric expected = occupation * 1/(1-q).
+        // So ZeroInflatedGeometric expected = occupation * 1/(1-q).
         let occ = 0.7;
         let xy = 0.4; // q = xy
         let ztg_mean = 1.0 / (1.0 - xy);
-        let dist = PairDistribution::ZipGeometric {
+        let dist = PairDistribution::ZeroInflatedGeometric {
             occupation: occ,
             xy,
         };
@@ -860,7 +860,7 @@ mod tests {
 
     #[test]
     fn zip_geometric_zero_probability() {
-        let dist = PairDistribution::ZipGeometric {
+        let dist = PairDistribution::ZeroInflatedGeometric {
             occupation: 0.6,
             xy: 0.3,
         };
@@ -871,7 +871,7 @@ mod tests {
     #[test]
     fn zip_geometric_samples_are_non_negative() {
         use rand::SeedableRng;
-        let dist = PairDistribution::ZipGeometric {
+        let dist = PairDistribution::ZeroInflatedGeometric {
             occupation: 0.8,
             xy: 0.5,
         };
@@ -886,24 +886,24 @@ mod tests {
                 has_positive = true;
             }
         }
-        assert!(has_zero, "expected some zeros from ZipGeometric");
+        assert!(has_zero, "expected some zeros from ZeroInflatedGeometric");
         assert!(
             has_positive,
-            "expected some positive weights from ZipGeometric"
+            "expected some positive weights from ZeroInflatedGeometric"
         );
     }
 
     #[test]
-    fn zip_neg_binomial_expected_value() {
-        // ZipNegBinomial: occupation * ZTNB mean.
-        // NB(M, 1-q) has P(k=0) = (1-q)^M. Mean = Mq/(1-q).
-        // ZTNB mean = Mq/((1-q)*(1-(1-q)^M)).
-        // ZipNB expected = occupation * ZTNB_mean.
+    fn zip_negative_binomial_expected_value() {
+        // ZeroInflatedNegativeBinomial: occupation * positive negative binomial mean.
+        // negative binomial(M, 1-q) has P(k=0) = (1-q)^M. Mean = Mq/(1-q).
+        // positive negative binomial mean = Mq/((1-q)*(1-(1-q)^M)).
+        // zero-inflated negative binomial expected = occupation * positive negative binomial mean.
         let occ = 0.8;
         let xy = 0.4; // q = xy
         let m = 3_u32;
         let ztnb_mean = (m as f64) * xy / ((1.0 - xy) * (1.0 - (1.0 - xy).powi(m as i32)));
-        let dist = PairDistribution::ZipNegBinomial {
+        let dist = PairDistribution::ZeroInflatedNegativeBinomial {
             occupation: occ,
             xy,
             layers: m,
@@ -912,8 +912,8 @@ mod tests {
     }
 
     #[test]
-    fn zip_neg_binomial_zero_probability() {
-        let dist = PairDistribution::ZipNegBinomial {
+    fn zip_negative_binomial_zero_probability() {
+        let dist = PairDistribution::ZeroInflatedNegativeBinomial {
             occupation: 0.5,
             xy: 0.3,
             layers: 2,
@@ -923,9 +923,9 @@ mod tests {
     }
 
     #[test]
-    fn zip_neg_binomial_samples_are_non_negative() {
+    fn zip_negative_binomial_samples_are_non_negative() {
         use rand::SeedableRng;
-        let dist = PairDistribution::ZipNegBinomial {
+        let dist = PairDistribution::ZeroInflatedNegativeBinomial {
             occupation: 0.7,
             xy: 0.4,
             layers: 3,
@@ -941,8 +941,14 @@ mod tests {
                 has_positive = true;
             }
         }
-        assert!(has_zero, "expected some zeros from ZipNegBinomial");
-        assert!(has_positive, "expected some positive from ZipNegBinomial");
+        assert!(
+            has_zero,
+            "expected some zeros from ZeroInflatedNegativeBinomial"
+        );
+        assert!(
+            has_positive,
+            "expected some positive from ZeroInflatedNegativeBinomial"
+        );
     }
 
     #[test]
@@ -956,7 +962,7 @@ mod tests {
         let dist = WeightFamily::Binomial(10).distribution(0.5);
         assert!((dist.expected() - 10.0 / 3.0).abs() < 1e-10);
 
-        let dist = WeightFamily::NegBinomial(3).distribution(0.4);
+        let dist = WeightFamily::NegativeBinomial(3).distribution(0.4);
         assert!((dist.expected() - 2.0).abs() < 1e-12);
     }
 }

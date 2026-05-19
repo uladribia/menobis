@@ -4,6 +4,7 @@ import time
 
 import numpy as np
 
+from benchmarks.common import complete_euclidean_costs, pareto_strength_network
 from odme.analysis import directed_degrees, directed_strengths
 from odme.models import (
     fit_degree_bernoulli,
@@ -11,29 +12,10 @@ from odme.models import (
     fit_strength_cost_poisson,
     fit_strength_degree_poisson,
     fit_strength_edges_poisson,
-    sample_strength_poisson,
 )
 
 N_VALUES = [50, 100, 200, 500, 1000]
 AVG_S = 100
-
-
-def _make_network(n: int):
-    rng = np.random.default_rng(42)
-    raw = rng.pareto(1.5, size=n) + 1.0
-    p_out = raw / raw.sum()
-    raw = rng.pareto(1.5, size=n) + 1.0
-    p_in = raw / raw.sum()
-    total = n * AVG_S
-    s_out = np.round(p_out * total).astype(np.uint64)
-    s_in = np.round(p_in * total).astype(np.uint64)
-    diff = int(s_out.sum()) - int(s_in.sum())
-    if diff > 0:
-        s_in[np.argmax(s_in)] += abs(diff)
-    elif diff < 0:
-        s_out[np.argmax(s_out)] += abs(diff)
-    fit = fit_strength_poisson(s_out, s_in)
-    return sample_strength_poisson(fit.x, fit.y, seed=42)
 
 
 def _check_strength(name, fit, s_out, s_in, n, rate_fn):
@@ -53,7 +35,7 @@ def _check_strength(name, fit, s_out, s_in, n, rate_fn):
 for n in N_VALUES:
     print(f"\n{'='*60}")
     print(f"N={n}")
-    edges = _make_network(n)
+    edges = pareto_strength_network(n, AVG_S)
     s = directed_strengths(edges)
     k = directed_degrees(edges)
     s_out = s.out.astype(float)
@@ -92,27 +74,16 @@ for n in N_VALUES:
 
     # Fixed strength + cost
     if n <= 500:
-        rng = np.random.default_rng(99)
-        pos = rng.uniform(0, 10, size=(n, 2))
-        c_src, c_tgt, c_val = [], [], []
-        for i in range(n):
-            for j in range(n):
-                if i == j:
-                    continue
-                c_src.append(i)
-                c_tgt.append(j)
-                c_val.append(float(np.linalg.norm(pos[i] - pos[j])))
-        cost_src = np.array(c_src)
-        cost_tgt = np.array(c_tgt)
-        cost_val = np.array(c_val)
-        cost_map = {(int(a), int(b)): float(c) for a, b, c in zip(cost_src, cost_tgt, cost_val)}
-        target_cost = sum(
-            float(w) * cost_map.get((int(sv), int(tv)), 0.0)
-            for sv, tv, w in zip(edges.source, edges.target, edges.weight)
-        )
+        costs = complete_euclidean_costs(edges, n)
         t0 = time.perf_counter()
         fit_sc = fit_strength_cost_poisson(
-            s_out, s_in, cost_src, cost_tgt, cost_val, target_cost, verbose=2
+            s_out,
+            s_in,
+            costs.source,
+            costs.target,
+            costs.value,
+            costs.target_cost,
+            verbose=2,
         )
         dt = time.perf_counter() - t0
         print(f"  fit_strength_cost_poisson: {dt:.4f}s  conv={fit_sc.converged} iters={fit_sc.iterations} gamma={fit_sc.gamma:.6f}")

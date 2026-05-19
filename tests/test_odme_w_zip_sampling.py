@@ -1,4 +1,4 @@
-"""Tests for W (geometric/NB) ZIP sampling across all constraint types."""
+"""Tests for W zero-inflated sampling across all constraint types."""
 
 import numpy as np
 
@@ -9,13 +9,13 @@ from odme.models import (
 )
 from odme.models.generation import (
     sample_degree_events_geometric,
-    sample_degree_events_neg_binomial,
+    sample_degree_events_negative_binomial,
     sample_strength_cost_geometric,
-    sample_strength_cost_neg_binomial,
+    sample_strength_cost_negative_binomial,
     sample_strength_degree_geometric,
-    sample_strength_degree_neg_binomial,
+    sample_strength_degree_negative_binomial,
     sample_strength_edges_geometric,
-    sample_strength_edges_neg_binomial,
+    sample_strength_edges_negative_binomial,
 )
 
 
@@ -55,7 +55,7 @@ def _degree_fit() -> FitResult:
 
 
 class TestStrengthEdgesGeometric:
-    """Tests for strength-edges geometric ZIP sampling."""
+    """Tests for strength-edges geometric zero-inflated sampling."""
 
     def test_produces_edges(self) -> None:
         """Sampler returns a valid EdgeTable."""
@@ -71,25 +71,25 @@ class TestStrengthEdgesGeometric:
         np.testing.assert_array_equal(a.weight, b.weight)
 
 
-class TestStrengthEdgesNegBinomial:
-    """Tests for strength-edges negative binomial ZIP sampling."""
+class TestStrengthEdgesNegativeBinomial:
+    """Tests for strength-edges negative binomial zero-inflated sampling."""
 
     def test_produces_edges(self) -> None:
         """Sampler returns a valid EdgeTable."""
         fit = _strength_edges_fit()
-        sample = sample_strength_edges_neg_binomial(fit, layers=3, seed=42)
+        sample = sample_strength_edges_negative_binomial(fit, layers=3, seed=42)
         assert sample.num_edges >= 0
 
     def test_seeded_reproducibility(self) -> None:
         """Same seed gives same result."""
         fit = _strength_edges_fit()
-        a = sample_strength_edges_neg_binomial(fit, layers=3, seed=99)
-        b = sample_strength_edges_neg_binomial(fit, layers=3, seed=99)
+        a = sample_strength_edges_negative_binomial(fit, layers=3, seed=99)
+        b = sample_strength_edges_negative_binomial(fit, layers=3, seed=99)
         np.testing.assert_array_equal(a.weight, b.weight)
 
 
 class TestStrengthDegreeGeometric:
-    """Tests for strength-degree geometric ZIP sampling."""
+    """Tests for strength-degree geometric zero-inflated sampling."""
 
     def test_produces_edges(self) -> None:
         """Sampler returns a valid EdgeTable."""
@@ -105,25 +105,25 @@ class TestStrengthDegreeGeometric:
         np.testing.assert_array_equal(a.weight, b.weight)
 
 
-class TestStrengthDegreeNegBinomial:
-    """Tests for strength-degree negative binomial ZIP sampling."""
+class TestStrengthDegreeNegativeBinomial:
+    """Tests for strength-degree negative binomial zero-inflated sampling."""
 
     def test_produces_edges(self) -> None:
         """Sampler returns a valid EdgeTable."""
         fit = _strength_degree_fit()
-        sample = sample_strength_degree_neg_binomial(fit, layers=3, seed=42)
+        sample = sample_strength_degree_negative_binomial(fit, layers=3, seed=42)
         assert sample.num_edges >= 0
 
     def test_seeded_reproducibility(self) -> None:
         """Same seed gives same result."""
         fit = _strength_degree_fit()
-        a = sample_strength_degree_neg_binomial(fit, layers=3, seed=99)
-        b = sample_strength_degree_neg_binomial(fit, layers=3, seed=99)
+        a = sample_strength_degree_negative_binomial(fit, layers=3, seed=99)
+        b = sample_strength_degree_negative_binomial(fit, layers=3, seed=99)
         np.testing.assert_array_equal(a.weight, b.weight)
 
 
 class TestDegreeEventsGeometric:
-    """Tests for degree-events geometric ZIP sampling."""
+    """Tests for degree-events geometric zero-inflated sampling."""
 
     def test_produces_edges(self) -> None:
         """Sampler returns a valid EdgeTable."""
@@ -139,13 +139,13 @@ class TestDegreeEventsGeometric:
         np.testing.assert_array_equal(a.weight, b.weight)
 
 
-class TestDegreeEventsNegBinomial:
-    """Tests for degree-events negative binomial ZIP sampling."""
+class TestDegreeEventsNegativeBinomial:
+    """Tests for degree-events negative binomial zero-inflated sampling."""
 
     def test_produces_edges(self) -> None:
         """Sampler returns a valid EdgeTable."""
         fit = _degree_fit()
-        sample = sample_degree_events_neg_binomial(
+        sample = sample_degree_events_negative_binomial(
             fit, positive_weight_rate=0.5, layers=3, seed=42
         )
         assert sample.num_edges >= 0
@@ -153,10 +153,10 @@ class TestDegreeEventsNegBinomial:
     def test_seeded_reproducibility(self) -> None:
         """Same seed gives same result."""
         fit = _degree_fit()
-        a = sample_degree_events_neg_binomial(
+        a = sample_degree_events_negative_binomial(
             fit, positive_weight_rate=0.5, layers=3, seed=99
         )
-        b = sample_degree_events_neg_binomial(
+        b = sample_degree_events_negative_binomial(
             fit, positive_weight_rate=0.5, layers=3, seed=99
         )
         np.testing.assert_array_equal(a.weight, b.weight)
@@ -200,7 +200,7 @@ class TestStrengthCostGeometric:
         np.testing.assert_array_equal(a.weight, b.weight)
 
 
-class TestStrengthCostNegBinomial:
+class TestStrengthCostNegativeBinomial:
     """Tests for strength-cost negative binomial sampling."""
 
     def test_produces_edges(self) -> None:
@@ -209,7 +209,7 @@ class TestStrengthCostNegBinomial:
         c_src = np.array([0, 1], dtype=np.int64)
         c_tgt = np.array([1, 0], dtype=np.int64)
         c_val = np.array([1.0, 2.0])
-        sample = sample_strength_cost_neg_binomial(
+        sample = sample_strength_cost_negative_binomial(
             fit, c_src, c_tgt, c_val, layers=3, seed=42
         )
         assert sample.num_edges >= 0
@@ -220,10 +220,10 @@ class TestStrengthCostNegBinomial:
         c_src = np.array([0, 1], dtype=np.int64)
         c_tgt = np.array([1, 0], dtype=np.int64)
         c_val = np.array([1.0, 2.0])
-        a = sample_strength_cost_neg_binomial(
+        a = sample_strength_cost_negative_binomial(
             fit, c_src, c_tgt, c_val, layers=3, seed=99
         )
-        b = sample_strength_cost_neg_binomial(
+        b = sample_strength_cost_negative_binomial(
             fit, c_src, c_tgt, c_val, layers=3, seed=99
         )
         np.testing.assert_array_equal(a.weight, b.weight)

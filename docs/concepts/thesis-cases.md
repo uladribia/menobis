@@ -20,7 +20,7 @@ ODME models are organized by **constraint** (what is fixed), **ensemble type**
 |-------|--------|
 | operation | `fit`, `sample`, `filter` |
 | constraint | `strength`, `strength_edges`, `strength_degree`, `strength_cost`, `degree`, `custom` |
-| distribution | `poisson`, `geometric`, `binomial`, `neg_binomial`, `multinomial`, `microcanonical`, `bernoulli` |
+| distribution | `poisson`, `geometric`, `binomial`, `negative_binomial`, `multinomial`, `stub_matching`, `bernoulli` |
 
 ## Ensemble types
 
@@ -28,7 +28,7 @@ The distribution name implies the ensemble type:
 
 | Ensemble | Legacy | Distributions | Weight support | Fitting |
 |----------|--------|---------------|----------------|---------|
-| ME (multi-edge) | `ME` | Poisson, Multinomial, Microcanonical | $\{0, 1, 2, \ldots\}$ | IPF |
+| ME (multi-edge) | `ME` | Poisson, Multinomial, Stub matching | $\{0, 1, 2, \ldots\}$ | IPF |
 | W (weighted) | `W` | Geometric, Negative binomial | $\{0, 1, 2, \ldots\}$ | Bounded optimization |
 | B (binary layers) | `B` | Binomial, Bernoulli | $\{0, \ldots, M\}$ | IPF with correction |
 
@@ -38,10 +38,10 @@ The distribution name implies the ensemble type:
 |------------|---------|-----------|----------|---------------|
 | strength | ✅ | ✅ | ✅ | ✅ (no fit yet) |
 | strength-cost | ✅ | — | ✅ | — |
-| strength-edges | ✅ (ZIP) | — | ✅ (ZIP) | — |
-| strength-degree | ✅ (ZIP) | — | ✅ (ZIP) | — |
+| strength-edges | ✅ (zero-inflated) | — | ✅ (zero-inflated) | — |
+| strength-degree | ✅ (zero-inflated) | — | ✅ (zero-inflated) | — |
 | degree | Bernoulli ✅ | — | — | — |
-| degree-events | ✅ (ZIP) | — | ✅ (ZIP) | — |
+| degree-events | ✅ (zero-inflated) | — | ✅ (zero-inflated) | — |
 | custom | ✅ | — | — | — |
 
 ## Case mapping
@@ -51,16 +51,16 @@ The distribution name implies the ensemble type:
 | — | strength | $\mathbb{E}[t_{ij}] = x_i y_j$ | `fit_strength_poisson` | `sample_strength_poisson` |
 | 1 | custom | $\mathbb{E}[t_{ij}] = T p_{ij}$ | — | `sample_custom_poisson` |
 | 2 | strength-cost | $\mathbb{E}[t_{ij}] = x_i y_j e^{-\gamma d_{ij}}$ | `fit_strength_cost_poisson` | `sample_strength_cost_poisson` |
-| 3 | strength-edges | ZIP occupation + ZTP weight | `fit_strength_edges_poisson` | `sample_strength_edges_poisson` |
-| 4 | strength-degree | ZIP occupation + ZTP weight | `fit_strength_degree_poisson` | `sample_strength_degree_poisson` |
-| 5 | degree-events | Bernoulli occupation + ZTP weight | `fit_degree_bernoulli` | `sample_degree_events_poisson` |
+| 3 | strength-edges | zero-inflated occupation + positive Poisson weight | `fit_strength_edges_poisson` | `sample_strength_edges_poisson` |
+| 4 | strength-degree | zero-inflated occupation + positive Poisson weight | `fit_strength_degree_poisson` | `sample_strength_degree_poisson` |
+| 5 | degree-events | Bernoulli occupation + positive Poisson weight | `fit_degree_bernoulli` | `sample_degree_events_poisson` |
 
 Additional strength samplers for ensemble comparison:
 
 | Sampler | Ensemble | Total weight |
 |---------|----------|-------------|
 | `sample_strength_multinomial` | canonical | exactly $T$ |
-| `sample_strength_microcanonical` | microcanonical | exactly $T$ |
+| `sample_strength_stub_matching` | stub_matching | exactly $T$ |
 | `sample_strength_poisson_multinomial` | mixed | Poisson $T$ then multinomial |
 
 ## CLI mapping
@@ -78,9 +78,9 @@ Additional strength samplers for ensemble comparison:
 ## Zero-inflated models
 
 Cases 3, 4, and 5 use zero-inflated distributions: a Bernoulli occupation
-draw followed by a zero-truncated positive-weight draw. The occupation
+draw followed by a positive-weight conditional draw. The occupation
 formula depends on the constraint; the positive-weight distribution is
-currently always Poisson (ZTP).
+currently always Poisson (positive Poisson).
 
 ## Reference
 

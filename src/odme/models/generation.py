@@ -23,6 +23,20 @@ def _edge_table_from_lists(
     )
 
 
+def _sample_native(function_name: str, *args: object) -> EdgeTable:
+    """Call a native sampler and normalize its edge-list output."""
+    sources, targets, weights = getattr(_odme, function_name)(*args)
+    return _edge_table_from_lists(sources, targets, weights)
+
+
+def _as_float_list(values: NDArray[np.floating]) -> list[float]:
+    return np.asarray(values, dtype=np.float64).tolist()
+
+
+def _as_int_list(values: NDArray[np.integer]) -> list[int]:
+    return np.asarray(values, dtype=np.int64).tolist()
+
+
 def sample_strength_cost_poisson(
     fit: StrengthCostFit,
     cost_sources: NDArray[np.integer],
@@ -48,13 +62,13 @@ def sample_strength_cost_poisson(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_microcanonical(
+def sample_strength_stub_matching(
     strength_out: NDArray[np.integer],
     strength_in: NDArray[np.integer],
     *,
     seed: int = 0,
 ) -> EdgeTable:
-    """Microcanonical stub-matching sampler for fixed-strength ME.
+    """Exact-strength stub-matching sampler for fixed-strength ME.
 
     Produces an unbiased uniform sample from the space of all integer-weight
     directed graphs with the exact given strength sequence. Self-loops are
@@ -71,7 +85,7 @@ def sample_strength_microcanonical(
     """
     s_out = np.asarray(strength_out, dtype=np.uint64)
     s_in = np.asarray(strength_in, dtype=np.uint64)
-    sources, targets, weights = _odme.sample_strength_microcanonical(
+    sources, targets, weights = _odme.sample_strength_stub_matching(
         s_out.tolist(), s_in.tolist(), seed
     )
     return _edge_table_from_lists(sources, targets, weights)
@@ -226,7 +240,7 @@ def sample_strength_binomial(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_neg_binomial(
+def sample_strength_negative_binomial(
     x: NDArray[np.floating],
     y: NDArray[np.floating],
     *,
@@ -234,8 +248,8 @@ def sample_strength_neg_binomial(
     self_loops: bool = True,
     seed: int = 0,
 ) -> EdgeTable:
-    """Sample from independent NegBinomial(M, 1-x_i*y_j)."""
-    sources, targets, weights = _odme.sample_strength_neg_binomial(
+    """Sample from independent NegativeBinomial(M, 1-x_i*y_j)."""
+    sources, targets, weights = _odme.sample_strength_negative_binomial(
         x.tolist(), y.tolist(), layers, self_loops, seed
     )
     return _edge_table_from_lists(sources, targets, weights)
@@ -290,7 +304,7 @@ def sample_strength_cost_geometric(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_cost_neg_binomial(
+def sample_strength_cost_negative_binomial(
     fit: "StrengthCostFit",
     cost_sources: NDArray[np.integer],
     cost_targets: NDArray[np.integer],
@@ -299,11 +313,11 @@ def sample_strength_cost_neg_binomial(
     layers: int = 1,
     seed: int = 0,
 ) -> EdgeTable:
-    """Sample strength-cost negative binomial: NB(M) with cost-modulated rates."""
+    """Sample strength-cost negative binomial with cost-modulated rates."""
     c_src = np.asarray(cost_sources, dtype=np.int64)
     c_tgt = np.asarray(cost_targets, dtype=np.int64)
     c_val = np.asarray(cost_values, dtype=np.float64)
-    sources, targets, weights = _odme.sample_strength_cost_neg_binomial(
+    sources, targets, weights = _odme.sample_strength_cost_negative_binomial(
         fit.x.tolist(),
         fit.y.tolist(),
         fit.gamma,
@@ -323,7 +337,7 @@ def sample_strength_edges_binomial(
     layers: int = 1,
     seed: int = 0,
 ) -> EdgeTable:
-    """Sample strength-edges binomial ZIP: Bernoulli occupation + ZTB(M, p)."""
+    """Sample strength-edges zero-inflated binomial."""
     sources, targets, weights = _odme.sample_strength_edges_binomial(
         fit.x.tolist(),
         fit.y.tolist(),
@@ -341,7 +355,7 @@ def sample_strength_degree_binomial(
     layers: int = 1,
     seed: int = 0,
 ) -> EdgeTable:
-    """Sample strength-degree binomial ZIP: Bernoulli occupation + ZTB(M, p)."""
+    """Sample strength-degree zero-inflated binomial."""
     sources, targets, weights = _odme.sample_strength_degree_binomial(
         fit.x.tolist(),
         fit.y.tolist(),
@@ -362,7 +376,7 @@ def sample_degree_events_binomial(
     self_loops: bool = True,
     seed: int = 0,
 ) -> EdgeTable:
-    """Sample degree-events binomial ZIP: Bernoulli occupation + ZTB(M, mu)."""
+    """Sample degree-events zero-inflated binomial."""
     sources, targets, weights = _odme.sample_degree_events_binomial(
         fit.x.tolist(),
         fit.y.tolist(),
@@ -379,7 +393,7 @@ def sample_strength_edges_geometric(
     *,
     seed: int = 0,
 ) -> EdgeTable:
-    """Sample strength-edges geometric ZIP: Bernoulli occupation + ZTG."""
+    """Sample strength-edges zero-inflated geometric."""
     sources, targets, weights = _odme.sample_strength_edges_geometric(
         fit.x.tolist(),
         fit.y.tolist(),
@@ -390,14 +404,14 @@ def sample_strength_edges_geometric(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_edges_neg_binomial(
+def sample_strength_edges_negative_binomial(
     fit: "StrengthEdgesFit",
     *,
     layers: int = 1,
     seed: int = 0,
 ) -> EdgeTable:
-    """Sample strength-edges negative binomial ZIP: Bernoulli occupation + ZTNB(M)."""
-    sources, targets, weights = _odme.sample_strength_edges_neg_binomial(
+    """Sample strength-edges zero-inflated negative binomial."""
+    sources, targets, weights = _odme.sample_strength_edges_negative_binomial(
         fit.x.tolist(),
         fit.y.tolist(),
         fit.lam,
@@ -413,7 +427,7 @@ def sample_strength_degree_geometric(
     *,
     seed: int = 0,
 ) -> EdgeTable:
-    """Sample strength-degree geometric ZIP: Bernoulli occupation + ZTG."""
+    """Sample strength-degree zero-inflated geometric."""
     sources, targets, weights = _odme.sample_strength_degree_geometric(
         fit.x.tolist(),
         fit.y.tolist(),
@@ -425,14 +439,14 @@ def sample_strength_degree_geometric(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_degree_neg_binomial(
+def sample_strength_degree_negative_binomial(
     fit: "StrengthDegreeFit",
     *,
     layers: int = 1,
     seed: int = 0,
 ) -> EdgeTable:
-    """Sample strength-degree negative binomial ZIP: Bernoulli occupation + ZTNB(M)."""
-    sources, targets, weights = _odme.sample_strength_degree_neg_binomial(
+    """Sample strength-degree zero-inflated negative binomial."""
+    sources, targets, weights = _odme.sample_strength_degree_negative_binomial(
         fit.x.tolist(),
         fit.y.tolist(),
         fit.z.tolist(),
@@ -451,7 +465,7 @@ def sample_degree_events_geometric(
     self_loops: bool = True,
     seed: int = 0,
 ) -> EdgeTable:
-    """Sample degree-events geometric ZIP: Bernoulli occupation + ZTG."""
+    """Sample degree-events zero-inflated geometric."""
     sources, targets, weights = _odme.sample_degree_events_geometric(
         fit.x.tolist(),
         fit.y.tolist(),
@@ -462,7 +476,7 @@ def sample_degree_events_geometric(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_degree_events_neg_binomial(
+def sample_degree_events_negative_binomial(
     fit: FitResult,
     *,
     positive_weight_rate: float,
@@ -470,8 +484,8 @@ def sample_degree_events_neg_binomial(
     self_loops: bool = True,
     seed: int = 0,
 ) -> EdgeTable:
-    """Sample degree-events negative binomial ZIP: Bernoulli occupation + ZTNB(M)."""
-    sources, targets, weights = _odme.sample_degree_events_neg_binomial(
+    """Sample degree-events zero-inflated negative binomial."""
+    sources, targets, weights = _odme.sample_degree_events_negative_binomial(
         fit.x.tolist(),
         fit.y.tolist(),
         positive_weight_rate,
@@ -487,25 +501,25 @@ __all__ = [
     "sample_custom_poisson",
     "sample_degree_events_binomial",
     "sample_degree_events_geometric",
-    "sample_degree_events_neg_binomial",
+    "sample_degree_events_negative_binomial",
     "sample_degree_events_poisson",
     "sample_strength_binomial",
     "sample_strength_cost_binomial",
     "sample_strength_cost_geometric",
-    "sample_strength_cost_neg_binomial",
+    "sample_strength_cost_negative_binomial",
     "sample_strength_cost_poisson",
     "sample_strength_degree_binomial",
     "sample_strength_degree_geometric",
-    "sample_strength_degree_neg_binomial",
+    "sample_strength_degree_negative_binomial",
     "sample_strength_degree_poisson",
     "sample_strength_edges_binomial",
     "sample_strength_edges_geometric",
-    "sample_strength_edges_neg_binomial",
+    "sample_strength_edges_negative_binomial",
     "sample_strength_edges_poisson",
     "sample_strength_geometric",
-    "sample_strength_microcanonical",
     "sample_strength_multinomial",
-    "sample_strength_neg_binomial",
+    "sample_strength_negative_binomial",
     "sample_strength_poisson",
     "sample_strength_poisson_multinomial",
+    "sample_strength_stub_matching",
 ]

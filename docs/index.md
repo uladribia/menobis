@@ -14,7 +14,7 @@ ergonomic Python workflows.
 | Capability | Description |
 |------------|-------------|
 | **Fit** | Solve Lagrange multipliers for strength, degree, cost, and combined constraints |
-| **Generate** | Sample networks from fitted null models (Poisson, ZIP, multinomial, microcanonical) |
+| **Generate** | Sample networks from fitted null models (Poisson, zero-inflated, multinomial, stub_matching) |
 | **Filter** | Identify statistically significant edges against independent null models |
 | **Analyze** | Compute strengths, degrees, weight distributions, and node-level statistics |
 | **Convert** | Read and write CSV, TSV, Parquet, and Arrow IPC edge tables |

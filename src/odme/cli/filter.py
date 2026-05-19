@@ -167,7 +167,7 @@ def strength_edges(
         bool, Option("--self-loops/--no-self-loops", help="Include diagonal pairs.")
     ] = True,
 ) -> None:
-    """Fit strength-edges ME, then filter against its ZIP null."""
+    """Fit strength-edges ME, then filter against its zero-inflated null."""
     edges = read_edges(input_path)
     node_count = int(max(edges.source.max(), edges.target.max())) + 1
     s_out = np.zeros(node_count, dtype=np.float64)
@@ -292,7 +292,7 @@ def strength_degree(
         bool, Option("--self-loops/--no-self-loops", help="Include diagonal pairs.")
     ] = True,
 ) -> None:
-    """Fit strength-degree ME, then filter against its ZIP null."""
+    """Fit strength-degree ME, then filter against its zero-inflated null."""
     edges = read_edges(input_path)
     node_count = int(max(edges.source.max(), edges.target.max())) + 1
     s_out = np.zeros(node_count, dtype=np.float64)
@@ -350,7 +350,7 @@ def degree_events(
         bool, Option("--self-loops/--no-self-loops", help="Include diagonal pairs.")
     ] = True,
 ) -> None:
-    """Fit degree-events ME, then filter against its ZIP null."""
+    """Fit degree-events ME, then filter against its zero-inflated null."""
     edges = read_edges(input_path)
     node_count = int(max(edges.source.max(), edges.target.max())) + 1
     d_out = np.zeros(node_count, dtype=np.float64)

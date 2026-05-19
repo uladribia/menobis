@@ -98,12 +98,12 @@ class TestStrengthCostBinomial:
 
 
 # ---------------------------------------------------------------------------
-# Strength-edges binomial (ZIP)
+# Strength-edges binomial (zero-inflated)
 # ---------------------------------------------------------------------------
 
 
 class TestStrengthEdgesBinomial:
-    """Tests for strength-edges binomial ZIP sampling and filtering."""
+    """Tests for strength-edges binomial zero-inflated sampling and filtering."""
 
     def test_sample_weights_bounded(self) -> None:
         """Weights bounded by M layers."""
@@ -155,12 +155,12 @@ class TestStrengthEdgesBinomial:
 
 
 # ---------------------------------------------------------------------------
-# Strength-degree binomial (ZIP)
+# Strength-degree binomial (zero-inflated)
 # ---------------------------------------------------------------------------
 
 
 class TestStrengthDegreeBinomial:
-    """Tests for strength-degree binomial ZIP sampling and filtering."""
+    """Tests for strength-degree binomial zero-inflated sampling and filtering."""
 
     def test_sample_weights_bounded(self) -> None:
         """Weights bounded by M layers."""
@@ -192,12 +192,12 @@ class TestStrengthDegreeBinomial:
 
 
 # ---------------------------------------------------------------------------
-# Degree-events binomial (ZIP)
+# Degree-events binomial (zero-inflated)
 # ---------------------------------------------------------------------------
 
 
 class TestDegreeEventsBinomial:
-    """Tests for degree-events binomial ZIP sampling and filtering."""
+    """Tests for degree-events binomial zero-inflated sampling and filtering."""
 
     def test_sample_weights_bounded(self) -> None:
         """Weights bounded by M layers."""
@@ -248,7 +248,7 @@ def test_binomial_weight_bounded_by_layers(layers: int, xy: float) -> None:
 )
 @settings(max_examples=50)
 def test_zip_binomial_weight_bounded(layers: int, xy: float) -> None:
-    """ZIP-binomial samples never exceed M layers."""
+    """zero-inflated binomial samples never exceed M layers."""
     x = [xy, xy]
     y = [1.0, 1.0]
     _src, _tgt, wgt = _odme.sample_strength_edges_binomial(x, y, 0.5, layers, True, 42)

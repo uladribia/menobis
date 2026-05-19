@@ -18,9 +18,9 @@ seeded synthetic edge table. Data goes to stdout unless `--output` is set.
 | `strength-poisson-multinomial` | Strength Poisson-multinomial | — | — |
 | `custom-poisson` | Custom Poisson | 1 | `--total-events`, `--ensemble` |
 | `strength-cost-poisson` | Strength-cost Poisson | 2 | `--costs` |
-| `strength-edges-poisson` | Strength-edges Poisson (ZIP) | 3 | optional `--target-edges` |
-| `strength-degree-poisson` | Strength-degree Poisson (ZIP) | 4 | — |
-| `degree-events-poisson` | Degree-events Poisson (ZIP) | 5 | `--total-events` |
+| `strength-edges-poisson` | Strength-edges Poisson (zero-inflated) | 3 | optional `--target-edges` |
+| `strength-degree-poisson` | Strength-degree Poisson (zero-inflated) | 4 | — |
+| `degree-events-poisson` | Degree-events Poisson (zero-inflated) | 5 | `--total-events` |
 
 ## Examples
 
