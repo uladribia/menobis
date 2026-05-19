@@ -11,6 +11,7 @@ pub mod fitting;
 pub mod generation;
 pub mod graph;
 pub mod pairs;
+pub mod partial;
 pub mod stats;
 
 /// Current ODME core version, synchronized with the Python package during releases.

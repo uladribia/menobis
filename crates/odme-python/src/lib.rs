@@ -85,6 +85,13 @@ use odme_core::graph::{
     directed_degrees as core_directed_degrees, directed_strengths as core_directed_strengths,
     WeightedEdge,
 };
+use odme_core::partial::{
+    fit_partial_degree as core_fit_partial_degree,
+    fit_partial_strength as core_fit_partial_strength,
+    fit_partial_strength_cost as core_fit_partial_strength_cost,
+    fit_partial_strength_degree as core_fit_partial_strength_degree,
+    fit_partial_strength_edges as core_fit_partial_strength_edges,
+};
 use odme_core::stats::{
     compute_all_node_stats as core_compute_all_stats,
     weight_distribution as core_weight_distribution,
@@ -932,6 +939,145 @@ fn fit_masked_strength_binomial(
         max_iterations,
     );
     (result.x, result.y, result.converged, result.iterations)
+}
+
+type PartialResult = (Vec<u64>, Vec<u64>, Vec<f64>, bool, usize);
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn fit_partial_strength_poisson_full(
+    strength_out: Vec<f64>,
+    strength_in: Vec<f64>,
+    known_src: Vec<u64>,
+    known_tgt: Vec<u64>,
+    known_rate: Vec<f64>,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PartialResult {
+    let r = core_fit_partial_strength(
+        &strength_out,
+        &strength_in,
+        &known_src,
+        &known_tgt,
+        &known_rate,
+        self_loops,
+        tolerance,
+        max_iterations,
+    );
+    (r.sources, r.targets, r.rates, r.converged, r.iterations)
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn fit_partial_degree_poisson_full(
+    degree_out: Vec<f64>,
+    degree_in: Vec<f64>,
+    known_src: Vec<u64>,
+    known_tgt: Vec<u64>,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PartialResult {
+    let r = core_fit_partial_degree(
+        &degree_out,
+        &degree_in,
+        &known_src,
+        &known_tgt,
+        self_loops,
+        tolerance,
+        max_iterations,
+    );
+    (r.sources, r.targets, r.rates, r.converged, r.iterations)
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn fit_partial_strength_degree_poisson_full(
+    strength_out: Vec<f64>,
+    strength_in: Vec<f64>,
+    degree_out: Vec<f64>,
+    degree_in: Vec<f64>,
+    known_src: Vec<u64>,
+    known_tgt: Vec<u64>,
+    known_rate: Vec<f64>,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PartialResult {
+    let r = core_fit_partial_strength_degree(
+        &strength_out,
+        &strength_in,
+        &degree_out,
+        &degree_in,
+        &known_src,
+        &known_tgt,
+        &known_rate,
+        self_loops,
+        tolerance,
+        max_iterations,
+    );
+    (r.sources, r.targets, r.rates, r.converged, r.iterations)
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn fit_partial_strength_edges_poisson_full(
+    strength_out: Vec<f64>,
+    strength_in: Vec<f64>,
+    known_src: Vec<u64>,
+    known_tgt: Vec<u64>,
+    known_rate: Vec<f64>,
+    target_edges: f64,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PartialResult {
+    let r = core_fit_partial_strength_edges(
+        &strength_out,
+        &strength_in,
+        &known_src,
+        &known_tgt,
+        &known_rate,
+        target_edges,
+        self_loops,
+        tolerance,
+        max_iterations,
+    );
+    (r.sources, r.targets, r.rates, r.converged, r.iterations)
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn fit_partial_strength_cost_poisson_full(
+    strength_out: Vec<f64>,
+    strength_in: Vec<f64>,
+    known_src: Vec<u64>,
+    known_tgt: Vec<u64>,
+    known_rate: Vec<f64>,
+    cost_sources: Vec<usize>,
+    cost_targets: Vec<usize>,
+    cost_values: Vec<f64>,
+    target_cost: f64,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PartialResult {
+    let r = core_fit_partial_strength_cost(
+        &strength_out,
+        &strength_in,
+        &known_src,
+        &known_tgt,
+        &known_rate,
+        &cost_sources,
+        &cost_targets,
+        &cost_values,
+        target_cost,
+        self_loops,
+        tolerance,
+        max_iterations,
+    );
+    (r.sources, r.targets, r.rates, r.converged, r.iterations)
 }
 
 #[pyfunction]
@@ -2186,6 +2332,20 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(fit_degree_events_geometric, module)?)?;
     module.add_function(wrap_pyfunction!(fit_degree_events_neg_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(fit_masked_strength_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_partial_strength_poisson_full, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_partial_degree_poisson_full, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        fit_partial_strength_degree_poisson_full,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        fit_partial_strength_edges_poisson_full,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        fit_partial_strength_cost_poisson_full,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(filter_strength_poisson, module)?)?;
     module.add_function(wrap_pyfunction!(absent_strength_poisson, module)?)?;
     module.add_function(wrap_pyfunction!(filter_custom_poisson, module)?)?;
