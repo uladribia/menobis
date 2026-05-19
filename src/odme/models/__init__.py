@@ -1,11 +1,9 @@
 """Multi-edge model helpers for ODME."""
 
 from odme.models.fitting import (
-    FitResult,
-    StrengthCostFit,
-    StrengthDegreeFit,
-    StrengthEdgesFit,
     fit_degree_bernoulli,
+    fit_degree_events_geometric,
+    fit_degree_events_neg_binomial,
     fit_strength_binomial,
     fit_strength_cost_poisson,
     fit_strength_degree_poisson,
@@ -30,13 +28,25 @@ from odme.models.generation import (
     sample_strength_poisson,
     sample_strength_poisson_multinomial,
 )
+from odme.models.types import (
+    DegreeEventsFit,
+    FitResult,
+    PartialFitResult,
+    StrengthCostFit,
+    StrengthDegreeFit,
+    StrengthEdgesFit,
+)
 
 __all__ = [
+    "DegreeEventsFit",
     "FitResult",
+    "PartialFitResult",
     "StrengthCostFit",
     "StrengthDegreeFit",
     "StrengthEdgesFit",
     "fit_degree_bernoulli",
+    "fit_degree_events_geometric",
+    "fit_degree_events_neg_binomial",
     "fit_strength_binomial",
     "fit_strength_cost_poisson",
     "fit_strength_degree_poisson",

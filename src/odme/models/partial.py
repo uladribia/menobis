@@ -5,31 +5,14 @@ runs in Rust. Python only validates inputs and wraps results.
 """
 
 import warnings
-from dataclasses import dataclass
 
 import numpy as np
 from numpy.typing import NDArray
 
 import odme._odme as _odme
 from odme.analysis import directed_degrees, directed_strengths
-from odme.data.frames import EdgeTable, ProbabilityTable
-
-
-@dataclass(frozen=True)
-class PartialFitResult:
-    """Combined rate table from partial-constraint fitting."""
-
-    source: NDArray[np.uint64]
-    target: NDArray[np.uint64]
-    rate: NDArray[np.float64]
-
-    def as_probability_table(self) -> ProbabilityTable:
-        """Convert to ProbabilityTable for sampling (rates as weights)."""
-        return ProbabilityTable(
-            source=self.source,
-            target=self.target,
-            probability=self.rate,
-        )
+from odme.data.frames import EdgeTable
+from odme.models.types import PartialFitResult
 
 
 def _warn_if_not_converged(name: str, converged: bool, iters: int) -> None:

@@ -2,13 +2,19 @@
 
 import time
 import warnings
-from dataclasses import dataclass
 
 import numpy as np
 from loguru import logger
 from numpy.typing import NDArray
 
 import odme._odme as _odme
+from odme.models.types import (
+    DegreeEventsFit,
+    FitResult,
+    StrengthCostFit,
+    StrengthDegreeFit,
+    StrengthEdgesFit,
+)
 
 
 def _log_fit_result(
@@ -40,74 +46,6 @@ def _log_fit_result(
             f"{name} did not converge after {iterations} iterations",
             stacklevel=3,
         )
-
-
-@dataclass(frozen=True)
-class StrengthCostFit:
-    """Fitted strength-cost ME model: E[t_ij] = x_i y_j exp(-gamma d_ij)."""
-
-    node: NDArray[np.uint64]
-    x: NDArray[np.float64]
-    y: NDArray[np.float64]
-    gamma: float
-    self_loops: bool
-    converged: bool
-    iterations: int
-
-
-@dataclass(frozen=True)
-class StrengthEdgesFit:
-    """Fitted exact ME fixed-strength-and-edge-count ME model."""
-
-    node: NDArray[np.uint64]
-    x: NDArray[np.float64]
-    y: NDArray[np.float64]
-    lam: float
-    self_loops: bool
-    converged: bool
-    iterations: int
-
-
-@dataclass(frozen=True)
-class StrengthDegreeFit:
-    """Fitted exact ME fixed-strength-degree ME model."""
-
-    node: NDArray[np.uint64]
-    x: NDArray[np.float64]
-    y: NDArray[np.float64]
-    z: NDArray[np.float64]
-    w: NDArray[np.float64]
-    self_loops: bool
-    converged: bool
-    iterations: int
-
-
-@dataclass(frozen=True)
-class FitResult:
-    """Lagrange multiplier fitting result."""
-
-    node: NDArray[np.uint64]
-    x: NDArray[np.float64]
-    y: NDArray[np.float64]
-    converged: bool = True
-    iterations: int = 0
-
-
-@dataclass(frozen=True)
-class DegreeEventsFit:
-    """Fitting result for degree-events W models (geometric/NB).
-
-    The model factorizes into occupation (Bernoulli via x, y) and
-    positive-weight distribution (ZTG or ZTNB with parameter q).
-    """
-
-    node: NDArray[np.uint64]
-    x: NDArray[np.float64]
-    y: NDArray[np.float64]
-    q: float
-    positive_mean: float
-    converged: bool = True
-    iterations: int = 0
 
 
 def _validate_balanced_sequences(
