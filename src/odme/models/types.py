@@ -60,6 +60,34 @@ class StrengthDegreeFit:
 
 
 @dataclass(frozen=True)
+class WStrengthFit:
+    """Fitted independent W fixed-strength model."""
+
+    node: NDArray[np.uint64]
+    x: NDArray[np.float64]
+    y: NDArray[np.float64]
+    layers: int
+    status: str
+    objective: float
+    iterations: int
+    min_margin: float
+    max_q: float
+    max_strength_residual: float
+    total_strength_residual: float
+    variables: int
+    auxiliary_variables: int
+    exponential_cones: int
+    power_cones: int
+    linear_constraints: int
+    sparse_nonzeros: int
+
+    @property
+    def converged(self) -> bool:
+        """Whether the conic solver reported an optimal solution."""
+        return self.status == "solved"
+
+
+@dataclass(frozen=True)
 class DegreeEventsFit:
     """Fitting result for degree-events W models (geometric/negative binomial).
 
@@ -100,4 +128,5 @@ __all__ = [
     "StrengthCostFit",
     "StrengthDegreeFit",
     "StrengthEdgesFit",
+    "WStrengthFit",
 ]

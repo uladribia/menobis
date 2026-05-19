@@ -14,6 +14,7 @@ from odme.models.types import (
     StrengthCostFit,
     StrengthDegreeFit,
     StrengthEdgesFit,
+    WStrengthFit,
 )
 
 
@@ -331,6 +332,136 @@ def fit_strength_poisson(
     )
 
 
+def _wrap_w_strength_fit(
+    native_result: tuple[
+        list[float],
+        list[float],
+        int,
+        str,
+        float,
+        int,
+        float,
+        float,
+        float,
+        float,
+        tuple[int, int, int, int, int, int],
+    ],
+    *,
+    node_count: int,
+) -> WStrengthFit:
+    (
+        x_list,
+        y_list,
+        layers,
+        status,
+        objective,
+        iterations,
+        min_margin,
+        max_q,
+        max_strength_residual,
+        total_strength_residual,
+        metrics,
+    ) = native_result
+    (
+        variables,
+        auxiliary_variables,
+        exponential_cones,
+        power_cones,
+        linear_constraints,
+        sparse_nonzeros,
+    ) = metrics
+    return WStrengthFit(
+        node=np.arange(node_count, dtype=np.uint64),
+        x=np.asarray(x_list, dtype=np.float64),
+        y=np.asarray(y_list, dtype=np.float64),
+        layers=layers,
+        status=status,
+        objective=objective,
+        iterations=iterations,
+        min_margin=min_margin,
+        max_q=max_q,
+        max_strength_residual=max_strength_residual,
+        total_strength_residual=total_strength_residual,
+        variables=variables,
+        auxiliary_variables=auxiliary_variables,
+        exponential_cones=exponential_cones,
+        power_cones=power_cones,
+        linear_constraints=linear_constraints,
+        sparse_nonzeros=sparse_nonzeros,
+    )
+
+
+def fit_strength_geometric(
+    strength_out: NDArray[np.integer],
+    strength_in: NDArray[np.integer],
+    *,
+    self_loops: bool = True,
+    tolerance: float = 1e-8,
+    verbose: int = 0,
+    max_iterations: int = 1000,
+) -> WStrengthFit:
+    """Fit the independent W fixed-strength geometric model."""
+    s_out = np.asarray(strength_out, dtype=np.float64)
+    s_in = np.asarray(strength_in, dtype=np.float64)
+    _validate_balanced_sequences(s_out, s_in, name="strength")
+
+    t0 = time.perf_counter()
+    result = _wrap_w_strength_fit(
+        _odme.fit_strength_geometric(
+            s_out.tolist(), s_in.tolist(), self_loops, tolerance, max_iterations
+        ),
+        node_count=len(s_out),
+    )
+    _log_fit_result(
+        "fit_strength_geometric",
+        result.converged,
+        result.iterations,
+        time.perf_counter() - t0,
+        verbose,
+    )
+    return result
+
+
+def fit_strength_negative_binomial(
+    strength_out: NDArray[np.integer],
+    strength_in: NDArray[np.integer],
+    *,
+    layers: int = 3,
+    self_loops: bool = True,
+    tolerance: float = 1e-8,
+    verbose: int = 0,
+    max_iterations: int = 1000,
+) -> WStrengthFit:
+    """Fit the independent W fixed-strength negative-binomial model."""
+    if layers <= 1:
+        msg = "negative binomial W fitting requires layers > 1; use geometric for M = 1"
+        raise ValueError(msg)
+    s_out = np.asarray(strength_out, dtype=np.float64)
+    s_in = np.asarray(strength_in, dtype=np.float64)
+    _validate_balanced_sequences(s_out, s_in, name="strength")
+
+    t0 = time.perf_counter()
+    result = _wrap_w_strength_fit(
+        _odme.fit_strength_negative_binomial(
+            s_out.tolist(),
+            s_in.tolist(),
+            layers,
+            self_loops,
+            tolerance,
+            max_iterations,
+        ),
+        node_count=len(s_out),
+    )
+    _log_fit_result(
+        "fit_strength_negative_binomial",
+        result.converged,
+        result.iterations,
+        time.perf_counter() - t0,
+        verbose,
+    )
+    return result
+
+
 def fit_degree_bernoulli(
     degree_out: NDArray[np.floating],
     degree_in: NDArray[np.floating],
@@ -588,6 +719,7 @@ __all__ = [
     "StrengthCostFit",
     "StrengthDegreeFit",
     "StrengthEdgesFit",
+    "WStrengthFit",
     "fit_degree_bernoulli",
     "fit_degree_events_geometric",
     "fit_degree_events_negative_binomial",
@@ -595,6 +727,8 @@ __all__ = [
     "fit_strength_cost_poisson",
     "fit_strength_degree_poisson",
     "fit_strength_edges_poisson",
+    "fit_strength_geometric",
+    "fit_strength_negative_binomial",
     "fit_strength_poisson",
     "validate_strength_degree_constraints",
 ]

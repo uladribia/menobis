@@ -36,7 +36,7 @@ The distribution name implies the ensemble type:
 
 | Constraint | Poisson | Geometric | Binomial | Neg. binomial |
 |------------|---------|-----------|----------|---------------|
-| strength | ✅ | ✅ | ✅ | ✅ (no fit yet) |
+| strength | ✅ | ✅ | ✅ | ✅ |
 | strength-cost | ✅ | — | ✅ | — |
 | strength-edges | ✅ (zero-inflated) | — | ✅ (zero-inflated) | — |
 | strength-degree | ✅ (zero-inflated) | — | ✅ (zero-inflated) | — |
@@ -55,6 +55,11 @@ The distribution name implies the ensemble type:
 | 4 | strength-degree | zero-inflated occupation + positive Poisson weight | `fit_strength_degree_poisson` | `sample_strength_degree_poisson` |
 | 5 | degree-events | Bernoulli occupation + positive Poisson weight | `fit_degree_bernoulli` | `sample_degree_events_poisson` |
 
+W fixed-strength fitting uses Clarabel exponential cones and returns
+`WStrengthFit` diagnostics (`status`, residuals, margins, and lifted problem
+metrics) through `fit_strength_geometric` and
+`fit_strength_negative_binomial`.
+
 Additional strength samplers for ensemble comparison:
 
 | Sampler | Ensemble | Total weight |
@@ -68,6 +73,8 @@ Additional strength samplers for ensemble comparison:
 | Constraint | `odme fit` | `odme generate` | `odme filter` |
 |-----------|------------|-----------------|---------------|
 | strength | `strength-poisson` | `strength-poisson` | `strength-poisson` |
+| strength (W geometric) | `strength-geometric` | — | — |
+| strength (W negative binomial) | `strength-negative-binomial` | — | — |
 | strength (B) | — | — | — |
 | strength-cost | `strength-cost-poisson` | `strength-cost-poisson` | `strength-cost-poisson` |
 | strength-edges | `strength-edges-poisson` | `strength-edges-poisson` | `strength-edges-poisson` |

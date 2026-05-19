@@ -551,6 +551,45 @@ def fit_strength_poisson(
     tolerance: float,
     max_iterations: int,
 ) -> tuple[list[float], list[float], bool, int]: ...
+def fit_strength_geometric(
+    strength_out: list[float],
+    strength_in: list[float],
+    self_loops: bool,
+    tolerance: float,
+    max_iterations: int,
+) -> tuple[
+    list[float],
+    list[float],
+    int,
+    str,
+    float,
+    int,
+    float,
+    float,
+    float,
+    float,
+    tuple[int, int, int, int, int, int],
+]: ...
+def fit_strength_negative_binomial(
+    strength_out: list[float],
+    strength_in: list[float],
+    layers: int,
+    self_loops: bool,
+    tolerance: float,
+    max_iterations: int,
+) -> tuple[
+    list[float],
+    list[float],
+    int,
+    str,
+    float,
+    int,
+    float,
+    float,
+    float,
+    float,
+    tuple[int, int, int, int, int, int],
+]: ...
 def fit_degree_events_geometric(
     degree_out: list[float],
     degree_in: list[float],

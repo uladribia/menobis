@@ -24,6 +24,7 @@ Scientific reference: <https://hdl.handle.net/10803/400560>.
 | — | Naming cleanup: `{operation}_{constraint}_{distribution}` |
 | — | Provider unification: `WeightFamily` enum + `FixedStrengthProvider` |
 | — | Final project rename from ODME to MENoBiS |
+| — | Publish MkDocs site to dedicated GitHub Pages |
 
 Total: 202 Python tests, 46 Rust tests, all checks green.
 
@@ -59,13 +60,19 @@ Total: 202 Python tests, 46 Rust tests, all checks green.
   `fitting/partial.rs`, `fitting/types.rs`, and shared internal
   `fitting/support.rs`; ME strength-cost fitting now lives in `fitting/me.rs`,
   and the old top-level `cost.rs` module was removed.
+- Added W fixed-strength result diagnostics, lifted problem metrics, and
+  independent-strength residual helpers in Rust.
+- Added optional Rust `w-conic` feature with `cvxrust` and Clarabel dependencies;
+  fixed-strength W fit entry points now solve the independent geometric and
+  negative-binomial strength model via Clarabel exponential cones, with PyO3 and
+  Python wrappers.
 
 **Remaining:**
 
 - W zero-inflated absent-edge wrappers for strength-edges, strength-degree, and
   degree-events if/when native absent-edge bindings are added.
-- W **strength fitting** (geometric/negative binomial) — requires conic solver
-  (cvxrust/Clarabel).
+- W **strength fitting** documentation and benchmark coverage for geometric /
+  negative-binomial Rust conic core.
 - W **strength-cost fitting** — same conic approach + gamma variable.
 - W **strength-edges fitting** — conic with eta = log(lambda).
 - W **strength-degree fitting** — conic with c, d variables.
@@ -248,6 +255,9 @@ recentering gauges after solving.
 3. Implement `fitting/w.rs` result structs with solver status, objective,
    `iterations`, `min_margin = min(r_ij)`, `max_q`, fitted scalar multipliers,
    max/total residuals for every active constraint, and lifted problem metrics.
+   Fixed-strength diagnostics and residual helpers are in place; extend the
+   same typed diagnostics to cost, edges, and degree W fits as those solvers are
+   added.
 4. Fit strengths first, then strengths+cost, because both use independent W
    pairs and share the barrier term. Keep the same organization as the ME/B
    fitters: W strength-cost implementation belongs in `fitting/w.rs`, with
@@ -548,6 +558,35 @@ Rename scope:
 | Docs/site title | MENoBiS |
 | Repository/package metadata | MENoBiS |
 | Historical references | keep ODME as legacy/thesis-era name |
+
+### Final milestone: publish MkDocs to GitHub Pages — NOT STARTED
+
+After the scientific refactor and final naming decisions are stable, publish the
+MkDocs Material documentation to a dedicated GitHub Pages site. This is a release
+polish milestone, not part of the W fitting implementation.
+
+Publishing scope:
+
+| Item | Target |
+|------|--------|
+| Source docs | `docs/` + `mkdocs.yml` |
+| Validation | `mkdocs build --strict` in CI |
+| Deployment | GitHub Actions workflow for Pages |
+| Hosting | Dedicated GitHub Pages environment/site |
+| Branch policy | deploy only from protected default branch or release tags |
+
+Required steps:
+
+1. Decide final Pages URL after the MENoBiS rename decision.
+2. Configure `site_url`, repository links, and canonical project name in
+   `mkdocs.yml`.
+3. Add a GitHub Actions workflow that installs with `uv`, runs
+   `mkdocs build --strict`, uploads the generated `site/` artifact, and deploys
+   to GitHub Pages.
+4. Protect the Pages deployment environment and document who can publish.
+5. Add docs release instructions under `docs/development/`.
+6. Verify published navigation, search, API links, and thesis terminology links
+   after deployment.
 
 ### Future: thesis-equation mapping
 

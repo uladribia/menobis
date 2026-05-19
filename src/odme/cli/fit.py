@@ -12,10 +12,13 @@ from typer import Option, Typer
 from odme.analysis import directed_degrees, directed_strengths
 from odme.data.io import read_edges
 from odme.models import (
+    WStrengthFit,
     fit_degree_bernoulli,
     fit_strength_cost_poisson,
     fit_strength_degree_poisson,
     fit_strength_edges_poisson,
+    fit_strength_geometric,
+    fit_strength_negative_binomial,
     fit_strength_poisson,
 )
 
@@ -54,6 +57,86 @@ def strengths(
     if not effective_quiet:
         dest = str(output) if output else "stdout"
         typer.echo(f"Wrote Lagrange multipliers to {dest}", err=True)
+
+
+@app.command("strength-geometric")
+def strength_geometric(
+    input_path: Path,
+    output: Annotated[
+        Path | None, Option("--output", "-o", help="Output path. Stdout if omitted.")
+    ] = None,
+    output_json: Annotated[bool, Option("--json", help="Output as JSON.")] = False,
+    quiet: Annotated[
+        bool, Option("--quiet", help="Suppress progress messages.")
+    ] = False,
+    self_loops: Annotated[
+        bool,
+        Option("--self-loops/--no-self-loops", help="Whether model self loops."),
+    ] = True,
+    tolerance: Annotated[
+        float, Option("--tolerance", help="Conic solver tolerance.")
+    ] = 1e-8,
+    max_iterations: Annotated[
+        int, Option("--max-iterations", help="Maximum conic solver iterations.")
+    ] = 1000,
+) -> None:
+    """Fit the W fixed-strength geometric model."""
+    effective_quiet = quiet or output_json
+    edges = read_edges(input_path)
+    s = directed_strengths(edges)
+    result = fit_strength_geometric(
+        s.out.astype(np.float64),
+        s.incoming.astype(np.float64),
+        self_loops=self_loops,
+        tolerance=tolerance,
+        max_iterations=max_iterations,
+    )
+    _write_w_strength_result(result, output, output_json)
+    if not effective_quiet:
+        dest = str(output) if output else "stdout"
+        typer.echo(f"Wrote W geometric multipliers to {dest}", err=True)
+
+
+@app.command("strength-negative-binomial")
+def strength_negative_binomial(
+    input_path: Path,
+    output: Annotated[
+        Path | None, Option("--output", "-o", help="Output path. Stdout if omitted.")
+    ] = None,
+    output_json: Annotated[bool, Option("--json", help="Output as JSON.")] = False,
+    quiet: Annotated[
+        bool, Option("--quiet", help="Suppress progress messages.")
+    ] = False,
+    layers: Annotated[
+        int, Option("--layers", help="Negative-binomial layer count M (>1).")
+    ] = 3,
+    self_loops: Annotated[
+        bool,
+        Option("--self-loops/--no-self-loops", help="Whether model self loops."),
+    ] = True,
+    tolerance: Annotated[
+        float, Option("--tolerance", help="Conic solver tolerance.")
+    ] = 1e-8,
+    max_iterations: Annotated[
+        int, Option("--max-iterations", help="Maximum conic solver iterations.")
+    ] = 1000,
+) -> None:
+    """Fit the W fixed-strength negative-binomial model."""
+    effective_quiet = quiet or output_json
+    edges = read_edges(input_path)
+    s = directed_strengths(edges)
+    result = fit_strength_negative_binomial(
+        s.out.astype(np.float64),
+        s.incoming.astype(np.float64),
+        layers=layers,
+        self_loops=self_loops,
+        tolerance=tolerance,
+        max_iterations=max_iterations,
+    )
+    _write_w_strength_result(result, output, output_json)
+    if not effective_quiet:
+        dest = str(output) if output else "stdout"
+        typer.echo(f"Wrote W negative-binomial multipliers to {dest}", err=True)
 
 
 @app.command("degree-bernoulli")
@@ -277,6 +360,48 @@ def strength_cost_me(
     if not effective_quiet:
         dest = str(output) if output else "stdout"
         typer.echo(f"Wrote strength-cost ME multipliers to {dest}", err=True)
+
+
+def _write_w_strength_result(
+    result: WStrengthFit, path: Path | None, output_json: bool
+) -> None:
+    if output_json:
+        data = {
+            "status": result.status,
+            "layers": int(result.layers),
+            "objective": float(result.objective),
+            "iterations": int(result.iterations),
+            "min_margin": float(result.min_margin),
+            "max_q": float(result.max_q),
+            "max_strength_residual": float(result.max_strength_residual),
+            "total_strength_residual": float(result.total_strength_residual),
+            "metrics": {
+                "variables": int(result.variables),
+                "auxiliary_variables": int(result.auxiliary_variables),
+                "exponential_cones": int(result.exponential_cones),
+                "power_cones": int(result.power_cones),
+                "linear_constraints": int(result.linear_constraints),
+                "sparse_nonzeros": int(result.sparse_nonzeros),
+            },
+            "nodes": [
+                {"node": int(n), "x": float(x), "y": float(y)}
+                for n, x, y in zip(result.node, result.x, result.y, strict=True)
+            ],
+        }
+        _write_output(json.dumps(data, indent=2), path)
+        return
+
+    lines = [
+        "node,x,y,layers,status,objective,iterations,min_margin,max_q,"
+        "max_strength_residual,total_strength_residual"
+    ]
+    for n, x, y in zip(result.node, result.x, result.y, strict=True):
+        lines.append(
+            f"{n},{x},{y},{result.layers},{result.status},{result.objective},"
+            f"{result.iterations},{result.min_margin},{result.max_q},"
+            f"{result.max_strength_residual},{result.total_strength_residual}"
+        )
+    _write_output("\n".join(lines) + "\n", path)
 
 
 def _write_output(content: str, path: Path | None) -> None:

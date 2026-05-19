@@ -8,6 +8,8 @@ from odme.models.fitting import (
     fit_strength_cost_poisson,
     fit_strength_degree_poisson,
     fit_strength_edges_poisson,
+    fit_strength_geometric,
+    fit_strength_negative_binomial,
     fit_strength_poisson,
     validate_strength_degree_constraints,
 )
@@ -45,6 +47,7 @@ from odme.models.types import (
     StrengthCostFit,
     StrengthDegreeFit,
     StrengthEdgesFit,
+    WStrengthFit,
 )
 
 __all__ = [
@@ -54,6 +57,7 @@ __all__ = [
     "StrengthCostFit",
     "StrengthDegreeFit",
     "StrengthEdgesFit",
+    "WStrengthFit",
     "fit_degree_bernoulli",
     "fit_degree_events_geometric",
     "fit_degree_events_negative_binomial",
@@ -61,6 +65,8 @@ __all__ = [
     "fit_strength_cost_poisson",
     "fit_strength_degree_poisson",
     "fit_strength_edges_poisson",
+    "fit_strength_geometric",
+    "fit_strength_negative_binomial",
     "fit_strength_poisson",
     "sample_custom_multinomial",
     "sample_custom_poisson",

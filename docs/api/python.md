@@ -14,6 +14,7 @@ description: Python API reference for ODME.
 | `StrengthCostFit` | `odme.models.fitting` | Fitted strength-cost model with `x`, `y`, `gamma` |
 | `StrengthEdgesFit` | `odme.models.fitting` | Fitted strength-edges model with `x`, `y`, `lam` |
 | `StrengthDegreeFit` | `odme.models.fitting` | Fitted strength-degree model with `x`, `y`, `z`, `w` |
+| `WStrengthFit` | `odme.models.fitting` | W fixed-strength conic fit with multipliers and solver diagnostics |
 | `FilterResult` | `odme.filtering` | Filtering output with upper, lower, compatible, absent tables |
 | `FilteredEdges` | `odme.filtering` | Edge subset with p-values, expected weights, occupation |
 
@@ -39,6 +40,8 @@ description: Python API reference for ODME.
 | Function | Model | Constraints |
 |----------|-------|-------------|
 | `fit_strength_poisson` | Poisson | strengths |
+| `fit_strength_geometric` | Geometric W | strengths |
+| `fit_strength_negative_binomial` | Negative-binomial W | strengths + `layers > 1` |
 | `fit_degree_bernoulli` | Bernoulli | degrees |
 | `fit_strength_edges_poisson` | zero-inflated | strengths + edge count |
 | `fit_strength_degree_poisson` | zero-inflated | strengths + degrees |

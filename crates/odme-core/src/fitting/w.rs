@@ -94,6 +94,331 @@ pub fn w_positive_mean(q: f64, layers: u32) -> f64 {
     m * q / (one_minus_q * (1.0 - one_minus_q.powf(m)))
 }
 
+use super::{
+    WConicFitOptions, WFitStatus, WProblemMetrics, WStrengthFitResult, WStrengthResiduals,
+};
+
+/// Compute independent W fixed-strength residuals from inverse/log multipliers.
+///
+/// `a` and `b` are inverse/log variables with `r_ij = a_i + b_j` and
+/// `q_ij = exp(-r_ij)`. The pair expectation is `M q_ij / (1 - q_ij)`.
+#[must_use]
+pub fn independent_strength_residuals(
+    a: &[f64],
+    b: &[f64],
+    layers: u32,
+    strength_out: &[f64],
+    strength_in: &[f64],
+    self_loops: bool,
+) -> WStrengthResiduals {
+    let n = strength_out.len();
+    let mut predicted_out = vec![0.0; n];
+    let mut predicted_in = vec![0.0; n];
+    let mut min_margin = f64::INFINITY;
+    let mut max_q = 0.0_f64;
+
+    for (i, &ai) in a.iter().enumerate().take(n) {
+        for (j, &bj) in b.iter().enumerate().take(n) {
+            if !self_loops && i == j {
+                continue;
+            }
+            let r = ai + bj;
+            min_margin = min_margin.min(r);
+            max_q = max_q.max((-r).exp());
+            let expected = w_mean(r, layers);
+            predicted_out[i] += expected;
+            predicted_in[j] += expected;
+        }
+    }
+
+    let mut max_abs = 0.0_f64;
+    let mut total_abs = 0.0_f64;
+    for i in 0..n {
+        let out_abs = (predicted_out[i] - strength_out[i]).abs();
+        let in_abs = (predicted_in[i] - strength_in[i]).abs();
+        max_abs = max_abs.max(out_abs).max(in_abs);
+        total_abs += out_abs + in_abs;
+    }
+
+    WStrengthResiduals {
+        max_abs,
+        total_abs,
+        min_margin,
+        max_q,
+    }
+}
+
+fn initial_independent_strength_guess(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    layers: u32,
+) -> (Vec<f64>, Vec<f64>) {
+    let total = strength_out.iter().sum::<f64>().max(f64::EPSILON);
+    let m = f64::from(layers);
+    let x: Vec<f64> = strength_out
+        .iter()
+        .map(|&s| {
+            (s / (s + m * total.sqrt()))
+                .clamp(1e-12, 1.0 - 1e-12)
+                .sqrt()
+        })
+        .collect();
+    let y: Vec<f64> = strength_in
+        .iter()
+        .map(|&s| {
+            (s / (s + m * total.sqrt()))
+                .clamp(1e-12, 1.0 - 1e-12)
+                .sqrt()
+        })
+        .collect();
+    let a = x.iter().map(|&xi| -xi.ln()).collect();
+    let b = y.iter().map(|&yj| -yj.ln()).collect();
+    (a, b)
+}
+
+fn w_strength_metrics(n: usize, self_loops: bool) -> WProblemMetrics {
+    let pairs = if self_loops {
+        n * n
+    } else {
+        n * n.saturating_sub(1)
+    };
+    WProblemMetrics {
+        variables: 2 * n,
+        auxiliary_variables: pairs,
+        exponential_cones: 2 * pairs,
+        power_cones: 0,
+        linear_constraints: 1,
+        sparse_nonzeros: 4 * pairs + 2 * n,
+    }
+}
+
+fn fit_strength_w_not_solved(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    layers: u32,
+    opts: WConicFitOptions,
+    status: WFitStatus,
+) -> WStrengthFitResult {
+    let (a, b) = initial_independent_strength_guess(strength_out, strength_in, layers);
+    let residuals =
+        independent_strength_residuals(&a, &b, layers, strength_out, strength_in, opts.self_loops);
+    WStrengthFitResult {
+        x: a.iter().map(|&ai| (-ai).exp()).collect(),
+        y: b.iter().map(|&bj| (-bj).exp()).collect(),
+        layers,
+        status,
+        objective: f64::NAN,
+        iterations: 0,
+        min_margin: residuals.min_margin,
+        max_q: residuals.max_q,
+        max_strength_residual: residuals.max_abs,
+        total_strength_residual: residuals.total_abs,
+        metrics: w_strength_metrics(strength_out.len(), opts.self_loops),
+    }
+}
+
+/// Start fixed-strength W geometric fitting.
+///
+/// This public kernel establishes validation, diagnostics, and the conic-solver
+/// boundary. The actual conic solve is enabled behind the `w-conic` feature and
+/// will replace the current not-yet-solved status as the Clarabel model is
+/// assembled.
+#[must_use]
+pub fn fit_strength_geometric(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    opts: WConicFitOptions,
+) -> WStrengthFitResult {
+    fit_strength_w(strength_out, strength_in, 1, opts)
+}
+
+/// Start fixed-strength W negative-binomial fitting.
+#[must_use]
+pub fn fit_strength_negative_binomial(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    layers: u32,
+    opts: WConicFitOptions,
+) -> WStrengthFitResult {
+    fit_strength_w(strength_out, strength_in, layers, opts)
+}
+
+#[cfg(not(feature = "w-conic"))]
+fn fit_strength_w(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    layers: u32,
+    opts: WConicFitOptions,
+) -> WStrengthFitResult {
+    fit_strength_w_not_solved(strength_out, strength_in, layers, opts, WFitStatus::Failed)
+}
+
+#[cfg(feature = "w-conic")]
+fn fit_strength_w(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    layers: u32,
+    opts: WConicFitOptions,
+) -> WStrengthFitResult {
+    use clarabel::algebra::CscMatrix;
+    use clarabel::solver::{
+        DefaultSettings, DefaultSolver, ExponentialConeT, IPSolver, NonnegativeConeT, SolverStatus,
+        SupportedConeT, ZeroConeT,
+    };
+
+    let n = strength_out.len();
+    if n == 0 || n != strength_in.len() || layers == 0 {
+        return fit_strength_w_not_solved(
+            strength_out,
+            strength_in,
+            layers,
+            opts,
+            WFitStatus::Infeasible,
+        );
+    }
+
+    let pairs: Vec<(usize, usize)> = (0..n)
+        .flat_map(|i| (0..n).map(move |j| (i, j)))
+        .filter(|&(i, j)| opts.self_loops || i != j)
+        .collect();
+    let pair_count = pairs.len();
+    let variable_count = 2 * n + 3 * pair_count;
+    let row_count = 1 + 6 * pair_count + pair_count;
+    let t_offset = 2 * n;
+    let p_offset = t_offset + pair_count;
+    let q_offset = p_offset + pair_count;
+    let mut dense_a = vec![vec![0.0_f64; variable_count]; row_count];
+    let mut rhs = vec![0.0_f64; row_count];
+    let mut row = 0;
+
+    // Gauge: sum(a) - sum(b) = 0.
+    for i in 0..n {
+        dense_a[row][i] = 1.0;
+        dense_a[row][n + i] = -1.0;
+    }
+    row += 1;
+
+    for (pair_idx, &(i, j)) in pairs.iter().enumerate() {
+        let t_idx = t_offset + pair_idx;
+        let p_idx = p_offset + pair_idx;
+        let q_idx = q_offset + pair_idx;
+
+        // p_ij >= exp(-t_ij): slack (-t, 1, p) in K_exp.
+        dense_a[row][t_idx] = 1.0;
+        row += 1;
+        rhs[row] = 1.0;
+        row += 1;
+        dense_a[row][p_idx] = -1.0;
+        row += 1;
+
+        // q_ij >= exp(-(a_i + b_j)): slack (-(a+b), 1, q) in K_exp.
+        dense_a[row][i] = 1.0;
+        dense_a[row][n + j] = 1.0;
+        row += 1;
+        rhs[row] = 1.0;
+        row += 1;
+        dense_a[row][q_idx] = -1.0;
+        row += 1;
+    }
+
+    // exp(-t_ij) + exp(-r_ij) <= 1.
+    for pair_idx in 0..pair_count {
+        dense_a[row][p_offset + pair_idx] = 1.0;
+        dense_a[row][q_offset + pair_idx] = 1.0;
+        rhs[row] = 1.0;
+        row += 1;
+    }
+
+    let mut objective = vec![0.0_f64; variable_count];
+    objective[..n].copy_from_slice(strength_out);
+    objective[n..2 * n].copy_from_slice(strength_in);
+    for pair_idx in 0..pair_count {
+        objective[t_offset + pair_idx] = f64::from(layers);
+    }
+
+    let p_matrix = CscMatrix::<f64>::zeros((variable_count, variable_count));
+    let a_matrix = dense_to_csc(&dense_a, row_count, variable_count);
+    let mut cones: Vec<SupportedConeT<f64>> = Vec::with_capacity(2 * pair_count + 2);
+    cones.push(ZeroConeT(1));
+    for _ in 0..(2 * pair_count) {
+        cones.push(ExponentialConeT());
+    }
+    cones.push(NonnegativeConeT(pair_count));
+    let settings = DefaultSettings {
+        verbose: false,
+        max_iter: opts.max_iterations.try_into().unwrap_or(u32::MAX),
+        tol_gap_abs: opts.tolerance,
+        tol_gap_rel: opts.tolerance,
+        tol_feas: opts.tolerance,
+        ..DefaultSettings::default()
+    };
+
+    let Ok(mut solver) =
+        DefaultSolver::new(&p_matrix, &objective, &a_matrix, &rhs, &cones, settings)
+    else {
+        return fit_strength_w_not_solved(
+            strength_out,
+            strength_in,
+            layers,
+            opts,
+            WFitStatus::Failed,
+        );
+    };
+    solver.solve();
+    let status = match solver.solution.status {
+        SolverStatus::Solved => WFitStatus::Solved,
+        SolverStatus::AlmostSolved | SolverStatus::MaxIterations | SolverStatus::MaxTime => {
+            WFitStatus::Inaccurate
+        }
+        SolverStatus::PrimalInfeasible
+        | SolverStatus::DualInfeasible
+        | SolverStatus::AlmostPrimalInfeasible
+        | SolverStatus::AlmostDualInfeasible => WFitStatus::Infeasible,
+        _ => WFitStatus::Failed,
+    };
+    if !matches!(status, WFitStatus::Solved | WFitStatus::Inaccurate) {
+        return fit_strength_w_not_solved(strength_out, strength_in, layers, opts, status);
+    }
+
+    let solution = &solver.solution.x;
+    let a = solution[..n].to_vec();
+    let b = solution[n..2 * n].to_vec();
+    let residuals =
+        independent_strength_residuals(&a, &b, layers, strength_out, strength_in, opts.self_loops);
+    WStrengthFitResult {
+        x: a.iter().map(|&ai| (-ai).exp()).collect(),
+        y: b.iter().map(|&bj| (-bj).exp()).collect(),
+        layers,
+        status,
+        objective: solver.solution.obj_val,
+        iterations: solver.solution.iterations as usize,
+        min_margin: residuals.min_margin,
+        max_q: residuals.max_q,
+        max_strength_residual: residuals.max_abs,
+        total_strength_residual: residuals.total_abs,
+        metrics: w_strength_metrics(n, opts.self_loops),
+    }
+}
+
+#[cfg(feature = "w-conic")]
+fn dense_to_csc(dense: &[Vec<f64>], rows: usize, cols: usize) -> clarabel::algebra::CscMatrix<f64> {
+    let mut colptr = Vec::with_capacity(cols + 1);
+    let mut rowval = Vec::new();
+    let mut nzval = Vec::new();
+    colptr.push(0);
+    for col in 0..cols {
+        for (row, values) in dense.iter().enumerate().take(rows) {
+            let value = values[col];
+            if value != 0.0 {
+                rowval.push(row);
+                nzval.push(value);
+            }
+        }
+        colptr.push(rowval.len());
+    }
+    clarabel::algebra::CscMatrix::new(rows, cols, colptr, rowval, nzval)
+}
+
 // ---------------------------------------------------------------------------
 // W degree-events fitting
 // ---------------------------------------------------------------------------
@@ -200,10 +525,84 @@ pub fn fit_degree_events_negative_binomial(
 #[cfg(test)]
 mod tests {
     use super::{
-        neg_ln_1m_exp_neg, w_a, w_g, w_log_g, w_mean, w_occupation, w_positive_mean, w_zip_mean,
+        independent_strength_residuals, neg_ln_1m_exp_neg, w_a, w_g, w_log_g, w_mean, w_occupation,
+        w_positive_mean, w_zip_mean,
+    };
+    use crate::fitting::{
+        fit_strength_geometric, WConicFitOptions, WFitStatus, WProblemMetrics, WStrengthFitResult,
     };
 
     const TOL: f64 = 1e-12;
+
+    #[test]
+    fn w_fit_result_carries_solver_diagnostics() {
+        let result = WStrengthFitResult {
+            x: vec![0.5],
+            y: vec![0.25],
+            layers: 1,
+            status: WFitStatus::Solved,
+            objective: 1.25,
+            iterations: 7,
+            min_margin: 0.1,
+            max_q: 0.9,
+            max_strength_residual: 1e-9,
+            total_strength_residual: 2e-9,
+            metrics: WProblemMetrics {
+                variables: 2,
+                auxiliary_variables: 3,
+                exponential_cones: 4,
+                power_cones: 0,
+                linear_constraints: 1,
+                sparse_nonzeros: 8,
+            },
+        };
+
+        assert_eq!(result.status, WFitStatus::Solved);
+        assert_eq!(result.layers, 1);
+        assert_eq!(result.metrics.exponential_cones, 4);
+        assert!(result.max_q < 1.0);
+    }
+
+    #[test]
+    fn independent_strength_residuals_recover_homogeneous_self_loop_fit() {
+        let strength_out = [2.0, 2.0];
+        let strength_in = [2.0, 2.0];
+        let q = 0.5_f64;
+        let a = -q.sqrt().ln();
+        let b = -q.sqrt().ln();
+        let residuals =
+            independent_strength_residuals(&[a, a], &[b, b], 1, &strength_out, &strength_in, true);
+
+        assert!(residuals.max_abs <= TOL);
+        assert!(residuals.total_abs <= TOL);
+        assert!((residuals.min_margin + q.ln()).abs() <= TOL);
+        assert!((residuals.max_q - q).abs() <= TOL);
+    }
+
+    #[test]
+    fn fixed_strength_geometric_reports_problem_metrics() {
+        let result = fit_strength_geometric(
+            &[2.0, 2.0],
+            &[2.0, 2.0],
+            WConicFitOptions {
+                self_loops: true,
+                tolerance: 1e-9,
+                max_iterations: 100,
+            },
+        );
+
+        assert_eq!(result.layers, 1);
+        assert_eq!(result.metrics.variables, 4);
+        assert_eq!(result.metrics.auxiliary_variables, 4);
+        assert!(matches!(
+            result.status,
+            WFitStatus::Solved | WFitStatus::Failed | WFitStatus::Inaccurate
+        ));
+        if result.status == WFitStatus::Solved {
+            assert!(result.max_strength_residual < 1e-4);
+            assert!(result.max_q < 1.0);
+        }
+    }
 
     #[test]
     fn independent_geometric_kernels_match_closed_forms() {

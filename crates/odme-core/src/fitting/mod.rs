@@ -24,10 +24,12 @@ pub use partial::{
 };
 pub use types::{
     FitResult, PartialFitResult, StrengthCostFitResult, StrengthDegreeFitResult,
-    StrengthEdgesFitResult,
+    StrengthEdgesFitResult, WConicFitOptions, WFitStatus, WProblemMetrics, WStrengthFitResult,
+    WStrengthResiduals,
 };
 pub use w::{
-    fit_degree_events_geometric, fit_degree_events_negative_binomial, DegreeEventsFitResult,
+    fit_degree_events_geometric, fit_degree_events_negative_binomial, fit_strength_geometric,
+    fit_strength_negative_binomial, independent_strength_residuals, DegreeEventsFitResult,
 };
 
 #[cfg(test)]

@@ -50,7 +50,9 @@ use odme_core::fitting::{
     balance_strength_poisson, balance_weighted_factors,
     fit_degree_events_geometric as core_fit_degree_events_geometric,
     fit_degree_events_negative_binomial as core_fit_degree_events_negative_binomial,
-    fit_strength_poisson as core_fit_strength_poisson,
+    fit_strength_geometric as core_fit_strength_geometric,
+    fit_strength_negative_binomial as core_fit_strength_negative_binomial,
+    fit_strength_poisson as core_fit_strength_poisson, WConicFitOptions,
 };
 use odme_core::fitting::{
     fit_partial_degree as core_fit_partial_degree,
@@ -103,6 +105,19 @@ type FitStrengthEdges = (Vec<f64>, Vec<f64>, f64, bool, usize);
 type FitStrengthDegree = (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, bool, usize);
 
 type FitStrengthCost = (Vec<f64>, Vec<f64>, f64, bool, usize);
+type WStrengthFit = (
+    Vec<f64>,
+    Vec<f64>,
+    u32,
+    String,
+    f64,
+    usize,
+    f64,
+    f64,
+    f64,
+    f64,
+    (usize, usize, usize, usize, usize, usize),
+);
 type ObservedFilter = (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>);
 type AbsentFilter = (Vec<u64>, Vec<u64>, Vec<f64>, Vec<f64>, Vec<f64>);
 
@@ -474,6 +489,88 @@ fn fit_strength_poisson(
     }
     let result = core_fit_strength_poisson(&s_out, &s_in, self_loops, tolerance, max_iterations);
     Ok((result.x, result.y, result.converged, result.iterations))
+}
+
+fn w_strength_fit_tuple(result: odme_core::fitting::WStrengthFitResult) -> WStrengthFit {
+    let status = format!("{:?}", result.status).to_lowercase();
+    let metrics = result.metrics;
+    (
+        result.x,
+        result.y,
+        result.layers,
+        status,
+        result.objective,
+        result.iterations,
+        result.min_margin,
+        result.max_q,
+        result.max_strength_residual,
+        result.total_strength_residual,
+        (
+            metrics.variables,
+            metrics.auxiliary_variables,
+            metrics.exponential_cones,
+            metrics.power_cones,
+            metrics.linear_constraints,
+            metrics.sparse_nonzeros,
+        ),
+    )
+}
+
+#[pyfunction]
+fn fit_strength_geometric(
+    s_out: Vec<f64>,
+    s_in: Vec<f64>,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<WStrengthFit> {
+    if s_out.len() != s_in.len() {
+        return Err(PyValueError::new_err(
+            "s_out and s_in must have the same length",
+        ));
+    }
+    let result = core_fit_strength_geometric(
+        &s_out,
+        &s_in,
+        WConicFitOptions {
+            self_loops,
+            tolerance,
+            max_iterations,
+        },
+    );
+    Ok(w_strength_fit_tuple(result))
+}
+
+#[pyfunction]
+fn fit_strength_negative_binomial(
+    s_out: Vec<f64>,
+    s_in: Vec<f64>,
+    layers: u32,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<WStrengthFit> {
+    if s_out.len() != s_in.len() {
+        return Err(PyValueError::new_err(
+            "s_out and s_in must have the same length",
+        ));
+    }
+    if layers <= 1 {
+        return Err(PyValueError::new_err(
+            "negative binomial W fitting requires layers > 1; use geometric for M = 1",
+        ));
+    }
+    let result = core_fit_strength_negative_binomial(
+        &s_out,
+        &s_in,
+        layers,
+        WConicFitOptions {
+            self_loops,
+            tolerance,
+            max_iterations,
+        },
+    );
+    Ok(w_strength_fit_tuple(result))
 }
 
 #[pyfunction]
@@ -2293,6 +2390,8 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(fit_strength_degree_poisson, module)?)?;
     module.add_function(wrap_pyfunction!(fit_weighted_factors, module)?)?;
     module.add_function(wrap_pyfunction!(fit_strength_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_strength_geometric, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_strength_negative_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(
         fit_strength_poisson_no_self_loops,
         module
