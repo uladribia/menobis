@@ -64,9 +64,6 @@ Total: 191 Python tests, 46 Rust tests, all checks green.
 
 **Known technical debt (pre-existing, not blocking 7c):**
 
-- `src/odme/models/partial.py` `_build_result()` has an `O(N²)` Python double
-  loop that evaluates per-pair rate lambdas after masked fitting. Should be a
-  Rust kernel for large networks.
 - 3 pre-existing test failures in `TestStrengthDegree` and
   `test_validate_strength_degree_constraints_accepts_valid_sequences` due to
   overly strict boundary validation (positive degrees with `s == k`).
