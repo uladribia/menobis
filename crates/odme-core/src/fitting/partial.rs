@@ -4,37 +4,23 @@
 //! a sparse rate table. All mask building, excess computation, balancing, IPF,
 //! and result assembly happens in Rust.
 
-use crate::cost::fit_strength_cost;
-use crate::fitting::{
+use super::support::self_loop_mask;
+use super::{
     balance_masked_degree_bernoulli, balance_masked_strength_degree_poisson,
-    balance_masked_strength_poisson, balance_strength_edges_poisson,
+    balance_masked_strength_poisson, balance_strength_edges_poisson, fit_strength_cost_poisson,
+    CostFitOptions, PartialFitResult,
 };
-
-/// Result of a partial-constraint fit: sparse rate table.
-#[derive(Clone, Debug)]
-pub struct PartialFitResult {
-    pub sources: Vec<u64>,
-    pub targets: Vec<u64>,
-    pub rates: Vec<f64>,
-    pub converged: bool,
-    pub iterations: usize,
-}
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
 fn build_mask(n: usize, known_src: &[u64], known_tgt: &[u64], self_loops: bool) -> Vec<bool> {
-    let mut mask = vec![false; n * n];
+    let mut mask = self_loop_mask(n, self_loops);
     for (&s, &t) in known_src.iter().zip(known_tgt.iter()) {
         let idx = (s as usize) * n + (t as usize);
         if idx < mask.len() {
             mask[idx] = true;
-        }
-    }
-    if !self_loops {
-        for i in 0..n {
-            mask[i * n + i] = true;
         }
     }
     mask
@@ -559,14 +545,14 @@ pub fn fit_partial_strength_cost(
         }
     }
 
-    let fit = fit_strength_cost(
+    let fit = fit_strength_cost_poisson(
         &excess_out,
         &excess_in,
         &free_src,
         &free_tgt,
         &free_val,
         excess_cost,
-        &crate::cost::CostFitOptions {
+        &CostFitOptions {
             self_loops,
             tolerance,
             max_iterations,

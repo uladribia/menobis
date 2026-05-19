@@ -4,7 +4,6 @@ use odme_core::clustering::{
     clustering_coefficients as core_clustering,
     weighted_clustering_coefficients as core_weighted_clustering,
 };
-use odme_core::cost::{fit_strength_cost as core_fit_strength_cost, CostFitOptions};
 use odme_core::filter::{
     absent_custom_poisson as core_absent_custom_poisson,
     absent_degree_events_binomial as core_absent_degree_events_binomial,
@@ -53,6 +52,14 @@ use odme_core::fitting::{
     fit_degree_events_negative_binomial as core_fit_degree_events_negative_binomial,
     fit_strength_poisson as core_fit_strength_poisson,
 };
+use odme_core::fitting::{
+    fit_partial_degree as core_fit_partial_degree,
+    fit_partial_strength as core_fit_partial_strength,
+    fit_partial_strength_cost as core_fit_partial_strength_cost,
+    fit_partial_strength_degree as core_fit_partial_strength_degree,
+    fit_partial_strength_edges as core_fit_partial_strength_edges,
+};
+use odme_core::fitting::{fit_strength_cost_poisson as core_fit_strength_cost, CostFitOptions};
 use odme_core::generation::{
     sample_custom_multinomial as core_sample_custom_multinomial,
     sample_custom_poisson as core_sample_custom_poisson,
@@ -83,13 +90,6 @@ use odme_core::generation::{
 use odme_core::graph::{
     directed_degrees as core_directed_degrees, directed_strengths as core_directed_strengths,
     WeightedEdge,
-};
-use odme_core::partial::{
-    fit_partial_degree as core_fit_partial_degree,
-    fit_partial_strength as core_fit_partial_strength,
-    fit_partial_strength_cost as core_fit_partial_strength_cost,
-    fit_partial_strength_degree as core_fit_partial_strength_degree,
-    fit_partial_strength_edges as core_fit_partial_strength_edges,
 };
 use odme_core::stats::{
     compute_all_node_stats as core_compute_all_stats,

@@ -53,6 +53,12 @@ Total: 202 Python tests, 46 Rust tests, all checks green.
 - Result types extracted into per-submodule `types.py` files:
   `analysis/types.py`, `models/types.py`, `filtering_types.py`.
 - Removed overly strict `s == k` boundary check; all 194 tests pass.
+- Added stable Rust scalar kernels for W fitting validation/residuals in
+  `crates/odme-core/src/fitting/w.rs`.
+- Split Rust fitting code into `fitting/me.rs`, `fitting/b.rs`, `fitting/w.rs`,
+  `fitting/partial.rs`, `fitting/types.rs`, and shared internal
+  `fitting/support.rs`; ME strength-cost fitting now lives in `fitting/me.rs`,
+  and the old top-level `cost.rs` module was removed.
 
 **Remaining:**
 
@@ -63,7 +69,6 @@ Total: 202 Python tests, 46 Rust tests, all checks green.
 - W **strength-cost fitting** — same conic approach + gamma variable.
 - W **strength-edges fitting** — conic with eta = log(lambda).
 - W **strength-degree fitting** — conic with c, d variables.
-- Scalar kernel helpers for validation/residuals.
 - Documentation updates (API, concepts, decisions).
 - Benchmark additions (`bench_w_fitting.py`).
 
@@ -106,8 +111,8 @@ Current implementation facts to verify before fitting:
   `StrengthDegreeProvider`, and `DegreeEventsProvider` currently need an audit:
   they must produce exact zero-inflated geometric/negative binomial distributions, not fall
   back to zero-inflated Poisson.
-- Existing ME/B fitters live in `crates/odme-core/src/fitting.rs`; add W fitting
-  in `crates/odme-core/src/w_fitting.rs` and re-export it.
+- Existing ME/B fitters live in `crates/odme-core/src/fitting/mod.rs`; add W fitting
+  in `crates/odme-core/src/fitting/w.rs` and re-export it through the fitting module.
 
 Validate feasibility at the Python boundary before invoking the solver:
 
@@ -240,11 +245,14 @@ recentering gauges after solving.
 2. Complete W sampling/filtering coverage before declaring W fitting done:
    add `ZeroInflatedGeometric` and `ZeroInflatedNegativeBinomial` pair distributions; update providers;
    add Rust, PyO3, Python wrappers; and add p-value/absent-edge tests.
-3. Implement `w_fitting.rs` result structs with solver status, objective,
+3. Implement `fitting/w.rs` result structs with solver status, objective,
    `iterations`, `min_margin = min(r_ij)`, `max_q`, fitted scalar multipliers,
    max/total residuals for every active constraint, and lifted problem metrics.
 4. Fit strengths first, then strengths+cost, because both use independent W
-   pairs and share the barrier term.
+   pairs and share the barrier term. Keep the same organization as the ME/B
+   fitters: W strength-cost implementation belongs in `fitting/w.rs`, with
+   shared result types in `fitting/types.rs` and only compatibility re-exports
+   outside the fitting module.
 5. Fit degrees+events next. This is the only W constraint where balancing works:
    solve `q` from the scalar equation `m_+(q,M) = T/E` via Brent's method, then
    reuse the existing `balance_degree_bernoulli` IPF with effective multipliers
