@@ -25,7 +25,7 @@ Scientific reference: <https://hdl.handle.net/10803/400560>.
 | — | Provider unification: `WeightFamily` enum + `FixedStrengthProvider` |
 | — | Final project rename from ODME to MENoBiS |
 
-Total: 191 Python tests, 46 Rust tests, all checks green.
+Total: 194 Python tests, 46 Rust tests, all checks green.
 
 ## Remaining work
 
@@ -48,6 +48,11 @@ Total: 191 Python tests, 46 Rust tests, all checks green.
 - Unified `fit_strength_poisson` in Rust (analytic self-loops + IPF
   no-self-loops in one function). All Python fitting code is now a thin
   validation/logging shell over Rust.
+- Partial-constraint fitting pipeline moved entirely to Rust (`partial.rs`).
+  Python `partial.py` is now validation + wrapping only.
+- Result types extracted into per-submodule `types.py` files:
+  `analysis/types.py`, `models/types.py`, `filtering_types.py`.
+- Removed overly strict `s == k` boundary check; all 194 tests pass.
 
 **Remaining:**
 
@@ -62,11 +67,9 @@ Total: 191 Python tests, 46 Rust tests, all checks green.
 - Documentation updates (API, concepts, decisions).
 - Benchmark additions (`bench_w_fitting.py`).
 
-**Known technical debt (pre-existing, not blocking 7c):**
+**Known technical debt:**
 
-- 3 pre-existing test failures in `TestStrengthDegree` and
-  `test_validate_strength_degree_constraints_accepts_valid_sequences` due to
-  overly strict boundary validation (positive degrees with `s == k`).
+- None blocking.
 
 The W ensemble covers geometric (`M = 1`) and negative binomial (`M > 1`)
 weighted null models for every W-capable constraint in this package. The final
