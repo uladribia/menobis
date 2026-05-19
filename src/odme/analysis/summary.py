@@ -3,22 +3,11 @@
 Python is a thin wrapper: extract arrays from EdgeTable, call Rust, return results.
 """
 
-from dataclasses import dataclass
-
 import numpy as np
-from numpy.typing import NDArray
 
 import odme._odme as _odme
+from odme.analysis.types import DirectedSequences
 from odme.data.frames import EdgeTable
-
-
-@dataclass(frozen=True)
-class DirectedSequences:
-    """Directed per-node sequences (strengths or degrees)."""
-
-    node: NDArray[np.uint64]
-    out: NDArray[np.uint64]
-    incoming: NDArray[np.uint64]
 
 
 def directed_strengths(edges: EdgeTable) -> DirectedSequences:

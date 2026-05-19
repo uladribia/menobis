@@ -1,20 +1,10 @@
 """Clustering coefficients backed by Rust kernels."""
 
-from dataclasses import dataclass
-
 import numpy as np
-from numpy.typing import NDArray
 
 import odme._odme as _odme
+from odme.analysis.types import ClusteringResult
 from odme.data.frames import EdgeTable
-
-
-@dataclass(frozen=True)
-class ClusteringResult:
-    """Per-node clustering coefficient."""
-
-    node: NDArray[np.uint64]
-    values: NDArray[np.float64]
 
 
 def clustering_coefficient(edges: EdgeTable) -> ClusteringResult:

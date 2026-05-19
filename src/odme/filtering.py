@@ -1,49 +1,19 @@
 """Statistical filtering for ODME null models."""
 
 import math
-from dataclasses import dataclass
-from typing import Literal
 
 import numpy as np
 from numpy.typing import NDArray
 
 import odme._odme as _odme
 from odme.data.frames import EdgeTable, ProbabilityTable
+from odme.filtering_types import Correction, FilteredEdges, FilterResult, Tail
 from odme.models.fitting import (
     StrengthCostFit,
     StrengthDegreeFit,
     StrengthEdgesFit,
     fit_strength_poisson,
 )
-
-Tail = Literal["upper", "lower", "two-sided"]
-Correction = Literal["none", "bonferroni", "fdr"]
-Tail = Literal["upper", "lower", "two-sided"]
-Correction = Literal["none", "bonferroni", "fdr"]
-
-
-@dataclass(frozen=True)
-class FilteredEdges:
-    """Filtered edge table plus p-values and null expectations."""
-
-    edges: EdgeTable
-    upper_pvalue: NDArray[np.float64]
-    lower_pvalue: NDArray[np.float64]
-    expected: NDArray[np.float64]
-    occupation: NDArray[np.float64]
-
-
-@dataclass(frozen=True)
-class FilterResult:
-    """Statistical filtering result for observed and absent edges."""
-
-    upper: FilteredEdges
-    lower: FilteredEdges
-    compatible: FilteredEdges
-    absent_lower: FilteredEdges
-    alpha: float
-    tail: Tail
-    correction: Correction
 
 
 def filter_strength_poisson(
