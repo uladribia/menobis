@@ -1,141 +1,232 @@
 ---
-description: Public API consistency audit across ME, W, and B fitting families.
+description: Full public and private API coherence audit across ME, W, and B families.
 ---
 
 # API Consistency Audit
 
 ## TL;DR
 
-Public fitting APIs are consistent in naming and parameter ordering across
-ME/W/B families. Result types are constraint-oriented with shared diagnostics.
-Six discrepancies remain in the result-type population and need review.
+Full coherence audit of fitting, sampling, and filtering across all 5
+constraints × 3 families (ME/W/B). Public API naming and parameter ordering are
+largely consistent. Six categories of discrepancies are documented below with
+recommended actions.
 
-## Public API style (consistent)
+## Coverage matrix
 
-All fitting functions follow:
+### Fitting
 
-```text
-fit_{constraint}_{distribution}(
-    constraint_params...,  # positional-or-keyword, required
-    *,
-    [layers: int,]        # keyword-only, default, only for NB/binomial
-    self_loops: bool,     # keyword-only, default True
-    tolerance: float,     # keyword-only, default
-    verbose: int,         # keyword-only, default 0
-    max_iterations: int,  # keyword-only, default
-) -> ConstraintResult
+| Constraint | Poisson (ME) | Geometric (W) | Binomial (B) | Neg. Binomial (W) |
+|---|:---:|:---:|:---:|:---:|
+| strength | ✅ | ✅ | ✅ | ✅ |
+| strength-cost | ✅ | ✅ | ❌ missing | ✅ |
+| strength-edges | ✅ | ✅ | ❌ missing | ✅ |
+| strength-degree | ✅ | ✅ | ❌ missing | ✅ |
+| degree-events | ❌ missing | ✅ | ❌ missing | ✅ |
+
+Missing B fits (cost, edges, degree) exist as sampling/filtering but not as
+fitting APIs. Missing ME `fit_degree_events_poisson` — the Poisson
+degree-events model uses `fit_degree_bernoulli` for occupation and a separate
+positive-weight-rate parameter; it is not exposed as a single
+`fit_degree_events_poisson`.
+
+### Sampling and filtering
+
+Full coverage: all 5 constraints × 4 families have both sample and filter
+functions. ✅
+
+## Discrepancy 1: Result type fields
+
+| Field | `FitResult` | `StrengthCostFit` | `StrengthEdgesFit` | `StrengthDegreeFit` | `DegreeEventsFit` |
+|---|:---:|:---:|:---:|:---:|:---:|
+| `node` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `x`, `y` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `converged` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `iterations` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `family` | ✅ | ✅ | ✅ | ✅ | ❌ missing |
+| `layers` | ✅ | ✅ | ✅ | ✅ | ❌ missing |
+| `self_loops` | ❌ missing | ✅ | ✅ | ✅ | ❌ missing |
+| `diagnostics` | ✅ | ✅ | ✅ | ✅ | ❌ missing |
+
+**Action required:** Add `family`, `layers`, `self_loops`, and `diagnostics` to
+`DegreeEventsFit`. Add `self_loops` to `FitResult`.
+
+## Discrepancy 2: `family` field not populated correctly
+
+| Function | Current `family` | Correct `family` |
+|---|---|---|
+| `fit_strength_poisson` | `"poisson"` | ✅ correct |
+| `fit_strength_geometric` | `"geometric"` | ✅ correct |
+| `fit_strength_binomial` | `"poisson"` | ❌ should be `"binomial"` |
+| `fit_degree_bernoulli` | `"poisson"` | ❌ should be `"bernoulli"` |
+| `fit_strength_degree_poisson` | `"poisson"` | ✅ correct but no `diagnostics` |
+
+**Action required:** Fix `fit_strength_binomial` → `family="binomial"` with
+`layers=M`. Fix `fit_degree_bernoulli` → `family="bernoulli"`.
+
+## Discrepancy 3: `diagnostics` not populated consistently
+
+| Function | Has `diagnostics`? |
+|---|:---:|
+| ME strength (poisson) | ❌ |
+| W strength (geometric/NB) | ✅ |
+| ME strength-cost (poisson) | ✅ |
+| W strength-cost (geometric/NB) | ✅ |
+| ME strength-edges (poisson) | ✅ |
+| W strength-edges (geometric/NB) | ✅ |
+| ME strength-degree (poisson) | ❌ |
+| W strength-degree (geometric/NB) | ✅ |
+| B strength (binomial) | ❌ |
+| B degree (bernoulli) | ❌ |
+| W degree-events (geometric/NB) | ❌ (type lacks field) |
+
+**Action required:** Populate `diagnostics` for all fits. For simple analytic
+fits (ME Poisson with self-loops), use
+`OptimizationDiagnostics(converged=True, status="solved", iterations=0)`. This
+makes all results inspectable uniformly.
+
+## Discrepancy 4: Sampling interface style
+
+Independent-strength samplers accept raw `x`, `y` arrays:
+- `sample_strength_poisson(x, y, ...)`
+- `sample_strength_geometric(x, y, ...)`
+- `sample_strength_binomial(x, y, ...)`
+- `sample_strength_negative_binomial(x, y, ...)`
+
+All other samplers accept a fit object:
+- `sample_strength_cost_poisson(fit, cost_sources, cost_targets, cost_values, ...)`
+- `sample_strength_edges_geometric(fit, ...)`
+
+**Assessment:** This is **justified**. The independent-strength model has a
+trivial relationship between fit result and sampler parameters (`x`, `y` are the
+only parameters). Forcing a fit object would add unnecessary coupling for the
+simplest case. The zero-inflated models need multiple parameters (`lam`, `z`,
+`w`, `self_loops`) that are best bundled in the fit object. Force all cases to conform to the fit object.
+
+However, the degree-events samplers accept `fit` but also require a separate
+`positive_weight_rate` parameter that is available as `fit.q`. This is
+**inconsistent** — the fit object should encode everything needed for sampling.
+
+**Action required:** Degree-events samplers should derive `positive_weight_rate`
+from the fit's `q` field internally, or the parameter should be removed and `q`
+read from the fit. Unify all into the fit structure.
+
+## Discrepancy 5: Keyword argument ordering
+
+The standard ordering should be:
+```
+*, [layers,] self_loops, tolerance, verbose, max_iterations
 ```
 
-Result types are constraint-oriented, not family-oriented:
+Current violations:
+- `fit_degree_events_*`: order is `self_loops, tolerance, max_iterations, verbose`
+  (verbose after max_iterations).
+- All others: `self_loops, tolerance, verbose, max_iterations`.
 
-| Constraint | Result type | Constraint-specific fields |
-|---|---|---|
-| strength | `FitResult` | — |
-| strength-cost | `StrengthCostFit` | `gamma`, `self_loops` |
-| strength-edges | `StrengthEdgesFit` | `lam`, `self_loops` |
-| strength-degree | `StrengthDegreeFit` | `z`, `w`, `self_loops` |
-| degree-events | `DegreeEventsFit` | `q`, `positive_mean` |
-| degree | `FitResult` | — |
+**Action required:** Reorder `fit_degree_events_*` to match:
+`self_loops, tolerance, verbose, max_iterations`.
 
-All constraint types (except `DegreeEventsFit`) share:
-`family`, `layers`, `diagnostics: OptimizationDiagnostics | None`.
+## Discrepancy 6: Default tolerance and max_iterations differ by family
 
-## Discrepancies found
+| Constraint | Poisson tolerance | W tolerance | Poisson max_iter | W max_iter |
+|---|---:|---:|---:|---:|
+| strength | 1e-8 | 1e-8 | 10000 | 1000 |
+| strength-cost | 1e-6 | 1e-8 | 5000 | 1000 |
+| strength-edges | 1e-10 | 1e-8 | 50000 | 1000 |
+| strength-degree | 1e-10 | 1e-8 | 50000 | 1000 |
 
-### 1. `DegreeEventsFit` lacks `family`, `layers`, `self_loops`
+**Assessment:** This is **partially justified**. ME IPF converges faster and
+can use tighter tolerances. W conic/coordinate solvers have different iteration
+semantics (Clarabel iterations ≠ IPF iterations). However, the user-facing
+*meaning* of tolerance should be consistent: "how close are constraints
+recovered."
 
-| Field | Other constraint types | `DegreeEventsFit` |
-|---|---|---|
-| `family` | present | **missing** |
-| `layers` | present | **missing** |
-| `self_loops` | present on cost/edges/degree | **missing** |
-| `diagnostics` | present | **missing** (has bare `converged`/`iterations`) |
+**Action required:** Document that tolerance semantics differ by solver family.
+Consider whether ME defaults should be relaxed to 1e-8 for consistency, or
+whether W defaults should be tightened. Do not change without benchmarking.
 
-**Impact:** Users cannot distinguish geometric from negative-binomial
-degree-events fits programmatically; diagnostics are flat instead of nested.
+## Missing fitting APIs
 
-### 2. `FitResult` lacks `self_loops`
+| Missing | Rust backend exists? | Sampling/filtering exists? | Action |
+|---|:---:|:---:|---|
+| `fit_strength_cost_binomial` | ✅ (ME IPF with layers) | ✅ / ✅ | Add Python wrapper |
+| `fit_strength_edges_binomial` | ✅ (ME IPF with layers) | ✅ / ✅ | Add Python wrapper |
+| `fit_strength_degree_binomial` | ✅ (ME IPF with layers) | ✅ / ✅ | Add Python wrapper |
+| `fit_degree_events_binomial` | ✅ (Bernoulli IPF + rate) | ✅ / ✅ | Add Python wrapper |
+| `fit_degree_events_poisson` | ✅ (Bernoulli IPF + rate) | ✅ / ✅ | Add unified wrapper |
 
-`fit_strength_poisson`, `fit_strength_geometric`, `fit_strength_binomial`, and
-`fit_degree_bernoulli` all return `FitResult` which does not carry `self_loops`.
-Other constraint types (`StrengthCostFit`, `StrengthEdgesFit`,
-`StrengthDegreeFit`) do carry it.
+**Assessment:** All 5 missing B constraint fits have working Rust backends and
+complete sampling/filtering. The gap is purely in the Python fitting wrapper
+layer. These should be added for full coherence — they are thin wrappers over
+existing Rust code with `family="binomial"` and `layers=M`.
 
-**Impact:** If a fit is passed to a sampler that needs `self_loops`, the user
-must track it separately. Inconsistent with the other types.
-
-### 3. `fit_strength_binomial` returns `family="poisson"` and `layers=None`
-
-It should return `family="binomial"` and `layers=M`.
-
-**Impact:** A binomial fit is indistinguishable from a Poisson fit by inspection.
-
-### 4. `fit_degree_bernoulli` returns `family="poisson"` and `layers=None`
-
-It should return `family="bernoulli"` and `layers=None` (or `layers=1`).
-
-### 5. `fit_strength_degree_poisson` does not populate `diagnostics`
-
-Other Poisson constraint fits (`strength_cost`, `strength_edges`) populate
-`OptimizationDiagnostics` with `converged`/`status`/`iterations`. The ME
-strength-degree fit returns bare `converged`/`iterations` only.
-
-### 6. W absent-edge filtering not implemented for geometric/NB
-
-Rust has absent-edge functions for:
-- Poisson: all 5 constraints ✅
-- Binomial: strength, cost, edges, degree, degree-events ✅
-- Geometric: strength ✅, cost ✅ — but **not** edges, degree, degree-events
-- Negative binomial: strength ✅, cost ✅ — but **not** edges, degree, degree-events
-
-Python wrappers explicitly reject absent-edge detection for these W
-zero-inflated models with a clear error.
+The ME `fit_degree_events_poisson` is the same: occupation is Bernoulli IPF,
+positive-weight parameter is derived from `T/E`. A unified wrapper would match
+the W degree-events API pattern.
 
 ## Private implementation discrepancies
 
-### A. Rust result types are not unified
+### A. Rust result types: ME vs W
 
-| Constraint | Rust type | Fields |
-|---|---|---|
-| strength ME | `FitResult` | x, y, converged, iterations |
-| strength W | `WStrengthFitResult` | x, y, layers, status, objective, residuals, metrics |
-| strength-cost ME | `StrengthCostFitResult` | x, y, gamma, converged, iterations |
-| strength-cost W | `WStrengthCostFitResult` | x, y, gamma, layers, status, objective, residuals, metrics |
-| strength-edges ME | `StrengthEdgesFitResult` | x, y, lam, converged, iterations |
-| strength-edges W | `WStrengthEdgesFitResult` | x, y, lam, layers, status, objective, residuals, metrics |
-| strength-degree ME | `StrengthDegreeFitResult` | x, y, z, w, converged, iterations |
-| strength-degree W | `WStrengthDegreeFitResult` | x, y, z, w, layers, status, objective, residuals, metrics |
-| degree-events W | `DegreeEventsFitResult` | x, y, q, positive_mean, converged, iterations |
+ME fits return minimal structs (`FitResult`, `StrengthCostFitResult`, etc.)
+with only `x, y, [scalar], converged, iterations`. W fits return richer structs
+with `status, objective, residuals, metrics`.
 
-**Assessment:** The ME types are minimal; W types carry solver diagnostics. This
-split is **justified** because ME IPF is simple (converged + iterations is
-enough) while W conic/coordinate solvers produce richer diagnostics (objective,
-residuals, metrics). Forcing them into one Rust enum would add unnecessary
-complexity to simple ME paths.
+**Justified:** ME IPF is deterministic and cheap; richer diagnostics would be
+noise. W solvers can fail in interesting ways that need reporting. However, DO unify them as close as possible by modifying B and ME returned info.
 
-### B. PyO3 tuple return types differ per family
+### B. PyO3 return tuples
 
-ME fits return `(Vec<f64>, Vec<f64>, bool, usize)`.
-W fits return larger tuples with diagnostics and metrics sub-tuples.
+ME: `(Vec<f64>, Vec<f64>, bool, usize)`.
+W: larger tuples with nested diagnostic sub-tuples.
 
-**Assessment:** **Justified.** PyO3 does not support trait objects or enums as
-return types cleanly. The Python wrapper layer already unifies them into shared
-dataclasses. The tuple boundary is an implementation detail, not a public API.
+**Justified:** The Python wrapper unifies them into shared dataclasses. The
+tuple boundary is internal. Returns should be equivalent in all cases, since they serve the same purpose with different models. DO unify them.
 
-### C. Validation is partially shared
+### C. Sampling: `self_loops` comes from fit object vs parameter
 
-Strength-edges and cost entries have shared validators. But strength-degree and
-degree-events still validate inline.
+For zero-inflated models, `self_loops` is stored in the fit object and used
+automatically. For degree-events samplers, `self_loops` is a separate parameter
+even though it could come from the fit.
 
-**Assessment:** Minor inconsistency. Could be harmonized but low priority since
-the validation logic is small and correct in each case.
+**Not justified:** If `DegreeEventsFit` carried `self_loops`, the sampler could
+read it from the fit like other constraints do. This requires fixing
+discrepancy 1 first. FIX it.
 
-## Recommendations (pending review)
+### D. Filtering: W absent-edge gaps
 
-1. Add `family`, `layers`, `self_loops`, and `diagnostics` to `DegreeEventsFit`.
-2. Add `self_loops` to `FitResult`.
-3. Fix `fit_strength_binomial` to return `family="binomial"`.
-4. Fix `fit_degree_bernoulli` to return `family="bernoulli"`.
-5. Populate `diagnostics` in `fit_strength_degree_poisson`.
-6. W absent-edge for edges/degree/degree-events: implement in Rust or document
-   as intentionally unsupported.
+Absent-edge filtering for W geometric/NB is implemented for:
+- ✅ strength (independent)
+- ✅ strength-cost
+
+But **not** for:
+- ❌ strength-edges geometric/NB
+- ❌ strength-degree geometric/NB
+- ❌ degree-events geometric/NB
+
+Rust native `absent_*` functions do not exist for these. Python wrappers reject
+with clear error.
+
+**Assessment:** Implementing requires adding W zero-inflated absent-pair
+iteration in Rust for these providers. Not architecturally difficult but needs
+test coverage. Lower priority than fitting consistency. DO IT.
+
+## Summary of required actions (ordered by priority)
+
+1. Fix `DegreeEventsFit`: add `family`, `layers`, `self_loops`, `diagnostics`.
+2. Fix `FitResult`: add `self_loops`.
+3. Fix `fit_strength_binomial` → `family="binomial"`, `layers=M`.
+4. Fix `fit_degree_bernoulli` → `family="bernoulli"`.
+5. Populate `diagnostics` in all fits (ME strength, ME degree, B strength,
+   B degree, ME strength-degree). Unify ME/B Rust return types to carry the
+   same diagnostic fields as W where practical.
+6. Unify PyO3 return tuples: ME/B should return equivalent structure to W so
+   the Python wrapper does not need separate unpacking paths per family.
+7. Reorder `fit_degree_events_*` kwargs to match standard ordering.
+8. Fix degree-events samplers: remove `positive_weight_rate` parameter, derive
+   from fit `q` internally. Requires `DegreeEventsFit` to carry `self_loops`.
+9. Add missing B constraint fitting wrappers: cost, edges, degree, degree-events.
+10. Add missing ME `fit_degree_events_poisson` unified wrapper.
+11. Add missing W absent-edge filtering (edges, degree, degree-events) in Rust
+    and expose through PyO3/Python.
+12. Document tolerance/iteration defaults as family-dependent with rationale.
+
