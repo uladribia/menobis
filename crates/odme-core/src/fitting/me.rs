@@ -413,6 +413,10 @@ fn solve_me_sd_factor_k(target: f64, others_q: &[f64], others_v: &[f64]) -> f64 
     0.5 * (low + high)
 }
 
+/// Masked monotone coordinate solver for ME strength-degree.
+///
+/// Same approach as the non-masked version but skips pairs where mask[i*n+j] is true.
+#[must_use]
 pub fn balance_masked_strength_degree_poisson(
     strength_out: &[f64],
     strength_in: &[f64],
@@ -423,152 +427,92 @@ pub fn balance_masked_strength_degree_poisson(
     max_iterations: usize,
 ) -> StrengthDegreeFitResult {
     let n = strength_out.len();
-    let total: f64 = strength_out.iter().sum();
-    let sqrt_t = total.sqrt().max(1.0);
-    let k_avg = degree_out.iter().sum::<f64>() / n.max(1) as f64;
-    let n_free = (0..n * n).filter(|&idx| !mask[idx]).count() as f64 / n.max(1) as f64;
+    let total = strength_out.iter().sum::<f64>().max(1.0);
+    let scale = total.sqrt();
     let mut x: Vec<f64> = strength_out
         .iter()
-        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .map(|&s| (s / scale).max(1e-12))
         .collect();
     let mut y: Vec<f64> = strength_in
         .iter()
-        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .map(|&s| (s / scale).max(1e-12))
         .collect();
-    let c_k = if k_avg < n_free {
-        (k_avg / (n_free - k_avg).max(0.01)).sqrt()
-    } else {
-        0.9
-    };
+    let k_total = degree_out.iter().sum::<f64>().max(1.0);
+    let k_scale = (k_total / n.max(1) as f64).sqrt().max(0.1);
     let mut z: Vec<f64> = degree_out
         .iter()
-        .map(|&k| {
-            if k > 0.0 && k_avg > 0.0 {
-                k / k_avg * c_k
-            } else {
-                0.0
-            }
-        })
+        .map(|&k| (k / k_total * k_scale).max(1e-12))
         .collect();
     let mut w: Vec<f64> = degree_in
         .iter()
-        .map(|&k| {
-            if k > 0.0 && k_avg > 0.0 {
-                k / k_avg * c_k
-            } else {
-                0.0
-            }
-        })
+        .map(|&k| (k / k_total * k_scale).max(1e-12))
         .collect();
-    for i in 0..n {
-        if degree_out[i] <= 0.0 || strength_out[i] <= 0.0 {
-            x[i] = 0.0;
-            z[i] = 0.0;
-        }
-        if degree_in[i] <= 0.0 || strength_in[i] <= 0.0 {
-            y[i] = 0.0;
-            w[i] = 0.0;
-        }
-    }
+    let mut others_q = vec![0.0_f64; n];
+    let mut others_v = vec![0.0_f64; n];
+
     for iter in 0..max_iterations {
         let old_x = x.clone();
         let old_y = y.clone();
         let old_z = z.clone();
         let old_w = w.clone();
-        for i in 0..n {
-            if strength_out[i] <= 0.0 {
-                continue;
-            }
-            let denom: f64 = (0..n)
-                .filter(|&j| !mask[i * n + j])
-                .map(|j| {
-                    let u = x[i] * y[j];
-                    let exp_u = u.exp();
-                    let den = 1.0 + z[i] * w[j] * (exp_u - 1.0);
-                    if den > 0.0 {
-                        z[i] * y[j] * w[j] * exp_u / den
-                    } else {
-                        0.0
-                    }
-                })
-                .sum();
-            x[i] = if denom > 0.0 {
-                strength_out[i] / denom
-            } else {
-                0.0
-            };
-        }
+
         for j in 0..n {
-            if strength_in[j] <= 0.0 {
-                continue;
+            for i in 0..n {
+                if !mask[i * n + j] {
+                    others_q[i] = x[i];
+                    others_v[i] = z[i] * w[j];
+                } else {
+                    others_q[i] = 0.0;
+                    others_v[i] = 0.0;
+                }
             }
-            let denom: f64 = (0..n)
-                .filter(|&i| !mask[i * n + j])
-                .map(|i| {
-                    let u = x[i] * y[j];
-                    let exp_u = u.exp();
-                    let den = 1.0 + z[i] * w[j] * (exp_u - 1.0);
-                    if den > 0.0 {
-                        w[j] * x[i] * z[i] * exp_u / den
-                    } else {
-                        0.0
-                    }
-                })
-                .sum();
-            y[j] = if denom > 0.0 {
-                strength_in[j] / denom
-            } else {
-                0.0
-            };
-        }
-        for j in 0..n {
-            if degree_in[j] <= 0.0 {
-                continue;
-            }
-            let denom: f64 = (0..n)
-                .filter(|&i| !mask[i * n + j])
-                .map(|i| {
-                    let u = x[i] * y[j];
-                    let exp_u = u.exp();
-                    let den = 1.0 + z[i] * w[j] * (exp_u - 1.0);
-                    if den > 0.0 {
-                        z[i] * (exp_u - 1.0) / den
-                    } else {
-                        0.0
-                    }
-                })
-                .sum();
-            w[j] = if denom > 0.0 {
-                degree_in[j] / denom
-            } else {
-                0.0
-            };
+            y[j] = solve_me_sd_factor_s(strength_in[j], &others_q, &others_v);
         }
         for i in 0..n {
-            if degree_out[i] <= 0.0 {
-                continue;
+            for j in 0..n {
+                if !mask[i * n + j] {
+                    others_q[j] = y[j];
+                    others_v[j] = z[i] * w[j];
+                } else {
+                    others_q[j] = 0.0;
+                    others_v[j] = 0.0;
+                }
             }
-            let denom: f64 = (0..n)
-                .filter(|&j| !mask[i * n + j])
-                .map(|j| {
-                    let u = x[i] * y[j];
-                    let exp_u = u.exp();
-                    let den = 1.0 + z[i] * w[j] * (exp_u - 1.0);
-                    if den > 0.0 {
-                        w[j] * (exp_u - 1.0) / den
-                    } else {
-                        0.0
-                    }
-                })
-                .sum();
-            z[i] = if denom > 0.0 {
-                degree_out[i] / denom
-            } else {
-                0.0
-            };
+            x[i] = solve_me_sd_factor_s(strength_out[i], &others_q, &others_v);
         }
-        let delta =
-            max_pair_delta(&x, &old_x, &y, &old_y).max(max_pair_delta(&z, &old_z, &w, &old_w));
+        for j in 0..n {
+            for i in 0..n {
+                if !mask[i * n + j] {
+                    others_q[i] = x[i] * y[j];
+                    others_v[i] = z[i];
+                } else {
+                    others_q[i] = 0.0;
+                    others_v[i] = 0.0;
+                }
+            }
+            w[j] = solve_me_sd_factor_k(degree_in[j], &others_q, &others_v);
+        }
+        for i in 0..n {
+            for j in 0..n {
+                if !mask[i * n + j] {
+                    others_q[j] = x[i] * y[j];
+                    others_v[j] = w[j];
+                } else {
+                    others_q[j] = 0.0;
+                    others_v[j] = 0.0;
+                }
+            }
+            z[i] = solve_me_sd_factor_k(degree_out[i], &others_q, &others_v);
+        }
+
+        let delta = x
+            .iter()
+            .zip(old_x.iter())
+            .chain(y.iter().zip(old_y.iter()))
+            .chain(z.iter().zip(old_z.iter()))
+            .chain(w.iter().zip(old_w.iter()))
+            .map(|(&a, &b)| (a - b).abs())
+            .fold(0.0_f64, f64::max);
         if delta < tolerance {
             return StrengthDegreeFitResult {
                 x,
