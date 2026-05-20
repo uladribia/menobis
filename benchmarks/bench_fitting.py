@@ -41,32 +41,44 @@ def _degrees(s_out, s_in, frac=0.3):
     return k_out, k_in
 
 
-def _compute_strength_residual(fit, s_out, s_in, self_loops=True):
+def _compute_strength_residual(
+    fit, s_out, s_in, self_loops=True, family=None, layers=None
+):
     x, y = np.asarray(fit.x), np.asarray(fit.y)
     n = len(x)
     lam = getattr(fit, "lam", None)
     gamma = getattr(fit, "gamma", None)
     z = getattr(fit, "z", None)
     w = getattr(fit, "w", None)
+    fam = family or getattr(fit, "family", "poisson")
+    m = layers or getattr(fit, "layers", None) or 1
     pred_out, pred_in = np.zeros(n), np.zeros(n)
     for i in range(n):
         for j in range(n):
             if not self_loops and i == j:
                 continue
             if z is not None and w is not None:
+                # strength-degree: v*u/(exp(-u)+v*(1-exp(-u)))
                 u = x[i] * y[j]
                 v = z[i] * w[j]
                 e_neg = np.exp(-u)
                 den = e_neg + v * (1.0 - e_neg)
                 mean = v * u / den if den > 0 else 0.0
             elif lam is not None:
+                # strength-edges: lam*u/(exp(-u)+lam*(1-exp(-u)))
                 u = x[i] * y[j]
                 e_neg = np.exp(-u)
                 den = e_neg + lam * (1.0 - e_neg)
                 mean = lam * u / den if den > 0 else 0.0
             elif gamma is not None:
-                mean = x[i] * y[j] * np.exp(-gamma * 0.0)  # simplified
+                # strength-cost
+                mean = x[i] * y[j] * np.exp(-gamma * 0.0)
+            elif fam == "binomial":
+                # binomial: M * xy / (1 + xy)
+                xy = x[i] * y[j]
+                mean = m * xy / (1.0 + xy)
             else:
+                # poisson: x*y
                 mean = x[i] * y[j]
             pred_out[i] += mean
             pred_in[j] += mean
@@ -76,13 +88,24 @@ def _compute_strength_residual(fit, s_out, s_in, self_loops=True):
 def _compute_degree_residual(fit, k_out, k_in, self_loops=True):
     x, y = np.asarray(fit.x), np.asarray(fit.y)
     n = len(x)
+    z = getattr(fit, "z", None)
+    w = getattr(fit, "w", None)
     pred_out, pred_in = np.zeros(n), np.zeros(n)
     for i in range(n):
         for j in range(n):
             if not self_loops and i == j:
                 continue
-            xy = x[i] * y[j]
-            occ = xy / (1.0 + xy)
+            if z is not None and w is not None:
+                # strength-degree: v*(1-exp(-u))/(exp(-u)+v*(1-exp(-u)))
+                u = x[i] * y[j]
+                v = z[i] * w[j]
+                e_neg = np.exp(-u)
+                den = e_neg + v * (1.0 - e_neg)
+                occ = v * (1.0 - e_neg) / den if den > 0 else 0.0
+            else:
+                # Bernoulli: xy/(1+xy)
+                xy = x[i] * y[j]
+                occ = xy / (1.0 + xy)
             pred_out[i] += occ
             pred_in[j] += occ
     return float(max(np.max(np.abs(pred_out - k_out)), np.max(np.abs(pred_in - k_in))))
@@ -135,8 +158,10 @@ def bench_all(max_n=1000, tolerance=1e-4, verbose=0):
         fit_degree_events_geometric,
         fit_degree_events_poisson,
         fit_strength_binomial,
+        fit_strength_cost_binomial,
         fit_strength_cost_geometric,
         fit_strength_cost_poisson,
+        fit_strength_degree_binomial,
         fit_strength_degree_geometric,
         fit_strength_degree_poisson,
         fit_strength_edges_binomial,
@@ -306,6 +331,54 @@ def bench_all(max_n=1000, tolerance=1e-4, verbose=0):
                 verbose=verbose,
             )
         )
+
+        results.append(
+            run_fit(
+                "B strength-degree (M=3)",
+                fit_strength_degree_binomial,
+                {
+                    "strength_out": s_out,
+                    "strength_in": s_in,
+                    "degree_out": k_out,
+                    "degree_in": k_in,
+                    "layers": 3,
+                    "tolerance": tolerance,
+                },
+                n,
+                s_out,
+                s_in,
+                k_out,
+                k_in,
+                verbose=verbose,
+            )
+        )
+
+        if n <= 200:
+            c_src, c_tgt, c_val = _costs(n)
+            base_me = fit_strength_poisson(s_out, s_in)
+            target_cost_me = float(
+                np.sum(c_val.reshape(n, n) * np.outer(base_me.x, base_me.y))
+            )
+            results.append(
+                run_fit(
+                    "B strength-cost (M=3)",
+                    fit_strength_cost_binomial,
+                    {
+                        "strength_out": s_out,
+                        "strength_in": s_in,
+                        "cost_sources": c_src,
+                        "cost_targets": c_tgt,
+                        "cost_values": c_val,
+                        "target_cost": target_cost_me,
+                        "layers": 3,
+                        "tolerance": tolerance,
+                    },
+                    n,
+                    s_out,
+                    s_in,
+                    verbose=verbose,
+                )
+            )
 
         # --- W (Geometric) ---
         if n <= conic_max:
