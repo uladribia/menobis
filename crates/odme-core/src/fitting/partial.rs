@@ -355,10 +355,10 @@ pub fn fit_partial_strength_degree(
         |i, j| {
             let u = x[i] * y[j];
             let v = z[i] * w[j];
-            let exp_u = u.exp();
-            let den = 1.0 + v * (exp_u - 1.0);
+            let e_neg_u = (-u).exp();
+            let den = e_neg_u + v * (1.0 - e_neg_u);
             if den > 0.0 {
-                v * u * exp_u / den
+                v * u / den
             } else {
                 0.0
             }
@@ -438,10 +438,10 @@ pub fn fit_partial_strength_edges(
         &mask,
         |i, j| {
             let u = x[i] * y[j];
-            let exp_u = u.exp();
-            let den = 1.0 + lam * (exp_u - 1.0);
+            let e_neg_u = (-u).exp();
+            let den = e_neg_u + lam * (1.0 - e_neg_u);
             if den > 0.0 {
-                lam * u * exp_u / den
+                lam * u / den
             } else {
                 0.0
             }
