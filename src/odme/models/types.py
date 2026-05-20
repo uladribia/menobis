@@ -43,6 +43,7 @@ class FitResult:
     node: NDArray[np.uint64]
     x: NDArray[np.float64]
     y: NDArray[np.float64]
+    self_loops: bool = True
     converged: bool = True
     iterations: int = 0
     family: str = "poisson"
@@ -359,10 +360,10 @@ class StrengthDegreeFit:
 
 @dataclass(frozen=True)
 class DegreeEventsFit:
-    """Fitting result for degree-events W models (geometric/negative binomial).
+    """Fitting result for degree-events models (all families).
 
     The model factorizes into occupation (Bernoulli via x, y) and
-    positive-weight distribution (geometric or negative binomial with q).
+    positive-weight distribution parameterized by q.
     """
 
     node: NDArray[np.uint64]
@@ -370,8 +371,12 @@ class DegreeEventsFit:
     y: NDArray[np.float64]
     q: float
     positive_mean: float
+    self_loops: bool
     converged: bool = True
     iterations: int = 0
+    family: str = "geometric"
+    layers: int | None = None
+    diagnostics: OptimizationDiagnostics | None = None
 
 
 @dataclass(frozen=True)
