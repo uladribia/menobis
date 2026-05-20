@@ -12,7 +12,7 @@ from typer import Option, Typer
 from odme.analysis import directed_degrees, directed_strengths
 from odme.data.io import read_edges
 from odme.models import (
-    WStrengthFit,
+    FitResult,
     fit_degree_bernoulli,
     fit_strength_cost_poisson,
     fit_strength_degree_poisson,
@@ -363,7 +363,7 @@ def strength_cost_me(
 
 
 def _write_w_strength_result(
-    result: WStrengthFit, path: Path | None, output_json: bool
+    result: FitResult, path: Path | None, output_json: bool
 ) -> None:
     if output_json:
         data = {

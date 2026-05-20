@@ -49,6 +49,25 @@ pub struct PartialFitResult {
     pub iterations: usize,
 }
 
+/// Fitted multipliers and diagnostics for W fixed-strength-plus-degree models.
+#[derive(Clone, Debug)]
+pub struct WStrengthDegreeFitResult {
+    pub x: Vec<f64>,
+    pub y: Vec<f64>,
+    pub z: Vec<f64>,
+    pub w: Vec<f64>,
+    pub layers: u32,
+    pub status: WFitStatus,
+    pub objective: f64,
+    pub iterations: usize,
+    pub min_margin: f64,
+    pub max_q: f64,
+    pub max_strength_residual: f64,
+    pub total_strength_residual: f64,
+    pub max_degree_residual: f64,
+    pub metrics: WProblemMetrics,
+}
+
 /// Solver status for conic W fitting routines.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WFitStatus {
@@ -113,5 +132,41 @@ pub struct WStrengthFitResult {
     pub max_q: f64,
     pub max_strength_residual: f64,
     pub total_strength_residual: f64,
+    pub metrics: WProblemMetrics,
+}
+
+/// Fitted multipliers and diagnostics for W fixed-strength-plus-cost models.
+#[derive(Clone, Debug)]
+pub struct WStrengthCostFitResult {
+    pub x: Vec<f64>,
+    pub y: Vec<f64>,
+    pub gamma: f64,
+    pub layers: u32,
+    pub status: WFitStatus,
+    pub objective: f64,
+    pub iterations: usize,
+    pub min_margin: f64,
+    pub max_q: f64,
+    pub max_strength_residual: f64,
+    pub total_strength_residual: f64,
+    pub cost_residual: f64,
+    pub metrics: WProblemMetrics,
+}
+
+/// Fitted multipliers and diagnostics for W fixed-strength-plus-edge-count models.
+#[derive(Clone, Debug)]
+pub struct WStrengthEdgesFitResult {
+    pub x: Vec<f64>,
+    pub y: Vec<f64>,
+    pub lam: f64,
+    pub layers: u32,
+    pub status: WFitStatus,
+    pub objective: f64,
+    pub iterations: usize,
+    pub min_margin: f64,
+    pub max_q: f64,
+    pub max_strength_residual: f64,
+    pub total_strength_residual: f64,
+    pub edge_residual: f64,
     pub metrics: WProblemMetrics,
 }

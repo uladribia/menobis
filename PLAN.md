@@ -66,6 +66,31 @@ Total: 202 Python tests, 46 Rust tests, all checks green.
   fixed-strength W fit entry points now solve the independent geometric and
   negative-binomial strength model via Clarabel exponential cones, with PyO3 and
   Python wrappers.
+- Added W strength-cost geometric and negative-binomial conic fitting in Rust,
+  PyO3 bindings, Python wrappers, typed diagnostics, tests, and Python/concept
+  documentation updates.
+- Recorded decision `docs/decisions/0004-w-conic-solver-boundary.md`: keep
+  Clarabel/CVXRust scoped to W conic fits; keep ME/B fitting on balancing plus
+  scalar root searches unless benchmark evidence justifies changing that boundary.
+- Fit-result API cleanup started: W fixed-strength wrappers now return the
+  shared `FitResult`, W strength-cost wrappers now return the shared
+  `StrengthCostFit`, and both carry `family`, optional `layers`, shared
+  `OptimizationDiagnostics`, and nested W-only `ConicDiagnostics`. Public W
+  aliases were removed from `odme.models` exports; internal compatibility
+  aliases remain only during migration.
+- Partial-fit API cleanup is still needed. `PartialFitResult` should not remain
+  an unrelated sparse-rate-only type: partial constraints are the same fitted
+  model types with a support mask / known-rate mask applied. Final API should
+  represent partial strength, strength-cost, strength-edges, degree, and
+  strength-degree fits as the corresponding constraint-oriented fit result plus
+  mask/support metadata and diagnostics, not as a disconnected result family.
+- General fitting failure policy started and documented in
+  `docs/decisions/0005-fitting-failure-policy.md`: shared Python-boundary
+  validation for shape, finite values, non-negativity, balance, and cheap
+  infeasibility; solver failures should return typed diagnostics/warnings rather
+  than model-specific ad-hoc behavior. Added shared strength-edges capacity,
+  strength-cost cost-entry, and degree-events capacity/layer validation across
+  relevant Poisson/W wrappers.
 
 **Remaining:**
 
@@ -73,11 +98,116 @@ Total: 202 Python tests, 46 Rust tests, all checks green.
   degree-events if/when native absent-edge bindings are added.
 - W **strength fitting** documentation and benchmark coverage for geometric /
   negative-binomial Rust conic core.
-- W **strength-cost fitting** — same conic approach + gamma variable.
-- W **strength-edges fitting** — conic with eta = log(lambda).
+- W **strength-cost fitting** benchmark coverage and any additional edge-case
+  feasibility tests.
+- W **strength-edges fitting** — Rust/PyO3/Python public wrappers and general
+  geometric/NB recovery tests are in place. Current solver uses bracketed
+  scalar search over `lambda` plus per-row/per-column monotone solves to recover
+  strengths and `sum(pi_ij)=E`; decide whether to keep this root/IPF method or
+  replace it with the originally planned conic `eta = log(lambda)` formulation
+  before declaring the API scientifically final. This monotone coordinate solver
+  is used only for the **strengths + total edges** W constraint, not for the
+  independent **fixed-strength-only** W case, which remains a Clarabel conic fit.
+- Continue clean fitting result API unification for upcoming W strength-edges,
+  strength-degree, and partial-constraint fits: use constraint-oriented result
+  types plus family, mask/support metadata, and diagnostics before declaring
+  fitting APIs stable.
 - W **strength-degree fitting** — conic with c, d variables.
 - Documentation updates (API, concepts, decisions).
 - Benchmark additions (`bench_w_fitting.py`).
+
+**Session handoff (2026-05-20):**
+
+- Current branch: `refactor/w-ensemble`.
+- Current red/green state: W strength-cost geometric recovery and negative-
+  binomial `layers > 1` validation are green.
+- Checks run: `uv run maturin develop -m crates/odme-python/Cargo.toml`, full
+  `UV_EXCLUDE_NEWER=2026-05-08T22:43:59Z uv run pytest` (208 passed),
+  `cargo test --workspace --features w-conic`, `cargo clippy --workspace
+  --features w-conic --all-targets -- -D warnings`, `cargo fmt --all --
+  --check`, and `UV_EXCLUDE_NEWER=2026-05-08T22:43:59Z uv run mkdocs build
+  --strict`.
+- Checks still recommended before commit: full `uv run ruff format --check .`,
+  full `uv run ruff check .`, and `uv run ty check`.
+- Latest API cleanup checks: added `tests/test_odme_fit_result_api.py`; focused
+  pytest for unified fit result shape is green; `uv run ty check src/odme/models
+  tests/test_odme_fit_result_api.py` is green.
+- W strength-edges update: added Rust/PyO3/Python entry points plus homogeneous
+  and non-homogeneous geometric recovery tests. The implementation is currently
+  an exact monotone root/IPF routine over `lambda`, not a Clarabel conic model.
+- Added harder W workflow tests on a Pareto-like `N=10` sequence with
+  non-saturating expected binary support. The tests fit and simulate geometric
+  and negative-binomial variants for fixed strengths, strength-cost,
+  degree-events, and strength-edges, then check ensemble alignment of strengths,
+  costs, degrees/events, and edge counts with statistical tolerances. Observed
+  max z-scores were comfortably below the test limits: fixed-strength <= 1.68,
+  strength-cost <= 1.68 with cost z <= 0.32, degree-events degree z <= 2.75
+  with total-event z <= 0.90, and strength-edges strength z <= 3.29 with edge z
+  <= 1.30.
+- Ran an out-of-test `N=100` Pareto strength-edges stress check with total
+  strength 600 and target edges 180 (density 0.018). Geometric solved in ~38.9s
+  with max strength residual ~3e-9 and edge residual ~2.2e-9; negative binomial
+  (`M=3`) solved in ~33.0s with max strength residual ~5.1e-10 and edge
+  residual ~9e-9. Accuracy is strong, but runtime is high.
+- Solver recommendation recorded for handoff: keep the W strength-edges
+  root/IPF solver provisionally as a validated reference for the
+  strengths+total-edges constraint only. Do not use this method for
+  fixed-strength-only W fits. Optimize and benchmark it before deciding whether
+  to replace it with the planned Clarabel `eta = log(lambda)` conic model.
+- Risk note: the strength-edges coordinate-bisection routine is not yet proven
+  globally convergent. It passed current Pareto `N=10` workflow tests, an
+  out-of-test `N=100` stress check, and explicit convergence/failure-mode tests
+  (near-capacity, very sparse, heterogeneous no-self-loops, NB high layers,
+  forced non-convergence warning). Treat it as experimental until property tests,
+  benchmark sweeps, and either a proof or a conic fallback are available.
+- W **strength-degree fitting** — Rust/PyO3/Python public wrappers with
+  monotone coordinate solver (same approach as strength-edges). Homogeneous
+  recovery test passes. Same experimental/risk status as strength-edges.
+- Benchmark results (Pareto strengths, self-loops, `tolerance=1e-7`,
+  `max_iterations=500`):
+
+  | N | edges_geo | edges_nb3 | degree_geo | degree_nb3 |
+  |---:|---:|---:|---:|---:|
+  | 25 | 0.62s | 0.56s | 0.20s | 0.42s |
+  | 50 | 2.01s | 2.02s | 0.78s | 1.67s |
+  | 100 | 9.71s | 8.78s | 3.31s | 6.42s |
+  | 200 | 41.9s | 38.9s | 13.7s | 24.4s |
+  | 500 | 281.9s | 276.6s | 91.2s | 137.4s |
+
+  All converged with max strength residual ≤ 1e-5 (degree) or ≤ 1e-9 (edges).
+- Clarabel conic comparison: current implementation uses dense matrix assembly
+  and OOM-kills at N≥50 (~8.5 GB for N=50, ~17 GB for N=100). The dense builder
+  must be rewritten to sparse CSC before Clarabel can scale beyond N≈25.
+  Monotone coordinate solver is currently the only viable path for N≥50.
+- Sparse Clarabel CSC assembly implemented for both W fixed-strength and W
+  strength-cost fitting. Eliminates OOM: N=100 in ~5s for both (was OOM at
+  N≥50). The `dense_to_csc` helper has been removed. Updated scaling limits.
+- Assessment on Clarabel vs monotone coordinate for edges/degree constraints:
+  Clarabel is not applicable because `log(1 + v*G_M(r))` terms in the
+  zero-inflated objective do not reduce to simple exponential cones. The
+  monotone coordinate solver is the correct and only practical approach for
+  these constraints. Documented and closed.
+
+**Session handoff (2026-05-20, session 2):**
+
+- Current branch: `refactor/w-ensemble`.
+- Full test suite: 236 passed (after fixing `WStrengthFit` import in CLI).
+- Checks run: `cargo clippy --workspace --features w-conic --all-targets --
+  -D warnings`, `cargo fmt --all`, `UV_EXCLUDE_NEWER=2026-05-08T22:43:59Z
+  uv run pytest -q` (236 passed), `UV_EXCLUDE_NEWER=2026-05-08T22:43:59Z
+  uv run mkdocs build --strict`.
+- Checks not run: `uv run ty check` (full project), full `uv run ruff check .`.
+- Next recommended steps:
+  1. Add Pareto workflow tests for W strength-degree (fit → simulate → check
+     strengths and degrees).
+  2. Add `.pyi` stubs for new PyO3 W strength-degree functions.
+  3. Run full `uv run ruff check .` and `uv run ty check` before commit.
+  4. Commit all session work with `/skill:commit`.
+  5. Consider release-mode benchmarks for the monotone coordinate solver to
+     get realistic production timings (debug builds are 3–5x slower).
+- All 5 W constraints now have fitting entry points. Remaining work: Pareto
+  workflow tests for strength-degree, documentation updates, sparse Clarabel
+  rewrite for fixed-strength/cost scaling, and benchmark coverage.
 
 **Known technical debt:**
 
@@ -161,19 +291,33 @@ The conditional positive-weight mean used by degree-events models is
 
 $$m_+(q,M)=\frac{M q}{(1-q)(1-(1-q)^M)}.$$
 
-#### Why balancing fails for most W constraints
+#### Why naïve balancing fails for most W constraints
 
 IPF/balancing converges for ME and B because expected weights are linear or
 monotone-ratio functions of multipliers with unbounded domains. For W, the
-expected weight `M xy/(1-xy)` has a pole at `xy = 1`, and the balancing update
-`x_i = s_i / sum(...)` is implicit (x_i appears inside the denominator). Naïve
-iteration either diverges or requires aggressive clamping that destroys
-convergence guarantees. The legacy code confirms this: `fitter_s.py` case W
-uses TNC+CVXOPT rather than `balance_xy`. Therefore all W constraints involving
-strength fitting (strengths, strengths+cost, strengths+edges,
-strengths+degrees) require the conic solver. Only the degrees+events case
-avoids this because its `q` is a single global scalar solved by root-finding,
-and the remaining occupation IPF has no barrier.
+independent fixed-strength expected weight `M xy/(1-xy)` has a pole at `xy = 1`,
+and the naïve balancing update `x_i = s_i / sum(...)` is implicit (`x_i` appears
+inside the denominator). Naïve iteration either diverges or requires aggressive
+clamping that destroys convergence guarantees. The legacy code confirms this:
+`fitter_s.py` case W uses TNC+CVXOPT rather than `balance_xy`. Therefore the
+independent fixed-strength W case stays on the conic solver.
+
+A restricted exception is currently being evaluated for W strengths + total
+edges. With fixed `lambda`, each row/column strength equation is monotone in a
+single coordinate if the opposite side and `lambda` are held fixed. The current
+strength-edges implementation solves each coordinate by scalar bisection and
+uses an outer bracketed solve for `lambda` to recover total expected edges. This
+is **not** the naïve multiplicative IPF update and is **not** used for
+fixed-strength-only W fitting. It is provisional until optimized, benchmarked,
+and compared conceptually against the planned conic `eta = log(lambda)` model.
+Because alternating coordinate bisection lacks a documented global convergence
+proof here, future work must either prove/characterize convergence, add strong
+failure detection plus conic fallback, or replace this solver with the conic
+formulation.
+
+The degrees+events case remains another exception because its `q` is a single
+global scalar solved by root-finding, and the remaining occupation IPF has no
+W strength barrier.
 
 #### Convex fitting objectives
 
@@ -262,19 +406,34 @@ recentering gauges after solving.
    pairs and share the barrier term. Keep the same organization as the ME/B
    fitters: W strength-cost implementation belongs in `fitting/w.rs`, with
    shared result types in `fitting/types.rs` and only compatibility re-exports
-   outside the fitting module.
+   outside the fitting module. **Done for initial geometric/NB APIs; add more
+   edge-case tests and benchmarks later.**
 5. Fit degrees+events next. This is the only W constraint where balancing works:
    solve `q` from the scalar equation `m_+(q,M) = T/E` via Brent's method, then
    reuse the existing `balance_degree_bernoulli` IPF with effective multipliers
    scaled by `sqrt(G_M(rho))`. Do **not** use the conic solver for this case.
    Add a smoke test confirming that the IPF result matches the conic objective
    value on tiny graphs.
-6. Fit strengths+edges, then strengths+degrees. These require exact
+6. Fit strengths+edges next, then strengths+degrees. These require exact
    zero-inflated W partition terms and should reuse the same pair kernels as
    sampling/filtering.
 7. Add PyO3 functions and Python dataclasses/wrappers for every API in the
-   public W scope table; export them from `odme.models` and update stubs.
-8. Update docs for public API and thesis terminology: concepts, API, CLI if W
+   public W scope table; export them from `odme.models` and update stubs. Keep
+   the final API clean: prefer one constraint-oriented fit type per constraint
+   (`StrengthCostFit`, `StrengthEdgesFit`, etc.) with `family`, optional
+   `layers`, common optimization diagnostics, and nested conic diagnostics over
+   separate public types for each ME/B/W case.
+8. Mirror that cleanup privately in Rust/PyO3: shared result structs should make
+   common fields obvious (`x`, `y`, scalar multipliers, `converged/status`,
+   `iterations`, residuals), while W-only lifted-problem metrics remain typed
+   diagnostics instead of leaking into every ME/B/Binomial result.
+9. Fold partial-constraint results into the same model-result ontology. Partial
+   fits are not a different mathematical result type; they are fixed-strength,
+   strength-cost, strength-edges, degree, or strength-degree fits on a masked
+   support with known-rate contributions. Their public/private result shape
+   should expose the corresponding constraint fit fields plus sparse support /
+   mask metadata and diagnostics.
+10. Update docs for public API and thesis terminology: concepts, API, CLI if W
    commands are exposed, and a decision record for the conic formulation.
 
 #### TDD checklist

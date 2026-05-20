@@ -24,12 +24,16 @@ pub use partial::{
 };
 pub use types::{
     FitResult, PartialFitResult, StrengthCostFitResult, StrengthDegreeFitResult,
-    StrengthEdgesFitResult, WConicFitOptions, WFitStatus, WProblemMetrics, WStrengthFitResult,
-    WStrengthResiduals,
+    StrengthEdgesFitResult, WConicFitOptions, WFitStatus, WProblemMetrics, WStrengthCostFitResult,
+    WStrengthDegreeFitResult, WStrengthEdgesFitResult, WStrengthFitResult, WStrengthResiduals,
 };
 pub use w::{
-    fit_degree_events_geometric, fit_degree_events_negative_binomial, fit_strength_geometric,
-    fit_strength_negative_binomial, independent_strength_residuals, DegreeEventsFitResult,
+    fit_degree_events_geometric, fit_degree_events_negative_binomial, fit_strength_cost_geometric,
+    fit_strength_cost_negative_binomial, fit_strength_degree_geometric,
+    fit_strength_degree_negative_binomial, fit_strength_edges_geometric,
+    fit_strength_edges_negative_binomial, fit_strength_geometric, fit_strength_negative_binomial,
+    independent_strength_residuals, strength_cost_residuals, strength_edges_residuals,
+    DegreeEventsFitResult,
 };
 
 #[cfg(test)]

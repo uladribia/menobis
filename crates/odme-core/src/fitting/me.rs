@@ -4,6 +4,7 @@ use super::b::binary_probability;
 use super::support::{max_abs_delta, max_pair_delta};
 use super::{FitResult, StrengthCostFitResult, StrengthDegreeFitResult, StrengthEdgesFitResult};
 
+#[allow(clippy::too_many_arguments)]
 fn balance_strength_edges_for_lambda(
     strength_out: &[f64],
     strength_in: &[f64],
@@ -11,18 +12,26 @@ fn balance_strength_edges_for_lambda(
     self_loops: bool,
     tolerance: f64,
     max_iterations: usize,
+    x_init: Option<&[f64]>,
+    y_init: Option<&[f64]>,
 ) -> FitResult {
     let n = strength_out.len();
     let total: f64 = strength_out.iter().sum();
     let sqrt_t = total.sqrt().max(1.0);
-    let mut x: Vec<f64> = strength_out
-        .iter()
-        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
-        .collect();
-    let mut y: Vec<f64> = strength_in
-        .iter()
-        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
-        .collect();
+    let mut x: Vec<f64> = match x_init {
+        Some(xi) => xi.to_vec(),
+        None => strength_out
+            .iter()
+            .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+            .collect(),
+    };
+    let mut y: Vec<f64> = match y_init {
+        Some(yi) => yi.to_vec(),
+        None => strength_in
+            .iter()
+            .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+            .collect(),
+    };
     for iter in 0..max_iterations {
         let old_x = x.clone();
         let old_y = y.clone();
@@ -135,6 +144,8 @@ pub fn balance_strength_edges_poisson(
         self_loops,
         tolerance,
         max_iterations,
+        None,
+        None,
     );
     while expected_edges_strength_edges(&best.x, &best.y, high, self_loops) < target_edges
         && high < 1e12
@@ -147,6 +158,8 @@ pub fn balance_strength_edges_poisson(
             self_loops,
             tolerance,
             max_iterations,
+            Some(&best.x),
+            Some(&best.y),
         );
     }
     let mut iterations = 0;
@@ -159,6 +172,8 @@ pub fn balance_strength_edges_poisson(
             self_loops,
             tolerance,
             max_iterations,
+            Some(&best.x),
+            Some(&best.y),
         );
         let edges = expected_edges_strength_edges(&fit.x, &fit.y, mid, self_loops);
         best = fit;

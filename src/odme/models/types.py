@@ -9,19 +9,132 @@ from odme.data.frames import ProbabilityTable
 
 
 @dataclass(frozen=True)
+class ConicDiagnostics:
+    """Lifted conic solver diagnostics for W fitting problems."""
+
+    min_margin: float
+    max_q: float
+    variables: int
+    auxiliary_variables: int
+    exponential_cones: int
+    power_cones: int
+    linear_constraints: int
+    sparse_nonzeros: int
+
+
+@dataclass(frozen=True)
+class OptimizationDiagnostics:
+    """Shared optimization diagnostics for fitted models."""
+
+    converged: bool
+    status: str
+    iterations: int
+    objective: float | None = None
+    max_strength_residual: float | None = None
+    total_strength_residual: float | None = None
+    cost_residual: float | None = None
+    conic: ConicDiagnostics | None = None
+
+
+@dataclass(frozen=True)
 class FitResult:
-    """Lagrange multiplier fitting result."""
+    """Fitted strength/degree Lagrange multipliers."""
 
     node: NDArray[np.uint64]
     x: NDArray[np.float64]
     y: NDArray[np.float64]
     converged: bool = True
     iterations: int = 0
+    family: str = "poisson"
+    layers: int | None = None
+    diagnostics: OptimizationDiagnostics | None = None
+
+    @property
+    def status(self) -> str:
+        """Optimization status string."""
+        if self.diagnostics is not None:
+            return self.diagnostics.status
+        return "solved" if self.converged else "failed"
+
+    @property
+    def objective(self) -> float | None:
+        """Optimization objective, when available."""
+        return None if self.diagnostics is None else self.diagnostics.objective
+
+    @property
+    def min_margin(self) -> float | None:
+        """Minimum W inverse/log margin, when conic diagnostics are available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.min_margin
+
+    @property
+    def max_q(self) -> float | None:
+        """Maximum W pair parameter q, when conic diagnostics are available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.max_q
+
+    @property
+    def max_strength_residual(self) -> float | None:
+        """Maximum absolute strength residual, when available."""
+        if self.diagnostics is None:
+            return None
+        return self.diagnostics.max_strength_residual
+
+    @property
+    def total_strength_residual(self) -> float | None:
+        """Total absolute strength residual, when available."""
+        if self.diagnostics is None:
+            return None
+        return self.diagnostics.total_strength_residual
+
+    @property
+    def variables(self) -> int | None:
+        """Number of original conic variables, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.variables
+
+    @property
+    def auxiliary_variables(self) -> int | None:
+        """Number of auxiliary conic variables, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.auxiliary_variables
+
+    @property
+    def exponential_cones(self) -> int | None:
+        """Number of exponential cones, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.exponential_cones
+
+    @property
+    def power_cones(self) -> int | None:
+        """Number of power cones, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.power_cones
+
+    @property
+    def linear_constraints(self) -> int | None:
+        """Number of lifted linear constraints, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.linear_constraints
+
+    @property
+    def sparse_nonzeros(self) -> int | None:
+        """Number of lifted sparse nonzeros, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.sparse_nonzeros
 
 
 @dataclass(frozen=True)
 class StrengthCostFit:
-    """Fitted strength-cost ME model: E[t_ij] = x_i y_j exp(-gamma d_ij)."""
+    """Fitted strength-cost model for Poisson, geometric, or binomial families."""
 
     node: NDArray[np.uint64]
     x: NDArray[np.float64]
@@ -30,11 +143,108 @@ class StrengthCostFit:
     self_loops: bool
     converged: bool
     iterations: int
+    family: str = "poisson"
+    layers: int | None = None
+    diagnostics: OptimizationDiagnostics | None = None
+
+    @property
+    def status(self) -> str:
+        """Optimization status string."""
+        if self.diagnostics is not None:
+            return self.diagnostics.status
+        return "solved" if self.converged else "failed"
+
+    @property
+    def objective(self) -> float | None:
+        """Optimization objective, when available."""
+        return None if self.diagnostics is None else self.diagnostics.objective
+
+    @property
+    def min_margin(self) -> float | None:
+        """Minimum W inverse/log margin, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.min_margin
+
+    @property
+    def max_q(self) -> float | None:
+        """Maximum W pair parameter q, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.max_q
+
+    @property
+    def max_strength_residual(self) -> float | None:
+        """Maximum absolute strength residual, when available."""
+        if self.diagnostics is None:
+            return None
+        return self.diagnostics.max_strength_residual
+
+    @property
+    def total_strength_residual(self) -> float | None:
+        """Total absolute strength residual, when available."""
+        if self.diagnostics is None:
+            return None
+        return self.diagnostics.total_strength_residual
+
+    @property
+    def cost_residual(self) -> float | None:
+        """Cost residual, when available."""
+        if self.diagnostics is None:
+            return None
+        return self.diagnostics.cost_residual
+
+    @property
+    def variables(self) -> int | None:
+        """Number of original conic variables, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.variables
+
+    @property
+    def auxiliary_variables(self) -> int | None:
+        """Number of auxiliary conic variables, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.auxiliary_variables
+
+    @property
+    def exponential_cones(self) -> int | None:
+        """Number of exponential cones, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.exponential_cones
+
+    @property
+    def power_cones(self) -> int | None:
+        """Number of power cones, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.power_cones
+
+    @property
+    def linear_constraints(self) -> int | None:
+        """Number of lifted linear constraints, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.linear_constraints
+
+    @property
+    def sparse_nonzeros(self) -> int | None:
+        """Number of lifted sparse nonzeros, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.sparse_nonzeros
+
+
+# Internal compatibility aliases while callers migrate to constraint types.
+WStrengthFit = FitResult
+WStrengthCostFit = StrengthCostFit
 
 
 @dataclass(frozen=True)
 class StrengthEdgesFit:
-    """Fitted exact ME fixed-strength-and-edge-count model."""
+    """Fitted fixed-strength-and-edge-count model."""
 
     node: NDArray[np.uint64]
     x: NDArray[np.float64]
@@ -43,11 +253,96 @@ class StrengthEdgesFit:
     self_loops: bool
     converged: bool
     iterations: int
+    family: str = "poisson"
+    layers: int | None = None
+    diagnostics: OptimizationDiagnostics | None = None
+
+    @property
+    def status(self) -> str:
+        """Optimization status string."""
+        if self.diagnostics is not None:
+            return self.diagnostics.status
+        return "solved" if self.converged else "failed"
+
+    @property
+    def objective(self) -> float | None:
+        """Optimization objective, when available."""
+        return None if self.diagnostics is None else self.diagnostics.objective
+
+    @property
+    def min_margin(self) -> float | None:
+        """Minimum W inverse/log margin, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.min_margin
+
+    @property
+    def max_q(self) -> float | None:
+        """Maximum W pair parameter q, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.max_q
+
+    @property
+    def max_strength_residual(self) -> float | None:
+        """Maximum absolute strength residual, when available."""
+        if self.diagnostics is None:
+            return None
+        return self.diagnostics.max_strength_residual
+
+    @property
+    def total_strength_residual(self) -> float | None:
+        """Total absolute strength residual, when available."""
+        if self.diagnostics is None:
+            return None
+        return self.diagnostics.total_strength_residual
+
+    @property
+    def variables(self) -> int | None:
+        """Number of original conic variables, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.variables
+
+    @property
+    def auxiliary_variables(self) -> int | None:
+        """Number of auxiliary conic variables, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.auxiliary_variables
+
+    @property
+    def exponential_cones(self) -> int | None:
+        """Number of exponential cones, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.exponential_cones
+
+    @property
+    def power_cones(self) -> int | None:
+        """Number of power cones, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.power_cones
+
+    @property
+    def linear_constraints(self) -> int | None:
+        """Number of lifted linear constraints, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.linear_constraints
+
+    @property
+    def sparse_nonzeros(self) -> int | None:
+        """Number of lifted sparse nonzeros, when available."""
+        if self.diagnostics is None or self.diagnostics.conic is None:
+            return None
+        return self.diagnostics.conic.sparse_nonzeros
 
 
 @dataclass(frozen=True)
 class StrengthDegreeFit:
-    """Fitted exact ME fixed-strength-degree model."""
+    """Fitted fixed-strength-degree model."""
 
     node: NDArray[np.uint64]
     x: NDArray[np.float64]
@@ -57,34 +352,9 @@ class StrengthDegreeFit:
     self_loops: bool
     converged: bool
     iterations: int
-
-
-@dataclass(frozen=True)
-class WStrengthFit:
-    """Fitted independent W fixed-strength model."""
-
-    node: NDArray[np.uint64]
-    x: NDArray[np.float64]
-    y: NDArray[np.float64]
-    layers: int
-    status: str
-    objective: float
-    iterations: int
-    min_margin: float
-    max_q: float
-    max_strength_residual: float
-    total_strength_residual: float
-    variables: int
-    auxiliary_variables: int
-    exponential_cones: int
-    power_cones: int
-    linear_constraints: int
-    sparse_nonzeros: int
-
-    @property
-    def converged(self) -> bool:
-        """Whether the conic solver reported an optimal solution."""
-        return self.status == "solved"
+    family: str = "poisson"
+    layers: int | None = None
+    diagnostics: OptimizationDiagnostics | None = None
 
 
 @dataclass(frozen=True)
@@ -122,11 +392,12 @@ class PartialFitResult:
 
 
 __all__ = [
+    "ConicDiagnostics",
     "DegreeEventsFit",
     "FitResult",
+    "OptimizationDiagnostics",
     "PartialFitResult",
     "StrengthCostFit",
     "StrengthDegreeFit",
     "StrengthEdgesFit",
-    "WStrengthFit",
 ]

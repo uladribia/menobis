@@ -63,11 +63,30 @@ the current implementation does **not** call a generic convex optimizer. It
 exploits separability/IPF and warm starts. Future work can replace the outer
 search with bracketed bisection/Brent or a gradient-based convex-dual solve.
 
+## W strength-cost variant
+
+The W ensemble replaces the Poisson mean with geometric or negative-binomial
+weights. With `M=1` for geometric and `M>1` for negative binomial,
+$q_{ij}=x_i y_j e^{-\gamma d_{ij}}$ and:
+
+$$
+\mathbb{E}[t_{ij}] = \frac{M q_{ij}}{1-q_{ij}}, \quad 0 \le q_{ij}<1.
+$$
+
+ODME fits this variant with the Clarabel exponential-cone formulation used by
+other W strength fits. The result includes solver status, residuals, `max_q`,
+and lifted problem-size diagnostics.
+
 ## Python API
 
 ```python
 import numpy as np
-from odme.models import fit_strength_cost_poisson, sample_strength_cost_poisson
+from odme.models import (
+    fit_strength_cost_geometric,
+    fit_strength_cost_poisson,
+    sample_strength_cost_geometric,
+    sample_strength_cost_poisson,
+)
 
 fit = fit_strength_cost_poisson(
     s_out, s_in,
@@ -75,6 +94,15 @@ fit = fit_strength_cost_poisson(
     target_cost,
 )
 sample = sample_strength_cost_poisson(fit, cost_sources, cost_targets, cost_values, seed=42)
+
+w_fit = fit_strength_cost_geometric(
+    s_out, s_in,
+    cost_sources, cost_targets, cost_values,
+    target_cost,
+)
+w_sample = sample_strength_cost_geometric(
+    w_fit, cost_sources, cost_targets, cost_values, seed=42,
+)
 ```
 
 ## CLI

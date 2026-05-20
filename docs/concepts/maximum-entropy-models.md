@@ -14,10 +14,10 @@ The taxonomy is documented in [Thesis Cases](thesis-cases.md).
 
 | Model | Case | Constraints | Fit API |
 |-------|------|-------------|----------|
-| Fixed strength | — | $s^{out}$, $s^{in}$ | `fit_strength_poisson` |
+| Fixed strength | — | $s^{out}$, $s^{in}$ | `fit_strength_poisson`, `fit_strength_geometric` |
 | Custom probability | 1 | $p_{ij}$, $T$ | `sample_custom_*` |
-| Strength-cost | 2 | $s^{out}$, $s^{in}$, $C$ | `fit_strength_cost_poisson` |
-| Strength-edges | 3 | $s^{out}$, $s^{in}$, $E$ | `fit_strength_edges_poisson` |
+| Strength-cost | 2 | $s^{out}$, $s^{in}$, $C$ | `fit_strength_cost_poisson`, `fit_strength_cost_geometric` |
+| Strength-edges | 3 | $s^{out}$, $s^{in}$, $E$ | `fit_strength_edges_poisson`, `fit_strength_edges_geometric` |
 | Strength-degree | 4 | $s^{out}$, $s^{in}$, $k^{out}$, $k^{in}$ | `fit_strength_degree_poisson` |
 | Degree-events | 5 | $k^{out}$, $k^{in}$, $T$ | `fit_degree_bernoulli` |
 
@@ -92,7 +92,8 @@ fit = fit_strength_cost_poisson(s_out, s_in, cost_src, cost_tgt, cost_val, C)
 sample = sample_strength_cost_poisson(fit, cost_src, cost_tgt, cost_val, seed=42)
 ```
 
-See [Spatial Costs](spatial-costs.md) for constraints and solver notes.
+See [Spatial Costs](spatial-costs.md) and [W Ensemble](w-ensemble.md) for W
+geometric/negative-binomial variants and solver notes.
 
 ## Strength-edges ME, thesis case 3
 
@@ -108,6 +109,10 @@ $$
 fit = fit_strength_edges_poisson(s_out, s_in, target_edges=E)
 sample = sample_strength_edges_poisson(fit, seed=42)
 ```
+
+The W strength-edges variant replaces the positive-weight Poisson term with the
+zero-inflated W equations in [W Ensemble](w-ensemble.md). Its current fitter uses
+an experimental monotone root/IPF solver over `lambda`.
 
 ## Strength-degree ME, thesis case 4
 

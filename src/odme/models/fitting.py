@@ -9,12 +9,13 @@ from numpy.typing import NDArray
 
 import odme._odme as _odme
 from odme.models.types import (
+    ConicDiagnostics,
     DegreeEventsFit,
     FitResult,
+    OptimizationDiagnostics,
     StrengthCostFit,
     StrengthDegreeFit,
     StrengthEdgesFit,
-    WStrengthFit,
 )
 
 
@@ -58,11 +59,93 @@ def _validate_balanced_sequences(
     if len(out_sequence) != len(in_sequence):
         msg = f"{name}_out and {name}_in must have the same length"
         raise ValueError(msg)
+    if np.any(~np.isfinite(out_sequence)) or np.any(~np.isfinite(in_sequence)):
+        msg = f"fixed-{name} fitting requires finite sequences"
+        raise ValueError(msg)
     if np.any(out_sequence < 0) or np.any(in_sequence < 0):
         msg = f"fixed-{name} fitting requires non-negative sequences"
         raise ValueError(msg)
     if not np.isclose(out_sequence.sum(), in_sequence.sum()):
         msg = f"fixed-{name} fitting requires balanced in/out sequences"
+        raise ValueError(msg)
+
+
+def _candidate_pair_capacity(node_count: int, *, self_loops: bool) -> int:
+    """Return candidate directed pair count for a self-loop policy."""
+    return (
+        node_count * node_count if self_loops else node_count * max(node_count - 1, 0)
+    )
+
+
+def _validate_strength_edges_constraints(
+    strength_out: NDArray[np.float64],
+    strength_in: NDArray[np.float64],
+    target_edges: float,
+    *,
+    self_loops: bool,
+) -> None:
+    """Validate common strength-edges feasibility at the Python boundary."""
+    _validate_balanced_sequences(strength_out, strength_in, name="strength")
+    if not np.isfinite(target_edges):
+        msg = "target_edges must be finite"
+        raise ValueError(msg)
+    total_strength = float(strength_out.sum())
+    capacity = _candidate_pair_capacity(len(strength_out), self_loops=self_loops)
+    if target_edges <= 0.0 or target_edges > total_strength:
+        msg = "target_edges must be positive and no larger than total strength"
+        raise ValueError(msg)
+    if target_edges >= capacity:
+        msg = "target_edges must be smaller than candidate-pair capacity"
+        raise ValueError(msg)
+
+
+def _validate_cost_entries(
+    cost_sources: NDArray[np.integer],
+    cost_targets: NDArray[np.integer],
+    cost_values: NDArray[np.floating],
+    *,
+    target_cost: float,
+    allow_zero_target: bool = False,
+) -> tuple[NDArray[np.uint64], NDArray[np.uint64], NDArray[np.float64]]:
+    """Validate shared sparse cost entries for strength-cost fitting."""
+    if not np.isfinite(target_cost) or (
+        target_cost < 0.0 if allow_zero_target else target_cost <= 0.0
+    ):
+        qualifier = "non-negative" if allow_zero_target else "positive"
+        msg = f"target_cost must be finite and {qualifier}"
+        raise ValueError(msg)
+    c_src = np.asarray(cost_sources, dtype=np.uint64)
+    c_tgt = np.asarray(cost_targets, dtype=np.uint64)
+    c_val = np.asarray(cost_values, dtype=np.float64)
+    if len(c_src) != len(c_tgt) or len(c_src) != len(c_val):
+        msg = "cost_sources, cost_targets, and cost_values must have the same length"
+        raise ValueError(msg)
+    if np.any(~np.isfinite(c_val)) or np.any(c_val < 0.0):
+        msg = "cost_values must be finite and non-negative"
+        raise ValueError(msg)
+    return c_src, c_tgt, c_val
+
+
+def _validate_degree_events_constraints(
+    degree_out: NDArray[np.float64],
+    degree_in: NDArray[np.float64],
+    total_events: int,
+    *,
+    self_loops: bool,
+) -> None:
+    """Validate shared W degree-events feasibility."""
+    _validate_balanced_sequences(degree_out, degree_in, name="degree")
+    if not np.isfinite(float(total_events)):
+        msg = "total_events must be finite"
+        raise ValueError(msg)
+    e = float(degree_out.sum())
+    t = float(total_events)
+    if t < e:
+        msg = "total_events must be >= sum(degree_out)"
+        raise ValueError(msg)
+    capacity = float(len(degree_out) if self_loops else max(len(degree_out) - 1, 0))
+    if np.any(degree_out >= capacity) or np.any(degree_in >= capacity):
+        msg = "degree-events fitting received boundary or infeasible degree constraints"
         raise ValueError(msg)
 
 
@@ -138,13 +221,12 @@ def fit_strength_cost_poisson(
     s_out = np.asarray(strength_out, dtype=np.float64)
     s_in = np.asarray(strength_in, dtype=np.float64)
     _validate_balanced_sequences(s_out, s_in, name="strength")
-    if target_cost <= 0.0:
-        msg = "target_cost must be positive"
-        raise ValueError(msg)
-
-    c_src = np.asarray(cost_sources, dtype=np.int64).tolist()
-    c_tgt = np.asarray(cost_targets, dtype=np.int64).tolist()
-    c_val = np.asarray(cost_values, dtype=np.float64).tolist()
+    c_src_arr, c_tgt_arr, c_val_arr = _validate_cost_entries(
+        cost_sources, cost_targets, cost_values, target_cost=target_cost
+    )
+    c_src = c_src_arr.tolist()
+    c_tgt = c_tgt_arr.tolist()
+    c_val = c_val_arr.tolist()
 
     t0 = time.perf_counter()
     x_list, y_list, gamma, converged, iters = _odme.fit_strength_cost_poisson(
@@ -167,6 +249,12 @@ def fit_strength_cost_poisson(
         self_loops=self_loops,
         converged=converged,
         iterations=iters,
+        family="poisson",
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status="solved" if converged else "inaccurate",
+            iterations=iters,
+        ),
     )
     _log_fit_result(
         "fit_strength_cost_poisson", converged, iters, time.perf_counter() - t0, verbose
@@ -187,10 +275,9 @@ def fit_strength_edges_poisson(
     """Fit exact ME fixed-strength and total-edge-count constraints."""
     s_out = np.asarray(strength_out, dtype=np.float64)
     s_in = np.asarray(strength_in, dtype=np.float64)
-    _validate_balanced_sequences(s_out, s_in, name="strength")
-    if target_edges <= 0.0 or target_edges > s_out.sum():
-        msg = "target_edges must be positive and no larger than total strength"
-        raise ValueError(msg)
+    _validate_strength_edges_constraints(
+        s_out, s_in, target_edges, self_loops=self_loops
+    )
     t0 = time.perf_counter()
     x_list, y_list, lam, converged, iters = _odme.fit_strength_edges_poisson(
         s_out.tolist(),
@@ -208,11 +295,317 @@ def fit_strength_edges_poisson(
         self_loops=self_loops,
         converged=converged,
         iterations=iters,
+        family="poisson",
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status="solved" if converged else "inaccurate",
+            iterations=iters,
+        ),
     )
     _log_fit_result(
         "fit_strength_edges_poisson",
         converged,
         iters,
+        time.perf_counter() - t0,
+        verbose,
+    )
+    return result
+
+
+def _wrap_w_strength_edges_fit(
+    native_result: tuple,
+    *,
+    node_count: int,
+    self_loops: bool,
+) -> StrengthEdgesFit:
+    (
+        x_list,
+        y_list,
+        lam,
+        layers,
+        status,
+        objective,
+        iterations,
+        diagnostics,
+        metrics,
+    ) = native_result
+    (
+        min_margin,
+        max_q,
+        max_strength_residual,
+        total_strength_residual,
+        _edge_residual,
+    ) = diagnostics
+    (
+        variables,
+        auxiliary_variables,
+        exponential_cones,
+        power_cones,
+        linear_constraints,
+        sparse_nonzeros,
+    ) = metrics
+    converged = status == "solved"
+    return StrengthEdgesFit(
+        node=np.arange(node_count, dtype=np.uint64),
+        x=np.asarray(x_list, dtype=np.float64),
+        y=np.asarray(y_list, dtype=np.float64),
+        lam=float(lam),
+        self_loops=self_loops,
+        converged=converged,
+        iterations=iterations,
+        family="geometric" if layers == 1 else "negative_binomial",
+        layers=layers,
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status=status,
+            iterations=iterations,
+            objective=objective,
+            max_strength_residual=max_strength_residual,
+            total_strength_residual=total_strength_residual,
+            conic=ConicDiagnostics(
+                min_margin=min_margin,
+                max_q=max_q,
+                variables=variables,
+                auxiliary_variables=auxiliary_variables,
+                exponential_cones=exponential_cones,
+                power_cones=power_cones,
+                linear_constraints=linear_constraints,
+                sparse_nonzeros=sparse_nonzeros,
+            ),
+        ),
+    )
+
+
+def fit_strength_edges_geometric(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    target_edges: float,
+    *,
+    self_loops: bool = True,
+    tolerance: float = 1e-8,
+    verbose: int = 0,
+    max_iterations: int = 1000,
+) -> StrengthEdgesFit:
+    """Fit the W fixed-strength-plus-edge-count geometric model."""
+    s_out = np.asarray(strength_out, dtype=np.float64)
+    s_in = np.asarray(strength_in, dtype=np.float64)
+    _validate_strength_edges_constraints(
+        s_out, s_in, target_edges, self_loops=self_loops
+    )
+    t0 = time.perf_counter()
+    result = _wrap_w_strength_edges_fit(
+        _odme.fit_strength_edges_geometric(
+            s_out.tolist(),
+            s_in.tolist(),
+            float(target_edges),
+            self_loops,
+            tolerance,
+            max_iterations,
+        ),
+        node_count=len(s_out),
+        self_loops=self_loops,
+    )
+    _log_fit_result(
+        "fit_strength_edges_geometric",
+        result.converged,
+        result.iterations,
+        time.perf_counter() - t0,
+        verbose,
+    )
+    return result
+
+
+def fit_strength_edges_negative_binomial(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    target_edges: float,
+    *,
+    layers: int = 3,
+    self_loops: bool = True,
+    tolerance: float = 1e-8,
+    verbose: int = 0,
+    max_iterations: int = 1000,
+) -> StrengthEdgesFit:
+    """Fit the W fixed-strength-plus-edge-count negative-binomial model."""
+    if layers <= 1:
+        msg = "negative binomial W fitting requires layers > 1; use geometric for M = 1"
+        raise ValueError(msg)
+    s_out = np.asarray(strength_out, dtype=np.float64)
+    s_in = np.asarray(strength_in, dtype=np.float64)
+    _validate_strength_edges_constraints(
+        s_out, s_in, target_edges, self_loops=self_loops
+    )
+    t0 = time.perf_counter()
+    result = _wrap_w_strength_edges_fit(
+        _odme.fit_strength_edges_negative_binomial(
+            s_out.tolist(),
+            s_in.tolist(),
+            float(target_edges),
+            layers,
+            self_loops,
+            tolerance,
+            max_iterations,
+        ),
+        node_count=len(s_out),
+        self_loops=self_loops,
+    )
+    _log_fit_result(
+        "fit_strength_edges_negative_binomial",
+        result.converged,
+        result.iterations,
+        time.perf_counter() - t0,
+        verbose,
+    )
+    return result
+
+
+def _wrap_w_strength_degree_fit(
+    native_result: tuple,
+    *,
+    node_count: int,
+    self_loops: bool,
+) -> StrengthDegreeFit:
+    (
+        x_list,
+        y_list,
+        z_list,
+        w_list,
+        layers,
+        status,
+        objective,
+        iterations,
+        diagnostics,
+        metrics,
+    ) = native_result
+    (
+        min_margin,
+        max_q,
+        max_strength_residual,
+        total_strength_residual,
+        _max_degree_residual,
+    ) = diagnostics
+    (
+        variables,
+        auxiliary_variables,
+        exponential_cones,
+        power_cones,
+        linear_constraints,
+        sparse_nonzeros,
+    ) = metrics
+    converged = status == "solved"
+    return StrengthDegreeFit(
+        node=np.arange(node_count, dtype=np.uint64),
+        x=np.asarray(x_list, dtype=np.float64),
+        y=np.asarray(y_list, dtype=np.float64),
+        z=np.asarray(z_list, dtype=np.float64),
+        w=np.asarray(w_list, dtype=np.float64),
+        self_loops=self_loops,
+        converged=converged,
+        iterations=iterations,
+        family="geometric" if layers == 1 else "negative_binomial",
+        layers=layers,
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status=status,
+            iterations=iterations,
+            objective=objective,
+            max_strength_residual=max_strength_residual,
+            total_strength_residual=total_strength_residual,
+            conic=ConicDiagnostics(
+                min_margin=min_margin,
+                max_q=max_q,
+                variables=variables,
+                auxiliary_variables=auxiliary_variables,
+                exponential_cones=exponential_cones,
+                power_cones=power_cones,
+                linear_constraints=linear_constraints,
+                sparse_nonzeros=sparse_nonzeros,
+            ),
+        ),
+    )
+
+
+def fit_strength_degree_geometric(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    degree_out: NDArray[np.floating],
+    degree_in: NDArray[np.floating],
+    *,
+    self_loops: bool = True,
+    tolerance: float = 1e-8,
+    verbose: int = 0,
+    max_iterations: int = 1000,
+) -> StrengthDegreeFit:
+    """Fit the W fixed-strength-degree geometric model."""
+    s_out = np.asarray(strength_out, dtype=np.float64)
+    s_in = np.asarray(strength_in, dtype=np.float64)
+    k_out = np.asarray(degree_out, dtype=np.float64)
+    k_in = np.asarray(degree_in, dtype=np.float64)
+    validate_strength_degree_constraints(s_out, s_in, k_out, k_in)
+    t0 = time.perf_counter()
+    result = _wrap_w_strength_degree_fit(
+        _odme.fit_strength_degree_geometric(
+            s_out.tolist(),
+            s_in.tolist(),
+            k_out.tolist(),
+            k_in.tolist(),
+            self_loops,
+            tolerance,
+            max_iterations,
+        ),
+        node_count=len(s_out),
+        self_loops=self_loops,
+    )
+    _log_fit_result(
+        "fit_strength_degree_geometric",
+        result.converged,
+        result.iterations,
+        time.perf_counter() - t0,
+        verbose,
+    )
+    return result
+
+
+def fit_strength_degree_negative_binomial(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    degree_out: NDArray[np.floating],
+    degree_in: NDArray[np.floating],
+    *,
+    layers: int = 3,
+    self_loops: bool = True,
+    tolerance: float = 1e-8,
+    verbose: int = 0,
+    max_iterations: int = 1000,
+) -> StrengthDegreeFit:
+    """Fit the W fixed-strength-degree negative-binomial model."""
+    if layers <= 1:
+        msg = "negative binomial W fitting requires layers > 1; use geometric for M = 1"
+        raise ValueError(msg)
+    s_out = np.asarray(strength_out, dtype=np.float64)
+    s_in = np.asarray(strength_in, dtype=np.float64)
+    k_out = np.asarray(degree_out, dtype=np.float64)
+    k_in = np.asarray(degree_in, dtype=np.float64)
+    validate_strength_degree_constraints(s_out, s_in, k_out, k_in)
+    t0 = time.perf_counter()
+    result = _wrap_w_strength_degree_fit(
+        _odme.fit_strength_degree_negative_binomial(
+            s_out.tolist(),
+            s_in.tolist(),
+            k_out.tolist(),
+            k_in.tolist(),
+            layers,
+            self_loops,
+            tolerance,
+            max_iterations,
+        ),
+        node_count=len(s_out),
+        self_loops=self_loops,
+    )
+    _log_fit_result(
+        "fit_strength_degree_negative_binomial",
+        result.converged,
+        result.iterations,
         time.perf_counter() - t0,
         verbose,
     )
@@ -348,7 +741,7 @@ def _wrap_w_strength_fit(
     ],
     *,
     node_count: int,
-) -> WStrengthFit:
+) -> FitResult:
     (
         x_list,
         y_list,
@@ -370,24 +763,33 @@ def _wrap_w_strength_fit(
         linear_constraints,
         sparse_nonzeros,
     ) = metrics
-    return WStrengthFit(
+    converged = status == "solved"
+    return FitResult(
         node=np.arange(node_count, dtype=np.uint64),
         x=np.asarray(x_list, dtype=np.float64),
         y=np.asarray(y_list, dtype=np.float64),
-        layers=layers,
-        status=status,
-        objective=objective,
+        converged=converged,
         iterations=iterations,
-        min_margin=min_margin,
-        max_q=max_q,
-        max_strength_residual=max_strength_residual,
-        total_strength_residual=total_strength_residual,
-        variables=variables,
-        auxiliary_variables=auxiliary_variables,
-        exponential_cones=exponential_cones,
-        power_cones=power_cones,
-        linear_constraints=linear_constraints,
-        sparse_nonzeros=sparse_nonzeros,
+        family="geometric" if layers == 1 else "negative_binomial",
+        layers=layers,
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status=status,
+            iterations=iterations,
+            objective=objective,
+            max_strength_residual=max_strength_residual,
+            total_strength_residual=total_strength_residual,
+            conic=ConicDiagnostics(
+                min_margin=min_margin,
+                max_q=max_q,
+                variables=variables,
+                auxiliary_variables=auxiliary_variables,
+                exponential_cones=exponential_cones,
+                power_cones=power_cones,
+                linear_constraints=linear_constraints,
+                sparse_nonzeros=sparse_nonzeros,
+            ),
+        ),
     )
 
 
@@ -399,7 +801,7 @@ def fit_strength_geometric(
     tolerance: float = 1e-8,
     verbose: int = 0,
     max_iterations: int = 1000,
-) -> WStrengthFit:
+) -> FitResult:
     """Fit the independent W fixed-strength geometric model."""
     s_out = np.asarray(strength_out, dtype=np.float64)
     s_in = np.asarray(strength_in, dtype=np.float64)
@@ -431,7 +833,7 @@ def fit_strength_negative_binomial(
     tolerance: float = 1e-8,
     verbose: int = 0,
     max_iterations: int = 1000,
-) -> WStrengthFit:
+) -> FitResult:
     """Fit the independent W fixed-strength negative-binomial model."""
     if layers <= 1:
         msg = "negative binomial W fitting requires layers > 1; use geometric for M = 1"
@@ -454,6 +856,178 @@ def fit_strength_negative_binomial(
     )
     _log_fit_result(
         "fit_strength_negative_binomial",
+        result.converged,
+        result.iterations,
+        time.perf_counter() - t0,
+        verbose,
+    )
+    return result
+
+
+def _wrap_w_strength_cost_fit(
+    native_result: tuple,
+    *,
+    node_count: int,
+    self_loops: bool,
+) -> StrengthCostFit:
+    (
+        x_list,
+        y_list,
+        gamma,
+        layers,
+        status,
+        objective,
+        iterations,
+        diagnostics,
+        metrics,
+    ) = native_result
+    (
+        min_margin,
+        max_q,
+        max_strength_residual,
+        total_strength_residual,
+        cost_residual,
+    ) = diagnostics
+    (
+        variables,
+        auxiliary_variables,
+        exponential_cones,
+        power_cones,
+        linear_constraints,
+        sparse_nonzeros,
+    ) = metrics
+    converged = status == "solved"
+    return StrengthCostFit(
+        node=np.arange(node_count, dtype=np.uint64),
+        x=np.asarray(x_list, dtype=np.float64),
+        y=np.asarray(y_list, dtype=np.float64),
+        gamma=float(gamma),
+        self_loops=self_loops,
+        converged=converged,
+        iterations=iterations,
+        family="geometric" if layers == 1 else "negative_binomial",
+        layers=layers,
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status=status,
+            iterations=iterations,
+            objective=objective,
+            max_strength_residual=max_strength_residual,
+            total_strength_residual=total_strength_residual,
+            cost_residual=cost_residual,
+            conic=ConicDiagnostics(
+                min_margin=min_margin,
+                max_q=max_q,
+                variables=variables,
+                auxiliary_variables=auxiliary_variables,
+                exponential_cones=exponential_cones,
+                power_cones=power_cones,
+                linear_constraints=linear_constraints,
+                sparse_nonzeros=sparse_nonzeros,
+            ),
+        ),
+    )
+
+
+def fit_strength_cost_geometric(
+    strength_out: NDArray[np.integer],
+    strength_in: NDArray[np.integer],
+    cost_sources: NDArray[np.integer],
+    cost_targets: NDArray[np.integer],
+    cost_values: NDArray[np.floating],
+    target_cost: float,
+    *,
+    self_loops: bool = True,
+    tolerance: float = 1e-8,
+    verbose: int = 0,
+    max_iterations: int = 1000,
+) -> StrengthCostFit:
+    """Fit the W fixed-strength-plus-cost geometric model."""
+    s_out = np.asarray(strength_out, dtype=np.float64)
+    s_in = np.asarray(strength_in, dtype=np.float64)
+    _validate_balanced_sequences(s_out, s_in, name="strength")
+    c_src, c_tgt, c_val = _validate_cost_entries(
+        cost_sources,
+        cost_targets,
+        cost_values,
+        target_cost=target_cost,
+        allow_zero_target=True,
+    )
+
+    t0 = time.perf_counter()
+    result = _wrap_w_strength_cost_fit(
+        _odme.fit_strength_cost_geometric(
+            s_out.tolist(),
+            s_in.tolist(),
+            c_src.tolist(),
+            c_tgt.tolist(),
+            c_val.tolist(),
+            float(target_cost),
+            self_loops,
+            tolerance,
+            max_iterations,
+        ),
+        node_count=len(s_out),
+        self_loops=self_loops,
+    )
+    _log_fit_result(
+        "fit_strength_cost_geometric",
+        result.converged,
+        result.iterations,
+        time.perf_counter() - t0,
+        verbose,
+    )
+    return result
+
+
+def fit_strength_cost_negative_binomial(
+    strength_out: NDArray[np.integer],
+    strength_in: NDArray[np.integer],
+    cost_sources: NDArray[np.integer],
+    cost_targets: NDArray[np.integer],
+    cost_values: NDArray[np.floating],
+    target_cost: float,
+    *,
+    layers: int = 3,
+    self_loops: bool = True,
+    tolerance: float = 1e-8,
+    verbose: int = 0,
+    max_iterations: int = 1000,
+) -> StrengthCostFit:
+    """Fit the W fixed-strength-plus-cost negative-binomial model."""
+    if layers <= 1:
+        msg = "negative binomial W fitting requires layers > 1; use geometric for M = 1"
+        raise ValueError(msg)
+    s_out = np.asarray(strength_out, dtype=np.float64)
+    s_in = np.asarray(strength_in, dtype=np.float64)
+    _validate_balanced_sequences(s_out, s_in, name="strength")
+    c_src, c_tgt, c_val = _validate_cost_entries(
+        cost_sources,
+        cost_targets,
+        cost_values,
+        target_cost=target_cost,
+        allow_zero_target=True,
+    )
+
+    t0 = time.perf_counter()
+    result = _wrap_w_strength_cost_fit(
+        _odme.fit_strength_cost_negative_binomial(
+            s_out.tolist(),
+            s_in.tolist(),
+            c_src.tolist(),
+            c_tgt.tolist(),
+            c_val.tolist(),
+            float(target_cost),
+            layers,
+            self_loops,
+            tolerance,
+            max_iterations,
+        ),
+        node_count=len(s_out),
+        self_loops=self_loops,
+    )
+    _log_fit_result(
+        "fit_strength_cost_negative_binomial",
         result.converged,
         result.iterations,
         time.perf_counter() - t0,
@@ -608,12 +1182,9 @@ def fit_degree_events_geometric(
     """
     k_out = np.asarray(degree_out, dtype=np.float64)
     k_in = np.asarray(degree_in, dtype=np.float64)
-    _validate_balanced_sequences(k_out, k_in, name="degree")
-    e = float(k_out.sum())
-    t = float(total_events)
-    if t < e:
-        msg = "total_events must be >= sum(degree_out)"
-        raise ValueError(msg)
+    _validate_degree_events_constraints(
+        k_out, k_in, total_events, self_loops=self_loops
+    )
     n = len(k_out)
     t0 = time.perf_counter()
     x_list, y_list, q, positive_mean, converged, iters = (
@@ -676,12 +1247,12 @@ def fit_degree_events_negative_binomial(
     """
     k_out = np.asarray(degree_out, dtype=np.float64)
     k_in = np.asarray(degree_in, dtype=np.float64)
-    _validate_balanced_sequences(k_out, k_in, name="degree")
-    e = float(k_out.sum())
-    t = float(total_events)
-    if t < e:
-        msg = "total_events must be >= sum(degree_out)"
+    if layers <= 1:
+        msg = "negative binomial W fitting requires layers > 1; use geometric for M = 1"
         raise ValueError(msg)
+    _validate_degree_events_constraints(
+        k_out, k_in, total_events, self_loops=self_loops
+    )
     n = len(k_out)
     t0 = time.perf_counter()
     x_list, y_list, q, positive_mean, converged, iters = (
@@ -714,18 +1285,25 @@ def fit_degree_events_negative_binomial(
 
 
 __all__ = [
+    "ConicDiagnostics",
     "DegreeEventsFit",
     "FitResult",
+    "OptimizationDiagnostics",
     "StrengthCostFit",
     "StrengthDegreeFit",
     "StrengthEdgesFit",
-    "WStrengthFit",
     "fit_degree_bernoulli",
     "fit_degree_events_geometric",
     "fit_degree_events_negative_binomial",
     "fit_strength_binomial",
+    "fit_strength_cost_geometric",
+    "fit_strength_cost_negative_binomial",
     "fit_strength_cost_poisson",
+    "fit_strength_degree_geometric",
+    "fit_strength_degree_negative_binomial",
     "fit_strength_degree_poisson",
+    "fit_strength_edges_geometric",
+    "fit_strength_edges_negative_binomial",
     "fit_strength_edges_poisson",
     "fit_strength_geometric",
     "fit_strength_negative_binomial",

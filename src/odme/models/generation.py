@@ -6,6 +6,7 @@ from numpy.typing import NDArray
 import odme._odme as _odme
 from odme.data.frames import EdgeTable, ProbabilityTable
 from odme.models.fitting import (
+    DegreeEventsFit,
     FitResult,
     StrengthCostFit,
     StrengthDegreeFit,
@@ -459,7 +460,7 @@ def sample_strength_degree_negative_binomial(
 
 
 def sample_degree_events_geometric(
-    fit: FitResult,
+    fit: "FitResult | DegreeEventsFit",
     *,
     positive_weight_rate: float,
     self_loops: bool = True,
@@ -477,7 +478,7 @@ def sample_degree_events_geometric(
 
 
 def sample_degree_events_negative_binomial(
-    fit: FitResult,
+    fit: "FitResult | DegreeEventsFit",
     *,
     positive_weight_rate: float,
     layers: int = 1,

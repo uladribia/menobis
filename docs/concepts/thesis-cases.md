@@ -28,8 +28,8 @@ The distribution name implies the ensemble type:
 
 | Ensemble | Legacy | Distributions | Weight support | Fitting |
 |----------|--------|---------------|----------------|---------|
-| ME (multi-edge) | `ME` | Poisson, Multinomial, Stub matching | $\{0, 1, 2, \ldots\}$ | IPF |
-| W (weighted) | `W` | Geometric, Negative binomial | $\{0, 1, 2, \ldots\}$ | Bounded optimization |
+| ME (multi-edge) | `ME` | Poisson, Multinomial, Stub matching | $\{0, 1, 2, \ldots\}$ | IPF / scalar search |
+| W (weighted) | `W` | Geometric, Negative binomial | $\{0, 1, 2, \ldots\}$ | conic / root-IPF by constraint |
 | B (binary layers) | `B` | Binomial, Bernoulli | $\{0, \ldots, M\}$ | IPF with correction |
 
 ## Constraint × distribution matrix
@@ -37,11 +37,11 @@ The distribution name implies the ensemble type:
 | Constraint | Poisson | Geometric | Binomial | Neg. binomial |
 |------------|---------|-----------|----------|---------------|
 | strength | ✅ | ✅ | ✅ | ✅ |
-| strength-cost | ✅ | — | ✅ | — |
-| strength-edges | ✅ (zero-inflated) | — | ✅ (zero-inflated) | — |
-| strength-degree | ✅ (zero-inflated) | — | ✅ (zero-inflated) | — |
+| strength-cost | ✅ | ✅ | ✅ | ✅ |
+| strength-edges | ✅ (zero-inflated) | ✅ (zero-inflated) | ✅ (zero-inflated) | ✅ (zero-inflated) |
+| strength-degree | ✅ (zero-inflated) | sampling/filtering ✅ | ✅ (zero-inflated) | sampling/filtering ✅ |
 | degree | Bernoulli ✅ | — | — | — |
-| degree-events | ✅ (zero-inflated) | — | ✅ (zero-inflated) | — |
+| degree-events | ✅ (zero-inflated) | ✅ (zero-inflated) | ✅ (zero-inflated) | ✅ (zero-inflated) |
 | custom | ✅ | — | — | — |
 
 ## Case mapping
@@ -55,10 +55,11 @@ The distribution name implies the ensemble type:
 | 4 | strength-degree | zero-inflated occupation + positive Poisson weight | `fit_strength_degree_poisson` | `sample_strength_degree_poisson` |
 | 5 | degree-events | Bernoulli occupation + positive Poisson weight | `fit_degree_bernoulli` | `sample_degree_events_poisson` |
 
-W fixed-strength fitting uses Clarabel exponential cones and returns
-`WStrengthFit` diagnostics (`status`, residuals, margins, and lifted problem
-metrics) through `fit_strength_geometric` and
-`fit_strength_negative_binomial`.
+W fixed-strength and strength-cost fitting use Clarabel exponential cones.
+W degree-events uses a scalar `q` solve plus Bernoulli IPF. W strength-edges
+currently uses an experimental monotone root/IPF solver over `lambda`. W fits
+return constraint-oriented result types with `family`, optional `layers`, and
+nested diagnostics; see [W Ensemble](w-ensemble.md).
 
 Additional strength samplers for ensemble comparison:
 
@@ -85,9 +86,9 @@ Additional strength samplers for ensemble comparison:
 ## Zero-inflated models
 
 Cases 3, 4, and 5 use zero-inflated distributions: a Bernoulli occupation
-draw followed by a positive-weight conditional draw. The occupation
-formula depends on the constraint; the positive-weight distribution is
-currently always Poisson (positive Poisson).
+draw followed by a positive-weight conditional draw. The occupation formula
+depends on the constraint; the positive-weight distribution follows the chosen
+family (Poisson, geometric, negative binomial, or binomial where implemented).
 
 ## Reference
 

@@ -10,11 +10,12 @@ description: Python API reference for ODME.
 |------|--------|-------------|
 | `EdgeTable` | `odme.data.frames` | Sparse edge table with `source`, `target`, `weight` numpy arrays |
 | `ProbabilityTable` | `odme.data.frames` | Sparse table with `source`, `target`, `probability` arrays |
-| `FitResult` | `odme.models.fitting` | Fitted Lagrange multipliers `x`, `y` |
-| `StrengthCostFit` | `odme.models.fitting` | Fitted strength-cost model with `x`, `y`, `gamma` |
-| `StrengthEdgesFit` | `odme.models.fitting` | Fitted strength-edges model with `x`, `y`, `lam` |
+| `FitResult` | `odme.models.fitting` | Fitted strength/degree multipliers `x`, `y`, with `family`, optional `layers`, and diagnostics |
+| `StrengthCostFit` | `odme.models.fitting` | Fitted strength-cost model with `x`, `y`, `gamma`, `family`, optional `layers`, and diagnostics |
+| `StrengthEdgesFit` | `odme.models.fitting` | Fitted strength-edges model with `x`, `y`, `lam`, `family`, optional `layers`, and diagnostics |
 | `StrengthDegreeFit` | `odme.models.fitting` | Fitted strength-degree model with `x`, `y`, `z`, `w` |
-| `WStrengthFit` | `odme.models.fitting` | W fixed-strength conic fit with multipliers and solver diagnostics |
+| `OptimizationDiagnostics` | `odme.models.fitting` | Shared convergence/status/objective/residual diagnostics |
+| `ConicDiagnostics` | `odme.models.fitting` | W-only lifted conic metrics nested under `diagnostics.conic` |
 | `FilterResult` | `odme.filtering` | Filtering output with upper, lower, compatible, absent tables |
 | `FilteredEdges` | `odme.filtering` | Edge subset with p-values, expected weights, occupation |
 
@@ -42,6 +43,10 @@ description: Python API reference for ODME.
 | `fit_strength_poisson` | Poisson | strengths |
 | `fit_strength_geometric` | Geometric W | strengths |
 | `fit_strength_negative_binomial` | Negative-binomial W | strengths + `layers > 1` |
+| `fit_strength_cost_geometric` | Geometric W with cost | strengths + spatial cost |
+| `fit_strength_cost_negative_binomial` | Negative-binomial W with cost | strengths + spatial cost + `layers > 1` |
+| `fit_strength_edges_geometric` | Geometric W zero-inflated | strengths + edge count |
+| `fit_strength_edges_negative_binomial` | Negative-binomial W zero-inflated | strengths + edge count + `layers > 1` |
 | `fit_degree_bernoulli` | Bernoulli | degrees |
 | `fit_strength_edges_poisson` | zero-inflated | strengths + edge count |
 | `fit_strength_degree_poisson` | zero-inflated | strengths + degrees |
@@ -56,8 +61,12 @@ description: Python API reference for ODME.
 | `sample_strength_poisson_multinomial` | Poisson-total multinomial | mixed |
 | `sample_strength_stub_matching` | stub-matching | stub_matching |
 | `sample_strength_edges_poisson` | strength-edges zero-inflated | grand-canonical |
+| `sample_strength_edges_geometric` | W strength-edges zero-inflated | grand-canonical |
+| `sample_strength_edges_negative_binomial` | W strength-edges zero-inflated | grand-canonical |
 | `sample_strength_degree_poisson` | strength-degree zero-inflated | grand-canonical |
 | `sample_strength_cost_poisson` | strength-cost Poisson | grand-canonical |
+| `sample_strength_cost_geometric` | W strength-cost geometric | grand-canonical |
+| `sample_strength_cost_negative_binomial` | W strength-cost negative binomial | grand-canonical |
 | `sample_degree_events_poisson` | degree-events zero-inflated | grand-canonical |
 | `sample_custom_poisson` | custom sparse Poisson | grand-canonical |
 | `sample_custom_multinomial` | custom sparse multinomial | canonical |
