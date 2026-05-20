@@ -144,8 +144,10 @@ def test_strength_cost_w_filters_partition_edges_and_absent() -> None:
     )
 
 
-def test_unsupported_w_absent_filters_fail_clearly() -> None:
-    with pytest.raises(NotImplementedError, match="absent-edge filtering"):
-        filter_strength_edges_geometric(
-            _edges(), _strength_edges_fit(), detect_absent=True
-        )
+def test_w_absent_edge_filtering_works() -> None:
+    """W absent-edge filtering for edges/degree/degree-events now works."""
+    result = filter_strength_edges_geometric(
+        _edges(), _strength_edges_fit(), detect_absent=True
+    )
+    # absent_lower should have results (may be empty if no absent edges pass)
+    assert result.absent_lower is not None

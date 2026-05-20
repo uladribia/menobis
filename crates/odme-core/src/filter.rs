@@ -1309,6 +1309,211 @@ pub fn filter_degree_events_negative_binomial(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_strength_edges_geometric(
+    x: &[f64],
+    y: &[f64],
+    lam: f64,
+    sources: &[u64],
+    targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    detect_absent_provider(
+        &StrengthEdgesProvider {
+            family: WeightFamily::Geometric,
+            x,
+            y,
+            lambda: lam,
+            self_loops,
+        },
+        sources,
+        targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_strength_edges_negative_binomial(
+    x: &[f64],
+    y: &[f64],
+    lam: f64,
+    layers: u32,
+    sources: &[u64],
+    targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    detect_absent_provider(
+        &StrengthEdgesProvider {
+            family: WeightFamily::NegativeBinomial(layers),
+            x,
+            y,
+            lambda: lam,
+            self_loops,
+        },
+        sources,
+        targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_strength_degree_geometric(
+    x: &[f64],
+    y: &[f64],
+    z: &[f64],
+    w: &[f64],
+    sources: &[u64],
+    targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    detect_absent_provider(
+        &StrengthDegreeProvider {
+            family: WeightFamily::Geometric,
+            x,
+            y,
+            z,
+            w,
+            self_loops,
+        },
+        sources,
+        targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_strength_degree_negative_binomial(
+    x: &[f64],
+    y: &[f64],
+    z: &[f64],
+    w: &[f64],
+    layers: u32,
+    sources: &[u64],
+    targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    detect_absent_provider(
+        &StrengthDegreeProvider {
+            family: WeightFamily::NegativeBinomial(layers),
+            x,
+            y,
+            z,
+            w,
+            self_loops,
+        },
+        sources,
+        targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_degree_events_geometric(
+    x: &[f64],
+    y: &[f64],
+    positive_weight_rate: f64,
+    sources: &[u64],
+    targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    detect_absent_provider(
+        &DegreeEventsProvider {
+            family: WeightFamily::Geometric,
+            x,
+            y,
+            positive_weight_rate,
+            self_loops,
+        },
+        sources,
+        targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_degree_events_negative_binomial(
+    x: &[f64],
+    y: &[f64],
+    positive_weight_rate: f64,
+    layers: u32,
+    sources: &[u64],
+    targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    detect_absent_provider(
+        &DegreeEventsProvider {
+            family: WeightFamily::NegativeBinomial(layers),
+            x,
+            y,
+            positive_weight_rate,
+            self_loops,
+        },
+        sources,
+        targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
+}
+
 fn build_cost_map(
     cost_sources: &[usize],
     cost_targets: &[usize],

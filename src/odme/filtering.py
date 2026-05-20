@@ -815,8 +815,20 @@ def filter_strength_edges_geometric(
     max_absent: int | None = None,
 ) -> FilterResult:
     """Filter edges against a strength-edges geometric zero-inflated null model."""
-    _reject_unsupported_absent_filter(detect_absent, "strength_edges_geometric")
-    _ = (min_occupation, min_expected, max_absent)
+    absent = None
+    if detect_absent:
+        absent = _odme.absent_strength_edges_geometric(
+            fit.x.tolist(),
+            fit.y.tolist(),
+            fit.lam,
+            edges.source.tolist(),
+            edges.target.tolist(),
+            fit.self_loops,
+            alpha,
+            min_occupation,
+            min_expected,
+            max_absent,
+        )
     return _classify_native(
         edges,
         _odme.filter_strength_edges_geometric(
@@ -827,7 +839,7 @@ def filter_strength_edges_geometric(
             edges.target.tolist(),
             edges.weight.tolist(),
         ),
-        None,
+        absent,
         alpha=alpha,
         tail=tail,
         correction=correction,
@@ -848,8 +860,21 @@ def filter_strength_edges_negative_binomial(
     max_absent: int | None = None,
 ) -> FilterResult:
     """Filter edges against a strength-edges negative-binomial null model."""
-    _reject_unsupported_absent_filter(detect_absent, "strength_edges_negative_binomial")
-    _ = (min_occupation, min_expected, max_absent)
+    absent = None
+    if detect_absent:
+        absent = _odme.absent_strength_edges_negative_binomial(
+            fit.x.tolist(),
+            fit.y.tolist(),
+            fit.lam,
+            layers,
+            edges.source.tolist(),
+            edges.target.tolist(),
+            fit.self_loops,
+            alpha,
+            min_occupation,
+            min_expected,
+            max_absent,
+        )
     return _classify_native(
         edges,
         _odme.filter_strength_edges_negative_binomial(
@@ -861,7 +886,7 @@ def filter_strength_edges_negative_binomial(
             edges.target.tolist(),
             edges.weight.tolist(),
         ),
-        None,
+        absent,
         alpha=alpha,
         tail=tail,
         correction=correction,
@@ -881,8 +906,21 @@ def filter_strength_degree_geometric(
     max_absent: int | None = None,
 ) -> FilterResult:
     """Filter edges against a strength-degree geometric zero-inflated null model."""
-    _reject_unsupported_absent_filter(detect_absent, "strength_degree_geometric")
-    _ = (min_occupation, min_expected, max_absent)
+    absent = None
+    if detect_absent:
+        absent = _odme.absent_strength_degree_geometric(
+            fit.x.tolist(),
+            fit.y.tolist(),
+            fit.z.tolist(),
+            fit.w.tolist(),
+            edges.source.tolist(),
+            edges.target.tolist(),
+            fit.self_loops,
+            alpha,
+            min_occupation,
+            min_expected,
+            max_absent,
+        )
     return _classify_native(
         edges,
         _odme.filter_strength_degree_geometric(
@@ -894,7 +932,7 @@ def filter_strength_degree_geometric(
             edges.target.tolist(),
             edges.weight.tolist(),
         ),
-        None,
+        absent,
         alpha=alpha,
         tail=tail,
         correction=correction,
@@ -915,10 +953,22 @@ def filter_strength_degree_negative_binomial(
     max_absent: int | None = None,
 ) -> FilterResult:
     """Filter edges against a strength-degree negative-binomial null model."""
-    _reject_unsupported_absent_filter(
-        detect_absent, "strength_degree_negative_binomial"
-    )
-    _ = (min_occupation, min_expected, max_absent)
+    absent = None
+    if detect_absent:
+        absent = _odme.absent_strength_degree_negative_binomial(
+            fit.x.tolist(),
+            fit.y.tolist(),
+            fit.z.tolist(),
+            fit.w.tolist(),
+            layers,
+            edges.source.tolist(),
+            edges.target.tolist(),
+            fit.self_loops,
+            alpha,
+            min_occupation,
+            min_expected,
+            max_absent,
+        )
     return _classify_native(
         edges,
         _odme.filter_strength_degree_negative_binomial(
@@ -931,7 +981,7 @@ def filter_strength_degree_negative_binomial(
             edges.target.tolist(),
             edges.weight.tolist(),
         ),
-        None,
+        absent,
         alpha=alpha,
         tail=tail,
         correction=correction,
@@ -953,8 +1003,20 @@ def filter_degree_events_geometric(
     max_absent: int | None = None,
 ) -> FilterResult:
     """Filter edges against a degree-events geometric zero-inflated null model."""
-    _reject_unsupported_absent_filter(detect_absent, "degree_events_geometric")
-    _ = (self_loops, min_occupation, min_expected, max_absent)
+    absent = None
+    if detect_absent:
+        absent = _odme.absent_degree_events_geometric(
+            fit.x.tolist(),
+            fit.y.tolist(),
+            positive_weight_rate,
+            edges.source.tolist(),
+            edges.target.tolist(),
+            self_loops,
+            alpha,
+            min_occupation,
+            min_expected,
+            max_absent,
+        )
     return _classify_native(
         edges,
         _odme.filter_degree_events_geometric(
@@ -965,7 +1027,7 @@ def filter_degree_events_geometric(
             edges.target.tolist(),
             edges.weight.tolist(),
         ),
-        None,
+        absent,
         alpha=alpha,
         tail=tail,
         correction=correction,
@@ -988,8 +1050,21 @@ def filter_degree_events_negative_binomial(
     max_absent: int | None = None,
 ) -> FilterResult:
     """Filter edges against a degree-events negative-binomial null model."""
-    _reject_unsupported_absent_filter(detect_absent, "degree_events_negative_binomial")
-    _ = (self_loops, min_occupation, min_expected, max_absent)
+    absent = None
+    if detect_absent:
+        absent = _odme.absent_degree_events_negative_binomial(
+            fit.x.tolist(),
+            fit.y.tolist(),
+            positive_weight_rate,
+            layers,
+            edges.source.tolist(),
+            edges.target.tolist(),
+            self_loops,
+            alpha,
+            min_occupation,
+            min_expected,
+            max_absent,
+        )
     return _classify_native(
         edges,
         _odme.filter_degree_events_negative_binomial(
@@ -1001,7 +1076,7 @@ def filter_degree_events_negative_binomial(
             edges.target.tolist(),
             edges.weight.tolist(),
         ),
-        None,
+        absent,
         alpha=alpha,
         tail=tail,
         correction=correction,
