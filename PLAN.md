@@ -96,15 +96,14 @@ Total: 202 Python tests, 46 Rust tests, all checks green.
 
 - Partial-fit API unification: make `PartialFitResult` use the same
   constraint-oriented result types with mask/support metadata.
-- ME strength-edges IPF has a known divergence bug: when lambda is too large,
-  the Gauss-Seidel iteration diverges (b grows unbounded, a shrinks to zero).
-  Root cause: the asymmetric update amplifies numerical imbalance between x and
-  y at high lambda. The legacy `fitter_E.py` masked this with `float128` but
-  the fundamental instability is the same. Fix requires either: (a) damped
-  updates, (b) better lambda upper-bound initialization, (c) a different
-  iteration structure (e.g., log-space or simultaneous update), or (d) using the
-  W monotone-coordinate approach adapted for Poisson. This blocks the
-  end-to-end benchmark for ME strength-edges at N>10.
+- ME strength-edges and strength-degree IPF bugs fixed: replaced divergent
+  Gauss-Seidel with monotone coordinate bisection. ME strength-edges: N=200 in
+  3.9s with residual 9e-11. ME strength-degree: N=200 in 22s with residual 2e-9.
+- Benchmark script `benchmarks/bench_fitting.py` covers all ME/W/B families
+  with post-hoc residual computation, degree residuals, and CLI options
+  (--max-n, --tolerance, --verbose, --plot, --output).
+- Remaining: run full N=1000 benchmark in release mode with plots, update
+  docs/development/benchmarking.md with results.
 - Release-mode benchmarks for realistic production timings.
 - `.pyi` stubs for new absent-edge PyO3 functions.
 - Milestone 7d: Legacy mobility benchmarks before archiving.
