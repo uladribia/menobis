@@ -12,7 +12,7 @@ from numpy.typing import NDArray
 import odme._odme as _odme
 from odme.analysis import directed_degrees, directed_strengths
 from odme.data.frames import EdgeTable
-from odme.models.types import PartialFitResult
+from odme.models.types import OptimizationDiagnostics, PartialFitResult
 
 
 def _warn_if_not_converged(name: str, converged: bool, iters: int) -> None:
@@ -51,6 +51,9 @@ def _to_partial_result(
     rates: list[float],
     converged: bool,
     iterations: int,
+    *,
+    constraint: str = "strength",
+    self_loops: bool = True,
 ) -> PartialFitResult:
     """Wrap Rust output into PartialFitResult with convergence warning."""
     _warn_if_not_converged(name, converged, iterations)
@@ -58,6 +61,16 @@ def _to_partial_result(
         source=np.array(sources, dtype=np.uint64),
         target=np.array(targets, dtype=np.uint64),
         rate=np.array(rates, dtype=np.float64),
+        constraint=constraint,
+        family="poisson",
+        self_loops=self_loops,
+        converged=converged,
+        iterations=iterations,
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status="solved" if converged else "inaccurate",
+            iterations=iterations,
+        ),
     )
 
 
@@ -102,6 +115,8 @@ def fit_partial_strength_poisson(
         rates,
         converged,
         iters,
+        constraint="strength",
+        self_loops=self_loops,
     )
 
 
@@ -137,6 +152,8 @@ def fit_partial_degree_poisson(
         rates,
         converged,
         iters,
+        constraint="degree",
+        self_loops=self_loops,
     )
 
 
@@ -183,6 +200,8 @@ def fit_partial_strength_degree_poisson(
         rates,
         converged,
         iters,
+        constraint="strength_degree",
+        self_loops=self_loops,
     )
 
 
@@ -225,6 +244,8 @@ def fit_partial_strength_edges_poisson(
         rates,
         converged,
         iters,
+        constraint="strength_edges",
+        self_loops=self_loops,
     )
 
 
@@ -276,6 +297,8 @@ def fit_partial_strength_cost_poisson(
         rates,
         converged,
         iters,
+        constraint="strength_cost",
+        self_loops=self_loops,
     )
 
 

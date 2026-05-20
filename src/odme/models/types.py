@@ -381,11 +381,17 @@ class DegreeEventsFit:
 
 @dataclass(frozen=True)
 class PartialFitResult:
-    """Combined rate table from partial-constraint fitting."""
+    """Rate table from partial-constraint fitting with diagnostics."""
 
     source: NDArray[np.uint64]
     target: NDArray[np.uint64]
     rate: NDArray[np.float64]
+    constraint: str = "strength"
+    family: str = "poisson"
+    self_loops: bool = True
+    converged: bool = True
+    iterations: int = 0
+    diagnostics: OptimizationDiagnostics | None = None
 
     def as_probability_table(self) -> ProbabilityTable:
         """Convert to ProbabilityTable for sampling (rates as weights)."""
