@@ -3,7 +3,6 @@
 import numpy as np
 
 from odme.models import (
-    FitResult,
     StrengthDegreeFit,
     StrengthEdgesFit,
 )
@@ -44,13 +43,20 @@ def _strength_degree_fit() -> StrengthDegreeFit:
     )
 
 
-def _degree_fit() -> FitResult:
-    return FitResult(
+def _degree_fit() -> "DegreeEventsFit":  # noqa: F821
+    from odme.models.types import DegreeEventsFit
+
+    return DegreeEventsFit(
         node=np.array([0, 1], dtype=np.uint64),
         x=np.array([0.8, 1.2]),
         y=np.array([1.0, 1.0]),
+        q=0.5,
+        positive_mean=2.0,
+        self_loops=True,
         converged=True,
         iterations=10,
+        family="geometric",
+        layers=1,
     )
 
 
@@ -128,14 +134,14 @@ class TestDegreeEventsGeometric:
     def test_produces_edges(self) -> None:
         """Sampler returns a valid EdgeTable."""
         fit = _degree_fit()
-        sample = sample_degree_events_geometric(fit, positive_weight_rate=0.5, seed=42)
+        sample = sample_degree_events_geometric(fit, seed=42)
         assert sample.num_edges >= 0
 
     def test_seeded_reproducibility(self) -> None:
         """Same seed gives same result."""
         fit = _degree_fit()
-        a = sample_degree_events_geometric(fit, positive_weight_rate=0.5, seed=99)
-        b = sample_degree_events_geometric(fit, positive_weight_rate=0.5, seed=99)
+        a = sample_degree_events_geometric(fit, seed=99)
+        b = sample_degree_events_geometric(fit, seed=99)
         np.testing.assert_array_equal(a.weight, b.weight)
 
 
@@ -145,20 +151,14 @@ class TestDegreeEventsNegativeBinomial:
     def test_produces_edges(self) -> None:
         """Sampler returns a valid EdgeTable."""
         fit = _degree_fit()
-        sample = sample_degree_events_negative_binomial(
-            fit, positive_weight_rate=0.5, layers=3, seed=42
-        )
+        sample = sample_degree_events_negative_binomial(fit, layers=3, seed=42)
         assert sample.num_edges >= 0
 
     def test_seeded_reproducibility(self) -> None:
         """Same seed gives same result."""
         fit = _degree_fit()
-        a = sample_degree_events_negative_binomial(
-            fit, positive_weight_rate=0.5, layers=3, seed=99
-        )
-        b = sample_degree_events_negative_binomial(
-            fit, positive_weight_rate=0.5, layers=3, seed=99
-        )
+        a = sample_degree_events_negative_binomial(fit, layers=3, seed=99)
+        b = sample_degree_events_negative_binomial(fit, layers=3, seed=99)
         np.testing.assert_array_equal(a.weight, b.weight)
 
 

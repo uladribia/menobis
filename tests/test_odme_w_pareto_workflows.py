@@ -250,16 +250,8 @@ def test_pareto_degree_events_fit_then_simulate_recovers_constraints(
 
     def sampler(seed: int) -> EdgeTable:
         if family == "geometric":
-            return sample_degree_events_geometric(
-                fit, positive_weight_rate=fit.q, self_loops=SELF_LOOPS, seed=seed
-            )
-        return sample_degree_events_negative_binomial(
-            fit,
-            positive_weight_rate=fit.q,
-            layers=LAYERS,
-            self_loops=SELF_LOOPS,
-            seed=seed,
-        )
+            return sample_degree_events_geometric(fit, seed=seed)
+        return sample_degree_events_negative_binomial(fit, seed=seed)
 
     assert fit.converged
     _assert_ensemble_node_stat(sampler, k_out, k_in, _degrees, z_limit=5.0)

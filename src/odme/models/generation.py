@@ -370,20 +370,27 @@ def sample_strength_degree_binomial(
 
 
 def sample_degree_events_binomial(
-    fit: FitResult,
+    fit: "FitResult | DegreeEventsFit",
     *,
-    positive_weight_rate: float,
-    layers: int = 1,
-    self_loops: bool = True,
+    positive_weight_rate: float | None = None,
+    layers: int | None = None,
+    self_loops: bool | None = None,
     seed: int = 0,
 ) -> EdgeTable:
     """Sample degree-events zero-inflated binomial."""
+    q = (
+        positive_weight_rate
+        if positive_weight_rate is not None
+        else getattr(fit, "q", 0.5)
+    )
+    m = layers if layers is not None else (getattr(fit, "layers", None) or 1)
+    sl = self_loops if self_loops is not None else getattr(fit, "self_loops", True)
     sources, targets, weights = _odme.sample_degree_events_binomial(
         fit.x.tolist(),
         fit.y.tolist(),
-        positive_weight_rate,
-        layers,
-        self_loops,
+        q,
+        m,
+        sl,
         seed,
     )
     return _edge_table_from_lists(sources, targets, weights)
@@ -460,38 +467,35 @@ def sample_strength_degree_negative_binomial(
 
 
 def sample_degree_events_geometric(
-    fit: "FitResult | DegreeEventsFit",
+    fit: "DegreeEventsFit",
     *,
-    positive_weight_rate: float,
-    self_loops: bool = True,
     seed: int = 0,
 ) -> EdgeTable:
     """Sample degree-events zero-inflated geometric."""
     sources, targets, weights = _odme.sample_degree_events_geometric(
         fit.x.tolist(),
         fit.y.tolist(),
-        positive_weight_rate,
-        self_loops,
+        fit.q,
+        fit.self_loops,
         seed,
     )
     return _edge_table_from_lists(sources, targets, weights)
 
 
 def sample_degree_events_negative_binomial(
-    fit: "FitResult | DegreeEventsFit",
+    fit: "DegreeEventsFit",
     *,
-    positive_weight_rate: float,
-    layers: int = 1,
-    self_loops: bool = True,
+    layers: int | None = None,
     seed: int = 0,
 ) -> EdgeTable:
     """Sample degree-events zero-inflated negative binomial."""
+    m = layers if layers is not None else (fit.layers or 1)
     sources, targets, weights = _odme.sample_degree_events_negative_binomial(
         fit.x.tolist(),
         fit.y.tolist(),
-        positive_weight_rate,
-        layers,
-        self_loops,
+        fit.q,
+        m,
+        fit.self_loops,
         seed,
     )
     return _edge_table_from_lists(sources, targets, weights)

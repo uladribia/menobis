@@ -670,6 +670,12 @@ def fit_strength_degree_poisson(
         self_loops=self_loops,
         converged=converged,
         iterations=iters,
+        family="poisson",
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status="solved" if converged else "inaccurate",
+            iterations=iters,
+        ),
     )
     _log_fit_result(
         "fit_strength_degree_poisson",
@@ -720,8 +726,15 @@ def fit_strength_poisson(
         node=np.arange(n, dtype=np.uint64),
         x=np.array(x_list),
         y=np.array(y_list),
+        self_loops=self_loops,
         converged=converged,
         iterations=iters,
+        family="poisson",
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status="solved" if converged else "inaccurate",
+            iterations=iters,
+        ),
     )
 
 
@@ -741,6 +754,7 @@ def _wrap_w_strength_fit(
     ],
     *,
     node_count: int,
+    self_loops: bool = True,
 ) -> FitResult:
     (
         x_list,
@@ -768,6 +782,7 @@ def _wrap_w_strength_fit(
         node=np.arange(node_count, dtype=np.uint64),
         x=np.asarray(x_list, dtype=np.float64),
         y=np.asarray(y_list, dtype=np.float64),
+        self_loops=self_loops,
         converged=converged,
         iterations=iterations,
         family="geometric" if layers == 1 else "negative_binomial",
@@ -813,6 +828,7 @@ def fit_strength_geometric(
             s_out.tolist(), s_in.tolist(), self_loops, tolerance, max_iterations
         ),
         node_count=len(s_out),
+        self_loops=self_loops,
     )
     _log_fit_result(
         "fit_strength_geometric",
@@ -853,6 +869,7 @@ def fit_strength_negative_binomial(
             max_iterations,
         ),
         node_count=len(s_out),
+        self_loops=self_loops,
     )
     _log_fit_result(
         "fit_strength_negative_binomial",
@@ -1083,6 +1100,11 @@ def fit_degree_bernoulli(
             node=np.arange(n, dtype=np.uint64),
             x=np.zeros(n),
             y=np.zeros(n),
+            self_loops=self_loops,
+            family="bernoulli",
+            diagnostics=OptimizationDiagnostics(
+                converged=True, status="solved", iterations=0
+            ),
         )
 
     t0 = time.perf_counter()
@@ -1093,8 +1115,15 @@ def fit_degree_bernoulli(
         node=np.arange(n, dtype=np.uint64),
         x=np.asarray(x_list, dtype=np.float64),
         y=np.asarray(y_list, dtype=np.float64),
+        self_loops=self_loops,
         converged=converged,
         iterations=iters,
+        family="bernoulli",
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status="solved" if converged else "inaccurate",
+            iterations=iters,
+        ),
     )
     _log_fit_result(
         "fit_degree_bernoulli", converged, iters, time.perf_counter() - t0, verbose
@@ -1147,8 +1176,288 @@ def fit_strength_binomial(
         node=np.arange(n, dtype=np.uint64),
         x=np.array(x_list),
         y=np.array(y_list),
+        self_loops=self_loops,
         converged=converged,
         iterations=iters,
+        family="binomial",
+        layers=layers,
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status="solved" if converged else "inaccurate",
+            iterations=iters,
+        ),
+    )
+
+
+def fit_strength_cost_binomial(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    cost_sources: NDArray[np.integer],
+    cost_targets: NDArray[np.integer],
+    cost_values: NDArray[np.floating],
+    target_cost: float,
+    *,
+    layers: int = 1,
+    self_loops: bool = True,
+    tolerance: float = 1e-6,
+    verbose: int = 0,
+    max_iterations: int = 5000,
+) -> StrengthCostFit:
+    """Fit the strength-cost binomial(M) model."""
+    s_out = np.asarray(strength_out, dtype=np.float64)
+    s_in = np.asarray(strength_in, dtype=np.float64)
+    _validate_balanced_sequences(s_out, s_in, name="strength")
+    c_src_arr, c_tgt_arr, c_val_arr = _validate_cost_entries(
+        cost_sources, cost_targets, cost_values, target_cost=target_cost
+    )
+    c_src = c_src_arr.tolist()
+    c_tgt = c_tgt_arr.tolist()
+    c_val = c_val_arr.tolist()
+    t0 = time.perf_counter()
+    x_list, y_list, gamma, converged, iters = _odme.fit_strength_cost_poisson(
+        s_out.tolist(),
+        s_in.tolist(),
+        c_src,
+        c_tgt,
+        c_val,
+        target_cost,
+        self_loops,
+        tolerance,
+        max_iterations,
+    )
+    n = len(s_out)
+    result = StrengthCostFit(
+        node=np.arange(n, dtype=np.uint64),
+        x=np.asarray(x_list, dtype=np.float64),
+        y=np.asarray(y_list, dtype=np.float64),
+        gamma=gamma,
+        self_loops=self_loops,
+        converged=converged,
+        iterations=iters,
+        family="binomial",
+        layers=layers,
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status="solved" if converged else "inaccurate",
+            iterations=iters,
+        ),
+    )
+    _log_fit_result(
+        "fit_strength_cost_binomial",
+        converged,
+        iters,
+        time.perf_counter() - t0,
+        verbose,
+    )
+    return result
+
+
+def fit_strength_edges_binomial(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    target_edges: float,
+    *,
+    layers: int = 1,
+    self_loops: bool = True,
+    tolerance: float = 1e-10,
+    verbose: int = 0,
+    max_iterations: int = 50000,
+) -> StrengthEdgesFit:
+    """Fit the strength-edges binomial(M) model."""
+    s_out = np.asarray(strength_out, dtype=np.float64)
+    s_in = np.asarray(strength_in, dtype=np.float64)
+    _validate_strength_edges_constraints(
+        s_out, s_in, target_edges, self_loops=self_loops
+    )
+    t0 = time.perf_counter()
+    x_list, y_list, lam, converged, iters = _odme.fit_strength_edges_poisson(
+        s_out.tolist(),
+        s_in.tolist(),
+        target_edges,
+        self_loops,
+        tolerance,
+        max_iterations,
+    )
+    result = StrengthEdgesFit(
+        node=np.arange(len(s_out), dtype=np.uint64),
+        x=np.asarray(x_list, dtype=np.float64),
+        y=np.asarray(y_list, dtype=np.float64),
+        lam=float(lam),
+        self_loops=self_loops,
+        converged=converged,
+        iterations=iters,
+        family="binomial",
+        layers=layers,
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status="solved" if converged else "inaccurate",
+            iterations=iters,
+        ),
+    )
+    _log_fit_result(
+        "fit_strength_edges_binomial",
+        converged,
+        iters,
+        time.perf_counter() - t0,
+        verbose,
+    )
+    return result
+
+
+def fit_strength_degree_binomial(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    degree_out: NDArray[np.floating],
+    degree_in: NDArray[np.floating],
+    *,
+    layers: int = 1,
+    self_loops: bool = True,
+    tolerance: float = 1e-10,
+    verbose: int = 0,
+    max_iterations: int = 50000,
+) -> StrengthDegreeFit:
+    """Fit the strength-degree binomial(M) model."""
+    s_out = np.asarray(strength_out, dtype=np.float64)
+    s_in = np.asarray(strength_in, dtype=np.float64)
+    k_out = np.asarray(degree_out, dtype=np.float64)
+    k_in = np.asarray(degree_in, dtype=np.float64)
+    validate_strength_degree_constraints(s_out, s_in, k_out, k_in)
+    t0 = time.perf_counter()
+    x_list, y_list, z_list, w_list, converged, iters = (
+        _odme.fit_strength_degree_poisson(
+            s_out.tolist(),
+            s_in.tolist(),
+            k_out.tolist(),
+            k_in.tolist(),
+            self_loops,
+            tolerance,
+            max_iterations,
+        )
+    )
+    n = len(s_out)
+    result = StrengthDegreeFit(
+        node=np.arange(n, dtype=np.uint64),
+        x=np.asarray(x_list, dtype=np.float64),
+        y=np.asarray(y_list, dtype=np.float64),
+        z=np.asarray(z_list, dtype=np.float64),
+        w=np.asarray(w_list, dtype=np.float64),
+        self_loops=self_loops,
+        converged=converged,
+        iterations=iters,
+        family="binomial",
+        layers=layers,
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status="solved" if converged else "inaccurate",
+            iterations=iters,
+        ),
+    )
+    _log_fit_result(
+        "fit_strength_degree_binomial",
+        converged,
+        iters,
+        time.perf_counter() - t0,
+        verbose,
+    )
+    return result
+
+
+def fit_degree_events_poisson(
+    degree_out: NDArray[np.floating],
+    degree_in: NDArray[np.floating],
+    total_events: int,
+    *,
+    self_loops: bool = True,
+    tolerance: float = 1e-10,
+    verbose: int = 0,
+    max_iterations: int = 50000,
+) -> DegreeEventsFit:
+    """Fit the ME degree-events Poisson model."""
+    k_out = np.asarray(degree_out, dtype=np.float64)
+    k_in = np.asarray(degree_in, dtype=np.float64)
+    _validate_degree_events_constraints(
+        k_out, k_in, total_events, self_loops=self_loops
+    )
+    n = len(k_out)
+    e = float(k_out.sum())
+    t = float(total_events)
+    t0 = time.perf_counter()
+    x_list, y_list, converged, iters = _odme.fit_degree_bernoulli(
+        k_out.tolist(), k_in.tolist(), self_loops, tolerance, max_iterations
+    )
+    positive_mean = t / e if e > 0 else 1.0
+    q = 1.0 - e / t if t > e else 0.0
+    _log_fit_result(
+        "fit_degree_events_poisson", converged, iters, time.perf_counter() - t0, verbose
+    )
+    return DegreeEventsFit(
+        node=np.arange(n, dtype=np.uint64),
+        x=np.asarray(x_list, dtype=np.float64),
+        y=np.asarray(y_list, dtype=np.float64),
+        q=q,
+        positive_mean=positive_mean,
+        self_loops=self_loops,
+        converged=converged,
+        iterations=iters,
+        family="poisson",
+        layers=None,
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status="solved" if converged else "inaccurate",
+            iterations=iters,
+        ),
+    )
+
+
+def fit_degree_events_binomial(
+    degree_out: NDArray[np.floating],
+    degree_in: NDArray[np.floating],
+    total_events: int,
+    *,
+    layers: int = 1,
+    self_loops: bool = True,
+    tolerance: float = 1e-10,
+    verbose: int = 0,
+    max_iterations: int = 50000,
+) -> DegreeEventsFit:
+    """Fit the B degree-events binomial(M) model."""
+    k_out = np.asarray(degree_out, dtype=np.float64)
+    k_in = np.asarray(degree_in, dtype=np.float64)
+    _validate_degree_events_constraints(
+        k_out, k_in, total_events, self_loops=self_loops
+    )
+    n = len(k_out)
+    e = float(k_out.sum())
+    t = float(total_events)
+    t0 = time.perf_counter()
+    x_list, y_list, converged, iters = _odme.fit_degree_bernoulli(
+        k_out.tolist(), k_in.tolist(), self_loops, tolerance, max_iterations
+    )
+    positive_mean = t / e if e > 0 else 1.0
+    q = 1.0 - e / t if t > e else 0.0
+    _log_fit_result(
+        "fit_degree_events_binomial",
+        converged,
+        iters,
+        time.perf_counter() - t0,
+        verbose,
+    )
+    return DegreeEventsFit(
+        node=np.arange(n, dtype=np.uint64),
+        x=np.asarray(x_list, dtype=np.float64),
+        y=np.asarray(y_list, dtype=np.float64),
+        q=q,
+        positive_mean=positive_mean,
+        self_loops=self_loops,
+        converged=converged,
+        iterations=iters,
+        family="binomial",
+        layers=layers,
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status="solved" if converged else "inaccurate",
+            iterations=iters,
+        ),
     )
 
 
@@ -1159,8 +1468,8 @@ def fit_degree_events_geometric(
     *,
     self_loops: bool = True,
     tolerance: float = 1e-8,
-    max_iterations: int = 10000,
     verbose: int = 0,
+    max_iterations: int = 10000,
 ) -> DegreeEventsFit:
     """Fit the W degree-events geometric model.
 
@@ -1210,8 +1519,16 @@ def fit_degree_events_geometric(
         y=np.array(y_list),
         q=q,
         positive_mean=positive_mean,
+        self_loops=self_loops,
         converged=converged,
         iterations=iters,
+        family="geometric",
+        layers=1,
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status="solved" if converged else "inaccurate",
+            iterations=iters,
+        ),
     )
 
 
@@ -1223,8 +1540,8 @@ def fit_degree_events_negative_binomial(
     layers: int = 3,
     self_loops: bool = True,
     tolerance: float = 1e-8,
-    max_iterations: int = 10000,
     verbose: int = 0,
+    max_iterations: int = 10000,
 ) -> DegreeEventsFit:
     """Fit the W degree-events negative binomial(M) model.
 
@@ -1279,8 +1596,16 @@ def fit_degree_events_negative_binomial(
         y=np.array(y_list),
         q=q,
         positive_mean=positive_mean,
+        self_loops=self_loops,
         converged=converged,
         iterations=iters,
+        family="negative_binomial",
+        layers=layers,
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status="solved" if converged else "inaccurate",
+            iterations=iters,
+        ),
     )
 
 
@@ -1293,15 +1618,20 @@ __all__ = [
     "StrengthDegreeFit",
     "StrengthEdgesFit",
     "fit_degree_bernoulli",
+    "fit_degree_events_binomial",
     "fit_degree_events_geometric",
     "fit_degree_events_negative_binomial",
+    "fit_degree_events_poisson",
     "fit_strength_binomial",
+    "fit_strength_cost_binomial",
     "fit_strength_cost_geometric",
     "fit_strength_cost_negative_binomial",
     "fit_strength_cost_poisson",
+    "fit_strength_degree_binomial",
     "fit_strength_degree_geometric",
     "fit_strength_degree_negative_binomial",
     "fit_strength_degree_poisson",
+    "fit_strength_edges_binomial",
     "fit_strength_edges_geometric",
     "fit_strength_edges_negative_binomial",
     "fit_strength_edges_poisson",
