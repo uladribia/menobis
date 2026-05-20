@@ -1,6 +1,6 @@
 //! Seeded network generation for node-factorized models.
 
-use crate::distribution::{zero_truncated_poisson_mean, PairDistribution, WeightFamily};
+use crate::distribution::{positive_edge_poisson_mean, PairDistribution, WeightFamily};
 use crate::pairs::{
     chunk_seed, row_ranges, CandidateSupport, DegreeEventsProvider, FixedStrengthProvider,
     NormalizedSparsePoissonProvider, PairDistributionProvider, StrengthCostProvider,
@@ -13,7 +13,7 @@ use rand_distr::{Binomial, Distribution, Poisson};
 use rayon::prelude::*;
 use std::collections::HashMap;
 
-const ZTP_MEAN_EPSILON: f64 = 1e-10;
+const POSITIVE_POISSON_MEAN_EPSILON: f64 = 1e-10;
 
 /// Sparse edge output from a generation run.
 #[derive(Clone, Debug, Default)]
@@ -35,6 +35,46 @@ pub struct SparseCostEntries<'a> {
     pub sources: &'a [usize],
     pub targets: &'a [usize],
     pub values: &'a [f64],
+}
+
+/// Internal ontology for provider-backed independent-pair samplers.
+enum SamplingModel<'a> {
+    FixedStrength {
+        x: &'a [f64],
+        y: &'a [f64],
+        family: WeightFamily,
+        self_loops: bool,
+    },
+    StrengthCost {
+        x: &'a [f64],
+        y: &'a [f64],
+        gamma: f64,
+        costs: &'a HashMap<(usize, usize), f64>,
+        family: WeightFamily,
+        self_loops: bool,
+    },
+    DegreeEvents {
+        x: &'a [f64],
+        y: &'a [f64],
+        positive_weight_rate: f64,
+        family: WeightFamily,
+        self_loops: bool,
+    },
+    StrengthEdges {
+        x: &'a [f64],
+        y: &'a [f64],
+        lambda: f64,
+        family: WeightFamily,
+        self_loops: bool,
+    },
+    StrengthDegree {
+        x: &'a [f64],
+        y: &'a [f64],
+        z: &'a [f64],
+        w: &'a [f64],
+        family: WeightFamily,
+        self_loops: bool,
+    },
 }
 
 fn merge_samples(chunks: Vec<SampledEdges>) -> SampledEdges {
@@ -70,6 +110,103 @@ where
         push_sampled_pair(&mut result, pair, rng);
     }
     result
+}
+
+fn sample_model(model: SamplingModel<'_>, seed: u64) -> SampledEdges {
+    match model {
+        SamplingModel::FixedStrength {
+            x,
+            y,
+            family,
+            self_loops,
+        } => sample_provider(
+            &FixedStrengthProvider {
+                x,
+                y,
+                family,
+                self_loops,
+            },
+            seed,
+        ),
+        SamplingModel::StrengthCost {
+            x,
+            y,
+            gamma,
+            costs,
+            family,
+            self_loops,
+        } => sample_provider(
+            &StrengthCostProvider {
+                x,
+                y,
+                gamma,
+                costs,
+                family,
+                self_loops,
+            },
+            seed,
+        ),
+        SamplingModel::DegreeEvents {
+            x,
+            y,
+            positive_weight_rate,
+            family,
+            self_loops,
+        } => sample_provider(
+            &DegreeEventsProvider {
+                x,
+                y,
+                positive_weight_rate,
+                family,
+                self_loops,
+            },
+            seed,
+        ),
+        SamplingModel::StrengthEdges {
+            x,
+            y,
+            lambda,
+            family,
+            self_loops,
+        } => sample_provider(
+            &StrengthEdgesProvider {
+                x,
+                y,
+                lambda,
+                family,
+                self_loops,
+            },
+            seed,
+        ),
+        SamplingModel::StrengthDegree {
+            x,
+            y,
+            z,
+            w,
+            family,
+            self_loops,
+        } => sample_provider(
+            &StrengthDegreeProvider {
+                x,
+                y,
+                z,
+                w,
+                family,
+                self_loops,
+            },
+            seed,
+        ),
+    }
+}
+
+fn cost_map(costs: &SparseCostEntries<'_>) -> HashMap<(usize, usize), f64> {
+    costs
+        .sources
+        .iter()
+        .zip(costs.targets.iter())
+        .zip(costs.values.iter())
+        .map(|((&source, &target), &cost)| ((source, target), cost))
+        .collect()
 }
 
 fn sample_provider<P>(provider: &P, seed: u64) -> SampledEdges
@@ -246,7 +383,7 @@ pub fn sample_custom_multinomial(
     sparse_multinomial_sample(sources, targets, probabilities, total_events, &mut rng)
 }
 
-/// Microcanonical stub-matching sampler for fixed-strength ME with self-loops.
+/// Exact-strength stub-matching sampler for fixed-strength ME with self-loops.
 ///
 /// Creates `s_out[i]` outgoing stubs for each node `i` and `s_in[j]` incoming
 /// stubs for each node `j`, then pairs them by random shuffle. This produces
@@ -257,7 +394,7 @@ pub fn sample_custom_multinomial(
 /// allowed. Without self-loops the rejection/constraint introduces bias that
 /// requires more sophisticated algorithms (e.g., MCMC) to correct.
 #[must_use]
-pub fn sample_strength_microcanonical(
+pub fn sample_strength_stub_matching(
     strength_out: &[u64],
     strength_in: &[u64],
     seed: u64,
@@ -267,7 +404,7 @@ pub fn sample_strength_microcanonical(
     let total_in: u64 = strength_in.iter().sum();
     assert_eq!(
         total_out, total_in,
-        "microcanonical requires balanced strengths"
+        "stub_matching requires balanced strengths"
     );
     let t = total_out as usize;
 
@@ -313,8 +450,8 @@ pub fn sample_strength_microcanonical(
 /// Sample from independent Poisson(x_i * y_j) for all (i, j).
 #[must_use]
 pub fn sample_strength_poisson(x: &[f64], y: &[f64], self_loops: bool, seed: u64) -> SampledEdges {
-    sample_provider(
-        &FixedStrengthProvider {
+    sample_model(
+        SamplingModel::FixedStrength {
             x,
             y,
             family: WeightFamily::Poisson,
@@ -332,8 +469,8 @@ pub fn sample_strength_geometric(
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
-    sample_provider(
-        &FixedStrengthProvider {
+    sample_model(
+        SamplingModel::FixedStrength {
             x,
             y,
             family: WeightFamily::Geometric,
@@ -352,8 +489,8 @@ pub fn sample_strength_binomial(
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
-    sample_provider(
-        &FixedStrengthProvider {
+    sample_model(
+        SamplingModel::FixedStrength {
             x,
             y,
             family: WeightFamily::Binomial(layers),
@@ -363,20 +500,20 @@ pub fn sample_strength_binomial(
     )
 }
 
-/// Sample from independent NegBinomial(M, 1-x_i*y_j) for all (i, j).
+/// Sample from independent NegativeBinomial(M, 1-x_i*y_j) for all (i, j).
 #[must_use]
-pub fn sample_strength_neg_binomial(
+pub fn sample_strength_negative_binomial(
     x: &[f64],
     y: &[f64],
     layers: u32,
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
-    sample_provider(
-        &FixedStrengthProvider {
+    sample_model(
+        SamplingModel::FixedStrength {
             x,
             y,
-            family: WeightFamily::NegBinomial(layers),
+            family: WeightFamily::NegativeBinomial(layers),
             self_loops,
         },
         seed,
@@ -396,41 +533,35 @@ pub fn sample_strength_cost_poisson(
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
-    let cost_map: HashMap<(usize, usize), f64> = costs
-        .sources
-        .iter()
-        .zip(costs.targets.iter())
-        .zip(costs.values.iter())
-        .map(|((&source, &target), &cost)| ((source, target), cost))
-        .collect();
-    sample_provider(
-        &StrengthCostProvider {
-            family: WeightFamily::Poisson,
+    let cost_map = cost_map(costs);
+    sample_model(
+        SamplingModel::StrengthCost {
             x,
             y,
             gamma,
             costs: &cost_map,
+            family: WeightFamily::Poisson,
             self_loops,
         },
         seed,
     )
 }
 
-fn solve_zero_truncated_poisson_rate(mean: f64) -> f64 {
-    if mean < 1.0 - ZTP_MEAN_EPSILON {
+fn solve_positive_edge_poisson_rate(mean: f64) -> f64 {
+    if mean < 1.0 - POSITIVE_POISSON_MEAN_EPSILON {
         return f64::NAN;
     }
-    if mean <= 1.0 + ZTP_MEAN_EPSILON {
+    if mean <= 1.0 + POSITIVE_POISSON_MEAN_EPSILON {
         return 0.0;
     }
     let mut low = 0.0;
     let mut high = mean.max(1.0);
-    while zero_truncated_poisson_mean(high) < mean {
+    while positive_edge_poisson_mean(high) < mean {
         high *= 2.0;
     }
     for _ in 0..100 {
         let mid = 0.5 * (low + high);
-        if zero_truncated_poisson_mean(mid) < mean {
+        if positive_edge_poisson_mean(mid) < mean {
             low = mid;
         } else {
             high = mid;
@@ -463,20 +594,20 @@ pub fn sample_degree_events_poisson(
     } else {
         1.0
     };
-    let rate = solve_zero_truncated_poisson_rate(mean_existing_weight.max(1.0));
-    sample_provider(
-        &DegreeEventsProvider {
-            family: WeightFamily::Poisson,
+    let rate = solve_positive_edge_poisson_rate(mean_existing_weight.max(1.0));
+    sample_model(
+        SamplingModel::DegreeEvents {
             x,
             y,
             positive_weight_rate: rate,
+            family: WeightFamily::Poisson,
             self_loops,
         },
         seed,
     )
 }
 
-/// Sample from the exact ME fixed-strength-degree ZIP model.
+/// Sample from the exact ME fixed-strength-degree zero-inflated model.
 #[must_use]
 pub fn sample_strength_degree_poisson(
     x: &[f64],
@@ -486,13 +617,13 @@ pub fn sample_strength_degree_poisson(
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
-    sample_provider(
-        &StrengthDegreeProvider {
-            family: WeightFamily::Poisson,
+    sample_model(
+        SamplingModel::StrengthDegree {
             x,
             y,
             z,
             w,
+            family: WeightFamily::Poisson,
             self_loops,
         },
         seed,
@@ -527,7 +658,7 @@ pub fn sample_strength_poisson_multinomial(
     sample_strength_multinomial(x, y, total_events, self_loops, seed.wrapping_add(1))
 }
 
-/// Sample exact ME fixed-strength-and-edge-count ZIP model.
+/// Sample exact ME fixed-strength-and-edge-count zero-inflated model.
 #[must_use]
 pub fn sample_strength_edges_poisson(
     x: &[f64],
@@ -536,12 +667,12 @@ pub fn sample_strength_edges_poisson(
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
-    sample_provider(
-        &StrengthEdgesProvider {
-            family: WeightFamily::Poisson,
+    sample_model(
+        SamplingModel::StrengthEdges {
             x,
             y,
             lambda: lam,
+            family: WeightFamily::Poisson,
             self_loops,
         },
         seed,
@@ -559,27 +690,70 @@ pub fn sample_strength_cost_binomial(
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
-    let cost_map: HashMap<(usize, usize), f64> = costs
-        .sources
-        .iter()
-        .zip(costs.targets.iter())
-        .zip(costs.values.iter())
-        .map(|((&source, &target), &cost)| ((source, target), cost))
-        .collect();
-    sample_provider(
-        &StrengthCostProvider {
-            family: WeightFamily::Binomial(layers),
+    let cost_map = cost_map(costs);
+    sample_model(
+        SamplingModel::StrengthCost {
             x,
             y,
             gamma,
             costs: &cost_map,
+            family: WeightFamily::Binomial(layers),
             self_loops,
         },
         seed,
     )
 }
 
-/// Sample strength-edges binomial ZIP: Bernoulli occupation + ZTB(M, p).
+/// Sample strength-cost geometric: Geometric with cost-modulated rates.
+#[must_use]
+pub fn sample_strength_cost_geometric(
+    x: &[f64],
+    y: &[f64],
+    gamma: f64,
+    costs: &SparseCostEntries<'_>,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    let cost_map = cost_map(costs);
+    sample_model(
+        SamplingModel::StrengthCost {
+            x,
+            y,
+            gamma,
+            costs: &cost_map,
+            family: WeightFamily::Geometric,
+            self_loops,
+        },
+        seed,
+    )
+}
+
+/// Sample strength-cost negative binomial: negative binomial(M) with cost-modulated rates.
+#[must_use]
+pub fn sample_strength_cost_negative_binomial(
+    x: &[f64],
+    y: &[f64],
+    gamma: f64,
+    costs: &SparseCostEntries<'_>,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    let cost_map = cost_map(costs);
+    sample_model(
+        SamplingModel::StrengthCost {
+            x,
+            y,
+            gamma,
+            costs: &cost_map,
+            family: WeightFamily::NegativeBinomial(layers),
+            self_loops,
+        },
+        seed,
+    )
+}
+
+/// Sample strength-edges binomial zero-inflated: Bernoulli occupation + positive binomial(M, p).
 #[must_use]
 pub fn sample_strength_edges_binomial(
     x: &[f64],
@@ -589,19 +763,19 @@ pub fn sample_strength_edges_binomial(
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
-    sample_provider(
-        &StrengthEdgesProvider {
-            family: WeightFamily::Binomial(layers),
+    sample_model(
+        SamplingModel::StrengthEdges {
             x,
             y,
             lambda: lam,
+            family: WeightFamily::Binomial(layers),
             self_loops,
         },
         seed,
     )
 }
 
-/// Sample strength-degree binomial ZIP: Bernoulli occupation + ZTB(M, p).
+/// Sample strength-degree binomial zero-inflated: Bernoulli occupation + positive binomial(M, p).
 #[must_use]
 pub fn sample_strength_degree_binomial(
     x: &[f64],
@@ -612,20 +786,20 @@ pub fn sample_strength_degree_binomial(
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
-    sample_provider(
-        &StrengthDegreeProvider {
-            family: WeightFamily::Binomial(layers),
+    sample_model(
+        SamplingModel::StrengthDegree {
             x,
             y,
             z,
             w,
+            family: WeightFamily::Binomial(layers),
             self_loops,
         },
         seed,
     )
 }
 
-/// Sample degree-events binomial ZIP: Bernoulli occupation + ZTB(M, mu).
+/// Sample degree-events binomial zero-inflated: Bernoulli occupation + positive binomial(M, mu).
 #[must_use]
 pub fn sample_degree_events_binomial(
     x: &[f64],
@@ -635,12 +809,145 @@ pub fn sample_degree_events_binomial(
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
-    sample_provider(
-        &DegreeEventsProvider {
-            family: WeightFamily::Binomial(layers),
+    sample_model(
+        SamplingModel::DegreeEvents {
             x,
             y,
             positive_weight_rate,
+            family: WeightFamily::Binomial(layers),
+            self_loops,
+        },
+        seed,
+    )
+}
+
+/// Sample strength-edges geometric zero-inflated: Bernoulli occupation + positive geometric.
+#[must_use]
+pub fn sample_strength_edges_geometric(
+    x: &[f64],
+    y: &[f64],
+    lam: f64,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    sample_model(
+        SamplingModel::StrengthEdges {
+            x,
+            y,
+            lambda: lam,
+            family: WeightFamily::Geometric,
+            self_loops,
+        },
+        seed,
+    )
+}
+
+/// Sample strength-edges negative binomial zero-inflated: Bernoulli occupation + positive negative binomial(M).
+#[must_use]
+pub fn sample_strength_edges_negative_binomial(
+    x: &[f64],
+    y: &[f64],
+    lam: f64,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    sample_model(
+        SamplingModel::StrengthEdges {
+            x,
+            y,
+            lambda: lam,
+            family: WeightFamily::NegativeBinomial(layers),
+            self_loops,
+        },
+        seed,
+    )
+}
+
+/// Sample strength-degree geometric zero-inflated: Bernoulli occupation + positive geometric.
+#[must_use]
+pub fn sample_strength_degree_geometric(
+    x: &[f64],
+    y: &[f64],
+    z: &[f64],
+    w: &[f64],
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    sample_model(
+        SamplingModel::StrengthDegree {
+            x,
+            y,
+            z,
+            w,
+            family: WeightFamily::Geometric,
+            self_loops,
+        },
+        seed,
+    )
+}
+
+/// Sample strength-degree negative binomial zero-inflated: Bernoulli occupation + positive negative binomial(M).
+#[must_use]
+pub fn sample_strength_degree_negative_binomial(
+    x: &[f64],
+    y: &[f64],
+    z: &[f64],
+    w: &[f64],
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    sample_model(
+        SamplingModel::StrengthDegree {
+            x,
+            y,
+            z,
+            w,
+            family: WeightFamily::NegativeBinomial(layers),
+            self_loops,
+        },
+        seed,
+    )
+}
+
+/// Sample degree-events geometric zero-inflated: Bernoulli occupation + positive geometric.
+#[must_use]
+pub fn sample_degree_events_geometric(
+    x: &[f64],
+    y: &[f64],
+    positive_weight_rate: f64,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    sample_model(
+        SamplingModel::DegreeEvents {
+            x,
+            y,
+            positive_weight_rate,
+            family: WeightFamily::Geometric,
+            self_loops,
+        },
+        seed,
+    )
+}
+
+/// Sample degree-events negative binomial zero-inflated: Bernoulli occupation + positive negative binomial(M).
+#[must_use]
+pub fn sample_degree_events_negative_binomial(
+    x: &[f64],
+    y: &[f64],
+    positive_weight_rate: f64,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    sample_model(
+        SamplingModel::DegreeEvents {
+            x,
+            y,
+            positive_weight_rate,
+            family: WeightFamily::NegativeBinomial(layers),
             self_loops,
         },
         seed,
@@ -864,8 +1171,8 @@ fn multinomial_sample(rates: &[f64], total: u64, rng: &mut StdRng) -> Vec<u64> {
 #[cfg(test)]
 mod tests {
     use super::{
-        sample_strength_cost_poisson, sample_strength_degree_poisson,
-        sample_strength_microcanonical, sample_strength_multinomial, sample_strength_poisson,
+        sample_strength_cost_poisson, sample_strength_degree_poisson, sample_strength_multinomial,
+        sample_strength_poisson, sample_strength_stub_matching,
     };
 
     #[test]
@@ -904,10 +1211,10 @@ mod tests {
     }
 
     #[test]
-    fn microcanonical_preserves_exact_strengths() {
+    fn stub_matching_preserves_exact_strengths() {
         let s_out = vec![10, 20, 30];
         let s_in = vec![15, 25, 20];
-        let edges = sample_strength_microcanonical(&s_out, &s_in, 42);
+        let edges = sample_strength_stub_matching(&s_out, &s_in, 42);
         let total: u64 = edges.weights.iter().sum();
         assert_eq!(total, 60);
         let mut actual_out = vec![0u64; 3];
@@ -936,14 +1243,16 @@ mod tests {
     }
 
     #[test]
-    fn zero_truncated_poisson_rate_handles_boundary_mean() {
-        assert_eq!(super::solve_zero_truncated_poisson_rate(1.0), 0.0);
+    fn positive_edge_poisson_rate_handles_boundary_mean() {
+        assert_eq!(super::solve_positive_edge_poisson_rate(1.0), 0.0);
         assert_eq!(
-            super::solve_zero_truncated_poisson_rate(1.0 + super::ZTP_MEAN_EPSILON / 2.0),
+            super::solve_positive_edge_poisson_rate(
+                1.0 + super::POSITIVE_POISSON_MEAN_EPSILON / 2.0
+            ),
             0.0,
         );
-        assert!(super::solve_zero_truncated_poisson_rate(1.01).is_finite());
-        assert!(super::solve_zero_truncated_poisson_rate(0.99).is_nan());
+        assert!(super::solve_positive_edge_poisson_rate(1.01).is_finite());
+        assert!(super::solve_positive_edge_poisson_rate(0.99).is_nan());
     }
 
     #[test]

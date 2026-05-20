@@ -15,9 +15,9 @@ return a `FilterResult` with upper, lower, compatible, and absent-lower tables.
 |----------|------------|----------------|
 | `filter_strength_poisson` | Poisson, auto-fitted | edges |
 | `filter_strength_cost_poisson` | Poisson with costs | edges, fit, cost arrays |
-| `filter_strength_edges_poisson` | ZIP, pre-fitted | edges, fit |
-| `filter_strength_degree_poisson` | ZIP, pre-fitted | edges, fit |
-| `filter_degree_events_poisson` | ZIP, manual | edges, x, y, rate |
+| `filter_strength_edges_poisson` | zero-inflated, pre-fitted | edges, fit |
+| `filter_strength_degree_poisson` | zero-inflated, pre-fitted | edges, fit |
+| `filter_degree_events_poisson` | zero-inflated, manual | edges, x, y, rate |
 | `filter_custom_poisson` | Poisson, user/partial rates | edges, rates table |
 
 ## Common options

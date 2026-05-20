@@ -19,8 +19,8 @@ from odme.data.frames import EdgeTable
 from odme.filtering import filter_strength_poisson
 from odme.models import (
     fit_strength_poisson,
-    sample_strength_microcanonical,
     sample_strength_poisson,
+    sample_strength_stub_matching,
 )
 
 BASELINES_PATH = (
@@ -91,14 +91,14 @@ def test_poisson_generation_10k(large_edges: EdgeTable) -> None:
     assert elapsed < threshold, msg
 
 
-def test_microcanonical_generation_10k(large_edges: EdgeTable) -> None:
-    """Microcanonical generation at N=10000 completes within baseline threshold."""
-    threshold = _load_threshold("microcanonical_generation_10k")
+def test_stub_matching_generation_10k(large_edges: EdgeTable) -> None:
+    """Stub matching generation at N=10000 completes within baseline threshold."""
+    threshold = _load_threshold("stub_matching_generation_10k")
     s = directed_strengths(large_edges)
     start = time.perf_counter()
-    sample_strength_microcanonical(s.out, s.incoming, seed=0)
+    sample_strength_stub_matching(s.out, s.incoming, seed=0)
     elapsed = time.perf_counter() - start
-    msg = f"microcanonical took {elapsed:.2f}s (limit {threshold}s)"
+    msg = f"stub_matching took {elapsed:.2f}s (limit {threshold}s)"
     assert elapsed < threshold, msg
 
 

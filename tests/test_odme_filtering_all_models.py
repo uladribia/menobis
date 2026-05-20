@@ -83,7 +83,7 @@ class TestCustomRates:
 
 
 class TestStrengthEdges:
-    """Tests for strength-edges ZIP filtering."""
+    """Tests for strength-edges zero-inflated filtering."""
 
     def test_partitions_edges(self) -> None:
         """Upper + lower + compatible == total edges."""
@@ -153,7 +153,7 @@ class TestStrengthCost:
 
 
 class TestStrengthDegree:
-    """Tests for strength-degree ZIP filtering."""
+    """Tests for strength-degree zero-inflated filtering."""
 
     def test_partitions_edges(self) -> None:
         """Upper + lower + compatible == total edges."""
@@ -195,7 +195,7 @@ class TestStrengthDegree:
 
 
 class TestDegreeEvents:
-    """Tests for degree-events ZIP filtering."""
+    """Tests for degree-events zero-inflated filtering."""
 
     def test_partitions_edges(self) -> None:
         """Upper + lower + compatible == total edges."""
@@ -284,7 +284,7 @@ class TestPartialConstraints:
 
 
 class TestSolveZtpRate:
-    """Tests for the ZTP rate solver."""
+    """Tests for the positive Poisson rate solver."""
 
     def test_unit_mean_returns_zero(self) -> None:
         """Mean of 1.0 implies rate 0."""

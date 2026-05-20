@@ -19,9 +19,9 @@ from odme.analysis.stats import compute_all_stats
 from odme.data.frames import EdgeTable
 from odme.models import (
     fit_strength_poisson,
-    sample_strength_microcanonical,
     sample_strength_multinomial,
     sample_strength_poisson,
+    sample_strength_stub_matching,
 )
 
 FIGURES_DIR = Path(__file__).resolve().parent.parent / "docs" / "figures"
@@ -88,7 +88,7 @@ def _ensemble_stats(
 
 def _run_convergence() -> dict[str, dict[int, tuple[np.ndarray, np.ndarray]]]:
     results: dict[str, dict[int, tuple[np.ndarray, np.ndarray]]] = {
-        "microcanonical": {},
+        "stub_matching": {},
         "canonical": {},
         "grand_canonical": {},
     }
@@ -98,8 +98,8 @@ def _run_convergence() -> dict[str, dict[int, tuple[np.ndarray, np.ndarray]]]:
         fit = fit_strength_poisson(s_out, s_in)
 
         _s_out, _s_in, _fit, _total = s_out, s_in, fit, total
-        results["microcanonical"][total] = _ensemble_stats(
-            lambda seed, so=_s_out, si=_s_in: sample_strength_microcanonical(
+        results["stub_matching"][total] = _ensemble_stats(
+            lambda seed, so=_s_out, si=_s_in: sample_strength_stub_matching(
                 so, si, seed=seed
             ),
             REPETITIONS,
@@ -126,19 +126,19 @@ def _collect_per_node_stats(
     fit = fit_strength_poisson(s_out, s_in)
 
     ensemble_y2: dict[str, list[np.ndarray]] = {
-        "microcanonical": [],
+        "stub_matching": [],
         "canonical": [],
         "grand_canonical": [],
     }
     ensemble_snn: dict[str, list[np.ndarray]] = {
-        "microcanonical": [],
+        "stub_matching": [],
         "canonical": [],
         "grand_canonical": [],
     }
 
     samplers: dict[str, Callable[[int], EdgeTable]] = {
-        "microcanonical": lambda seed, so=s_out, si=s_in: (
-            sample_strength_microcanonical(so, si, seed=seed)
+        "stub_matching": lambda seed, so=s_out, si=s_in: sample_strength_stub_matching(
+            so, si, seed=seed
         ),
         "canonical": lambda seed, f=fit, t=total: sample_strength_multinomial(
             f.x, f.y, total_events=t, seed=seed
@@ -168,8 +168,8 @@ def _collect_per_node_stats(
 
 def _plot_per_node_vs_strength() -> None:
     """Plot Y2 and s_nn vs relative strength p_s for each ensemble and T."""
-    ensemble_names = ["microcanonical", "canonical", "grand_canonical"]
-    ensemble_labels = ["microcanonical", "canonical", "grand-canonical"]
+    ensemble_names = ["stub_matching", "canonical", "grand_canonical"]
+    ensemble_labels = ["stub_matching", "canonical", "grand-canonical"]
     markers = ["o", "s", "^"]
     colors = ["#1f77b4", "#ff7f0e", "#2ca02c"]
 
@@ -259,7 +259,7 @@ def _plot_convergence(
     mc_vs_gc = []
     can_vs_gc = []
     for total in T_VALUES:
-        m_micro = results["microcanonical"][total][0]
+        m_micro = results["stub_matching"][total][0]
         m_can = results["canonical"][total][0]
         m_gc = results["grand_canonical"][total][0]
         # Normalize by T to compare across scales.
@@ -281,7 +281,7 @@ def _plot_convergence(
     # 2. Variance decrease: mean std across statistics vs T.
     ax = axes[1]
     for name, marker in [
-        ("microcanonical", "o-"),
+        ("stub_matching", "o-"),
         ("canonical", "s-"),
         ("grand_canonical", "^-"),
     ]:
@@ -302,14 +302,14 @@ def _plot_convergence(
 
     # 3. Per-statistic comparison at largest T.
     largest_t = T_VALUES[-1]
-    m_micro = results["microcanonical"][largest_t][0]
+    m_micro = results["stub_matching"][largest_t][0]
     m_can = results["canonical"][largest_t][0]
     m_gc = results["grand_canonical"][largest_t][0]
 
     fig, ax = plt.subplots(figsize=(14, 5))
     x_pos = np.arange(len(stat_labels))
     width = 0.25
-    ax.bar(x_pos - width, m_micro, width, label="microcanonical", alpha=0.8)
+    ax.bar(x_pos - width, m_micro, width, label="stub_matching", alpha=0.8)
     ax.bar(x_pos, m_can, width, label="canonical", alpha=0.8)
     ax.bar(x_pos + width, m_gc, width, label="grand-canonical", alpha=0.8)
     ax.set_xticks(x_pos[::5])
@@ -335,7 +335,7 @@ def test_ensemble_equivalence_convergence() -> None:
 
     # At largest T, assert convergence.
     largest_t = T_VALUES[-1]
-    m_micro = results["microcanonical"][largest_t][0]
+    m_micro = results["stub_matching"][largest_t][0]
     m_can = results["canonical"][largest_t][0]
     m_gc = results["grand_canonical"][largest_t][0]
 
@@ -345,7 +345,7 @@ def test_ensemble_equivalence_convergence() -> None:
     np.testing.assert_allclose(m_micro / scale, m_gc / scale, atol=0.15)
 
     # Variances should decrease with T for all ensembles.
-    for name in ["microcanonical", "canonical", "grand_canonical"]:
+    for name in ["stub_matching", "canonical", "grand_canonical"]:
         std_small = np.mean(results[name][T_VALUES[0]][1])
         std_large = np.mean(results[name][T_VALUES[-1]][1])
         # Variance per unit T should decrease.
@@ -354,12 +354,12 @@ def test_ensemble_equivalence_convergence() -> None:
         )
 
 
-def test_microcanonical_preserves_exact_strengths() -> None:
-    """Microcanonical samples preserve exact strength sequences."""
+def test_stub_matching_preserves_exact_strengths() -> None:
+    """Stub matching samples preserve exact strength sequences."""
     for total in [100, 1000]:
         s_out, s_in = _balanced_integer_strengths(P_OUT, P_IN, total)
         for seed in range(50):
-            sample = sample_strength_microcanonical(s_out, s_in, seed=seed)
+            sample = sample_strength_stub_matching(s_out, s_in, seed=seed)
             actual_s = directed_strengths(sample)
             np.testing.assert_array_equal(actual_s.out, s_out)
             np.testing.assert_array_equal(actual_s.incoming, s_in)

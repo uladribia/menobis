@@ -720,7 +720,7 @@ pub fn absent_strength_binomial(
 // --- Negative binomial family ---
 
 #[must_use]
-pub fn filter_strength_neg_binomial(
+pub fn filter_strength_negative_binomial(
     x: &[f64],
     y: &[f64],
     layers: u32,
@@ -733,7 +733,7 @@ pub fn filter_strength_neg_binomial(
         targets,
         weights,
         &FixedStrengthProvider {
-            family: WeightFamily::NegBinomial(layers),
+            family: WeightFamily::NegativeBinomial(layers),
             x,
             y,
             self_loops: true,
@@ -743,7 +743,7 @@ pub fn filter_strength_neg_binomial(
 
 #[allow(clippy::too_many_arguments)]
 #[must_use]
-pub fn absent_strength_neg_binomial(
+pub fn absent_strength_negative_binomial(
     x: &[f64],
     y: &[f64],
     layers: u32,
@@ -757,7 +757,7 @@ pub fn absent_strength_neg_binomial(
 ) -> AbsentFilterResult {
     detect_absent_provider(
         &FixedStrengthProvider {
-            family: WeightFamily::NegBinomial(layers),
+            family: WeightFamily::NegativeBinomial(layers),
             x,
             y,
             self_loops,
@@ -827,6 +827,142 @@ pub fn absent_strength_cost_binomial(
     detect_absent_provider(
         &StrengthCostProvider {
             family: WeightFamily::Binomial(layers),
+            x,
+            y,
+            gamma,
+            costs: &costs,
+            self_loops,
+        },
+        observed_sources,
+        observed_targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn filter_strength_cost_geometric(
+    x: &[f64],
+    y: &[f64],
+    gamma: f64,
+    cost_sources: &[usize],
+    cost_targets: &[usize],
+    cost_values: &[f64],
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    let costs = build_cost_map(cost_sources, cost_targets, cost_values);
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &StrengthCostProvider {
+            family: WeightFamily::Geometric,
+            x,
+            y,
+            gamma,
+            costs: &costs,
+            self_loops: true,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_strength_cost_geometric(
+    x: &[f64],
+    y: &[f64],
+    gamma: f64,
+    cost_sources: &[usize],
+    cost_targets: &[usize],
+    cost_values: &[f64],
+    observed_sources: &[u64],
+    observed_targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    let costs = build_cost_map(cost_sources, cost_targets, cost_values);
+    detect_absent_provider(
+        &StrengthCostProvider {
+            family: WeightFamily::Geometric,
+            x,
+            y,
+            gamma,
+            costs: &costs,
+            self_loops,
+        },
+        observed_sources,
+        observed_targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn filter_strength_cost_negative_binomial(
+    x: &[f64],
+    y: &[f64],
+    gamma: f64,
+    cost_sources: &[usize],
+    cost_targets: &[usize],
+    cost_values: &[f64],
+    layers: u32,
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    let costs = build_cost_map(cost_sources, cost_targets, cost_values);
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &StrengthCostProvider {
+            family: WeightFamily::NegativeBinomial(layers),
+            x,
+            y,
+            gamma,
+            costs: &costs,
+            self_loops: true,
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_strength_cost_negative_binomial(
+    x: &[f64],
+    y: &[f64],
+    gamma: f64,
+    cost_sources: &[usize],
+    cost_targets: &[usize],
+    cost_values: &[f64],
+    layers: u32,
+    observed_sources: &[u64],
+    observed_targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    let costs = build_cost_map(cost_sources, cost_targets, cost_values);
+    detect_absent_provider(
+        &StrengthCostProvider {
+            family: WeightFamily::NegativeBinomial(layers),
             x,
             y,
             gamma,
@@ -1023,6 +1159,156 @@ pub fn absent_degree_events_binomial(
     )
 }
 
+// ---------------------------------------------------------------------------
+// W (Geometric / NegativeBinomial) zero-inflated filter functions
+// ---------------------------------------------------------------------------
+
+#[must_use]
+pub fn filter_strength_edges_geometric(
+    x: &[f64],
+    y: &[f64],
+    lam: f64,
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &StrengthEdgesProvider {
+            family: WeightFamily::Geometric,
+            x,
+            y,
+            lambda: lam,
+            self_loops: true,
+        },
+    )
+}
+
+#[must_use]
+pub fn filter_strength_edges_negative_binomial(
+    x: &[f64],
+    y: &[f64],
+    lam: f64,
+    layers: u32,
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &StrengthEdgesProvider {
+            family: WeightFamily::NegativeBinomial(layers),
+            x,
+            y,
+            lambda: lam,
+            self_loops: true,
+        },
+    )
+}
+
+#[must_use]
+pub fn filter_strength_degree_geometric(
+    x: &[f64],
+    y: &[f64],
+    z: &[f64],
+    w: &[f64],
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &StrengthDegreeProvider {
+            family: WeightFamily::Geometric,
+            x,
+            y,
+            z,
+            w,
+            self_loops: true,
+        },
+    )
+}
+
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn filter_strength_degree_negative_binomial(
+    x: &[f64],
+    y: &[f64],
+    z: &[f64],
+    w: &[f64],
+    layers: u32,
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &StrengthDegreeProvider {
+            family: WeightFamily::NegativeBinomial(layers),
+            x,
+            y,
+            z,
+            w,
+            self_loops: true,
+        },
+    )
+}
+
+#[must_use]
+pub fn filter_degree_events_geometric(
+    x: &[f64],
+    y: &[f64],
+    positive_weight_rate: f64,
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &DegreeEventsProvider {
+            family: WeightFamily::Geometric,
+            x,
+            y,
+            positive_weight_rate,
+            self_loops: true,
+        },
+    )
+}
+
+#[must_use]
+pub fn filter_degree_events_negative_binomial(
+    x: &[f64],
+    y: &[f64],
+    positive_weight_rate: f64,
+    layers: u32,
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    filter_observed_provider(
+        sources,
+        targets,
+        weights,
+        &DegreeEventsProvider {
+            family: WeightFamily::NegativeBinomial(layers),
+            x,
+            y,
+            positive_weight_rate,
+            self_loops: true,
+        },
+    )
+}
+
 fn build_cost_map(
     cost_sources: &[usize],
     cost_targets: &[usize],
@@ -1100,7 +1386,7 @@ mod tests {
 
     #[test]
     fn zip_zero_probability_is_one_minus_occupation() {
-        let dist = PairDistribution::ZipPoisson {
+        let dist = PairDistribution::ZeroInflatedPoisson {
             occupation: 0.7,
             rate: 2.0,
         };

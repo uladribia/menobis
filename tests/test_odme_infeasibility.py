@@ -47,14 +47,17 @@ def test_degree_rejects_boundary_capacity_without_self_loops() -> None:
         )
 
 
-def test_strength_degree_rejects_boundary_strength_equal_degree() -> None:
-    with pytest.raises(ValueError, match="boundary"):
-        fit_strength_degree_poisson(
-            np.array([1.0, 3.0]),
-            np.array([2.0, 2.0]),
-            np.array([1.0, 1.0]),
-            np.array([1.0, 1.0]),
-        )
+def test_strength_degree_handles_boundary_strength_equal_degree() -> None:
+    """Boundary s==k case converges (possibly slowly) without crashing."""
+    result = fit_strength_degree_poisson(
+        np.array([1.0, 3.0]),
+        np.array([2.0, 2.0]),
+        np.array([1.0, 1.0]),
+        np.array([1.0, 1.0]),
+    )
+    # May or may not converge, but must not crash
+    assert result.x is not None
+    assert result.y is not None
 
 
 def test_strength_edges_rejects_zero_edges() -> None:

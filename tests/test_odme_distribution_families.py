@@ -9,13 +9,13 @@ from odme.filtering import (
     FilterResult,
     filter_strength_binomial,
     filter_strength_geometric,
-    filter_strength_neg_binomial,
+    filter_strength_negative_binomial,
 )
 from odme.models.fitting import fit_strength_binomial
 from odme.models.generation import (
     sample_strength_binomial,
     sample_strength_geometric,
-    sample_strength_neg_binomial,
+    sample_strength_negative_binomial,
 )
 
 
@@ -76,23 +76,23 @@ class TestBinomialGeneration:
         assert np.all(edges.weight <= 5)
 
 
-class TestNegBinomialGeneration:
+class TestNegativeBinomialGeneration:
     """Tests for negative binomial sampling."""
 
     def test_reproducible(self) -> None:
         """Seeded negative binomial sampling is reproducible."""
         x = np.array([0.3, 0.4])
         y = np.array([0.25, 0.35])
-        a = sample_strength_neg_binomial(x, y, layers=3, seed=42)
-        b = sample_strength_neg_binomial(x, y, layers=3, seed=42)
+        a = sample_strength_negative_binomial(x, y, layers=3, seed=42)
+        b = sample_strength_negative_binomial(x, y, layers=3, seed=42)
         np.testing.assert_array_equal(a.source, b.source)
         np.testing.assert_array_equal(a.weight, b.weight)
 
     def test_nonneg_weights(self) -> None:
-        """All NB weights are non-negative."""
+        """All negative binomial weights are non-negative."""
         x = np.array([0.3, 0.4])
         y = np.array([0.25, 0.35])
-        edges = sample_strength_neg_binomial(x, y, layers=3, seed=0)
+        edges = sample_strength_negative_binomial(x, y, layers=3, seed=0)
         assert np.all(edges.weight >= 0)
 
 
@@ -160,7 +160,7 @@ class TestBinomialFiltering:
             assert np.all(group.upper_pvalue <= 1.0)
 
 
-class TestNegBinomialFiltering:
+class TestNegativeBinomialFiltering:
     """Tests for negative binomial filtering."""
 
     def test_partitions_edges(self) -> None:
@@ -168,5 +168,5 @@ class TestNegBinomialFiltering:
         edges = _small_edges()
         x = np.array([0.3, 0.4, 0.2])
         y = np.array([0.25, 0.35, 0.3])
-        result = filter_strength_neg_binomial(edges, x, y, layers=3, alpha=0.05)
+        result = filter_strength_negative_binomial(edges, x, y, layers=3, alpha=0.05)
         _assert_filter_partitions(result, len(edges))

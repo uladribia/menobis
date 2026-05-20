@@ -39,9 +39,9 @@ Filtering supports all independent grand-canonical distributions:
 | strength Poisson | Poisson($x_i y_j$) |
 | strength-cost Poisson | Poisson($x_i y_j e^{-\gamma d_{ij}}$) |
 | custom Poisson | Poisson($\lambda_{ij}$), where $\lambda_{ij}=T p_{ij}$ |
-| strength-edges Poisson (ZIP) | ZIP/ZTP with fitted occupation and rate $x_i y_j$ |
-| strength-degree Poisson (ZIP) | ZIP/ZTP with fitted occupation and rate $x_i y_j$ |
-| degree-events Poisson (ZIP) | ZIP/ZTP with binary degree occupation and shared rate |
+| strength-edges Poisson (zero-inflated) | zero-inflated Poisson with positive weights with fitted occupation and rate $x_i y_j$ |
+| strength-degree Poisson (zero-inflated) | zero-inflated Poisson with positive weights with fitted occupation and rate $x_i y_j$ |
+| degree-events Poisson (zero-inflated) | zero-inflated Poisson with positive weights with binary degree occupation and shared rate |
 
 | partial constraints | Poisson rates from combined known + free-pair rates |
 

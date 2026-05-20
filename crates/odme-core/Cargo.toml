@@ -9,8 +9,14 @@ rust-version.workspace = true
 name = "odme_core"
 path = "src/lib.rs"
 
+[features]
+default = []
+w-conic = ["dep:clarabel", "dep:cvxrust"]
+
 [dependencies]
 thiserror.workspace = true
 rand.workspace = true
 rand_distr.workspace = true
 rayon.workspace = true
+clarabel = { workspace = true, optional = true }
+cvxrust = { workspace = true, optional = true }

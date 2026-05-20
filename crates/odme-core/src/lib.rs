@@ -4,7 +4,6 @@
 //! Origin-Destination Multi-Edge network analysis, fitting, and generation.
 
 pub mod clustering;
-pub mod cost;
 pub mod distribution;
 pub mod filter;
 pub mod fitting;

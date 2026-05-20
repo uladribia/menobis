@@ -24,7 +24,7 @@ The public Rust API lives in the `odme-core` crate under `crates/odme-core/`.
 
 | Type | Module | Description |
 |------|--------|-------------|
-| `PairDistribution` | `distribution` | Poisson or ZipPoisson pair distribution |
+| `PairDistribution` | `distribution` | Poisson or ZeroInflatedPoisson pair distribution |
 | `PairDistributionProvider` | `pairs` | Trait: compute distribution for any pair on demand |
 | `CandidateSupport` | `pairs` | AllPairs or SparsePairs support declaration |
 | `SampledEdges` | `generation` | Sparse sampled edge output |
@@ -38,9 +38,9 @@ The public Rust API lives in the `odme-core` crate under `crates/odme-core/`.
 |----------|-------|--------------|
 | `FixedStrengthPoissonProvider` | fixed-strength | Poisson |
 | `StrengthCostPoissonProvider` | strength-cost | Poisson |
-| `StrengthEdgesPoissonProvider` | strength-edges | Poisson (ZIP) |
-| `StrengthDegreePoissonProvider` | strength-degree | Poisson (ZIP) |
-| `DegreeEventsPoissonProvider` | degree-events | Poisson (ZIP) |
+| `StrengthEdgesPoissonProvider` | strength-edges | Poisson (zero-inflated) |
+| `StrengthDegreePoissonProvider` | strength-degree | Poisson (zero-inflated) |
+| `DegreeEventsPoissonProvider` | degree-events | Poisson (zero-inflated) |
 | `SparsePoissonRateProvider` | custom sparse | Poisson |
 | `NormalizedSparsePoissonProvider` | custom normalized | Poisson |
 

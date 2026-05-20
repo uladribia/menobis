@@ -29,7 +29,7 @@ Use reusable generation and filtering components:
 
 Python APIs call Rust kernels. The default path is streaming; dense matrix
 construction is not a prerequisite for sampling or filtering. Custom sparse
-Poisson rates and degree-events ZIP also use providers, so new independent null
+Poisson rates and degree-events zero-inflated also use providers, so new independent null
 models should implement one provider and reuse generation/filtering/stat sinks.
 
 ## Parallel strategy
@@ -37,11 +37,11 @@ models should implement one provider and reuse generation/filtering/stat sinks.
 | Model family | Parallel unit | Coupling handled by |
 |--------------|---------------|---------------------|
 | Poisson all-pairs | source-row chunks | independent draws |
-| ZIP-Poisson all-pairs | source-row chunks | independent occupation/weight draws |
+| zero-inflated Poisson all-pairs | source-row chunks | independent occupation/weight draws |
 | sparse custom Poisson | sparse-entry chunks | independent draws |
 | factorized multinomial | non-empty source rows | source totals sampled first |
 | sparse custom multinomial | sparse-entry chunks | chunk totals sampled first |
-| microcanonical | not parallelized yet | stub shuffle dominates |
+| stub_matching | not parallelized yet | stub shuffle dominates |
 
 All-pairs generation and absent-edge filtering switch to row chunks for large
 supports. Sparse custom probability generation and sparse-support absent
@@ -55,9 +55,9 @@ avoids shared RNG locks and makes results independent of thread scheduling.
 Parallel and serial paths may produce different samples for the same seed, but
 each path is reproducible for fixed code, thresholds, and Rayon configuration.
 
-## Zero-truncated Poisson boundary
+## Positive Poisson boundary
 
-For positive-edge weights, the zero-truncated Poisson mean satisfies:
+For positive-edge weights, the positive-edge Poisson mean satisfies:
 
 $$
 \mathbb{E}[W \mid W>0] = \lambda / (1-e^{-\lambda}) \ge 1.
@@ -78,6 +78,6 @@ avoid near-infinite loops.
 
 ## Validation
 
-Tests cover `N = 1000` streaming generation, the zero-truncated Poisson boundary,
+Tests cover `N = 1000` streaming generation, the positive-edge Poisson boundary,
 and fixed-total multinomial preservation. Benchmarks cover all generation cases
 through `N = 30000` with five repeats; see `docs/development/benchmarking.md`.

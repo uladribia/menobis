@@ -9,8 +9,6 @@ from __future__ import annotations
 import csv
 import gc
 import json
-import resource
-import sys
 import threading
 import time
 from collections.abc import Callable
@@ -22,6 +20,13 @@ from typing import Annotated
 import numpy as np
 import typer
 
+from benchmarks.common import (
+    edge_strengths,
+    max_rss_mb,
+    pareto_strength_network,
+    sparse_exponential_costs,
+    sparse_probability_table,
+)
 from odme.data.frames import EdgeTable, ProbabilityTable
 from odme.models import (
     FitResult,
@@ -45,7 +50,7 @@ from odme.models import (
     sample_strength_degree_poisson,
     sample_strength_edges_binomial,
     sample_strength_edges_poisson,
-    sample_strength_microcanonical,
+    sample_strength_stub_matching,
     sample_strength_multinomial,
     sample_strength_poisson,
     sample_strength_poisson_multinomial,
@@ -56,7 +61,7 @@ DEFAULT_CASES = [
     "strength_poisson",
     "strength_multinomial",
     "strength_poisson_multinomial",
-    "strength_microcanonical",
+    "strength_stub_matching",
     "strength_binomial",
     "custom_poisson_sparse",
     "custom_multinomial_sparse",
@@ -145,15 +150,6 @@ class Inputs:
     fit_info: dict[str, FitInfo]
 
 
-def _max_rss_mb() -> float:
-    """Return maximum resident set size in MiB for the current process."""
-    # Linux reports KiB; macOS reports bytes. This repo benchmark is Linux-first.
-    value = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    if sys.platform == "darwin":
-        return value / (1024 * 1024)
-    return value / 1024
-
-
 def _parse_csv_ints(value: str) -> list[int]:
     return [int(part.strip()) for part in value.split(",") if part.strip()]
 
@@ -173,20 +169,6 @@ def _order_cases(cases: list[str]) -> list[str]:
     regular = [case for case in cases if case not in strength_degree_cases]
     delayed = [case for case in cases if case in strength_degree_cases]
     return regular + delayed
-
-
-def _make_sparse_probability_table(n: int, degree: int) -> ProbabilityTable:
-    """Build deterministic sparse custom p_ij support with O(N * degree) entries."""
-    degree = max(1, min(degree, n))
-    sources = np.repeat(np.arange(n, dtype=np.uint64), degree)
-    offsets = np.arange(1, degree + 1, dtype=np.uint64)
-    targets = (sources.reshape(n, degree) + offsets.reshape(1, degree)) % n
-    probabilities = np.ones(n * degree, dtype=np.float64)
-    return ProbabilityTable(
-        source=sources,
-        target=targets.reshape(-1).astype(np.uint64),
-        probability=probabilities,
-    )
 
 
 def _clip_to_interior_degrees(
@@ -256,43 +238,19 @@ def _make_inputs(
     progress_interval: float,
 ) -> Inputs:
     """Generate a real synthetic network and fit all models from it."""
-    rng = np.random.default_rng(42)
-    total_events = n * average_strength
+    network = pareto_strength_network(n, average_strength)
+    total_events = int(network.total_events)
 
-    # 1. Create heterogeneous strength targets
-    raw = rng.pareto(1.5, size=n) + 1.0
-    s_out_target = np.round(raw / raw.sum() * total_events).astype(np.uint64)
-    raw = rng.pareto(1.5, size=n) + 1.0
-    s_in_target = np.round(raw / raw.sum() * total_events).astype(np.uint64)
-    diff = int(s_out_target.sum()) - int(s_in_target.sum())
-    if diff > 0:
-        s_in_target[np.argmax(s_in_target)] += abs(diff)
-    elif diff < 0:
-        s_out_target[np.argmax(s_out_target)] += abs(diff)
-
-    # 2. Fit and sample a real Poisson network
-    pre_fit = fit_strength_poisson(s_out_target, s_in_target)
-    network = sample_strength_poisson(pre_fit.x, pre_fit.y, seed=42)
-
-    # 3. Extract actual strengths and degrees from the real network
-    strength_out = np.zeros(n, dtype=np.uint64)
-    strength_in = np.zeros(n, dtype=np.uint64)
+    # Extract actual strengths and degrees from the real network.
+    strength_out, strength_in = edge_strengths(network, n)
     d_out = np.zeros(n, dtype=np.float64)
     d_in = np.zeros(n, dtype=np.float64)
-    np.add.at(strength_out, network.source, network.weight)
-    np.add.at(strength_in, network.target, network.weight)
     for src in network.source:
         if src < n:
             d_out[src] += 1
     for tgt in network.target:
         if tgt < n:
             d_in[tgt] += 1
-    # Balance (rounding may cause tiny imbalance)
-    diff = int(strength_out.sum()) - int(strength_in.sum())
-    if diff > 0:
-        strength_in[np.argmax(strength_in)] += abs(diff)
-    elif diff < 0:
-        strength_out[np.argmax(strength_out)] += abs(diff)
     total_events = int(strength_out.sum())
     d_out, d_in, degree_info = _clip_to_interior_degrees(
         d_out, d_in, strength_out, strength_in
@@ -319,7 +277,7 @@ def _make_inputs(
         fn: Callable[[], FitLike],
     ) -> FitLike:
         print(
-            f"  fit start: model={name} {details} rss={_max_rss_mb():.1f}MiB",
+            f"  fit start: model={name} {details} rss={max_rss_mb():.1f}MiB",
             flush=True,
         )
         t0 = time.perf_counter()
@@ -330,7 +288,7 @@ def _make_inputs(
                 elapsed = time.perf_counter() - t0
                 print(
                     f"  fit running: model={name} N={n} elapsed={elapsed:.1f}s "
-                    f"rss={_max_rss_mb():.1f}MiB",
+                    f"rss={max_rss_mb():.1f}MiB",
                     flush=True,
                 )
 
@@ -357,7 +315,7 @@ def _make_inputs(
         status = "converged" if converged else "NOT converged"
         print(
             f"  fit done:  model={name} status={status} "
-            f"iterations={iterations} seconds={elapsed:.4f} rss={_max_rss_mb():.1f}MiB",
+            f"iterations={iterations} seconds={elapsed:.4f} rss={max_rss_mb():.1f}MiB",
             flush=True,
         )
         return result
@@ -382,7 +340,7 @@ def _make_inputs(
         ),
     )
 
-    custom = _make_sparse_probability_table(n, sparse_degree)
+    custom = sparse_probability_table(n, sparse_degree)
 
     degree_fit = _timed_fit(
         "degree_bernoulli",
@@ -409,46 +367,19 @@ def _make_inputs(
         ),
     )
 
-    cost_degree = min(sparse_degree, n)
-    cost_sources = np.repeat(np.arange(n, dtype=np.uint64), cost_degree)
-    cost_offsets = np.arange(1, cost_degree + 1, dtype=np.uint64)
-    cost_targets = (
-        (
-            (
-                cost_sources.reshape(n, cost_degree)
-                + cost_offsets.reshape(1, cost_degree)
-            )
-            % n
-        )
-        .reshape(-1)
-        .astype(np.uint64)
-    )
-    cost_values = rng.exponential(1.0, size=len(cost_sources))
-    cost_by_pair = {
-        (int(src), int(tgt)): float(cost)
-        for src, tgt, cost in zip(cost_sources, cost_targets, cost_values, strict=True)
-    }
-    observed_cost = sum(
-        float(weight) * cost_by_pair.get((int(src), int(tgt)), 0.0)
-        for src, tgt, weight in zip(
-            network.source, network.target, network.weight, strict=True
-        )
-    )
-    target_cost = 0.9 * observed_cost
-    if target_cost <= 0.0:
-        target_cost = 0.9 * float(np.mean(cost_values) * total_events)
+    costs = sparse_exponential_costs(network, n, sparse_degree)
     strength_cost_fit = _timed_fit(
         "strength_cost_poisson",
-        f"T={total_events} cost_entries={len(cost_sources)} "
-        f"target_cost={target_cost:.6g} self_loops=True "
+        f"T={total_events} cost_entries={len(costs.source)} "
+        f"target_cost={costs.target_cost:.6g} self_loops=True "
         "tolerance=1e-3 max_iterations=3000",
         lambda: fit_strength_cost_poisson(
             s_out_f,
             s_in_f,
-            cost_sources,
-            cost_targets,
-            cost_values,
-            target_cost,
+            costs.source,
+            costs.target,
+            costs.value,
+            costs.target_cost,
             tolerance=1e-3,
             max_iterations=3000,
         ),
@@ -483,9 +414,9 @@ def _make_inputs(
         strength_degree_fit=strength_degree_fit,
         strength_binomial_fit=strength_binomial_fit,
         degree_events_binomial_xy=degree_events_binomial_xy,
-        cost_sources=cost_sources,
-        cost_targets=cost_targets,
-        cost_values=cost_values,
+        cost_sources=costs.source,
+        cost_targets=costs.target,
+        cost_values=costs.value,
         fit_info=fit_info,
     )
 
@@ -509,7 +440,7 @@ def _case_functions(inputs: Inputs, seed: int) -> dict[str, Callable[[], EdgeTab
             inputs.y_strength,
             seed=seed,
         ),
-        "strength_microcanonical": lambda: sample_strength_microcanonical(
+        "strength_stub_matching": lambda: sample_strength_stub_matching(
             inputs.strength_out,
             inputs.strength_in,
             seed=seed,
@@ -593,7 +524,7 @@ def _candidate_description(n: int, case: str, sparse_degree: int) -> str:
     """Describe the work expected for a benchmark case."""
     if case in {"custom_pij_poisson_sparse", "custom_pij_multinomial_sparse"}:
         return f"candidate_pairs≈{n * min(sparse_degree, n):,} sparse support"
-    if case == "fixed_strength_microcanonical":
+    if case == "fixed_strength_stub_matching":
         return "candidate_pairs=stubs only, no all-pairs scan"
     return f"candidate_pairs≈{n * n:,} all-pairs stream"
 
@@ -616,7 +547,7 @@ def _start_progress_reporter(
             elapsed = time.perf_counter() - start
             print(
                 f"      still running case={case} N={n} repeat={repeat} "
-                f"elapsed={elapsed:.1f}s rss={_max_rss_mb():.1f}MiB",
+                f"elapsed={elapsed:.1f}s rss={max_rss_mb():.1f}MiB",
                 flush=True,
             )
 
@@ -665,7 +596,7 @@ def _run_one(
         print(f"      fit:   {fit_info.summary()}", flush=True)
     else:
         print("      fit:   no iterative fit used by this case", flush=True)
-    print(f"      start: {description} rss={_max_rss_mb():.1f}MiB", flush=True)
+    print(f"      start: {description} rss={max_rss_mb():.1f}MiB", flush=True)
     gc.collect()
     start = time.perf_counter()
     done = threading.Event()
@@ -695,7 +626,7 @@ def _run_one(
     seconds = time.perf_counter() - start
     print(
         f"      done:  {status} {seconds:.3f}s edges={sampled_edges} "
-        f"T={total_weight} rss={_max_rss_mb():.1f}MiB",
+        f"T={total_weight} rss={max_rss_mb():.1f}MiB",
         flush=True,
     )
     return {
@@ -707,7 +638,7 @@ def _run_one(
         "seconds": seconds,
         "sampled_edges": sampled_edges,
         "total_weight": total_weight,
-        "max_rss_mb": _max_rss_mb(),
+        "max_rss_mb": max_rss_mb(),
         "status": status,
         "error": error,
         "fit_converged": "" if fit_info is None else fit_info.converged,
@@ -773,7 +704,7 @@ def run_benchmarks(
         inputs = _make_inputs(n, average_strength, sparse_degree, progress_interval)
         print(
             f"N={n}: T={inputs.total_events} sparse_pij_entries="
-            f"{inputs.custom_probabilities.num_edges} rss={_max_rss_mb():.1f}MiB",
+            f"{inputs.custom_probabilities.num_edges} rss={max_rss_mb():.1f}MiB",
             flush=True,
         )
         print(f"N={n}: fitting diagnostics:", flush=True)

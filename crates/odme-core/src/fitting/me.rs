@@ -1,35 +1,10 @@
-//! Lagrange multiplier fitting for fixed-strength ME models.
+//! Multi-edge (ME/Poisson-family) fitting routines.
 
-/// Result of iterative proportional fitting.
-#[derive(Clone, Debug)]
-pub struct FitResult {
-    pub x: Vec<f64>,
-    pub y: Vec<f64>,
-    pub converged: bool,
-    pub iterations: usize,
-}
+use super::b::binary_probability;
+use super::support::{max_abs_delta, max_pair_delta};
+use super::{FitResult, StrengthCostFitResult, StrengthDegreeFitResult, StrengthEdgesFitResult};
 
-/// Fitted multipliers for exact ME fixed-strength-and-edge-count models.
-#[derive(Clone, Debug)]
-pub struct StrengthEdgesFitResult {
-    pub x: Vec<f64>,
-    pub y: Vec<f64>,
-    pub lam: f64,
-    pub converged: bool,
-    pub iterations: usize,
-}
-
-/// Fitted multipliers for exact ME fixed-strength-degree models.
-#[derive(Clone, Debug)]
-pub struct StrengthDegreeFitResult {
-    pub x: Vec<f64>,
-    pub y: Vec<f64>,
-    pub z: Vec<f64>,
-    pub w: Vec<f64>,
-    pub converged: bool,
-    pub iterations: usize,
-}
-
+#[allow(clippy::too_many_arguments)]
 fn balance_strength_edges_for_lambda(
     strength_out: &[f64],
     strength_in: &[f64],
@@ -37,18 +12,26 @@ fn balance_strength_edges_for_lambda(
     self_loops: bool,
     tolerance: f64,
     max_iterations: usize,
+    x_init: Option<&[f64]>,
+    y_init: Option<&[f64]>,
 ) -> FitResult {
     let n = strength_out.len();
     let total: f64 = strength_out.iter().sum();
     let sqrt_t = total.sqrt().max(1.0);
-    let mut x: Vec<f64> = strength_out
-        .iter()
-        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
-        .collect();
-    let mut y: Vec<f64> = strength_in
-        .iter()
-        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
-        .collect();
+    let mut x: Vec<f64> = match x_init {
+        Some(xi) => xi.to_vec(),
+        None => strength_out
+            .iter()
+            .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+            .collect(),
+    };
+    let mut y: Vec<f64> = match y_init {
+        Some(yi) => yi.to_vec(),
+        None => strength_in
+            .iter()
+            .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+            .collect(),
+    };
     for iter in 0..max_iterations {
         let old_x = x.clone();
         let old_y = y.clone();
@@ -98,12 +81,7 @@ fn balance_strength_edges_for_lambda(
                 0.0
             };
         }
-        let delta = x
-            .iter()
-            .zip(old_x.iter())
-            .chain(y.iter().zip(old_y.iter()))
-            .map(|(a, b)| (a - b).abs())
-            .fold(0.0_f64, f64::max);
+        let delta = max_pair_delta(&x, &old_x, &y, &old_y);
         if delta < tolerance {
             return FitResult {
                 x,
@@ -135,7 +113,7 @@ fn expected_edges_strength_edges(x: &[f64], y: &[f64], lam: f64, self_loops: boo
     total
 }
 
-/// Fit exact grand-canonical ME fixed-strength-and-edge-count ZIP constraints.
+/// Fit exact grand-canonical ME fixed-strength-and-edge-count zero-inflated constraints.
 #[must_use]
 pub fn balance_strength_edges_poisson(
     strength_out: &[f64],
@@ -166,6 +144,8 @@ pub fn balance_strength_edges_poisson(
         self_loops,
         tolerance,
         max_iterations,
+        None,
+        None,
     );
     while expected_edges_strength_edges(&best.x, &best.y, high, self_loops) < target_edges
         && high < 1e12
@@ -178,6 +158,8 @@ pub fn balance_strength_edges_poisson(
             self_loops,
             tolerance,
             max_iterations,
+            Some(&best.x),
+            Some(&best.y),
         );
     }
     let mut iterations = 0;
@@ -190,6 +172,8 @@ pub fn balance_strength_edges_poisson(
             self_loops,
             tolerance,
             max_iterations,
+            Some(&best.x),
+            Some(&best.y),
         );
         let edges = expected_edges_strength_edges(&fit.x, &fit.y, mid, self_loops);
         best = fit;
@@ -214,7 +198,7 @@ pub fn balance_strength_edges_poisson(
     }
 }
 
-/// Fit exact grand-canonical ME fixed-strength-and-degree ZIP constraints.
+/// Fit exact grand-canonical ME fixed-strength-and-degree zero-inflated constraints.
 ///
 /// The model is the thesis case 4 ME equation:
 /// E[t_ij] = z_i w_j x_i y_j exp(x_i y_j) / (1 + z_i w_j(exp(x_i y_j)-1)).
@@ -383,14 +367,8 @@ pub fn balance_strength_degree_poisson(
             };
         }
 
-        let delta = x
-            .iter()
-            .zip(old_x.iter())
-            .chain(y.iter().zip(old_y.iter()))
-            .chain(z.iter().zip(old_z.iter()))
-            .chain(w.iter().zip(old_w.iter()))
-            .map(|(a, b)| (a - b).abs())
-            .fold(0.0_f64, f64::max);
+        let delta =
+            max_pair_delta(&x, &old_x, &y, &old_y).max(max_pair_delta(&z, &old_z, &w, &old_w));
         if delta < tolerance {
             return StrengthDegreeFitResult {
                 x,
@@ -415,109 +393,6 @@ pub fn balance_strength_degree_poisson(
 /// Masked IPF balancing for directed binary fixed-degree.
 ///
 /// Pairs where ``mask[i * n + j]`` is true are skipped in summations.
-#[must_use]
-pub fn balance_masked_degree_bernoulli(
-    degree_out: &[f64],
-    degree_in: &[f64],
-    mask: &[bool],
-    tolerance: f64,
-    max_iterations: usize,
-) -> FitResult {
-    let n = degree_out.len();
-    let k_avg = degree_out.iter().sum::<f64>() / n.max(1) as f64;
-    let n_free = (0..n * n).filter(|&idx| !mask[idx]).count() as f64 / n.max(1) as f64;
-    let c = if k_avg < n_free {
-        (k_avg / (n_free - k_avg).max(0.01)).sqrt()
-    } else {
-        1.0
-    };
-    let mut x: Vec<f64> = degree_out
-        .iter()
-        .map(|&k| {
-            if k > 0.0 && k_avg > 0.0 {
-                k / k_avg * c
-            } else {
-                0.0
-            }
-        })
-        .collect();
-    let mut y: Vec<f64> = degree_in
-        .iter()
-        .map(|&k| {
-            if k > 0.0 && k_avg > 0.0 {
-                k / k_avg * c
-            } else {
-                0.0
-            }
-        })
-        .collect();
-
-    for iter in 0..max_iterations {
-        let old_x = x.clone();
-        let old_y = y.clone();
-
-        for j in 0..n {
-            if degree_in[j] <= 0.0 {
-                y[j] = 0.0;
-                continue;
-            }
-            let denom: f64 = (0..n)
-                .filter(|&i| !mask[i * n + j])
-                .map(|i| {
-                    let aux = 1.0 + x[i] * y[j];
-                    x[i] / aux
-                })
-                .sum();
-            y[j] = if denom > 0.0 {
-                degree_in[j] / denom
-            } else {
-                0.0
-            };
-        }
-        for i in 0..n {
-            if degree_out[i] <= 0.0 {
-                x[i] = 0.0;
-                continue;
-            }
-            let denom: f64 = (0..n)
-                .filter(|&j| !mask[i * n + j])
-                .map(|j| {
-                    let aux = 1.0 + x[i] * y[j];
-                    y[j] / aux
-                })
-                .sum();
-            x[i] = if denom > 0.0 {
-                degree_out[i] / denom
-            } else {
-                0.0
-            };
-        }
-
-        let delta = x
-            .iter()
-            .zip(old_x.iter())
-            .chain(y.iter().zip(old_y.iter()))
-            .map(|(a, b)| (a - b).abs())
-            .fold(0.0_f64, f64::max);
-        if delta < tolerance {
-            return FitResult {
-                x,
-                y,
-                converged: true,
-                iterations: iter + 1,
-            };
-        }
-    }
-
-    FitResult {
-        x,
-        y,
-        converged: false,
-        iterations: max_iterations,
-    }
-}
-
-/// Masked fitting for exact ME fixed-strength-and-degree.
 #[must_use]
 pub fn balance_masked_strength_degree_poisson(
     strength_out: &[f64],
@@ -673,14 +548,8 @@ pub fn balance_masked_strength_degree_poisson(
                 0.0
             };
         }
-        let delta = x
-            .iter()
-            .zip(old_x.iter())
-            .chain(y.iter().zip(old_y.iter()))
-            .chain(z.iter().zip(old_z.iter()))
-            .chain(w.iter().zip(old_w.iter()))
-            .map(|(a, b)| (a - b).abs())
-            .fold(0.0_f64, f64::max);
+        let delta =
+            max_pair_delta(&x, &old_x, &y, &old_y).max(max_pair_delta(&z, &old_z, &w, &old_w));
         if delta < tolerance {
             return StrengthDegreeFitResult {
                 x,
@@ -706,159 +575,6 @@ pub fn balance_masked_strength_degree_poisson(
 ///
 /// Solves: k_out_i = sum_j p_ij and k_in_j = sum_i p_ij with
 /// p_ij = x_i * y_j / (1 + x_i * y_j).
-#[must_use]
-pub fn balance_degree_bernoulli(
-    degree_out: &[f64],
-    degree_in: &[f64],
-    self_loops: bool,
-    tolerance: f64,
-    max_iterations: usize,
-) -> FitResult {
-    let n = degree_out.len();
-    let n_eff = if self_loops {
-        n as f64
-    } else {
-        (n - 1).max(1) as f64
-    };
-    let k_avg = degree_out.iter().sum::<f64>() / n as f64;
-    // Homogeneous solution: x=y=c where c*c*n_eff/(1+c*c) = k_avg
-    // => c = sqrt(k_avg / (n_eff - k_avg))
-    let c = if k_avg < n_eff {
-        (k_avg / (n_eff - k_avg).max(0.01)).sqrt()
-    } else {
-        1.0
-    };
-    let mut x: Vec<f64> = degree_out
-        .iter()
-        .map(|&k| {
-            if k > 0.0 && k_avg > 0.0 {
-                k / k_avg * c
-            } else {
-                0.0
-            }
-        })
-        .collect();
-    let mut y: Vec<f64> = degree_in
-        .iter()
-        .map(|&k| {
-            if k > 0.0 && k_avg > 0.0 {
-                k / k_avg * c
-            } else {
-                0.0
-            }
-        })
-        .collect();
-
-    for iter in 0..max_iterations {
-        let old_x = x.clone();
-        let old_y = y.clone();
-
-        // Update y: k_in_j = sum_i x_i y_j / (1 + x_i y_j)
-        // => y_j = k_in_j / sum_i x_i / (1 + x_i y_j)
-        for j in 0..n {
-            if degree_in[j] <= 0.0 {
-                y[j] = 0.0;
-                continue;
-            }
-            let denom: f64 = (0..n)
-                .filter(|&i| self_loops || i != j)
-                .map(|i| {
-                    let aux = 1.0 + x[i] * y[j];
-                    x[i] / aux
-                })
-                .sum();
-            y[j] = if denom > 0.0 {
-                degree_in[j] / denom
-            } else {
-                0.0
-            };
-        }
-        // Update x: k_out_i = sum_j x_i y_j / (1 + x_i y_j)
-        // => x_i = k_out_i / sum_j y_j / (1 + x_i y_j)
-        for i in 0..n {
-            if degree_out[i] <= 0.0 {
-                x[i] = 0.0;
-                continue;
-            }
-            let denom: f64 = (0..n)
-                .filter(|&j| self_loops || i != j)
-                .map(|j| {
-                    let aux = 1.0 + x[i] * y[j];
-                    y[j] / aux
-                })
-                .sum();
-            x[i] = if denom > 0.0 {
-                degree_out[i] / denom
-            } else {
-                0.0
-            };
-        }
-
-        let delta = x
-            .iter()
-            .zip(old_x.iter())
-            .chain(y.iter().zip(old_y.iter()))
-            .map(|(a, b)| (a - b).abs())
-            .fold(0.0_f64, f64::max);
-        if delta < tolerance {
-            return FitResult {
-                x,
-                y,
-                converged: true,
-                iterations: iter + 1,
-            };
-        }
-        // Check constraint satisfaction every 100 iterations.
-        if iter % 100 == 99 {
-            let mut max_err = 0.0_f64;
-            for i in 0..n {
-                let pred: f64 = (0..n)
-                    .filter(|&j| self_loops || i != j)
-                    .map(|j| {
-                        let z = x[i] * y[j];
-                        z / (1.0 + z)
-                    })
-                    .sum();
-                max_err = max_err.max((pred - degree_out[i]).abs());
-            }
-            for j in 0..n {
-                let pred: f64 = (0..n)
-                    .filter(|&i| self_loops || i != j)
-                    .map(|i| {
-                        let z = x[i] * y[j];
-                        z / (1.0 + z)
-                    })
-                    .sum();
-                max_err = max_err.max((pred - degree_in[j]).abs());
-            }
-            if max_err < 1e-6 {
-                return FitResult {
-                    x,
-                    y,
-                    converged: true,
-                    iterations: iter + 1,
-                };
-            }
-        }
-    }
-
-    FitResult {
-        x,
-        y,
-        converged: false,
-        iterations: max_iterations,
-    }
-}
-
-fn binary_probability(x: f64, y: f64) -> f64 {
-    let z = x * y;
-    z / (1.0 + z)
-}
-
-/// Iterative proportional fitting for weighted factor constraints.
-///
-/// Solves excess_out_i = sum_j p_ij * a_i * b_j and excess_in_j = sum_i p_ij * a_i * b_j.
-#[must_use]
 pub fn balance_weighted_factors(
     excess_out: &[f64],
     excess_in: &[f64],
@@ -913,16 +629,8 @@ pub fn balance_weighted_factors(
             };
         }
 
-        let da = a_new
-            .iter()
-            .zip(a.iter())
-            .map(|(x, y)| (x - y).abs())
-            .fold(0.0_f64, f64::max);
-        let db = b_new
-            .iter()
-            .zip(b.iter())
-            .map(|(x, y)| (x - y).abs())
-            .fold(0.0_f64, f64::max);
+        let da = max_abs_delta(&a_new, &a);
+        let db = max_abs_delta(&b_new, &b);
 
         a = a_new;
         b = b_new;
@@ -996,12 +704,7 @@ pub fn balance_masked_strength_poisson(
             };
         }
 
-        let delta = x
-            .iter()
-            .zip(old_x.iter())
-            .chain(y.iter().zip(old_y.iter()))
-            .map(|(a, b)| (a - b).abs())
-            .fold(0.0_f64, f64::max);
+        let delta = max_pair_delta(&x, &old_x, &y, &old_y);
         if delta < tolerance {
             return FitResult {
                 x,
@@ -1064,16 +767,8 @@ pub fn balance_strength_poisson(
             x_new[i] = if denom > 0.0 { s_out[i] / denom } else { 0.0 };
         }
 
-        let dx = x_new
-            .iter()
-            .zip(x.iter())
-            .map(|(a, b)| (a - b).abs())
-            .fold(0.0_f64, f64::max);
-        let dy = y_new
-            .iter()
-            .zip(y.iter())
-            .map(|(a, b)| (a - b).abs())
-            .fold(0.0_f64, f64::max);
+        let dx = max_abs_delta(&x_new, &x);
+        let dy = max_abs_delta(&y_new, &y);
 
         x = x_new;
         y = y_new;
@@ -1096,84 +791,113 @@ pub fn balance_strength_poisson(
     }
 }
 
-/// Iterative proportional fitting for binomial(M) fixed-strength ME.
+/// Fit fixed-strength Poisson ME model (both self-loops and no-self-loops).
 ///
-/// Solves: s_out_i = sum_j M * x_i*y_j / (1 + x_i*y_j)
+/// With self-loops the solution is analytic: `x = s_out / sqrt(T)`,
+/// `y = s_in / sqrt(T)`. Without self-loops uses iterative balancing.
 #[must_use]
-#[allow(clippy::needless_range_loop)]
-pub fn balance_strength_binomial(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    layers: u32,
+pub fn fit_strength_poisson(
+    s_out: &[f64],
+    s_in: &[f64],
     self_loops: bool,
     tolerance: f64,
     max_iterations: usize,
 ) -> FitResult {
-    let n = strength_out.len();
-    let m = f64::from(layers);
+    let total: f64 = s_out.iter().sum();
+    if total <= 0.0 {
+        return FitResult {
+            x: vec![0.0; s_out.len()],
+            y: vec![0.0; s_in.len()],
+            converged: true,
+            iterations: 0,
+        };
+    }
+    if self_loops {
+        let sqrt_t = total.sqrt();
+        let x: Vec<f64> = s_out.iter().map(|&s| s / sqrt_t).collect();
+        let y: Vec<f64> = s_in.iter().map(|&s| s / sqrt_t).collect();
+        FitResult {
+            x,
+            y,
+            converged: true,
+            iterations: 0,
+        }
+    } else {
+        balance_strength_poisson(s_out, s_in, tolerance, max_iterations)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ME strength-cost fitting
+// ---------------------------------------------------------------------------
+
+/// Sparse cost matrix for strength-cost models.
+pub struct CostMatrix<'a> {
+    pub sources: &'a [usize],
+    pub targets: &'a [usize],
+    pub values: &'a [f64],
+}
+
+/// Balance x,y for a fixed gamma via IPF, with optional warm start.
+#[allow(clippy::too_many_arguments)]
+fn balance_xy_cost(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    f_mat: &[f64],
+    n: usize,
+    tolerance: f64,
+    max_iterations: usize,
+    x_init: Option<&[f64]>,
+    y_init: Option<&[f64]>,
+) -> FitResult {
     let total: f64 = strength_out.iter().sum();
     let sqrt_t = total.sqrt().max(1.0);
-    let mut x: Vec<f64> = strength_out
-        .iter()
-        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
-        .collect();
-    let mut y: Vec<f64> = strength_in
-        .iter()
-        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
-        .collect();
-    let k_in: Vec<f64> = strength_in.iter().map(|&s| s / m).collect();
-    let k_out: Vec<f64> = strength_out.iter().map(|&s| s / m).collect();
+    let mut x: Vec<f64> = match x_init {
+        Some(xi) => xi.to_vec(),
+        None => strength_out
+            .iter()
+            .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+            .collect(),
+    };
+    let mut y: Vec<f64> = match y_init {
+        Some(yi) => yi.to_vec(),
+        None => strength_in
+            .iter()
+            .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+            .collect(),
+    };
 
     for iter in 0..max_iterations {
+        let old_x = x.clone();
+        let old_y = y.clone();
+
         for j in 0..n {
-            if k_in[j] <= 0.0 {
+            if strength_in[j] <= 0.0 {
+                y[j] = 0.0;
                 continue;
             }
-            let mut denom = 0.0;
-            for i in 0..n {
-                if !self_loops && i == j {
-                    continue;
-                }
-                denom += x[i] / (1.0 + x[i] * y[j]);
-            }
-            y[j] = if denom > 0.0 { k_in[j] / denom } else { 0.0 };
+            let denom: f64 = (0..n).map(|i| x[i] * f_mat[i * n + j]).sum();
+            y[j] = if denom > 0.0 {
+                strength_in[j] / denom
+            } else {
+                0.0
+            };
         }
         for i in 0..n {
-            if k_out[i] <= 0.0 {
+            if strength_out[i] <= 0.0 {
+                x[i] = 0.0;
                 continue;
             }
-            let mut denom = 0.0;
-            for j in 0..n {
-                if !self_loops && i == j {
-                    continue;
-                }
-                denom += y[j] / (1.0 + x[i] * y[j]);
-            }
-            x[i] = if denom > 0.0 { k_out[i] / denom } else { 0.0 };
+            let denom: f64 = (0..n).map(|j| y[j] * f_mat[i * n + j]).sum();
+            x[i] = if denom > 0.0 {
+                strength_out[i] / denom
+            } else {
+                0.0
+            };
         }
 
-        let mut max_err = 0.0_f64;
-        for i in 0..n {
-            let mut pred = 0.0;
-            for j in 0..n {
-                if !self_loops && i == j {
-                    continue;
-                }
-                pred += m * x[i] * y[j] / (1.0 + x[i] * y[j]);
-            }
-            max_err = max_err.max((pred - strength_out[i]).abs());
-        }
-        for j in 0..n {
-            let mut pred = 0.0;
-            for i in 0..n {
-                if !self_loops && i == j {
-                    continue;
-                }
-                pred += m * x[i] * y[j] / (1.0 + x[i] * y[j]);
-            }
-            max_err = max_err.max((pred - strength_in[j]).abs());
-        }
-        if max_err < tolerance {
+        let delta = max_pair_delta(&x, &old_x, &y, &old_y);
+        if delta < tolerance {
             return FitResult {
                 x,
                 y,
@@ -1191,151 +915,205 @@ pub fn balance_strength_binomial(
     }
 }
 
-/// Masked binomial(M) IPF for partial-constraint fitting.
+/// Build dense f_mat = exp(-gamma * d_ij) from sparse cost entries.
+fn build_f_mat(n: usize, costs: &CostMatrix<'_>, gamma: f64, self_loops: bool) -> Vec<f64> {
+    let mut f_mat = vec![1.0; n * n];
+    if !self_loops {
+        for i in 0..n {
+            f_mat[i * n + i] = 0.0;
+        }
+    }
+    for (idx, (&src, &tgt)) in costs.sources.iter().zip(costs.targets.iter()).enumerate() {
+        if !self_loops && src == tgt {
+            continue;
+        }
+        if src < n && tgt < n {
+            f_mat[src * n + tgt] = (-gamma * costs.values[idx]).exp();
+        }
+    }
+    f_mat
+}
+
+/// Compute expected total cost given x, y, gamma and cost entries.
+fn expected_cost(
+    x: &[f64],
+    y: &[f64],
+    costs: &CostMatrix<'_>,
+    gamma: f64,
+    n: usize,
+    self_loops: bool,
+) -> f64 {
+    let mut total = 0.0;
+    for (idx, (&src, &tgt)) in costs.sources.iter().zip(costs.targets.iter()).enumerate() {
+        if !self_loops && src == tgt {
+            continue;
+        }
+        if src < n && tgt < n {
+            let d = costs.values[idx];
+            total += x[src] * y[tgt] * d * (-gamma * d).exp();
+        }
+    }
+    total
+}
+
+/// Strength-cost solver options.
+pub struct CostFitOptions {
+    pub self_loops: bool,
+    pub tolerance: f64,
+    pub max_iterations: usize,
+}
+
+/// Fit the strength-cost model using adaptive search on gamma.
+///
+/// Inner loop: IPF balancing of x, y for fixed gamma.
+/// Outer loop: adaptive step on gamma to match target cost,
+/// following the thesis algorithm with warm-started x, y.
 #[must_use]
-#[allow(clippy::needless_range_loop)]
-pub fn balance_masked_strength_binomial(
+pub fn fit_strength_cost_poisson(
     strength_out: &[f64],
     strength_in: &[f64],
-    mask: &[bool],
-    layers: u32,
-    tolerance: f64,
-    max_iterations: usize,
-) -> FitResult {
+    cost_sources: &[usize],
+    cost_targets: &[usize],
+    cost_values: &[f64],
+    target_cost: f64,
+    opts: &CostFitOptions,
+) -> StrengthCostFitResult {
+    let costs = CostMatrix {
+        sources: cost_sources,
+        targets: cost_targets,
+        values: cost_values,
+    };
     let n = strength_out.len();
-    let m = f64::from(layers);
+    let self_loops = opts.self_loops;
+    let tolerance = opts.tolerance;
+    let max_iterations = opts.max_iterations;
     let total: f64 = strength_out.iter().sum();
-    let sqrt_t = total.sqrt().max(1.0);
-    let mut x: Vec<f64> = strength_out
-        .iter()
-        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
-        .collect();
-    let mut y: Vec<f64> = strength_in
-        .iter()
-        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
-        .collect();
-    let k_in: Vec<f64> = strength_in.iter().map(|&s| s / m).collect();
-    let k_out: Vec<f64> = strength_out.iter().map(|&s| s / m).collect();
+
+    // Initial gamma guess.
+    let gamma_init = if target_cost > 0.0 {
+        total / target_cost
+    } else {
+        1.0
+    };
+    let mut gamma = gamma_init;
+    let mut step = gamma_init * 0.5;
+    let mut direction = 1.0_f64;
+    let factor = 3.0;
+
+    // Initial fit.
+    let f_mat = build_f_mat(n, &costs, gamma, self_loops);
+    let mut best_fit = balance_xy_cost(
+        strength_out,
+        strength_in,
+        &f_mat,
+        n,
+        tolerance,
+        max_iterations,
+        None,
+        None,
+    );
+    let mut best_delta_c =
+        expected_cost(&best_fit.x, &best_fit.y, &costs, gamma, n, self_loops) - target_cost;
 
     for iter in 0..max_iterations {
-        for j in 0..n {
-            if k_in[j] <= 0.0 {
-                continue;
-            }
-            let mut denom = 0.0;
-            for i in 0..n {
-                if mask[i * n + j] {
-                    continue;
-                }
-                denom += x[i] / (1.0 + x[i] * y[j]);
-            }
-            y[j] = if denom > 0.0 { k_in[j] / denom } else { 0.0 };
-        }
-        for i in 0..n {
-            if k_out[i] <= 0.0 {
-                continue;
-            }
-            let mut denom = 0.0;
-            for j in 0..n {
-                if mask[i * n + j] {
-                    continue;
-                }
-                denom += y[j] / (1.0 + x[i] * y[j]);
-            }
-            x[i] = if denom > 0.0 { k_out[i] / denom } else { 0.0 };
-        }
-
-        let mut max_err = 0.0_f64;
-        for i in 0..n {
-            let mut pred = 0.0;
-            for j in 0..n {
-                if mask[i * n + j] {
-                    continue;
-                }
-                pred += m * x[i] * y[j] / (1.0 + x[i] * y[j]);
-            }
-            max_err = max_err.max((pred - strength_out[i]).abs());
-        }
-        for j in 0..n {
-            let mut pred = 0.0;
-            for i in 0..n {
-                if mask[i * n + j] {
-                    continue;
-                }
-                pred += m * x[i] * y[j] / (1.0 + x[i] * y[j]);
-            }
-            max_err = max_err.max((pred - strength_in[j]).abs());
-        }
-        if max_err < tolerance {
-            return FitResult {
-                x,
-                y,
+        if best_delta_c.abs() < tolerance {
+            return StrengthCostFitResult {
+                x: best_fit.x,
+                y: best_fit.y,
+                gamma,
                 converged: true,
                 iterations: iter + 1,
             };
         }
+
+        let new_gamma = gamma + step * direction;
+        if new_gamma <= 0.0 {
+            step /= factor;
+            direction = -direction;
+            continue;
+        }
+
+        let f_mat_new = build_f_mat(n, &costs, new_gamma, self_loops);
+        let fit = balance_xy_cost(
+            strength_out,
+            strength_in,
+            &f_mat_new,
+            n,
+            tolerance,
+            max_iterations,
+            Some(&best_fit.x),
+            Some(&best_fit.y),
+        );
+        let new_delta_c =
+            expected_cost(&fit.x, &fit.y, &costs, new_gamma, n, self_loops) - target_cost;
+
+        if new_delta_c.abs() < best_delta_c.abs() {
+            if new_delta_c.signum() != best_delta_c.signum() {
+                direction = -direction;
+            }
+            gamma = new_gamma;
+            best_delta_c = new_delta_c;
+            best_fit = fit;
+            step *= factor;
+        } else {
+            step /= factor;
+            direction = -direction;
+            if step < 1e-15 {
+                break;
+            }
+        }
     }
 
-    FitResult {
-        x,
-        y,
-        converged: false,
+    StrengthCostFitResult {
+        x: best_fit.x,
+        y: best_fit.y,
+        gamma,
+        converged: best_delta_c.abs() < tolerance,
         iterations: max_iterations,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{balance_degree_bernoulli, balance_strength_poisson, binary_probability};
+    use super::{fit_strength_cost_poisson, CostFitOptions};
 
     #[test]
-    fn recovers_binary_degrees() {
-        let k_out = vec![0.8, 1.2, 1.0];
-        let k_in = vec![1.1, 0.9, 1.0];
-        let result = balance_degree_bernoulli(&k_out, &k_in, true, 1e-12, 50000);
-
-        assert!(result.converged);
-        for (i, &expected) in k_out.iter().enumerate() {
-            let row_sum: f64 = (0..3)
-                .map(|j| binary_probability(result.x[i], result.y[j]))
-                .sum();
-            assert!((row_sum - expected).abs() < 1e-6);
-        }
-        for (j, &expected) in k_in.iter().enumerate() {
-            let col_sum: f64 = (0..3)
-                .map(|i| binary_probability(result.x[i], result.y[j]))
-                .sum();
-            assert!((col_sum - expected).abs() < 1e-6);
-        }
-    }
-
-    #[test]
-    fn recovers_symmetric_strengths() {
+    fn recovers_strengths_for_uniform_cost() {
         let s_out = vec![10.0, 20.0, 30.0];
         let s_in = vec![15.0, 25.0, 20.0];
-
-        let result = balance_strength_poisson(&s_out, &s_in, 1e-10, 50000);
-
-        assert!(result.converged);
-        // Check: sum_{j!=i} x_i * y_j ≈ s_out_i
-        for (i, &s_out_i) in s_out.iter().enumerate() {
-            let row_sum: f64 = (0..3)
-                .filter(|&j| j != i)
-                .map(|j| result.x[i] * result.y[j])
-                .sum();
-            assert!(
-                (row_sum - s_out_i).abs() < 1e-6,
-                "s_out[{i}]: expected {s_out_i}, got {row_sum}",
-            );
+        let mut sources = Vec::new();
+        let mut targets = Vec::new();
+        let mut cost_vals = Vec::new();
+        for i in 0..3 {
+            for j in 0..3 {
+                sources.push(i);
+                targets.push(j);
+                cost_vals.push(1.0);
+            }
         }
-        for (j, &s_in_j) in s_in.iter().enumerate() {
-            let col_sum: f64 = (0..3)
-                .filter(|&i| i != j)
-                .map(|i| result.x[i] * result.y[j])
+        let total_cost: f64 = 60.0 * 0.8;
+        let result = fit_strength_cost_poisson(
+            &s_out,
+            &s_in,
+            &sources,
+            &targets,
+            &cost_vals,
+            total_cost,
+            &CostFitOptions {
+                self_loops: true,
+                tolerance: 1e-6,
+                max_iterations: 5000,
+            },
+        );
+        let n = 3;
+        for (i, &s_out_i) in s_out.iter().enumerate() {
+            let row_sum: f64 = (0..n)
+                .map(|j| result.x[i] * result.y[j] * (-result.gamma * cost_vals[i * n + j]).exp())
                 .sum();
             assert!(
-                (col_sum - s_in_j).abs() < 1e-6,
-                "s_in[{j}]: expected {s_in_j}, got {col_sum}",
+                (row_sum - s_out_i).abs() < 0.1,
+                "s_out[{i}]: expected {s_out_i}, got {row_sum}, gamma={}",
+                result.gamma,
             );
         }
     }

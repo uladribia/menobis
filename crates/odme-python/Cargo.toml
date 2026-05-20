@@ -10,6 +10,10 @@ name = "_odme"
 crate-type = ["cdylib"]
 path = "src/lib.rs"
 
+[features]
+default = ["w-conic"]
+w-conic = ["odme-core/w-conic"]
+
 [dependencies]
 odme-core.workspace = true
 pyo3.workspace = true
