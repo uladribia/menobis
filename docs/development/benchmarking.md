@@ -128,8 +128,20 @@ uv run maturin develop --release -m crates/odme-python/Cargo.toml
 uv run python benchmarks/bench_fitting.py --max-n 1000 --tolerance 1e-4 --plot
 ```
 
-Options: `--max-n N`, `--tolerance T`, `--verbose V` (0=quiet, 2=convergence),
-`--plot`, `--output DIR`.
+Options: `--max-n N`, `--nodes 50,100`, `--known-fractions 0.05,0.40`,
+`--tolerance T`, `--verbose V` (0=quiet, 2=convergence), `--plot`, and
+`--output DIR`. Use `--nodes` for exact size-only runs. Partial benchmarks use
+known weighted pairs only; occupation contributions are inferred from positive
+known weights.
+
+N=100 validation across all full and partial ME/B/W cases:
+
+```bash
+uv run python -m benchmarks fit --nodes 100 --max-n 100 \
+  --known-fractions 0.05,0.40 --tolerance 1e-4
+```
+
+Latest local run: 60 rows, 40 partial rows, 0 failures.
 
 ### Scaling (release mode, Pareto strengths)
 

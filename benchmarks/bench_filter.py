@@ -4,15 +4,20 @@ import sys
 
 import numpy as np
 
+from benchmarks.bench_fitting import _benchmark_sizes
 from benchmarks.common import pareto_strengths
 
 
-def bench_filter(max_n=100, ensemble=100):
+def bench_filter(max_n=100, ensemble=100, nodes=None):
     """Benchmark false-positive rates across alpha levels."""
     from odme.filtering import filter_strength_poisson
-    from odme.models import fit_strength_poisson, sample_strength_poisson
+    from odme.models import sample_strength_poisson
 
-    sizes = sorted({n for n in [10, 25, 50, 100] if n <= max_n})
+    sizes = (
+        _benchmark_sizes(max_n, nodes)
+        if nodes is not None
+        else sorted({n for n in [10, 25, 50, 100] if n <= max_n})
+    )
     alphas = [0.01, 0.05, 0.1]
     results = []
 
@@ -34,17 +39,27 @@ def bench_filter(max_n=100, ensemble=100):
                     continue
                 result = filter_strength_poisson(sample, alpha=alpha)
                 total_edges += sample.num_edges
-                upper_count += len(result.upper.edges.source) if result.upper.edges else 0
-                lower_count += len(result.lower.edges.source) if result.lower.edges else 0
+                upper_count += (
+                    len(result.upper.edges.source) if result.upper.edges else 0
+                )
+                lower_count += (
+                    len(result.lower.edges.source) if result.lower.edges else 0
+                )
 
             fpr_upper = upper_count / total_edges if total_edges > 0 else 0.0
             fpr_lower = lower_count / total_edges if total_edges > 0 else 0.0
-            results.append({
-                "n": n, "alpha": alpha,
-                "fpr_upper": fpr_upper, "fpr_lower": fpr_lower,
-                "total_edges": total_edges,
-            })
-            print(f"  alpha={alpha:.2f}: FPR_upper={fpr_upper:.4f} FPR_lower={fpr_lower:.4f}")
+            results.append(
+                {
+                    "n": n,
+                    "alpha": alpha,
+                    "fpr_upper": fpr_upper,
+                    "fpr_lower": fpr_lower,
+                    "total_edges": total_edges,
+                }
+            )
+            print(
+                f"  alpha={alpha:.2f}: FPR_upper={fpr_upper:.4f} FPR_lower={fpr_lower:.4f}"
+            )
             sys.stdout.flush()
 
     return results
@@ -54,16 +69,18 @@ def plot_filter(results):
     """Plot FPR vs alpha."""
     try:
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
         return
 
     from benchmarks.common import ensure_figures_dir
+
     fig_dir = ensure_figures_dir()
 
     fig, ax = plt.subplots(figsize=(8, 6))
-    ns = sorted(set(r["n"] for r in results))
+    ns = sorted({r["n"] for r in results})
     for n in ns:
         sub = [r for r in results if r["n"] == n]
         alphas = [r["alpha"] for r in sub]

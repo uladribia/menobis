@@ -103,9 +103,41 @@ Total: 202 Python tests, 46 Rust tests, all checks green.
   with post-hoc residual computation, degree residuals, and CLI options
   (--max-n, --tolerance, --verbose, --plot, --output). N=200 smoke run
   completed with plots in `docs/figures/` and `benchmarks/results/`.
+- Benchmark coverage consistency is now guarded by
+  `tests/test_odme_benchmark_cases.py`. The canonical fitting benchmark is
+  expected to cover ME/B/W × fixed strength, degree-events, strength-edges,
+  strength-degree, and strength-cost, including W negative-binomial and supported
+  partial variants. Smoke output now includes structured metadata fields
+  (`ensemble`, `family`, `constraint`, `layers`, `partial`, `solver`, `status`,
+  `failure_reason`) so non-convergence is explicit instead of hidden.
+- N=50 fitting benchmark investigation:
+  - Full non-partial ME/B/W benchmark matrix converges at N=50.
+  - W negative-binomial strength-degree only fails at N=10; N=25 and N=50
+    converge. Treat N=10 as a tiny low-density edge case unless it reappears at
+    production sizes.
+  - W strength-degree residual reporting was corrected to use W zero-inflated
+    geometric/negative-binomial formulas; degree residuals are now near machine
+    tolerance at N=50.
+  - Partial strength-degree benchmark input was invalid for the low-density
+    full-model degree sequence because all k_i < 1 while known occupied pairs
+    subtract one degree. The benchmark now uses a denser partial-only degree
+    sequence and feasible unit known edges; N=50 converges.
+  - Partial strength-cost now uses a masked strength-cost solver over the free
+    support. The N=50 and N=100 benchmark run converges for all fitting cases.
 - Remaining:
+  - Implement remaining partial B/W cases using the shared full/partial fitting
+    ontology: same `WeightFamily`, same constraint concepts, and a shared
+    support abstraction (`Full` vs known-pair masked support). Do not introduce
+    parallel `PartialConstraint` or `PartialWeightFamily` types.
+  - Final N=100 validation for known-weight partial benchmarks is green:
+    `uv run python -m benchmarks fit --nodes 100 --max-n 100 --known-fractions
+    0.05,0.40 --tolerance 1e-4 --output /tmp/odme-bench-n100-all-partial-3`
+    produced 60 rows, including 40 partial rows over 5% and 40% known weighted
+    candidate pairs, with 0 non-converged cases. The benchmark uses known
+    weights only; occupation contributions for degree/edge constraints are
+    inferred from positive known weights. It intentionally does not benchmark an
+    occupation-only partial mode.
   - Run full N=1000 benchmark in release mode for final scaling data.
-  - Fix partial-constraint solvers (same divergent IPF bug as ME edges/degree).
   - Milestone 7d: Legacy mobility benchmarks before archiving.
   - Final project rename to MENoBiS.
   - Publish MkDocs site to GitHub Pages.
@@ -428,10 +460,15 @@ recentering gauges after solving.
    diagnostics instead of leaking into every ME/B/Binomial result.
 9. Fold partial-constraint results into the same model-result ontology. Partial
    fits are not a different mathematical result type; they are fixed-strength,
-   strength-cost, strength-edges, degree, or strength-degree fits on a masked
-   support with known-rate contributions. Their public/private result shape
-   should expose the corresponding constraint fit fields plus sparse support /
-   mask metadata and diagnostics.
+   strength-cost, strength-edges, degree-events, or strength-degree fits on a
+   support with fixed known weighted-pair contributions. Model them as the same
+   `WeightFamily` and constraint concepts used by full fits plus a support
+   abstraction (`Full` vs known-pair masked support), not as separate
+   `PartialConstraint` or `PartialWeightFamily` enums. Their public/private
+   result shape should expose the corresponding constraint fit fields plus
+   sparse known-pair/support metadata and diagnostics. For the planned partial
+   benchmark scope, accept known weights only; infer occupation contributions
+   from positive known weights and do not add an occupation-only benchmark mode.
 10. Update docs for public API and thesis terminology: concepts, API, CLI if W
    commands are exposed, and a decision record for the conic formulation.
 
@@ -453,6 +490,15 @@ recentering gauges after solving.
 
 #### Benchmark update
 
+- Keep one canonical fitting benchmark path that is exhaustive by construction.
+  It must cover every supported ensemble/constraint combination before results
+  are used for conclusions: ME, B, and W for fixed strength, degree-events,
+  strength-edges, strength-degree, and strength-cost, plus partial-constraint
+  variants. Guard this matrix with `tests/test_odme_benchmark_cases.py`; do not
+  let W negative-binomial, cost, or partial cases live only in manual notes or
+  one-off scripts. N=100 partial validation is green for every supported partial
+  and non-partial case at 5% and 40% known weighted pairs; occupation-only
+  partial cases remain excluded from benchmark scope.
 - Add W fitting benchmarks separate from streaming generation, for example
   `benchmarks/bench_w_fitting.py`, with `N={10, 25, 50, 100}` initially and a
   hard cap that prevents accidental dense all-pairs conic solves at large `N`.
