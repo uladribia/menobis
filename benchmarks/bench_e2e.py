@@ -4,27 +4,28 @@ import sys
 
 import numpy as np
 
-from benchmarks.common import degrees_from_strengths, pareto_strengths
+from benchmarks.bench_fitting import _benchmark_sizes
+from benchmarks.common import pareto_strengths
 
 
-def bench_e2e(max_n=100, ensemble=300, tolerance=1e-4):
+def bench_e2e(max_n=100, ensemble=300, tolerance=1e-4, nodes=None):
     """Fit, sample ensemble, compute z-scores on constraint recovery."""
     from odme.models import (
-        fit_degree_events_geometric,
-        fit_strength_cost_poisson,
-        fit_strength_edges_poisson,
         fit_strength_geometric,
         fit_strength_poisson,
         sample_strength_poisson,
     )
-    from benchmarks.common import complete_costs, target_cost_from_fit
 
-    sizes = sorted({n for n in [10, 25, 50, 100] if n <= max_n})
+    sizes = (
+        _benchmark_sizes(max_n, nodes)
+        if nodes is not None
+        else sorted({n for n in [10, 25, 50, 100] if n <= max_n})
+    )
     results = []
 
     for n in sizes:
         s_out, s_in = pareto_strengths(n)
-        print(f"\n{'='*60}\nE2E N={n} ensemble={ensemble}\n{'='*60}")
+        print(f"\n{'=' * 60}\nE2E N={n} ensemble={ensemble}\n{'=' * 60}")
 
         # ME strength
         fit = fit_strength_poisson(s_out, s_in, tolerance=tolerance)
@@ -46,12 +47,15 @@ def bench_e2e(max_n=100, ensemble=300, tolerance=1e-4):
         se_out = np.sqrt(np.maximum(sq_out / ensemble - mean_out**2, 0) / ensemble)
         z_out = np.divide(mean_out - s_out, se_out, out=np.zeros(n), where=se_out > 0)
         max_z = float(np.max(np.abs(z_out)))
-        results.append({"name": "ME strength", "n": n, "max_z": max_z, "converged": fit.converged})
+        results.append(
+            {"name": "ME strength", "n": n, "max_z": max_z, "converged": fit.converged}
+        )
         print(f"  ME strength: max_z={max_z:.2f}")
 
         # W geometric strength
         fit_w = fit_strength_geometric(s_out, s_in, tolerance=tolerance)
         from odme.models import sample_strength_geometric
+
         sum_out = np.zeros(n)
         sq_out = np.zeros(n)
         for idx in range(ensemble):
@@ -64,7 +68,14 @@ def bench_e2e(max_n=100, ensemble=300, tolerance=1e-4):
         se_out = np.sqrt(np.maximum(sq_out / ensemble - mean_out**2, 0) / ensemble)
         z_out = np.divide(mean_out - s_out, se_out, out=np.zeros(n), where=se_out > 0)
         max_z = float(np.max(np.abs(z_out)))
-        results.append({"name": "W strength geometric", "n": n, "max_z": max_z, "converged": fit_w.converged})
+        results.append(
+            {
+                "name": "W strength geometric",
+                "n": n,
+                "max_z": max_z,
+                "converged": fit_w.converged,
+            }
+        )
         print(f"  W strength geometric: max_z={max_z:.2f}")
 
         sys.stdout.flush()
@@ -76,12 +87,14 @@ def plot_e2e(results):
     """Plot z-scores vs N."""
     try:
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
         return
 
     from benchmarks.common import ensure_figures_dir
+
     fig_dir = ensure_figures_dir()
 
     solvers = {}
@@ -95,7 +108,7 @@ def plot_e2e(results):
     fig, ax = plt.subplots(figsize=(10, 6))
     for name, data in sorted(solvers.items()):
         ax.plot(data["n"], data["z"], "o-", label=name)
-    ax.axhline(3.0, color="red", linestyle="--", alpha=0.5, label="3σ threshold")
+    ax.axhline(3.0, color="red", linestyle="--", alpha=0.5, label="3-sigma threshold")
     ax.set_xlabel("N")
     ax.set_ylabel("Max |z-score|")
     ax.set_title("Ensemble constraint recovery (z-scores)")

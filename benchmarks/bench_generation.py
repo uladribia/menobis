@@ -5,10 +5,11 @@ import time
 
 import numpy as np
 
-from benchmarks.common import ensure_results_dir, max_rss_mb, pareto_strengths
+from benchmarks.bench_fitting import _benchmark_sizes
+from benchmarks.common import max_rss_mb, pareto_strengths
 
 
-def bench_generation(max_n=10000, repeats=3):
+def bench_generation(max_n=10000, repeats=3, nodes=None):
     """Benchmark sampling speed and memory across N."""
     from odme.models import (
         fit_strength_poisson,
@@ -17,7 +18,11 @@ def bench_generation(max_n=10000, repeats=3):
         sample_strength_stub_matching,
     )
 
-    sizes = sorted({n for n in [100, 500, 1000, 5000, 10000] if n <= max_n})
+    sizes = (
+        _benchmark_sizes(max_n, nodes)
+        if nodes is not None
+        else sorted({n for n in [100, 500, 1000, 5000, 10000] if n <= max_n})
+    )
     results = []
 
     for n in sizes:
@@ -26,14 +31,24 @@ def bench_generation(max_n=10000, repeats=3):
         total = int(s_out.sum())
 
         cases = [
-            ("Poisson", lambda: sample_strength_poisson(fit.x, fit.y, seed=0)),
-            ("Multinomial", lambda: sample_strength_multinomial(fit.x, fit.y, total_events=total, seed=0)),
-            ("Stub-matching", lambda: sample_strength_stub_matching(s_out.astype(np.uint64), s_in.astype(np.uint64), seed=0)),
+            ("Poisson", lambda fit=fit: sample_strength_poisson(fit.x, fit.y, seed=0)),
+            (
+                "Multinomial",
+                lambda fit=fit, total=total: sample_strength_multinomial(
+                    fit.x, fit.y, total_events=total, seed=0
+                ),
+            ),
+            (
+                "Stub-matching",
+                lambda s_out=s_out, s_in=s_in: sample_strength_stub_matching(
+                    s_out.astype(np.uint64), s_in.astype(np.uint64), seed=0
+                ),
+            ),
         ]
 
         for name, func in cases:
             times = []
-            for r in range(repeats):
+            for _r in range(repeats):
                 t0 = time.perf_counter()
                 func()
                 times.append(time.perf_counter() - t0)
@@ -50,6 +65,7 @@ def plot_generation(results):
     """Plot generation scaling."""
     try:
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
@@ -57,6 +73,7 @@ def plot_generation(results):
         return
 
     from benchmarks.common import ensure_figures_dir
+
     fig_dir = ensure_figures_dir()
 
     solvers = {}

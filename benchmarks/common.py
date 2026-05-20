@@ -14,7 +14,7 @@ FIGURES_DIR = PROJECT_ROOT / "docs" / "figures"
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
 
 
-def pareto_strengths(n: int, total: float = None, seed: int = 42):
+def pareto_strengths(n: int, total: float | None = None, seed: int = 42):
     """Generate balanced Pareto-distributed strength sequences."""
     if total is None:
         total = n * 6.0
@@ -61,12 +61,32 @@ def max_rss_mb():
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
 
 
-def time_call(func, *args, **kwargs):
+def time_call(func, *args: object, **kwargs: object):
     """Time a function call, return (result, elapsed_seconds)."""
     gc.collect()
     t0 = time.perf_counter()
     result = func(*args, **kwargs)
     return result, time.perf_counter() - t0
+
+
+def _family_terms(q: float, family: str, layers: int) -> tuple[float, float]:
+    """Return occupation kernel G(q) and dG/dlogq for a weight family."""
+    if family in {"geometric", "negative_binomial"}:
+        one_minus = max(1.0 - q, 1e-15)
+        return one_minus ** (-layers) - 1.0, layers * q * one_minus ** (-layers - 1)
+    exp_u = np.exp(q)
+    return exp_u - 1.0, q * exp_u
+
+
+def _zip_mean_and_occupation(
+    q: float, v: float, family: str, layers: int
+) -> tuple[float, float]:
+    """Return expected weight and occupation for zero-inflated families."""
+    g, weighted_derivative = _family_terms(q, family, layers)
+    den = 1.0 + v * g
+    if den <= 0.0:
+        return 0.0, 0.0
+    return v * weighted_derivative / den, v * g / den
 
 
 def compute_strength_residual(fit, s_out, s_in, self_loops=True):
@@ -85,24 +105,19 @@ def compute_strength_residual(fit, s_out, s_in, self_loops=True):
         for j in range(n):
             if not self_loops and i == j:
                 continue
+            q = x[i] * y[j]
             if z is not None and w is not None:
-                u = x[i] * y[j]
-                v = z[i] * w[j]
-                e_neg = np.exp(-u)
-                den = e_neg + v * (1.0 - e_neg)
-                mean = v * u / den if den > 0 else 0.0
+                mean, _occ = _zip_mean_and_occupation(q, z[i] * w[j], fam, layers)
             elif lam is not None:
-                u = x[i] * y[j]
-                e_neg = np.exp(-u)
-                den = e_neg + lam * (1.0 - e_neg)
-                mean = lam * u / den if den > 0 else 0.0
+                mean, _occ = _zip_mean_and_occupation(q, lam, fam, layers)
             elif gamma is not None:
-                mean = x[i] * y[j]
+                mean = q
             elif fam == "binomial":
-                xy = x[i] * y[j]
-                mean = layers * xy / (1.0 + xy)
+                mean = layers * q / (1.0 + q)
+            elif fam in {"geometric", "negative_binomial"}:
+                mean = layers * q / max(1.0 - q, 1e-15)
             else:
-                mean = x[i] * y[j]
+                mean = q
             pred_out[i] += mean
             pred_in[j] += mean
     return float(max(np.max(np.abs(pred_out - s_out)), np.max(np.abs(pred_in - s_in))))
@@ -114,17 +129,17 @@ def compute_degree_residual(fit, k_out, k_in, self_loops=True):
     n = len(x)
     z = getattr(fit, "z", None)
     w = getattr(fit, "w", None)
+    fam = getattr(fit, "family", "poisson")
+    layers = getattr(fit, "layers", None) or 1
     pred_out, pred_in = np.zeros(n), np.zeros(n)
     for i in range(n):
         for j in range(n):
             if not self_loops and i == j:
                 continue
             if z is not None and w is not None:
-                u = x[i] * y[j]
-                v = z[i] * w[j]
-                e_neg = np.exp(-u)
-                den = e_neg + v * (1.0 - e_neg)
-                occ = v * (1.0 - e_neg) / den if den > 0 else 0.0
+                _mean, occ = _zip_mean_and_occupation(
+                    x[i] * y[j], z[i] * w[j], fam, layers
+                )
             else:
                 xy = x[i] * y[j]
                 occ = xy / (1.0 + xy)

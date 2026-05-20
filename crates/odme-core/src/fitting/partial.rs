@@ -4,11 +4,11 @@
 //! a sparse rate table. All mask building, excess computation, balancing, IPF,
 //! and result assembly happens in Rust.
 
-use super::support::self_loop_mask;
+use super::support::{max_pair_delta, self_loop_mask};
 use super::{
     balance_masked_degree_bernoulli, balance_masked_strength_degree_poisson,
-    balance_masked_strength_poisson, balance_strength_edges_poisson, fit_strength_cost_poisson,
-    CostFitOptions, PartialFitResult,
+    balance_masked_strength_poisson, balance_strength_edges_poisson, FitResult, PartialFitResult,
+    StrengthCostFitResult,
 };
 
 // ---------------------------------------------------------------------------
@@ -75,18 +75,289 @@ fn balance_excess(excess_out: &mut [f64], excess_in: &mut [f64]) {
             {
                 excess_in[idx] += diff;
             }
-        } else {
-            if let Some(idx) = excess_out
-                .iter()
-                .enumerate()
-                .max_by(|a, b| a.1.total_cmp(b.1))
-                .map(|(i, _)| i)
-            {
-                excess_out[idx] -= diff;
-            }
+        } else if let Some(idx) = excess_out
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.total_cmp(b.1))
+            .map(|(i, _)| i)
+        {
+            excess_out[idx] -= diff;
         }
     }
 }
+
+fn build_masked_cost_factors(
+    n: usize,
+    cost_sources: &[usize],
+    cost_targets: &[usize],
+    cost_values: &[f64],
+    mask: &[bool],
+    gamma: f64,
+) -> Vec<f64> {
+    let mut factors = vec![1.0; n * n];
+    for (idx, (&source, &target)) in cost_sources.iter().zip(cost_targets.iter()).enumerate() {
+        if source < n && target < n && !mask[source * n + target] {
+            let exponent = (-gamma * cost_values[idx]).clamp(-700.0, 700.0);
+            factors[source * n + target] = exponent.exp();
+        }
+    }
+    for idx in 0..factors.len() {
+        if mask[idx] {
+            factors[idx] = 0.0;
+        }
+    }
+    factors
+}
+
+#[allow(clippy::too_many_arguments)]
+fn balance_masked_strength_cost_poisson_fixed_gamma(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    factors: &[f64],
+    mask: &[bool],
+    tolerance: f64,
+    max_iterations: usize,
+    x_init: Option<&[f64]>,
+    y_init: Option<&[f64]>,
+) -> FitResult {
+    let n = strength_out.len();
+    let total: f64 = strength_out.iter().sum();
+    let sqrt_t = total.sqrt().max(1.0);
+    let mut x: Vec<f64> = x_init.map_or_else(
+        || {
+            strength_out
+                .iter()
+                .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+                .collect()
+        },
+        <[f64]>::to_vec,
+    );
+    let mut y: Vec<f64> = y_init.map_or_else(
+        || {
+            strength_in
+                .iter()
+                .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+                .collect()
+        },
+        <[f64]>::to_vec,
+    );
+
+    for iter in 0..max_iterations {
+        let old_x = x.clone();
+        let old_y = y.clone();
+
+        for j in 0..n {
+            if strength_in[j] <= 0.0 {
+                y[j] = 0.0;
+                continue;
+            }
+            let denom: f64 = (0..n)
+                .filter(|&i| !mask[i * n + j])
+                .map(|i| x[i] * factors[i * n + j])
+                .sum();
+            y[j] = if denom > 0.0 {
+                strength_in[j] / denom
+            } else {
+                0.0
+            };
+        }
+        for i in 0..n {
+            if strength_out[i] <= 0.0 {
+                x[i] = 0.0;
+                continue;
+            }
+            let denom: f64 = (0..n)
+                .filter(|&j| !mask[i * n + j])
+                .map(|j| y[j] * factors[i * n + j])
+                .sum();
+            x[i] = if denom > 0.0 {
+                strength_out[i] / denom
+            } else {
+                0.0
+            };
+        }
+
+        if max_pair_delta(&x, &old_x, &y, &old_y) < tolerance {
+            return FitResult {
+                x,
+                y,
+                converged: true,
+                iterations: iter + 1,
+            };
+        }
+    }
+
+    FitResult {
+        x,
+        y,
+        converged: false,
+        iterations: max_iterations,
+    }
+}
+
+fn expected_masked_cost(
+    x: &[f64],
+    y: &[f64],
+    cost_sources: &[usize],
+    cost_targets: &[usize],
+    cost_values: &[f64],
+    mask: &[bool],
+    gamma: f64,
+) -> f64 {
+    let n = x.len();
+    let mut total = 0.0;
+    for (idx, (&source, &target)) in cost_sources.iter().zip(cost_targets.iter()).enumerate() {
+        if source < n && target < n && !mask[source * n + target] {
+            let cost = cost_values[idx];
+            let exponent = (-gamma * cost).clamp(-700.0, 700.0);
+            total += x[source] * y[target] * cost * exponent.exp();
+        }
+    }
+    total
+}
+
+#[allow(clippy::too_many_arguments)]
+fn fit_masked_strength_cost_poisson(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    cost_sources: &[usize],
+    cost_targets: &[usize],
+    cost_values: &[f64],
+    target_cost: f64,
+    mask: &[bool],
+    tolerance: f64,
+    max_iterations: usize,
+) -> StrengthCostFitResult {
+    let n = strength_out.len();
+    let solve_at = |gamma: f64, x_init: Option<&[f64]>, y_init: Option<&[f64]>| {
+        let factors =
+            build_masked_cost_factors(n, cost_sources, cost_targets, cost_values, mask, gamma);
+        let fit = balance_masked_strength_cost_poisson_fixed_gamma(
+            strength_out,
+            strength_in,
+            &factors,
+            mask,
+            tolerance,
+            max_iterations,
+            x_init,
+            y_init,
+        );
+        let delta = expected_masked_cost(
+            &fit.x,
+            &fit.y,
+            cost_sources,
+            cost_targets,
+            cost_values,
+            mask,
+            gamma,
+        ) - target_cost;
+        (fit, delta)
+    };
+
+    let (fit_zero, delta_zero) = solve_at(0.0, None, None);
+    if delta_zero.abs() <= tolerance {
+        return StrengthCostFitResult {
+            x: fit_zero.x,
+            y: fit_zero.y,
+            gamma: 0.0,
+            converged: fit_zero.converged,
+            iterations: fit_zero.iterations,
+        };
+    }
+
+    let mut low = 0.0;
+    let mut high = 0.0;
+    let mut low_fit = fit_zero.clone();
+    let mut high_fit = fit_zero.clone();
+    let mut low_delta = delta_zero;
+    let mut high_delta = delta_zero;
+    let mut step = 1.0_f64;
+
+    for _ in 0..64 {
+        if delta_zero > 0.0 {
+            high = step;
+            let (fit, delta) = solve_at(high, Some(&high_fit.x), Some(&high_fit.y));
+            high_fit = fit;
+            high_delta = delta;
+            if high_delta <= 0.0 {
+                break;
+            }
+        } else {
+            low = -step;
+            let (fit, delta) = solve_at(low, Some(&low_fit.x), Some(&low_fit.y));
+            low_fit = fit;
+            low_delta = delta;
+            if low_delta >= 0.0 {
+                break;
+            }
+        }
+        step *= 2.0;
+    }
+
+    if !(low_delta >= 0.0 && high_delta <= 0.0) {
+        let best_fit = if low_delta.abs() < high_delta.abs() {
+            low_fit
+        } else {
+            high_fit
+        };
+        let gamma = if low_delta.abs() < high_delta.abs() {
+            low
+        } else {
+            high
+        };
+        return StrengthCostFitResult {
+            x: best_fit.x,
+            y: best_fit.y,
+            gamma,
+            converged: false,
+            iterations: max_iterations,
+        };
+    }
+
+    let mut best_gamma = if low_delta.abs() < high_delta.abs() {
+        low
+    } else {
+        high
+    };
+    let mut best_fit = if low_delta.abs() < high_delta.abs() {
+        low_fit
+    } else {
+        high_fit
+    };
+    let mut best_delta = low_delta.abs().min(high_delta.abs());
+    for iter in 0..max_iterations {
+        let mid = 0.5 * (low + high);
+        let (fit, delta) = solve_at(mid, Some(&best_fit.x), Some(&best_fit.y));
+        if delta.abs() < best_delta {
+            best_delta = delta.abs();
+            best_gamma = mid;
+            best_fit = fit.clone();
+        }
+        if delta.abs() <= tolerance {
+            return StrengthCostFitResult {
+                x: fit.x,
+                y: fit.y,
+                gamma: mid,
+                converged: fit.converged,
+                iterations: iter + 1,
+            };
+        }
+        if delta > 0.0 {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+
+    StrengthCostFitResult {
+        x: best_fit.x,
+        y: best_fit.y,
+        gamma: best_gamma,
+        converged: best_delta <= tolerance,
+        iterations: max_iterations,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn assemble_result(
     n: usize,
@@ -545,18 +816,16 @@ pub fn fit_partial_strength_cost(
         }
     }
 
-    let fit = fit_strength_cost_poisson(
+    let fit = fit_masked_strength_cost_poisson(
         &excess_out,
         &excess_in,
         &free_src,
         &free_tgt,
         &free_val,
         excess_cost,
-        &CostFitOptions {
-            self_loops,
-            tolerance,
-            max_iterations,
-        },
+        &mask,
+        tolerance,
+        max_iterations,
     );
     let x = fit.x;
     let y = fit.y;
