@@ -4,171 +4,142 @@ from __future__ import annotations
 
 import gc
 import resource
-import sys
 import time
-from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
-from typing import TypeVar
 
 import numpy as np
 
-from odme.analysis import directed_strengths
-from odme.data.frames import EdgeTable, ProbabilityTable
-from odme.models import fit_strength_poisson, sample_strength_poisson
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 FIGURES_DIR = PROJECT_ROOT / "docs" / "figures"
-RESULTS_DIR = PROJECT_ROOT / "benchmarks" / "results"
-FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-
-T = TypeVar("T")
+RESULTS_DIR = Path(__file__).resolve().parent / "results"
 
 
-@dataclass(frozen=True)
-class SparseCosts:
-    """Sparse pair costs plus observed target cost for a network."""
-
-    source: np.ndarray
-    target: np.ndarray
-    value: np.ndarray
-    target_cost: float
-
-
-def max_rss_mb() -> float:
-    """Return maximum resident set size in MiB for the current process."""
-    value = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    if sys.platform == "darwin":
-        return value / (1024 * 1024)
-    return value / 1024
+def pareto_strengths(n: int, total: float = None, seed: int = 42):
+    """Generate balanced Pareto-distributed strength sequences."""
+    if total is None:
+        total = n * 6.0
+    rng = np.random.default_rng(seed)
+    raw = rng.pareto(2.3, n) + 1.0
+    raw = np.clip(raw, 0.0, np.quantile(raw, 0.95))
+    s_out = raw / raw.sum() * total
+    raw_in = np.roll(raw[::-1], n // 5)
+    s_in = raw_in / raw_in.sum() * total
+    return s_out, s_in
 
 
-def time_call(function: Callable[..., T], *args: object, **kwargs: object) -> float:
-    """Run a callable after GC and return elapsed seconds."""
+def degrees_from_strengths(s_out, s_in, frac: float = 0.3):
+    """Generate non-saturating degree sequences proportional to strengths."""
+    n = len(s_out)
+    k_out = s_out / s_out.sum() * (n * frac)
+    k_in = s_in / s_in.sum() * (n * frac)
+    scale = min((s_out / k_out).min(), (s_in / k_in).min())
+    if scale < 1.0:
+        k_out *= scale * 0.9
+        k_in *= k_out.sum() / k_in.sum()
+    return k_out, k_in
+
+
+def complete_costs(n: int, seed: int = 99):
+    """Generate complete lognormal cost matrix as sparse triples."""
+    rng = np.random.default_rng(seed)
+    src, tgt = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
+    val = rng.lognormal(0.0, 0.35, (n, n))
+    return (
+        src.ravel().astype(np.uint64),
+        tgt.ravel().astype(np.uint64),
+        val.ravel().astype(np.float64),
+    )
+
+
+def target_cost_from_fit(fit, c_val, n: int):
+    """Compute target cost from a fitted strength model."""
+    return float(np.sum(c_val.reshape(n, n) * np.outer(fit.x, fit.y)))
+
+
+def max_rss_mb():
+    """Current peak RSS in MB."""
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+
+
+def time_call(func, *args, **kwargs):
+    """Time a function call, return (result, elapsed_seconds)."""
     gc.collect()
-    start = time.perf_counter()
-    function(*args, **kwargs)
-    return time.perf_counter() - start
+    t0 = time.perf_counter()
+    result = func(*args, **kwargs)
+    return result, time.perf_counter() - t0
 
 
-def balanced_pareto_strengths(
-    node_count: int,
-    average_strength: int,
-    *,
-    seed: int = 42,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Create balanced heterogeneous out/in strength sequences."""
-    rng = np.random.default_rng(seed)
-    total = node_count * average_strength
-    raw_out = rng.pareto(1.5, size=node_count) + 1.0
-    raw_in = rng.pareto(1.5, size=node_count) + 1.0
-    strength_out = np.round(raw_out / raw_out.sum() * total).astype(np.uint64)
-    strength_in = np.round(raw_in / raw_in.sum() * total).astype(np.uint64)
-    _balance_integer_sequences(strength_out, strength_in)
-    return strength_out, strength_in
+def compute_strength_residual(fit, s_out, s_in, self_loops=True):
+    """Post-hoc max absolute strength residual from fit multipliers."""
+    x, y = np.asarray(fit.x), np.asarray(fit.y)
+    n = len(x)
+    lam = getattr(fit, "lam", None)
+    gamma = getattr(fit, "gamma", None)
+    z = getattr(fit, "z", None)
+    w = getattr(fit, "w", None)
+    fam = getattr(fit, "family", "poisson")
+    layers = getattr(fit, "layers", None) or 1
+
+    pred_out, pred_in = np.zeros(n), np.zeros(n)
+    for i in range(n):
+        for j in range(n):
+            if not self_loops and i == j:
+                continue
+            if z is not None and w is not None:
+                u = x[i] * y[j]
+                v = z[i] * w[j]
+                e_neg = np.exp(-u)
+                den = e_neg + v * (1.0 - e_neg)
+                mean = v * u / den if den > 0 else 0.0
+            elif lam is not None:
+                u = x[i] * y[j]
+                e_neg = np.exp(-u)
+                den = e_neg + lam * (1.0 - e_neg)
+                mean = lam * u / den if den > 0 else 0.0
+            elif gamma is not None:
+                mean = x[i] * y[j]
+            elif fam == "binomial":
+                xy = x[i] * y[j]
+                mean = layers * xy / (1.0 + xy)
+            else:
+                mean = x[i] * y[j]
+            pred_out[i] += mean
+            pred_in[j] += mean
+    return float(max(np.max(np.abs(pred_out - s_out)), np.max(np.abs(pred_in - s_in))))
 
 
-def pareto_strength_network(
-    node_count: int,
-    average_strength: int,
-    *,
-    seed: int = 42,
-) -> EdgeTable:
-    """Sample a fixed-strength Poisson network from Pareto-like strengths."""
-    strength_out, strength_in = balanced_pareto_strengths(
-        node_count, average_strength, seed=seed
-    )
-    fit = fit_strength_poisson(strength_out, strength_in)
-    return sample_strength_poisson(fit.x, fit.y, seed=seed)
+def compute_degree_residual(fit, k_out, k_in, self_loops=True):
+    """Post-hoc max absolute degree residual."""
+    x, y = np.asarray(fit.x), np.asarray(fit.y)
+    n = len(x)
+    z = getattr(fit, "z", None)
+    w = getattr(fit, "w", None)
+    pred_out, pred_in = np.zeros(n), np.zeros(n)
+    for i in range(n):
+        for j in range(n):
+            if not self_loops and i == j:
+                continue
+            if z is not None and w is not None:
+                u = x[i] * y[j]
+                v = z[i] * w[j]
+                e_neg = np.exp(-u)
+                den = e_neg + v * (1.0 - e_neg)
+                occ = v * (1.0 - e_neg) / den if den > 0 else 0.0
+            else:
+                xy = x[i] * y[j]
+                occ = xy / (1.0 + xy)
+            pred_out[i] += occ
+            pred_in[j] += occ
+    return float(max(np.max(np.abs(pred_out - k_out)), np.max(np.abs(pred_in - k_in))))
 
 
-def edge_strengths(edges: EdgeTable, node_count: int) -> tuple[np.ndarray, np.ndarray]:
-    """Return balanced integer strengths for a known node count."""
-    strengths = directed_strengths(edges)
-    strength_out = np.zeros(node_count, dtype=np.uint64)
-    strength_in = np.zeros(node_count, dtype=np.uint64)
-    strength_out[: len(strengths.out)] = strengths.out
-    strength_in[: len(strengths.incoming)] = strengths.incoming
-    _balance_integer_sequences(strength_out, strength_in)
-    return strength_out, strength_in
+def ensure_results_dir():
+    """Create results directory if needed."""
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    return RESULTS_DIR
 
 
-def sparse_probability_table(node_count: int, degree: int) -> ProbabilityTable:
-    """Build deterministic sparse custom p_ij support with O(N * degree) entries."""
-    degree = max(1, min(degree, node_count))
-    sources = np.repeat(np.arange(node_count, dtype=np.uint64), degree)
-    offsets = np.arange(1, degree + 1, dtype=np.uint64)
-    targets = (sources.reshape(node_count, degree) + offsets.reshape(1, degree))
-    return ProbabilityTable(
-        source=sources,
-        target=(targets % node_count).reshape(-1).astype(np.uint64),
-        probability=np.ones(node_count * degree, dtype=np.float64),
-    )
-
-
-def sparse_exponential_costs(
-    edges: EdgeTable,
-    node_count: int,
-    degree: int,
-    *,
-    seed: int = 42,
-    target_fraction: float = 0.9,
-) -> SparseCosts:
-    """Build deterministic sparse costs and a feasible observed-cost target."""
-    rng = np.random.default_rng(seed)
-    degree = max(1, min(degree, node_count))
-    sources = np.repeat(np.arange(node_count, dtype=np.uint64), degree)
-    offsets = np.arange(1, degree + 1, dtype=np.uint64)
-    targets = (sources.reshape(node_count, degree) + offsets.reshape(1, degree))
-    targets = (targets % node_count).reshape(-1).astype(np.uint64)
-    values = rng.exponential(1.0, size=len(sources)).astype(np.float64)
-    target_cost = target_fraction * observed_sparse_cost(edges, sources, targets, values)
-    if target_cost <= 0.0:
-        target_cost = target_fraction * float(np.mean(values) * edges.total_events)
-    return SparseCosts(sources, targets, values, target_cost)
-
-
-def complete_euclidean_costs(
-    edges: EdgeTable,
-    node_count: int,
-    *,
-    seed: int = 99,
-) -> SparseCosts:
-    """Build complete directed non-self-loop Euclidean costs."""
-    rng = np.random.default_rng(seed)
-    positions = rng.uniform(0.0, 10.0, size=(node_count, 2))
-    pairs = [(i, j) for i in range(node_count) for j in range(node_count) if i != j]
-    sources = np.fromiter((i for i, _ in pairs), dtype=np.uint64, count=len(pairs))
-    targets = np.fromiter((j for _, j in pairs), dtype=np.uint64, count=len(pairs))
-    values = np.fromiter(
-        (float(np.linalg.norm(positions[i] - positions[j])) for i, j in pairs),
-        dtype=np.float64,
-        count=len(pairs),
-    )
-    return SparseCosts(sources, targets, values, observed_sparse_cost(edges, sources, targets, values))
-
-
-def observed_sparse_cost(
-    edges: EdgeTable,
-    cost_sources: np.ndarray,
-    cost_targets: np.ndarray,
-    cost_values: np.ndarray,
-) -> float:
-    """Compute observed cost using zero for pairs absent from sparse costs."""
-    cost_by_pair = {
-        (int(src), int(tgt)): float(cost)
-        for src, tgt, cost in zip(cost_sources, cost_targets, cost_values, strict=True)
-    }
-    return sum(
-        float(weight) * cost_by_pair.get((int(src), int(tgt)), 0.0)
-        for src, tgt, weight in zip(edges.source, edges.target, edges.weight, strict=True)
-    )
-
-
-def _balance_integer_sequences(out: np.ndarray, incoming: np.ndarray) -> None:
-    diff = int(out.sum()) - int(incoming.sum())
-    if diff > 0:
-        incoming[np.argmax(incoming)] += abs(diff)
-    elif diff < 0:
-        out[np.argmax(out)] += abs(diff)
+def ensure_figures_dir():
+    """Create figures directory if needed."""
+    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    return FIGURES_DIR

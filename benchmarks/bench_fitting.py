@@ -1,10 +1,5 @@
-"""Unified fitting benchmark CLI.
+"""Fitting benchmark logic for all ME/W/B families."""
 
-Usage:
-    uv run python benchmarks/bench_fitting.py [--max-n N] [--tolerance T] [--verbose V] [--plot] [--output DIR]
-"""
-
-import argparse
 import json
 import sys
 import time
@@ -12,103 +7,25 @@ from pathlib import Path
 
 import numpy as np
 
-
-def _pareto_strengths(n: int, total: float, seed: int = 42):
-    rng = np.random.default_rng(seed)
-    raw = rng.pareto(2.3, n) + 1.0
-    raw = np.clip(raw, 0.0, np.quantile(raw, 0.95))
-    s_out = raw / raw.sum() * total
-    raw_in = np.roll(raw[::-1], n // 5)
-    s_in = raw_in / raw_in.sum() * total
-    return s_out, s_in
-
-
-def _costs(n: int, seed: int = 99):
-    rng = np.random.default_rng(seed)
-    src, tgt = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
-    val = rng.lognormal(0.0, 0.35, (n, n))
-    return src.ravel().astype(np.uint64), tgt.ravel().astype(np.uint64), val.ravel()
+from benchmarks.common import (
+    complete_costs,
+    compute_degree_residual,
+    compute_strength_residual,
+    degrees_from_strengths,
+    ensure_results_dir,
+    pareto_strengths,
+    target_cost_from_fit,
+)
 
 
-def _degrees(s_out, s_in, frac=0.3):
-    n = len(s_out)
-    k_out = s_out / s_out.sum() * (n * frac)
-    k_in = s_in / s_in.sum() * (n * frac)
-    scale = min((s_out / k_out).min(), (s_in / k_in).min())
-    if scale < 1.0:
-        k_out *= scale * 0.9
-        k_in *= k_out.sum() / k_in.sum()
-    return k_out, k_in
 
 
-def _compute_strength_residual(
-    fit, s_out, s_in, self_loops=True, family=None, layers=None
-):
-    x, y = np.asarray(fit.x), np.asarray(fit.y)
-    n = len(x)
-    lam = getattr(fit, "lam", None)
-    gamma = getattr(fit, "gamma", None)
-    z = getattr(fit, "z", None)
-    w = getattr(fit, "w", None)
-    fam = family or getattr(fit, "family", "poisson")
-    m = layers or getattr(fit, "layers", None) or 1
-    pred_out, pred_in = np.zeros(n), np.zeros(n)
-    for i in range(n):
-        for j in range(n):
-            if not self_loops and i == j:
-                continue
-            if z is not None and w is not None:
-                # strength-degree: v*u/(exp(-u)+v*(1-exp(-u)))
-                u = x[i] * y[j]
-                v = z[i] * w[j]
-                e_neg = np.exp(-u)
-                den = e_neg + v * (1.0 - e_neg)
-                mean = v * u / den if den > 0 else 0.0
-            elif lam is not None:
-                # strength-edges: lam*u/(exp(-u)+lam*(1-exp(-u)))
-                u = x[i] * y[j]
-                e_neg = np.exp(-u)
-                den = e_neg + lam * (1.0 - e_neg)
-                mean = lam * u / den if den > 0 else 0.0
-            elif gamma is not None:
-                # strength-cost
-                mean = x[i] * y[j] * np.exp(-gamma * 0.0)
-            elif fam == "binomial":
-                # binomial: M * xy / (1 + xy)
-                xy = x[i] * y[j]
-                mean = m * xy / (1.0 + xy)
-            else:
-                # poisson: x*y
-                mean = x[i] * y[j]
-            pred_out[i] += mean
-            pred_in[j] += mean
-    return float(max(np.max(np.abs(pred_out - s_out)), np.max(np.abs(pred_in - s_in))))
 
 
-def _compute_degree_residual(fit, k_out, k_in, self_loops=True):
-    x, y = np.asarray(fit.x), np.asarray(fit.y)
-    n = len(x)
-    z = getattr(fit, "z", None)
-    w = getattr(fit, "w", None)
-    pred_out, pred_in = np.zeros(n), np.zeros(n)
-    for i in range(n):
-        for j in range(n):
-            if not self_loops and i == j:
-                continue
-            if z is not None and w is not None:
-                # strength-degree: v*(1-exp(-u))/(exp(-u)+v*(1-exp(-u)))
-                u = x[i] * y[j]
-                v = z[i] * w[j]
-                e_neg = np.exp(-u)
-                den = e_neg + v * (1.0 - e_neg)
-                occ = v * (1.0 - e_neg) / den if den > 0 else 0.0
-            else:
-                # Bernoulli: xy/(1+xy)
-                xy = x[i] * y[j]
-                occ = xy / (1.0 + xy)
-            pred_out[i] += occ
-            pred_in[j] += occ
-    return float(max(np.max(np.abs(pred_out - k_out)), np.max(np.abs(pred_in - k_in))))
+
+
+
+
 
 
 def run_fit(
@@ -125,10 +42,10 @@ def run_fit(
 
     # Compute residuals post-hoc
     if max_s is None and s_out is not None:
-        max_s = _compute_strength_residual(fit, s_out, s_in)
+        max_s = compute_strength_residual(fit, s_out, s_in)
     max_k = None
     if k_out is not None:
-        max_k = _compute_degree_residual(fit, k_out, k_in)
+        max_k = compute_degree_residual(fit, k_out, k_in)
 
     result = {
         "name": name,
@@ -178,8 +95,8 @@ def bench_all(max_n=1000, tolerance=1e-4, verbose=0):
 
     for n in all_sizes:
         total = n * 6.0
-        s_out, s_in = _pareto_strengths(n, total)
-        k_out, k_in = _degrees(s_out, s_in)
+        s_out, s_in = pareto_strengths(n, total)
+        k_out, k_in = degrees_from_strengths(s_out, s_in)
         target_edges = n * 1.8
         total_events = int(total)
 
@@ -255,7 +172,7 @@ def bench_all(max_n=1000, tolerance=1e-4, verbose=0):
         )
 
         if n <= 200:
-            c_src, c_tgt, c_val = _costs(n)
+            c_src, c_tgt, c_val = complete_costs(n)
             base = fit_strength_poisson(s_out, s_in)
             target_cost = float(np.sum(c_val.reshape(n, n) * np.outer(base.x, base.y)))
             results.append(
@@ -354,7 +271,7 @@ def bench_all(max_n=1000, tolerance=1e-4, verbose=0):
         )
 
         if n <= 200:
-            c_src, c_tgt, c_val = _costs(n)
+            c_src, c_tgt, c_val = complete_costs(n)
             base_me = fit_strength_poisson(s_out, s_in)
             target_cost_me = float(
                 np.sum(c_val.reshape(n, n) * np.outer(base_me.x, base_me.y))
@@ -399,7 +316,7 @@ def bench_all(max_n=1000, tolerance=1e-4, verbose=0):
             )
 
             if n >= 25 and n <= 100:
-                c_src, c_tgt, c_val = _costs(n)
+                c_src, c_tgt, c_val = complete_costs(n)
                 base = fit_strength_geometric(s_out, s_in, tolerance=tolerance)
                 target_cost = float(
                     np.sum(c_val.reshape(n, n) * np.outer(base.x, base.y))
@@ -498,8 +415,8 @@ def bench_partial(max_n=1000, tolerance=1e-4, verbose=0):
 
     for n in sizes:
         total = n * 6.0
-        s_out, s_in = _pareto_strengths(n, total)
-        k_out, k_in = _degrees(s_out, s_in)
+        s_out, s_in = pareto_strengths(n, total)
+        k_out, k_in = degrees_from_strengths(s_out, s_in)
 
         # Generate 30% known pairs with rates from the Poisson fit
         from odme.models import fit_strength_poisson
@@ -601,7 +518,7 @@ def bench_partial(max_n=1000, tolerance=1e-4, verbose=0):
         )
 
         if n <= 100:
-            c_src, c_tgt, c_val = _costs(n)
+            c_src, c_tgt, c_val = complete_costs(n)
             target_cost = float(np.sum(c_val.reshape(n, n) * np.outer(base.x, base.y)))
             t0 = time.perf_counter()
             fit = fit_partial_strength_cost_poisson(
@@ -695,52 +612,24 @@ def plot_results(results, output_dir: Path):
         print(f"Plot: {output_dir / 'fitting_residuals.png'}")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="ODME fitting benchmark")
-    parser.add_argument("--max-n", type=int, default=1000)
-    parser.add_argument("--tolerance", type=float, default=1e-4)
-    parser.add_argument(
-        "--verbose", type=int, default=0, help="0=quiet, 1=warn, 2=convergence info"
-    )
-    parser.add_argument("--output", type=str, default="benchmarks/results")
-    parser.add_argument("--plot", action="store_true")
-    args = parser.parse_args()
-
-    print("=" * 80)
-    print(
-        f"ODME FITTING BENCHMARK  max_n={args.max_n}  tol={args.tolerance}  verbose={args.verbose}"
-    )
-    print("=" * 80)
-
-    results = bench_all(
-        max_n=args.max_n, tolerance=args.tolerance, verbose=args.verbose
-    )
-    partial_results = bench_partial(
-        max_n=args.max_n, tolerance=args.tolerance, verbose=args.verbose
-    )
-    results.extend(partial_results)
-
-    output_dir = Path(args.output)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    with (output_dir / "fitting_benchmark.json").open("w") as f:
+def save_results(results, output_dir="benchmarks/results"):
+    """Save benchmark results to JSON."""
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    with (out / "fitting_benchmark.json").open("w") as f:
         json.dump(results, f, indent=2, default=str)
-    print(f"\nResults: {output_dir / 'fitting_benchmark.json'}")
+    print(f"\nResults: {out / 'fitting_benchmark.json'}")
 
-    if args.plot:
-        plot_results(results, output_dir)
 
+def print_summary(results):
+    """Print results summary table."""
     print(f"\n{'=' * 80}\nSUMMARY\n{'=' * 80}")
-    print(
-        f"{'Solver':<40} {'N':>4} {'Time':>7} {'Conv':>4} {'s_resid':>10} {'k_resid':>10}"
-    )
+    print(f"{'Solver':<40} {'N':>4} {'Time':>7} {'Conv':>4} {'s_resid':>10} {'k_resid':>10}")
     print("-" * 80)
     for r in results:
-        sr = f"{r['max_strength_residual']:.1e}" if r["max_strength_residual"] else "—"
-        kr = f"{r['max_degree_residual']:.1e}" if r.get("max_degree_residual") else "—"
+        sr = f"{r['max_strength_residual']:.1e}" if r["max_strength_residual"] else "\u2014"
+        kr = f"{r['max_degree_residual']:.1e}" if r.get("max_degree_residual") else "\u2014"
         print(
-            f"{r['name']:<40} {r['n']:>4} {r['time']:>6.2f}s {'✓' if r['converged'] else '✗':>4} {sr:>10} {kr:>10}"
+            f"{r['name']:<40} {r['n']:>4} {r['time']:>6.2f}s "
+            f"{'\u2713' if r['converged'] else '\u2717':>4} {sr:>10} {kr:>10}"
         )
-
-
-if __name__ == "__main__":
-    main()
