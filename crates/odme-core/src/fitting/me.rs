@@ -207,6 +207,13 @@ fn balance_me_edges_for_lambda(
     (x, y, false, max_iterations)
 }
 
+/// Fit exact grand-canonical ME fixed-strength-degree zero-inflated constraints.
+///
+/// Uses monotone coordinate bisection with ME pair statistics:
+/// E[t_ij] = v_ij * u / (exp(-u) + v_ij*(1-exp(-u)))
+/// pi_ij = v_ij * (1-exp(-u)) / (exp(-u) + v_ij*(1-exp(-u)))
+/// where u = x_i*y_j and v_ij = z_i*w_j.
+#[must_use]
 pub fn balance_strength_degree_poisson(
     strength_out: &[f64],
     strength_in: &[f64],
@@ -217,58 +224,28 @@ pub fn balance_strength_degree_poisson(
     max_iterations: usize,
 ) -> StrengthDegreeFitResult {
     let n = strength_out.len();
-    let total: f64 = strength_out.iter().sum();
-    let sqrt_t = total.sqrt().max(1.0);
-    let k_avg = degree_out.iter().sum::<f64>() / n.max(1) as f64;
-    let n_eff = if self_loops {
-        n as f64
-    } else {
-        (n - 1).max(1) as f64
-    };
+    let total = strength_out.iter().sum::<f64>().max(1.0);
+    let scale = total.sqrt();
     let mut x: Vec<f64> = strength_out
         .iter()
-        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .map(|&s| (s / scale).max(1e-12))
         .collect();
     let mut y: Vec<f64> = strength_in
         .iter()
-        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .map(|&s| (s / scale).max(1e-12))
         .collect();
-    let c_k = if k_avg < n_eff {
-        (k_avg / (n_eff - k_avg).max(0.01)).sqrt()
-    } else {
-        0.9
-    };
+    let k_total = degree_out.iter().sum::<f64>().max(1.0);
+    let k_scale = (k_total / n.max(1) as f64).sqrt().max(0.1);
     let mut z: Vec<f64> = degree_out
         .iter()
-        .map(|&k| {
-            if k > 0.0 && k_avg > 0.0 {
-                k / k_avg * c_k
-            } else {
-                0.0
-            }
-        })
+        .map(|&k| (k / k_total * k_scale).max(1e-12))
         .collect();
     let mut w: Vec<f64> = degree_in
         .iter()
-        .map(|&k| {
-            if k > 0.0 && k_avg > 0.0 {
-                k / k_avg * c_k
-            } else {
-                0.0
-            }
-        })
+        .map(|&k| (k / k_total * k_scale).max(1e-12))
         .collect();
-
-    for i in 0..n {
-        if degree_out[i] <= 0.0 || strength_out[i] <= 0.0 {
-            x[i] = 0.0;
-            z[i] = 0.0;
-        }
-        if degree_in[i] <= 0.0 || strength_in[i] <= 0.0 {
-            y[i] = 0.0;
-            w[i] = 0.0;
-        }
-    }
+    let mut others_q = vec![0.0_f64; n];
+    let mut others_v = vec![0.0_f64; n];
 
     for iter in 0..max_iterations {
         let old_x = x.clone();
@@ -276,103 +253,67 @@ pub fn balance_strength_degree_poisson(
         let old_z = z.clone();
         let old_w = w.clone();
 
-        for i in 0..n {
-            if strength_out[i] <= 0.0 {
-                continue;
-            }
-            let denom: f64 = (0..n)
-                .filter(|&j| self_loops || i != j)
-                .map(|j| {
-                    let u = x[i] * y[j];
-                    let v = z[i] * w[j];
-                    let exp_u = u.exp();
-                    let den = 1.0 + v * (exp_u - 1.0);
-                    if den > 0.0 {
-                        z[i] * y[j] * w[j] * exp_u / den
-                    } else {
-                        0.0
-                    }
-                })
-                .sum();
-            x[i] = if denom > 0.0 {
-                strength_out[i] / denom
-            } else {
-                0.0
-            };
-        }
+        // Update y (strength_in)
         for j in 0..n {
-            if strength_in[j] <= 0.0 {
-                continue;
+            for i in 0..n {
+                if self_loops || i != j {
+                    others_q[i] = x[i];
+                    others_v[i] = z[i] * w[j];
+                } else {
+                    others_q[i] = 0.0;
+                    others_v[i] = 0.0;
+                }
             }
-            let denom: f64 = (0..n)
-                .filter(|&i| self_loops || i != j)
-                .map(|i| {
-                    let u = x[i] * y[j];
-                    let v = z[i] * w[j];
-                    let exp_u = u.exp();
-                    let den = 1.0 + v * (exp_u - 1.0);
-                    if den > 0.0 {
-                        w[j] * x[i] * z[i] * exp_u / den
-                    } else {
-                        0.0
-                    }
-                })
-                .sum();
-            y[j] = if denom > 0.0 {
-                strength_in[j] / denom
-            } else {
-                0.0
-            };
+            y[j] = solve_me_sd_factor_s(strength_in[j], &others_q, &others_v);
         }
-        for j in 0..n {
-            if degree_in[j] <= 0.0 {
-                continue;
-            }
-            let denom: f64 = (0..n)
-                .filter(|&i| self_loops || i != j)
-                .map(|i| {
-                    let u = x[i] * y[j];
-                    let exp_u = u.exp();
-                    let den = 1.0 + z[i] * w[j] * (exp_u - 1.0);
-                    if den > 0.0 {
-                        z[i] * (exp_u - 1.0) / den
-                    } else {
-                        0.0
-                    }
-                })
-                .sum();
-            w[j] = if denom > 0.0 {
-                degree_in[j] / denom
-            } else {
-                0.0
-            };
-        }
+        // Update x (strength_out)
         for i in 0..n {
-            if degree_out[i] <= 0.0 {
-                continue;
+            for j in 0..n {
+                if self_loops || i != j {
+                    others_q[j] = y[j];
+                    others_v[j] = z[i] * w[j];
+                } else {
+                    others_q[j] = 0.0;
+                    others_v[j] = 0.0;
+                }
             }
-            let denom: f64 = (0..n)
-                .filter(|&j| self_loops || i != j)
-                .map(|j| {
-                    let u = x[i] * y[j];
-                    let exp_u = u.exp();
-                    let den = 1.0 + z[i] * w[j] * (exp_u - 1.0);
-                    if den > 0.0 {
-                        w[j] * (exp_u - 1.0) / den
-                    } else {
-                        0.0
-                    }
-                })
-                .sum();
-            z[i] = if denom > 0.0 {
-                degree_out[i] / denom
-            } else {
-                0.0
-            };
+            x[i] = solve_me_sd_factor_s(strength_out[i], &others_q, &others_v);
+        }
+        // Update w (degree_in)
+        for j in 0..n {
+            for i in 0..n {
+                if self_loops || i != j {
+                    others_q[i] = x[i] * y[j];
+                    others_v[i] = z[i];
+                } else {
+                    others_q[i] = 0.0;
+                    others_v[i] = 0.0;
+                }
+            }
+            w[j] = solve_me_sd_factor_k(degree_in[j], &others_q, &others_v);
+        }
+        // Update z (degree_out)
+        for i in 0..n {
+            for j in 0..n {
+                if self_loops || i != j {
+                    others_q[j] = x[i] * y[j];
+                    others_v[j] = w[j];
+                } else {
+                    others_q[j] = 0.0;
+                    others_v[j] = 0.0;
+                }
+            }
+            z[i] = solve_me_sd_factor_k(degree_out[i], &others_q, &others_v);
         }
 
-        let delta =
-            max_pair_delta(&x, &old_x, &y, &old_y).max(max_pair_delta(&z, &old_z, &w, &old_w));
+        let delta = x
+            .iter()
+            .zip(old_x.iter())
+            .chain(y.iter().zip(old_y.iter()))
+            .chain(z.iter().zip(old_z.iter()))
+            .chain(w.iter().zip(old_w.iter()))
+            .map(|(&a, &b)| (a - b).abs())
+            .fold(0.0_f64, f64::max);
         if delta < tolerance {
             return StrengthDegreeFitResult {
                 x,
@@ -394,10 +335,84 @@ pub fn balance_strength_degree_poisson(
     }
 }
 
-/// Masked IPF balancing for directed binary fixed-degree.
-///
-/// Pairs where ``mask[i * n + j]`` is true are skipped in summations.
-#[must_use]
+/// ME strength-degree pair mean: v*u / (exp(-u) + v*(1-exp(-u)))
+fn me_sd_pair_mean(xi: f64, oq: f64, ov: f64) -> f64 {
+    let u = xi * oq;
+    if u <= 0.0 {
+        return 0.0;
+    }
+    let v = ov;
+    let e_neg_u = (-u).exp();
+    let den = e_neg_u + v * (1.0 - e_neg_u);
+    if den <= 0.0 {
+        return 0.0;
+    }
+    v * u / den
+}
+
+/// ME strength-degree occupation: v*(1-exp(-u)) / (exp(-u) + v*(1-exp(-u)))
+fn me_sd_occupation(u: f64, v: f64) -> f64 {
+    if u <= 0.0 || v <= 0.0 {
+        return 0.0;
+    }
+    let e_neg_u = (-u).exp();
+    let den = e_neg_u + v * (1.0 - e_neg_u);
+    if den <= 0.0 {
+        return 0.0;
+    }
+    v * (1.0 - e_neg_u) / den
+}
+
+fn solve_me_sd_factor_s(target: f64, others_q: &[f64], others_v: &[f64]) -> f64 {
+    if target <= 0.0 {
+        return 0.0;
+    }
+    let mut low = 0.0_f64;
+    let mut high = 1e6_f64;
+    for _ in 0..60 {
+        let mid = 0.5 * (low + high);
+        let value: f64 = others_q
+            .iter()
+            .zip(others_v.iter())
+            .map(|(&oq, &ov)| me_sd_pair_mean(mid, oq, ov))
+            .sum();
+        if value < target {
+            low = mid;
+        } else {
+            high = mid;
+        }
+        if high - low < 1e-14 * high.max(1.0) {
+            break;
+        }
+    }
+    0.5 * (low + high)
+}
+
+fn solve_me_sd_factor_k(target: f64, others_q: &[f64], others_v: &[f64]) -> f64 {
+    if target <= 0.0 {
+        return 0.0;
+    }
+    let mut low = 0.0_f64;
+    let mut high = 1e6_f64;
+    for _ in 0..60 {
+        let mid = 0.5 * (low + high);
+        let value: f64 = others_q
+            .iter()
+            .zip(others_v.iter())
+            .map(|(&oq, &ov)| me_sd_occupation(oq, mid * ov))
+            .sum();
+        if value < target {
+            low = mid;
+        } else {
+            high = mid;
+        }
+        if high - low < 1e-14 * high.max(1.0) {
+            break;
+        }
+    }
+    0.5 * (low + high)
+}
+
 pub fn balance_masked_strength_degree_poisson(
     strength_out: &[f64],
     strength_in: &[f64],
