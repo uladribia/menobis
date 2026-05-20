@@ -95,26 +95,17 @@ Total: 202 Python tests, 46 Rust tests, all checks green.
 **Remaining:**
 
 - W zero-inflated absent-edge wrappers for strength-edges, strength-degree, and
-  degree-events if/when native absent-edge bindings are added.
-- W **strength fitting** documentation and benchmark coverage for geometric /
-  negative-binomial Rust conic core.
-- W **strength-cost fitting** benchmark coverage and any additional edge-case
-  feasibility tests.
-- W **strength-edges fitting** — Rust/PyO3/Python public wrappers and general
-  geometric/NB recovery tests are in place. Current solver uses bracketed
-  scalar search over `lambda` plus per-row/per-column monotone solves to recover
-  strengths and `sum(pi_ij)=E`; decide whether to keep this root/IPF method or
-  replace it with the originally planned conic `eta = log(lambda)` formulation
-  before declaring the API scientifically final. This monotone coordinate solver
-  is used only for the **strengths + total edges** W constraint, not for the
-  independent **fixed-strength-only** W case, which remains a Clarabel conic fit.
-- Continue clean fitting result API unification for upcoming W strength-edges,
-  strength-degree, and partial-constraint fits: use constraint-oriented result
-  types plus family, mask/support metadata, and diagnostics before declaring
-  fitting APIs stable.
-- W **strength-degree fitting** — conic with c, d variables.
-- Documentation updates (API, concepts, decisions).
-- Benchmark additions (`bench_w_fitting.py`).
+  degree-events geometric/NB: Rust native functions do not exist yet; Python
+  wrappers explicitly reject with clear error. Implement or document as
+  intentionally unsupported.
+- API consistency fixes documented in `docs/decisions/0006-api-consistency-audit.md`:
+  add `family`/`layers`/`self_loops`/`diagnostics` to `DegreeEventsFit`; add
+  `self_loops` to `FitResult`; fix `fit_strength_binomial` family; fix
+  `fit_degree_bernoulli` family; populate diagnostics in
+  `fit_strength_degree_poisson`. Pending review.
+- Benchmark script `bench_w_fitting.py` for all 10 W fitting APIs.
+- Documentation updates for complete W ensemble coverage.
+- Partial-fit API unification (use constraint-oriented types with mask metadata).
 
 **Session handoff (2026-05-20):**
 

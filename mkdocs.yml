@@ -47,6 +47,7 @@ nav:
       - Provider Pipeline: decisions/0003-provider-pipeline.md
       - W Conic Solver Boundary: decisions/0004-w-conic-solver-boundary.md
       - Fitting Failure Policy: decisions/0005-fitting-failure-policy.md
+      - API Consistency Audit: decisions/0006-api-consistency-audit.md
 
 plugins:
   - search
