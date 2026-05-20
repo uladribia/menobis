@@ -94,18 +94,15 @@ Total: 202 Python tests, 46 Rust tests, all checks green.
 
 **Remaining:**
 
-- W zero-inflated absent-edge wrappers for strength-edges, strength-degree, and
-  degree-events geometric/NB: Rust native functions do not exist yet; Python
-  wrappers explicitly reject with clear error. Implement or document as
-  intentionally unsupported.
-- API consistency fixes documented in `docs/decisions/0006-api-consistency-audit.md`:
-  add `family`/`layers`/`self_loops`/`diagnostics` to `DegreeEventsFit`; add
-  `self_loops` to `FitResult`; fix `fit_strength_binomial` family; fix
-  `fit_degree_bernoulli` family; populate diagnostics in
-  `fit_strength_degree_poisson`. Pending review.
-- Benchmark script `bench_w_fitting.py` for all 10 W fitting APIs.
-- Documentation updates for complete W ensemble coverage.
-- Partial-fit API unification (use constraint-oriented types with mask metadata).
+- Partial-fit API unification: make `PartialFitResult` use the same
+  constraint-oriented result types with mask/support metadata.
+- Sparse Clarabel assembly for W strength-cost (done) could be extended to
+  support `self_loops=False` variant if needed.
+- Release-mode benchmarks for realistic production timings.
+- `.pyi` stubs for new absent-edge PyO3 functions.
+- Milestone 7d: Legacy mobility benchmarks before archiving.
+- Final project rename to MENoBiS.
+- Publish MkDocs site to GitHub Pages.
 
 **Session handoff (2026-05-20):**
 
