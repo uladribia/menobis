@@ -81,7 +81,22 @@ pub fn balance_masked_degree_bernoulli(
         }
 
         let delta = max_pair_delta(&x, &old_x, &y, &old_y);
-        if delta < tolerance {
+        let mut max_err = 0.0_f64;
+        for i in 0..n {
+            let pred: f64 = (0..n)
+                .filter(|&j| !mask[i * n + j])
+                .map(|j| binary_probability(x[i], y[j]))
+                .sum();
+            max_err = max_err.max((pred - degree_out[i]).abs());
+        }
+        for j in 0..n {
+            let pred: f64 = (0..n)
+                .filter(|&i| !mask[i * n + j])
+                .map(|i| binary_probability(x[i], y[j]))
+                .sum();
+            max_err = max_err.max((pred - degree_in[j]).abs());
+        }
+        if delta < tolerance || max_err < tolerance {
             return FitResult {
                 x,
                 y,

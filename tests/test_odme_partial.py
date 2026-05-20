@@ -145,6 +145,7 @@ def test_partial_degree_recovers_constraints() -> None:
         known_source,
         known_target,
         self_loops=False,
+        tolerance=1e-4,
     )
     assert result.source.shape[0] > 0
     for src, tgt in zip(result.source, result.target, strict=True):
@@ -202,7 +203,12 @@ def test_fit_from_network_cutoff_all_models() -> None:
     edges = _small_network()
     for model in ["strength", "degree", "strength-degree", "strength-edges"]:
         result = fit_from_network_cutoff(
-            edges, cutoff=10, model=model, self_loops=False
+            edges,
+            cutoff=10,
+            model=model,
+            self_loops=False,
+            tolerance=1e-4,
+            max_iterations=50000,
         )
         assert result.source.shape[0] > 0
         for src, tgt in zip(result.source, result.target, strict=True):
