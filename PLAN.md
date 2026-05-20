@@ -101,9 +101,14 @@ Total: 202 Python tests, 46 Rust tests, all checks green.
   3.9s with residual 9e-11. ME strength-degree: N=200 in 22s with residual 2e-9.
 - Benchmark script `benchmarks/bench_fitting.py` covers all ME/W/B families
   with post-hoc residual computation, degree residuals, and CLI options
-  (--max-n, --tolerance, --verbose, --plot, --output).
-- Remaining: run full N=1000 benchmark in release mode with plots, update
-  docs/development/benchmarking.md with results.
+  (--max-n, --tolerance, --verbose, --plot, --output). N=200 smoke run
+  completed with plots in `docs/figures/` and `benchmarks/results/`.
+- Remaining:
+  - Run full N=1000 benchmark in release mode for final scaling data.
+  - Fix partial-constraint solvers (same divergent IPF bug as ME edges/degree).
+  - Milestone 7d: Legacy mobility benchmarks before archiving.
+  - Final project rename to MENoBiS.
+  - Publish MkDocs site to GitHub Pages.
 - Release-mode benchmarks for realistic production timings.
 - `.pyi` stubs for new absent-edge PyO3 functions.
 - Milestone 7d: Legacy mobility benchmarks before archiving.
