@@ -484,6 +484,158 @@ def bench_all(max_n=1000, tolerance=1e-4, verbose=0):
     return results
 
 
+def bench_partial(max_n=1000, tolerance=1e-4, verbose=0):
+    """Benchmark partial-constraint fitting with 30% known pairs."""
+    from odme.models.partial import (
+        fit_partial_strength_cost_poisson,
+        fit_partial_strength_degree_poisson,
+        fit_partial_strength_edges_poisson,
+        fit_partial_strength_poisson,
+    )
+
+    sizes = sorted({n for n in [10, 25, 50, 100, 200] if n <= max_n})
+    results = []
+
+    for n in sizes:
+        total = n * 6.0
+        s_out, s_in = _pareto_strengths(n, total)
+        k_out, k_in = _degrees(s_out, s_in)
+
+        # Generate 30% known pairs with rates from the Poisson fit
+        from odme.models import fit_strength_poisson
+
+        base = fit_strength_poisson(s_out, s_in)
+        capacity = n * n
+        n_known = int(capacity * 0.3)
+        # Pick top-rate pairs from the fitted model
+        rates_all = np.outer(base.x, base.y).ravel()
+        pair_order = np.argsort(rates_all)[::-1][:n_known]
+        k_src = (pair_order // n).astype(np.uint64)
+        k_tgt = (pair_order % n).astype(np.uint64)
+        k_rate = rates_all[pair_order]
+
+        print(
+            f"\n--- Partial fitting N={n} ({n_known} known pairs, {n_known / capacity * 100:.0f}%) ---"
+        )
+
+        t0 = time.perf_counter()
+        fit = fit_partial_strength_poisson(
+            s_out,
+            s_in,
+            k_src,
+            k_tgt,
+            k_rate,
+            tolerance=tolerance,
+        )
+        dt = time.perf_counter() - t0
+        results.append(
+            {
+                "name": "Partial ME strength",
+                "n": n,
+                "time": dt,
+                "converged": fit.converged,
+                "iterations": fit.iterations,
+                "max_strength_residual": None,
+                "max_degree_residual": None,
+                "max_q": None,
+            }
+        )
+        print(
+            f"  ✓ Partial ME strength                  N={n:<4} {dt:>7.2f}s iter={fit.iterations}"
+        )
+
+        target_edges = n * 1.8
+        t0 = time.perf_counter()
+        fit = fit_partial_strength_edges_poisson(
+            s_out,
+            s_in,
+            k_src,
+            k_tgt,
+            k_rate,
+            target_edges,
+            tolerance=tolerance,
+        )
+        dt = time.perf_counter() - t0
+        results.append(
+            {
+                "name": "Partial ME strength-edges",
+                "n": n,
+                "time": dt,
+                "converged": fit.converged,
+                "iterations": fit.iterations,
+                "max_strength_residual": None,
+                "max_degree_residual": None,
+                "max_q": None,
+            }
+        )
+        print(
+            f"  ✓ Partial ME strength-edges            N={n:<4} {dt:>7.2f}s iter={fit.iterations}"
+        )
+
+        t0 = time.perf_counter()
+        fit = fit_partial_strength_degree_poisson(
+            s_out,
+            s_in,
+            k_out,
+            k_in,
+            k_src,
+            k_tgt,
+            k_rate,
+            tolerance=tolerance,
+        )
+        dt = time.perf_counter() - t0
+        results.append(
+            {
+                "name": "Partial ME strength-degree",
+                "n": n,
+                "time": dt,
+                "converged": fit.converged,
+                "iterations": fit.iterations,
+                "max_strength_residual": None,
+                "max_degree_residual": None,
+                "max_q": None,
+            }
+        )
+        print(
+            f"  ✓ Partial ME strength-degree           N={n:<4} {dt:>7.2f}s iter={fit.iterations}"
+        )
+
+        if n <= 100:
+            c_src, c_tgt, c_val = _costs(n)
+            target_cost = float(np.sum(c_val.reshape(n, n) * np.outer(base.x, base.y)))
+            t0 = time.perf_counter()
+            fit = fit_partial_strength_cost_poisson(
+                s_out,
+                s_in,
+                k_src,
+                k_tgt,
+                k_rate,
+                c_src.astype(np.int64),
+                c_tgt.astype(np.int64),
+                c_val,
+                target_cost,
+                tolerance=tolerance,
+            )
+            dt = time.perf_counter() - t0
+            results.append(
+                {
+                    "name": "Partial ME strength-cost",
+                    "n": n,
+                    "time": dt,
+                    "converged": fit.converged,
+                    "iterations": fit.iterations,
+                    "max_strength_residual": None,
+                    "max_degree_residual": None,
+                    "max_q": None,
+                }
+            )
+            print(
+                f"  ✓ Partial ME strength-cost             N={n:<4} {dt:>7.2f}s iter={fit.iterations}"
+            )
+
+    return results
+
+
 def plot_results(results, output_dir: Path):
     try:
         import matplotlib
@@ -563,6 +715,10 @@ def main():
     results = bench_all(
         max_n=args.max_n, tolerance=args.tolerance, verbose=args.verbose
     )
+    partial_results = bench_partial(
+        max_n=args.max_n, tolerance=args.tolerance, verbose=args.verbose
+    )
+    results.extend(partial_results)
 
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
