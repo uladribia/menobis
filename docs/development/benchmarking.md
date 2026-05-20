@@ -118,6 +118,37 @@ uv run python benchmarks/bench_streaming_generation.py \
 They require a four-multiplier fit with repeated all-pairs sweeps, so test large
 N values separately before adding `N=20000` to a full matrix.
 
+## Fitting benchmarks
+
+The fitting benchmark covers all ME, W, and B families across 5 constraint
+types. Run with:
+
+```bash
+uv run maturin develop --release -m crates/odme-python/Cargo.toml
+uv run python benchmarks/bench_fitting.py --max-n 1000 --tolerance 1e-4 --plot
+```
+
+Options: `--max-n N`, `--tolerance T`, `--verbose V` (0=quiet, 2=convergence),
+`--plot`, `--output DIR`.
+
+### Scaling (release mode, Pareto strengths)
+
+![Fitting scaling](../figures/fitting_scaling.png)
+
+### Residual accuracy
+
+![Fitting residuals](../figures/fitting_residuals.png)
+
+### Solver limits
+
+| Solver | Constraint | Max N (comfortable) | Bottleneck |
+|--------|-----------|---:|---|
+| Analytic | ME strength | unlimited | O(N) |
+| IPF scalar search | ME cost | 1000+ | O(N² I K) |
+| Monotone coordinate | ME/W edges, degree | 200 | O(N² × 60 bisections × iters) |
+| Clarabel conic (sparse) | W strength, cost | 150 | O(N² cones) interior-point |
+| Scalar root + Bernoulli IPF | degree-events | 1000+ | O(N²) |
+
 ## Regression tests
 
 Regression baselines are stored in `benchmarks/regression_baselines.json`.
