@@ -96,11 +96,15 @@ Total: 202 Python tests, 46 Rust tests, all checks green.
 
 - Partial-fit API unification: make `PartialFitResult` use the same
   constraint-oriented result types with mask/support metadata.
-- ME strength-edges IPF has a known numerical instability: without the
-  `float128` preconditioning used by the legacy thesis code, multipliers can
-  collapse to zero at moderate N. This requires adding the `alf` scaling factor
-  from the original `fitter_E.py`. Tracked as a bug to fix before declaring ME
-  strength-edges production-ready at N>10.
+- ME strength-edges IPF has a known divergence bug: when lambda is too large,
+  the Gauss-Seidel iteration diverges (b grows unbounded, a shrinks to zero).
+  Root cause: the asymmetric update amplifies numerical imbalance between x and
+  y at high lambda. The legacy `fitter_E.py` masked this with `float128` but
+  the fundamental instability is the same. Fix requires either: (a) damped
+  updates, (b) better lambda upper-bound initialization, (c) a different
+  iteration structure (e.g., log-space or simultaneous update), or (d) using the
+  W monotone-coordinate approach adapted for Poisson. This blocks the
+  end-to-end benchmark for ME strength-edges at N>10.
 - Release-mode benchmarks for realistic production timings.
 - `.pyi` stubs for new absent-edge PyO3 functions.
 - Milestone 7d: Legacy mobility benchmarks before archiving.
