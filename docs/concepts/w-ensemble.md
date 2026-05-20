@@ -138,3 +138,26 @@ Common fields include `family`, optional `layers`, `converged`, `iterations`,
 and `diagnostics`. W conic/root diagnostics are nested under
 `diagnostics.conic` and include `max_q`, margin, lifted variables, cones, linear
 constraints, and sparse nonzeros.
+
+## Tolerance and iteration defaults
+
+Default `tolerance` and `max_iterations` differ by solver family because
+the solvers have different convergence characteristics:
+
+| Family | Default tolerance | Default max_iterations | Rationale |
+|--------|------------------:|----------------------:|---|
+| Poisson (ME) IPF | 1e-8 to 1e-10 | 10000–50000 | IPF converges linearly; needs many cheap iterations |
+| Binomial (B) IPF | 1e-8 to 1e-10 | 10000–50000 | Same structure as ME |
+| Geometric (W) conic | 1e-8 | 200–1000 | Clarabel interior-point; few expensive iterations |
+| Negative binomial (W) conic | 1e-8 | 200–1000 | Same as geometric |
+| W monotone coordinate | 1e-7 to 1e-8 | 500–1000 | Each iteration is O(N²) bisection sweeps |
+| Degree-events (all) | 1e-8 to 1e-10 | 10000–50000 | Scalar root + Bernoulli IPF |
+
+The user-facing meaning of `tolerance` is consistent across families:
+"maximum absolute change in multipliers between iterations" for IPF/coordinate
+solvers, or "solver feasibility/gap tolerance" for conic solvers. In both cases
+a smaller tolerance means tighter constraint recovery.
+
+When comparing residuals across families, use `diagnostics.max_strength_residual`
+rather than `tolerance` directly, because the relationship between multiplier
+tolerance and constraint residual depends on the model's nonlinearity.
