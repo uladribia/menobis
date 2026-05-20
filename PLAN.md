@@ -96,8 +96,11 @@ Total: 202 Python tests, 46 Rust tests, all checks green.
 
 - Partial-fit API unification: make `PartialFitResult` use the same
   constraint-oriented result types with mask/support metadata.
-- Sparse Clarabel assembly for W strength-cost (done) could be extended to
-  support `self_loops=False` variant if needed.
+- ME strength-edges IPF has a known numerical instability: without the
+  `float128` preconditioning used by the legacy thesis code, multipliers can
+  collapse to zero at moderate N. This requires adding the `alf` scaling factor
+  from the original `fitter_E.py`. Tracked as a bug to fix before declaring ME
+  strength-edges production-ready at N>10.
 - Release-mode benchmarks for realistic production timings.
 - `.pyi` stubs for new absent-edge PyO3 functions.
 - Milestone 7d: Legacy mobility benchmarks before archiving.

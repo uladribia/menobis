@@ -39,14 +39,18 @@ fn balance_strength_edges_for_lambda(
             if strength_in[j] <= 0.0 {
                 continue;
             }
+            // s_in[j] = sum_i lam * x[i] * y[j] * exp(u) / (1 + lam*(exp(u)-1))
+            // where u = x[i]*y[j]
+            // Stable form: exp(u)/(1+lam*(exp(u)-1)) = 1/(exp(-u) + lam*(1-exp(-u)))
+            // So coefficient of y[j] in sum: lam * x[i] / (exp(-u) + lam*(1-exp(-u)))
             let denom: f64 = (0..n)
                 .filter(|&i| self_loops || i != j)
                 .map(|i| {
                     let u = x[i] * y[j];
-                    let exp_u = u.exp();
-                    let den = 1.0 + lam * (exp_u - 1.0);
+                    let e_neg_u = (-u).exp();
+                    let den = e_neg_u + lam * (1.0 - e_neg_u);
                     if den > 0.0 {
-                        lam * x[i] * exp_u / den
+                        lam * x[i] / den
                     } else {
                         0.0
                     }
@@ -66,10 +70,10 @@ fn balance_strength_edges_for_lambda(
                 .filter(|&j| self_loops || i != j)
                 .map(|j| {
                     let u = x[i] * y[j];
-                    let exp_u = u.exp();
-                    let den = 1.0 + lam * (exp_u - 1.0);
+                    let e_neg_u = (-u).exp();
+                    let den = e_neg_u + lam * (1.0 - e_neg_u);
                     if den > 0.0 {
-                        lam * y[j] * exp_u / den
+                        lam * y[j] / den
                     } else {
                         0.0
                     }
@@ -106,8 +110,8 @@ fn expected_edges_strength_edges(x: &[f64], y: &[f64], lam: f64, self_loops: boo
             if !self_loops && i == j {
                 continue;
             }
-            let exp_u = (xi * yj).exp();
-            total += lam * (exp_u - 1.0) / (1.0 + lam * (exp_u - 1.0));
+            let e_neg_u = (-(xi * yj)).exp();
+            total += lam * (1.0 - e_neg_u) / (e_neg_u + lam * (1.0 - e_neg_u));
         }
     }
     total
