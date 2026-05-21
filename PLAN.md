@@ -74,18 +74,28 @@ escape.
 - N=100 needs more iterations (24k) but gamma is correct (~0.028)
 - Still slow compared to ME (~10x iterations); acceptable for now
 
-### 3. Diagnose B fixed-strength slow convergence `self_loops=False`
+### 3. ~~Diagnose B fixed-strength slow convergence `self_loops=False`~~ ✅ Investigated
 
-**Symptom:** `fit_strength_binomial(self_loops=False)` takes 28s at N=200.
+**Root cause:** B IPF oscillates and multipliers grow to 10^35 when operating
+near saturation (`max_s / (M * (N-1))` close to 1). The fixed-point iteration
+cycles without finding the solution at the minimum feasible M.
 
-**Hypothesis:** The B IPF (`balance_strength_binomial`) uses residual-based
-convergence which converges slowly for large heterogeneous networks without
-self-loops. The no-self-loop case removes the diagonal regularization.
+**Findings:**
+- The system IS mathematically feasible (scipy could solve it)
+- With minimal layers (ceil(max_s/(n-1))+1), saturation ~0.94: IPF diverges
+- With 2x layers (saturation ~0.49): converges for most seeds but not all
+- With 4x layers (saturation ~0.25): always converges in 4-55 iterations
+- Added log-space geometric damping to detect/reduce oscillation (helps
+  marginal cases but doesn't fix worst-case near-saturation)
 
-**Investigation plan:**
-- Profile the existing `balance_masked_strength_binomial` at N=200
-- Check if the issue is iteration count (slow convergence) or per-iteration cost
-- Compare with the B strength-cost IPF which converges fast
+**Practical fix:**
+- Benchmark uses `4 * ceil(max_s/(n-1))` layers (saturation < 0.25)
+- All 18 model cases now FIT successfully at N=25
+- Future: Anderson acceleration could fix the worst-case near-saturation
+  IPF but is not implemented yet
+
+**Recommendation for users:** Always use `layers >= 4 * ceil(max(s_out) / (N-1))`
+for B models with heterogeneous networks.
 
 ### 4. Diagnose degree-events N=500 infeasibility
 

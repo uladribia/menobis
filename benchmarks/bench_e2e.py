@@ -253,8 +253,9 @@ def bench_e2e(max_n: int = 100, nodes: list[int] | None = None):
         w_tol = max(fit_tol, 1.0)
         sample_tol = max(4.0 * np.sqrt(float(s_out.max())), 10.0)
 
-        # B layers: must be >= ceil(max_strength / (n-1)) for feasibility
-        b_layers = max(10, int(np.ceil(float(s_out.max()) / (n - 1))) + 1)
+        # B layers: must have headroom above saturation for convergence.
+        # Use 4x minimum feasible to ensure saturation < 0.25.
+        b_layers = max(10, 4 * int(np.ceil(float(s_out.max()) / (n - 1))))
 
         # Define all cases: (name, fit_func)
         cases = [

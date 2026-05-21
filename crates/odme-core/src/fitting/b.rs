@@ -154,6 +154,9 @@ pub fn balance_strength_binomial(
 }
 
 /// Masked binomial(M) IPF for partial-constraint fitting.
+///
+/// Uses log-space geometric damping to prevent multiplier explosion
+/// in ill-conditioned cases (high saturation, heterogeneous strengths).
 #[must_use]
 #[allow(clippy::needless_range_loop)]
 pub fn balance_masked_strength_binomial(
@@ -178,6 +181,8 @@ pub fn balance_masked_strength_binomial(
         .collect();
     let k_in: Vec<f64> = strength_in.iter().map(|&s| s / m).collect();
     let k_out: Vec<f64> = strength_out.iter().map(|&s| s / m).collect();
+    let mut prev_err = f64::INFINITY;
+    let mut damping = 1.0_f64; // geometric damping factor (1.0 = no damping)
 
     for iter in 0..max_iterations {
         for j in 0..n {
@@ -191,7 +196,13 @@ pub fn balance_masked_strength_binomial(
                 }
                 denom += x[i] / (1.0 + x[i] * y[j]);
             }
-            y[j] = if denom > 0.0 { k_in[j] / denom } else { 0.0 };
+            let new_y = if denom > 0.0 { k_in[j] / denom } else { 0.0 };
+            if damping < 1.0 && y[j] > 0.0 && new_y > 0.0 {
+                // Geometric interpolation in log-space
+                y[j] = (y[j].ln() * (1.0 - damping) + new_y.ln() * damping).exp();
+            } else {
+                y[j] = new_y;
+            }
         }
         for i in 0..n {
             if k_out[i] <= 0.0 {
@@ -204,7 +215,12 @@ pub fn balance_masked_strength_binomial(
                 }
                 denom += y[j] / (1.0 + x[i] * y[j]);
             }
-            x[i] = if denom > 0.0 { k_out[i] / denom } else { 0.0 };
+            let new_x = if denom > 0.0 { k_out[i] / denom } else { 0.0 };
+            if damping < 1.0 && x[i] > 0.0 && new_x > 0.0 {
+                x[i] = (x[i].ln() * (1.0 - damping) + new_x.ln() * damping).exp();
+            } else {
+                x[i] = new_x;
+            }
         }
 
         let mut max_err = 0.0_f64;
@@ -236,6 +252,19 @@ pub fn balance_masked_strength_binomial(
                 iterations: iter + 1,
             };
         }
+
+        // Detect stalling and enable damping
+        if max_err >= prev_err * 0.99 && damping >= 1.0 {
+            // Switch to damped mode
+            damping = 0.5;
+        } else if max_err >= prev_err * 0.999 && damping < 1.0 {
+            // Already damped but still stalling: reduce further
+            damping = (damping * 0.8).max(0.1);
+        } else if max_err < prev_err * 0.95 && damping < 1.0 {
+            // Good progress: relax damping
+            damping = (damping * 1.2).min(1.0);
+        }
+        prev_err = max_err;
     }
 
     FitResult {
