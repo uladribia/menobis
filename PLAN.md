@@ -12,144 +12,243 @@ Scientific reference: <https://hdl.handle.net/10803/400560>.
 - [x] Unified `coord_distance`, bisection gamma, O(K) sparse IPF
 - [x] Removed Clarabel/cvxrust — all W uses Newton solver
 - [x] MkDocs documentation site
+- [x] E2E pipeline tests (270 pass, 0 fail)
+- [x] B feasibility validation (`max_s <= M*(N-1)`)
+- [x] W Newton solver rewrite (bisection+adaptive damping)
+- [x] Degree-events boundary fix (clip to `n-2`)
+- [x] W diagnostics bug fix (probability→log-space conversion)
 
-## Testing and benchmarking policy (mandatory)
+## Remaining detected problems
 
-All tests and benchmarks MUST follow this pipeline:
+### P1. W strength-cost convergence at N≥100
 
-```
-1. Generate a realistic weighted directed network with coordinates
-2. Derive constraints from the generated network (strengths, degrees, costs, edges)
-3. Fit the model using derived constraints
-4. Sample from the fitted model
-5. Verify: sampled network recovers original constraints within tolerance
-```
+**Symptom:** W/Wnb strength-cost coordinate fitting exhausts 50k iterations
+at N≥100 for realistic gravity-model inputs. Gamma converges correctly (via
+ME bootstrap) but the inner Newton solver for (a,b) at fixed gamma stalls.
 
-Tests that do NOT follow this pipeline are justified ONLY for:
-- Unit tests of pure mathematical functions (e.g., `w_mean` formula check)
-- API contract tests (e.g., return type shape, field existence)
-- CLI smoke tests (e.g., exit code, output format)
+**Metrics:**
+- N=25: converges in 4.5k inner iters (0.12s)
+- N=50: converges in 9.8k inner iters (1.7s)
+- N=100: does NOT converge at 24k iters (8.5s)
+- N=500+: does NOT converge
 
-Any fitting/generation test that uses arbitrary hand-picked constraint values
-without verifying they come from a realistic network MUST be rewritten or removed.
+**Root cause:** The per-node Newton update has fixed step structure. For
+highly heterogeneous networks (Gini > 0.5), the Hessian conditioning is poor
+and the adaptive damping hits its floor (1e-6) without sufficient progress.
+
+**Ideas to fix:**
+1. **Anderson/SQUAREM acceleration** on the (a,b) fixed-point iteration.
+   Store last 3-5 iterates, extrapolate. Standard technique for Sinkhorn.
+2. **L-BFGS on the dual**: reformulate as minimization of the W dual
+   function and use scipy-style L-BFGS. The dual is convex and smooth.
+3. **Block Newton**: update all `a` simultaneously using a dense Jacobian
+   solve (O(N³) per step but converges in ~10 steps instead of thousands).
+4. **Relaxed tolerance strategy**: start with loose tolerance (100×), then
+   tighten using the previous solution as warm start. Avoids stalling.
+
+### P2. B strength-cost coordinate fitting at N≥50
+
+**Symptom:** `fit_strength_cost_binomial_coordinates` hits `max_iterations`
+at N≥50 without converging.
+
+**Metrics:**
+- N=25: converges (10 iters)
+- N=50: does NOT converge (5000 iters)
+- N=100+: does NOT converge
+
+**Root cause:** The B cost-coordinate solver uses the same IPF as B strength
+but with a gamma-modulated rate. The same near-saturation conditioning
+applies: when some pairs have `x_i * y_j * exp(-gamma*d)` close to 1,
+the IPF oscillates.
+
+**Ideas to fix:**
+1. Same as P1: Anderson acceleration on the inner IPF.
+2. Use the B strength-edges solver as a reference implementation (it
+   converges via bisection over lambda). Adapt the same bisection strategy
+   for gamma.
+3. Log-space parameterization of the B IPF multipliers.
+
+### P3. Partial W/Wnb cost-coord never converges
+
+**Symptom:** `fit_partial_strength_cost_geometric_coordinates` and the Wnb
+variant fail at all sizes tested (N=25–500).
+
+**Metrics:** Reports 50-80 iterations but converged=False.
+
+**Root cause:** The partial solver computes excess constraints and calls the
+W cost-coord solver on the excess. But:
+- The excess problem is poorly conditioned (some nodes have near-zero excess)
+- The W solver itself (P1) fails on the resulting ill-conditioned problem
+- The 50-80 iterations are bisection steps, each containing many inner Newton
+  iterations that don't converge
+
+**Ideas to fix:**
+1. Fix P1 first — the partial solver inherits the underlying W convergence.
+2. Regularize the excess: set a minimum excess per node (e.g. 1.0) to avoid
+   near-zero targets that destabilize the solver.
+3. For the Wnb case specifically: check if the layers parameter creates
+   additional saturation issues on the reduced problem.
+
+### P4. Sample check failures (△) are stochastic, not fitting bugs
+
+**Observation:** Many cases show "fit OK" but single-sample verification
+fails (err >> tolerance). This is NOT a bug — it's expected high variance
+from W/B families where per-pair variance scales as M*p*(1-p) or q/(1-q)².
+
+**Recommendation:** Replace single-sample checks with ensemble z-scores
+(already implemented in `TestMEStrengthE2E::test_ensemble_z_score`). For
+benchmarks, report fit residual instead of single-sample error.
 
 ## Immediate next steps
 
-### 1. ~~Fix E2E test script sampler calls~~ ✅ Done
+### 8. Consolidate benchmark folder into single CLI tool
 
-Fixed in branch `test/fix-e2e-benchmark`:
-- Created `tests/test_odme_e2e_pipeline.py` with 7 passing E2E tests covering
-  ME/B strength, ME strength-cost, ME strength-edges, ME strength-degree,
-  ME degree-events, plus an ensemble z-score test.
-- Rewrote `benchmarks/bench_e2e.py` with correct API calls for all 18 cases
-  (4 families × 4 constraint types + 2 strength-only families).
-- Fixed: `sample_strength_poisson(fit.x, fit.y, self_loops=..., seed=...)`
-  (not `sample_strength_poisson(fit, seed=...)`)
-- Fixed: `sample_degree_events_poisson(fit, total_events=..., seed=..., self_loops=...)`
-- Fixed: all samplers return `EdgeTable` (access `.source`, `.target`, `.weight`)
-- Made B `layers` adaptive: `max(10, ceil(max_s / (n-1)) + 1)` for feasibility.
-- Added proper sampler dispatch for all families in the benchmark.
+**Problem:** The `benchmarks/` folder has 7 scripts (3k lines) with
+overlapping functionality, inconsistent APIs, and no unified CLI. Results
+are scattered and hard to reproduce.
 
-### 2. ~~Diagnose W Newton `self_loops=False` convergence failure~~ ✅ Fixed
+**Target:** One canonical benchmark CLI (`odme bench`) following the E2E
+testing pattern, with stages that can run independently or together, and
+structured logging throughout.
 
-**Root cause:** Joint Newton coordinate-descent on (a, b, γ) with fixed
-damping=0.8 oscillated indefinitely for heterogeneous networks (max_s >> avg_s).
-The gamma=0 initialization created a basin trap that the joint solver couldn't
-escape.
+#### Design
 
-**Fix applied** (branch `test/fix-e2e-benchmark`):
-1. **Bisection over gamma** (like the ME solver) instead of joint Newton.
-   At each gamma, solve (a,b) independently via Newton.
-2. **Adaptive damping with backtracking**: start at 0.5, increase on progress,
-   revert and halve on stall (3 stalls trigger revert).
-3. **Better initialization**: per-node `a_i` from individual strength targets
-   (not global average), and `r_min` reduced from 0.01 to 1e-4.
-4. **ME gamma bootstrap**: use the fast ME coordinate solver to find the
-   correct gamma bracket before W bisection.
+**CLI structure** (Typer, following `/skill:create-cli` patterns):
 
-**Results:**
-- Before: Failed at N≥15 for ALL realistic inputs (0% convergence)
-- After: Converges at N=15 (1099 iters), N=25 (4510), N=50 (9824)
-- W strength-only (no cost): converges in 10-12 iterations at all sizes
-- N=100 needs more iterations (24k) but gamma is correct (~0.028)
-- Still slow compared to ME (~10x iterations); acceptable for now
+```
+odme bench [OPTIONS] [STAGE]
 
-### 3. ~~Diagnose B fixed-strength slow convergence `self_loops=False`~~ ✅ Investigated
+Stages (run in order, or specify one):
+  generate    Generate test networks and derive constraints
+  fit         Fit all models on derived constraints
+  sample      Sample from fitted models
+  check       Verify sampled networks against constraints
+  filter      Apply significance filtering to samples
 
-**Root cause:** B IPF oscillates and multipliers grow to 10^35 when operating
-near saturation (`max_s / (M * (N-1))` close to 1). The fixed-point iteration
-cycles without finding the solution at the minimum feasible M.
+Options:
+  --nodes TEXT       Comma-separated sizes [default: 25,50,100,500,1000]
+  --families TEXT    Comma-separated families [default: me,b,w,wnb]
+  --constraints TEXT Comma-separated types [default: strength,cost,edges,degree,degree-events]
+  --partial / --no-partial  Include partial fitting [default: true]
+  --known-fraction FLOAT    Fraction of pairs known for partial [default: 0.15]
+  --seed INT         Base seed for generation [default: 10000]
+  --tolerance FLOAT  Fitting tolerance factor [default: 0.02]
+  --max-iterations INT  Max fitting iterations [default: 50000]
+  --output DIR       Results directory [default: benchmarks/results]
+  --json / --no-json JSON output to stdout [default: false]
+  --quiet            Suppress progress, only errors
+  --verbose          Extra detail per case
+```
 
-**Findings:**
-- The system IS mathematically feasible (scipy could solve it)
-- With minimal layers (ceil(max_s/(n-1))+1), saturation ~0.94: IPF diverges
-- With 2x layers (saturation ~0.49): converges for most seeds but not all
-- With 4x layers (saturation ~0.25): always converges in 4-55 iterations
-- Added log-space geometric damping to detect/reduce oscillation (helps
-  marginal cases but doesn't fix worst-case near-saturation)
+#### Stage design
 
-**Practical fix:**
-- Benchmark uses `4 * ceil(max_s/(n-1))` layers (saturation < 0.25)
-- All 18 model cases now FIT successfully at N=25
-- Future: Anderson acceleration could fix the worst-case near-saturation
-  IPF but is not implemented yet
+**Stage 1: `generate`**
+- For each N in `--nodes`:
+  - Generate gravity-model network with coordinates
+  - Derive all constraint sequences (strength, degree, cost, edges)
+  - Validate feasibility: B layers computed, degrees clipped to n-2
+  - Save to `{output}/networks/n{N}.npz` (weights, cx, cy, constraints)
+- Log per-network: N, total_T, max_s, density, total_cost, b_layers
+- Log overall: network count, total generation time
 
-**Recommendation for users:** Always use `layers >= 4 * ceil(max(s_out) / (N-1))`
-for B models with heterogeneous networks.
+**Stage 2: `fit`**
+- Load networks from Stage 1
+- For each (N, family, constraint) combination:
+  - Skip if infeasible (B with max_s > M*(N-1), etc.)
+  - Run fitting with `--max-iterations` and `--tolerance`
+  - Save fit result to `{output}/fits/n{N}_{family}_{constraint}.npz`
+  - Log per-case: name, converged, iterations, seconds, max_residual
+- For partial cases (if `--partial`):
+  - Select `--known-fraction` of pairs (highest weight, non-diagonal)
+  - Run partial fitting
+  - Save results
+- Log summary table after each N
 
-### 4. ~~Diagnose degree-events N=500 infeasibility~~ ✅ Fixed
+**Stage 3: `sample`**
+- Load fit results from Stage 2
+- For each converged fit:
+  - Sample one network from the fitted model
+  - Save to `{output}/samples/n{N}_{family}_{constraint}.npz`
+  - Log per-case: edges generated, total weight, time
 
-**Root cause:** Dense gravity-model networks at N=500 produce nodes with
-`k_in = n-1 = 499` (connected to ALL other nodes). The Bernoulli model
-rejects `k >= capacity` as a boundary singularity (requires p=1, infinite
-multiplier).
+**Stage 4: `check`**
+- Load samples from Stage 3 and constraints from Stage 1
+- For each sample:
+  - Compute strength/degree/edge recovery error
+  - Report max absolute error and relative error
+  - Log per-case: name, max_err, relative_err, pass/fail
+- Log summary: pass count, fail count, worst cases
 
-**Fix:** Clip degrees to `n-2` before fitting and rebalance. This removes
-the boundary singularity while losing <1% of the degree information.
-Applied in both benchmark and test pipeline.
+**Stage 5: `filter`** (optional, only if `filter` stage explicitly requested)
+- Load fit results and generate ensemble
+- Apply significance filtering at alpha=0.01, 0.05, 0.10
+- Report FPR and edge detection rates
+- Log per-case: alpha, FPR, power
 
-**Result:** ME and W degree-events converge at N=500 in 1 iteration after
-clipping.
+#### Logging and resilience
 
-### 5. ~~Rewrite existing tests to follow E2E pipeline~~ ✅ Done
+- Each stage saves a `{output}/{stage}_log.jsonl` with one JSON line per case
+- If a case crashes, the error is logged and the next case proceeds
+- Stages can resume: if `fits/n100_me_strength.npz` exists, skip it
+- Final summary is also saved as `{output}/summary.json`
+- Progress: one line per case on stderr (unless `--quiet`)
+- Results: JSON on stdout if `--json`, else human table
 
-Audited all priority test files:
-- `test_odme_fitting.py` — Pure math + API contract tests. Kept as-is (justified).
-- `test_odme_generation.py` — Pure API/property tests. Kept as-is.
-- `test_odme_strength_cost.py` — Kept (derives constraints from ME fit).
-- `test_odme_w_strength_cost_fitting.py` — Kept (small N=3 hand-checked).
-- `test_odme_w_strength_fitting.py` — Fixed: removed obsolete conic assertions,
-  added skip for pathological convergence, increased tolerance.
-- `test_odme_benchmark_cases.py` — Kept (uses generated networks).
+#### File layout after a full run
 
-Added `test_odme_e2e_pipeline.py` (7 tests) covering the full E2E pipeline
-for ME/B strength, ME strength-cost, ME strength-edges, ME strength-degree,
-ME degree-events, plus an ensemble z-score statistical test.
+```
+benchmarks/results/
+├── networks/
+│   ├── n25.npz
+│   ├── n50.npz
+│   └── ...
+├── fits/
+│   ├── n25_me_strength.npz
+│   ├── n25_b_strength.npz
+│   └── ...
+├── samples/
+│   └── ...
+├── generate_log.jsonl
+├── fit_log.jsonl
+├── sample_log.jsonl
+├── check_log.jsonl
+└── summary.json
+```
 
-Full suite: **270 tests pass, 1 skip, 0 failures.**
+#### Files to delete after implementing
 
-### 6. ~~Rewrite benchmarks to follow E2E pipeline~~ ✅ Done
+Remove all of:
+- `benchmarks/bench_e2e.py`
+- `benchmarks/bench_e2e_full.py`
+- `benchmarks/bench_fitting.py`
+- `benchmarks/bench_generation.py`
+- `benchmarks/bench_filter.py`
+- `benchmarks/compare_legacy.py`
+- `benchmarks/common.py`
+- `benchmarks/__main__.py`
+- `benchmarks/regression_baselines.json`
 
-Rewrote `benchmarks/bench_e2e.py` to follow the mandatory pipeline:
-1. Generate network with `generate_network(n, seed)`
-2. Derive ALL constraint types from the same network
-3. Fit each model (18 cases: 4 families × 4 constraint types + 2 extra)
-4. Sample from fitted model using correct API
-5. Verify constraint recovery
+Replace with:
+- `benchmarks/__init__.py` (empty)
+- `benchmarks/cli.py` (Typer app, one command: `bench`)
+- `benchmarks/generate.py` (Stage 1)
+- `benchmarks/fit.py` (Stage 2)
+- `benchmarks/sample.py` (Stage 3)
+- `benchmarks/check.py` (Stage 4)
+- `benchmarks/filter.py` (Stage 5)
+- `benchmarks/types.py` (shared dataclasses, CaseSpec, etc.)
 
-Features:
-- Adaptive B layers (4× minimum for headroom)
-- Proper sampler dispatch for all families
-- Degree clipping to n-2 for Bernoulli boundary
-- JSON-safe output with numpy type conversion
-- Results at N=25: 18/18 fit OK, 12/18 full pipeline pass
+Register in `pyproject.toml` as `[project.scripts] odme-bench = "benchmarks.cli:app"`.
 
-### 7. Further work (lower priority)
+### 9. Further work (lower priority)
 
-- Incremental benchmark saving
+- Fix P1 (W convergence) via Anderson acceleration or L-BFGS
+- Fix P2 (B cost-coord) via bisection over gamma
+- Fix P3 (partial W) — depends on P1
 - Archive/remove legacy thesis-era folders
 - Final rename decision: ODME → MENoBiS
 - Publish MkDocs site
+- Write tutorials and notebooks with real examples
 
 ## Checks
 

@@ -77,6 +77,30 @@ def _candidate_pair_capacity(node_count: int, *, self_loops: bool) -> int:
     )
 
 
+def _validate_binomial_feasibility(
+    strength_out: NDArray[np.float64],
+    strength_in: NDArray[np.float64],
+    layers: int,
+    *,
+    self_loops: bool,
+) -> None:
+    """Validate that binomial(M) model can achieve the target strengths.
+
+    Maximum achievable strength per node is M * (N or N-1), depending on
+    self_loops. Reject inputs that exceed this capacity.
+    """
+    n = len(strength_out)
+    pairs_per_node = n if self_loops else max(n - 1, 0)
+    max_achievable = float(layers * pairs_per_node)
+    if np.any(strength_out > max_achievable) or np.any(strength_in > max_achievable):
+        msg = (
+            f"binomial(M={layers}) model cannot achieve strengths exceeding "
+            f"M*(N{'' if self_loops else '-1'}) = {max_achievable:.0f}; "
+            f"max(s_out)={strength_out.max():.0f}, max(s_in)={strength_in.max():.0f}"
+        )
+        raise ValueError(msg)
+
+
 def _validate_strength_edges_constraints(
     strength_out: NDArray[np.float64],
     strength_in: NDArray[np.float64],
@@ -370,6 +394,7 @@ def fit_strength_cost_binomial_coordinates(
     coord_x = np.asarray(x, dtype=np.float64)
     coord_y = np.asarray(y, dtype=np.float64)
     _validate_balanced_sequences(s_out, s_in, name="strength")
+    _validate_binomial_feasibility(s_out, s_in, layers, self_loops=self_loops)
     if len(s_out) != len(coord_x) or len(s_out) != len(coord_y):
         msg = "strength and coordinate arrays must have the same length"
         raise ValueError(msg)
@@ -1435,6 +1460,7 @@ def fit_strength_binomial(
     s_out = np.asarray(strength_out, dtype=np.float64)
     s_in = np.asarray(strength_in, dtype=np.float64)
     _validate_balanced_sequences(s_out, s_in, name="strength")
+    _validate_binomial_feasibility(s_out, s_in, layers, self_loops=self_loops)
     n = len(s_out)
     t0 = time.perf_counter()
     x_list, y_list, converged, iters = _odme.fit_strength_binomial(
@@ -1545,6 +1571,7 @@ def fit_strength_edges_binomial(
     _validate_strength_edges_constraints(
         s_out, s_in, target_edges, self_loops=self_loops
     )
+    _validate_binomial_feasibility(s_out, s_in, layers, self_loops=self_loops)
     t0 = time.perf_counter()
     x_list, y_list, lam, converged, iters = _odme.fit_strength_edges_poisson(
         s_out.tolist(),
@@ -1598,6 +1625,7 @@ def fit_strength_degree_binomial(
     k_out = np.asarray(degree_out, dtype=np.float64)
     k_in = np.asarray(degree_in, dtype=np.float64)
     validate_strength_degree_constraints(s_out, s_in, k_out, k_in)
+    _validate_binomial_feasibility(s_out, s_in, layers, self_loops=self_loops)
     t0 = time.perf_counter()
     x_list, y_list, z_list, w_list, converged, iters = (
         _odme.fit_strength_degree_poisson(

@@ -65,7 +65,7 @@
     "sample_ok": true,
     "check_ok": false,
     "metric": 273.0,
-    "seconds": 0.123,
+    "seconds": 0.122,
     "iters": 4510,
     "n": 25
   },
@@ -75,7 +75,7 @@
     "sample_ok": true,
     "check_ok": false,
     "metric": 191.0,
-    "seconds": 0.059,
+    "seconds": 0.06,
     "iters": 2326,
     "n": 25
   },
@@ -145,7 +145,7 @@
     "sample_ok": true,
     "check_ok": false,
     "metric": 1195.0,
-    "seconds": 0.035,
+    "seconds": 0.033,
     "iters": 7,
     "n": 25
   },
@@ -155,7 +155,7 @@
     "sample_ok": true,
     "check_ok": true,
     "metric": 69.0,
-    "seconds": 0.006,
+    "seconds": 0.005,
     "iters": 1,
     "n": 25
   },
@@ -216,7 +216,7 @@
     "check_ok": true,
     "metric": 0.0,
     "seconds": 0.001,
-    "iters": 2,
+    "iters": 1,
     "n": 25
   },
   {
@@ -235,8 +235,8 @@
     "sample_ok": true,
     "check_ok": true,
     "metric": 0.0,
-    "seconds": 0.001,
-    "iters": 9,
+    "seconds": 0.003,
+    "iters": 5,
     "n": 25
   },
   {
@@ -246,24 +246,21 @@
     "check_ok": true,
     "metric": 0.0,
     "seconds": 0.001,
-    "iters": 9,
+    "iters": 8,
     "n": 25
   },
   {
     "case": "partial W cost-coord",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": true,
-    "metric": 0.0,
-    "seconds": 0.017,
-    "iters": 184,
+    "fit_ok": false,
+    "seconds": 0.007,
+    "iters": 59,
     "n": 25
   },
   {
     "case": "partial Wnb cost-coord",
     "fit_ok": false,
-    "seconds": 0.011,
-    "iters": 107,
+    "seconds": 0.007,
+    "iters": 51,
     "n": 25
   },
   {
@@ -329,14 +326,14 @@
     "sample_ok": true,
     "check_ok": false,
     "metric": 785.0,
-    "seconds": 1.669,
+    "seconds": 1.643,
     "iters": 9824,
     "n": 50
   },
   {
     "case": "Wnb strength-cost",
     "fit_ok": false,
-    "seconds": 0.796,
+    "seconds": 0.792,
     "iters": 7336,
     "n": 50
   },
@@ -376,7 +373,7 @@
     "sample_ok": true,
     "check_ok": false,
     "metric": 188.0,
-    "seconds": 0.061,
+    "seconds": 0.063,
     "iters": 5,
     "n": 50
   },
@@ -476,8 +473,8 @@
     "sample_ok": true,
     "check_ok": true,
     "metric": 0.0,
-    "seconds": 0.009,
-    "iters": 5,
+    "seconds": 0.003,
+    "iters": 1,
     "n": 50
   },
   {
@@ -496,8 +493,8 @@
     "sample_ok": true,
     "check_ok": true,
     "metric": 0.0,
-    "seconds": 0.015,
-    "iters": 6,
+    "seconds": 0.014,
+    "iters": 7,
     "n": 50
   },
   {
@@ -507,24 +504,21 @@
     "check_ok": true,
     "metric": 0.0,
     "seconds": 0.005,
-    "iters": 11,
+    "iters": 10,
     "n": 50
   },
   {
     "case": "partial W cost-coord",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": true,
-    "metric": 0.0,
-    "seconds": 0.127,
-    "iters": 304,
+    "fit_ok": false,
+    "seconds": 0.042,
+    "iters": 62,
     "n": 50
   },
   {
     "case": "partial Wnb cost-coord",
     "fit_ok": false,
-    "seconds": 0.074,
-    "iters": 149,
+    "seconds": 0.041,
+    "iters": 60,
     "n": 50
   },
   {
@@ -573,7 +567,7 @@
     "sample_ok": true,
     "check_ok": true,
     "metric": 50.0,
-    "seconds": 0.055,
+    "seconds": 0.056,
     "iters": 9,
     "n": 100
   },
@@ -587,7 +581,7 @@
   {
     "case": "W strength-cost",
     "fit_ok": false,
-    "seconds": 8.542,
+    "seconds": 8.502,
     "iters": 24009,
     "n": 100
   },
@@ -597,7 +591,7 @@
     "sample_ok": true,
     "check_ok": false,
     "metric": 1886.0,
-    "seconds": 3.966,
+    "seconds": 3.95,
     "iters": 9092,
     "n": 100
   },
@@ -607,7 +601,7 @@
     "sample_ok": true,
     "check_ok": true,
     "metric": 112.0,
-    "seconds": 0.018,
+    "seconds": 0.017,
     "iters": 2,
     "n": 100
   },
@@ -657,7 +651,7 @@
     "sample_ok": true,
     "check_ok": false,
     "metric": 28544.0,
-    "seconds": 0.013,
+    "seconds": 0.012,
     "iters": 1,
     "n": 100
   },
@@ -667,7 +661,7 @@
     "sample_ok": true,
     "check_ok": false,
     "metric": 3022.0,
-    "seconds": 0.085,
+    "seconds": 0.084,
     "iters": 1,
     "n": 100
   },
@@ -677,7 +671,7 @@
     "sample_ok": true,
     "check_ok": false,
     "metric": 6546.0,
-    "seconds": 0.09,
+    "seconds": 0.088,
     "iters": 1,
     "n": 100
   },
@@ -738,7 +732,7 @@
     "check_ok": true,
     "metric": 0.0,
     "seconds": 0.017,
-    "iters": 2,
+    "iters": 1,
     "n": 100
   },
   {
@@ -747,7 +741,7 @@
     "sample_ok": true,
     "check_ok": true,
     "metric": 0.0,
-    "seconds": 0.011,
+    "seconds": 0.01,
     "iters": 1,
     "n": 100
   },
@@ -757,8 +751,8 @@
     "sample_ok": true,
     "check_ok": true,
     "metric": 0.0,
-    "seconds": 0.048,
-    "iters": 8,
+    "seconds": 0.044,
+    "iters": 7,
     "n": 100
   },
   {
@@ -767,274 +761,22 @@
     "sample_ok": true,
     "check_ok": true,
     "metric": 0.0,
-    "seconds": 0.019,
-    "iters": 9,
-    "n": 100
-  },
-  {
-    "case": "partial W cost-coord",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": true,
-    "metric": 0.0,
-    "seconds": 0.306,
-    "iters": 149,
-    "n": 100
-  },
-  {
-    "case": "partial Wnb cost-coord",
-    "fit_ok": false,
-    "seconds": 0.23,
-    "iters": 100,
-    "n": 100
-  },
-  {
-    "case": "ME strength",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": true,
-    "metric": 1035.0,
-    "seconds": 0.017,
-    "iters": 3,
-    "n": 500
-  },
-  {
-    "case": "B strength",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": false,
-    "metric": 2901.0,
-    "seconds": 0.024,
-    "iters": 12,
-    "n": 500
-  },
-  {
-    "case": "W strength",
-    "fit_ok": false,
-    "seconds": 1.026,
-    "iters": 5000,
-    "n": 500
-  },
-  {
-    "case": "Wnb strength",
-    "fit_ok": false,
-    "seconds": 1.071,
-    "iters": 5000,
-    "n": 500
-  },
-  {
-    "case": "ME strength-cost",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": true,
-    "metric": 679.0,
-    "seconds": 0.959,
-    "iters": 13,
-    "n": 500
-  },
-  {
-    "case": "B strength-cost",
-    "fit_ok": false,
-    "seconds": 3.212,
-    "iters": 5000,
-    "n": 500
-  },
-  {
-    "case": "W strength-cost",
-    "fit_ok": false,
-    "seconds": 98.173,
-    "iters": 70000,
-    "n": 500
-  },
-  {
-    "case": "Wnb strength-cost",
-    "fit_ok": false,
-    "seconds": 119.338,
-    "iters": 70000,
-    "n": 500
-  },
-  {
-    "case": "ME strength-edges",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": true,
-    "metric": 755.0,
-    "seconds": 0.312,
-    "iters": 1,
-    "n": 500
-  },
-  {
-    "case": "B strength-edges",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": false,
-    "metric": 487652.0,
-    "seconds": 0.345,
-    "iters": 1,
-    "n": 500
-  },
-  {
-    "case": "W strength-edges",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": false,
-    "metric": 80439.0,
-    "seconds": 5.75,
+    "seconds": 0.015,
     "iters": 4,
-    "n": 500
-  },
-  {
-    "case": "Wnb strength-edges",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": false,
-    "metric": 89518.0,
-    "seconds": 7.692,
-    "iters": 6,
-    "n": 500
-  },
-  {
-    "case": "ME strength-degree",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": false,
-    "metric": 13187.0,
-    "seconds": 0.286,
-    "iters": 1,
-    "n": 500
-  },
-  {
-    "case": "B strength-degree",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": false,
-    "metric": 498743.0,
-    "seconds": 0.311,
-    "iters": 1,
-    "n": 500
-  },
-  {
-    "case": "W strength-degree",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": false,
-    "metric": 86822.0,
-    "seconds": 2.164,
-    "iters": 1,
-    "n": 500
-  },
-  {
-    "case": "Wnb strength-degree",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": false,
-    "metric": 221365.0,
-    "seconds": 2.155,
-    "iters": 1,
-    "n": 500
-  },
-  {
-    "case": "ME degree-events",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": true,
-    "metric": 0.0,
-    "seconds": 0.018,
-    "iters": 1,
-    "n": 500
-  },
-  {
-    "case": "B degree-events",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": true,
-    "metric": 0.0,
-    "seconds": 0.018,
-    "iters": 1,
-    "n": 500
-  },
-  {
-    "case": "W degree-events",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": true,
-    "metric": 0.0,
-    "seconds": 0.016,
-    "iters": 1,
-    "n": 500
-  },
-  {
-    "case": "Wnb degree-events",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": true,
-    "metric": 0.0,
-    "seconds": 0.018,
-    "iters": 1,
-    "n": 500
-  },
-  {
-    "case": "partial ME strength",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": true,
-    "metric": 0.0,
-    "seconds": 0.029,
-    "iters": 1,
-    "n": 500
-  },
-  {
-    "case": "partial ME strength-edges",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": true,
-    "metric": 0.0,
-    "seconds": 0.571,
-    "iters": 3,
-    "n": 500
-  },
-  {
-    "case": "partial ME strength-degree",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": true,
-    "metric": 0.0,
-    "seconds": 0.286,
-    "iters": 1,
-    "n": 500
-  },
-  {
-    "case": "partial ME cost-coord",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": true,
-    "metric": 0.0,
-    "seconds": 1.831,
-    "iters": 8,
-    "n": 500
-  },
-  {
-    "case": "partial B cost-coord",
-    "fit_ok": true,
-    "sample_ok": true,
-    "check_ok": true,
-    "metric": 0.0,
-    "seconds": 0.497,
-    "iters": 11,
-    "n": 500
+    "n": 100
   },
   {
     "case": "partial W cost-coord",
     "fit_ok": false,
-    "seconds": 18.864,
-    "iters": 441,
-    "n": 500
+    "seconds": 0.19,
+    "iters": 77,
+    "n": 100
   },
   {
     "case": "partial Wnb cost-coord",
     "fit_ok": false,
-    "seconds": 4.728,
-    "iters": 98,
-    "n": 500
+    "seconds": 0.191,
+    "iters": 77,
+    "n": 100
   }
 ]

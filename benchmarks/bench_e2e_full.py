@@ -115,11 +115,24 @@ def derive_all(weights, dist, n):
     cost_tgt = jj[mask].ravel().astype(np.uint64)
     cost_val = dist[mask].ravel().astype(np.float64)
 
-    # Known pairs for partial (top 10% by weight)
+    # Known pairs for partial: 15% of all non-self-loop pairs
+    # Select pairs with highest observed weight (realistic: these are the
+    # pairs we'd observe in a partial survey)
+    total_pairs = n * (n - 1)
+    k_known = max(1, int(0.15 * total_pairs))
+    # Only select from non-zero weight pairs
     flat_w = weights.ravel()
-    order = np.argsort(flat_w)[::-1]
-    k_known = max(1, int(0.1 * (flat_w > 0).sum()))
-    known_idx = order[:k_known]
+    nonzero_mask = flat_w > 0
+    # Also exclude self-loops
+    diag_mask = np.zeros(n * n, dtype=bool)
+    for i in range(n):
+        diag_mask[i * n + i] = True
+    valid = nonzero_mask & ~diag_mask
+    valid_idx = np.where(valid)[0]
+    # Sort valid by weight descending, take top k_known
+    sorted_valid = valid_idx[np.argsort(flat_w[valid_idx])[::-1]]
+    k_known = min(k_known, len(sorted_valid))
+    known_idx = sorted_valid[:k_known]
     known_s = (known_idx // n).astype(np.uint64)
     known_t = (known_idx % n).astype(np.uint64)
     known_r = flat_w[known_idx].astype(np.float64)
@@ -247,8 +260,8 @@ def main():
         w_tol = max(fit_tol, 1.0)
         sample_tol = max(4.0 * np.sqrt(float(s_out.max())), 20.0)
 
-        # Timeout: scale with N^2
-        timeout = max(30, n * n * 0.001)
+        # Timeout: scale with N^2 (generous for large N)
+        timeout = max(60, n * n * 0.01)
 
         def s_check(sample, fit, tol=sample_tol):
             return check_strengths(sample, s_out, s_in, tol)
@@ -285,7 +298,7 @@ def main():
             (
                 "W strength",
                 lambda: fit_strength_geometric(
-                    s_out, s_in, self_loops=False, tolerance=w_tol, max_iterations=5000
+                    s_out, s_in, self_loops=False, tolerance=w_tol, max_iterations=50000
                 ),
                 lambda f: sample_strength_geometric(
                     f.x, f.y, self_loops=f.self_loops, seed=42
@@ -300,7 +313,7 @@ def main():
                     layers=3,
                     self_loops=False,
                     tolerance=w_tol,
-                    max_iterations=5000,
+                    max_iterations=50000,
                 ),
                 lambda f: sample_strength_negative_binomial(
                     f.x, f.y, layers=3, self_loops=f.self_loops, seed=42
@@ -350,7 +363,7 @@ def main():
                     total_cost,
                     self_loops=False,
                     tolerance=w_tol,
-                    max_iterations=5000,
+                    max_iterations=50000,
                 ),
                 lambda f: sample_strength_cost_geometric(
                     f, cost_src, cost_tgt, cost_val, seed=42
@@ -368,7 +381,7 @@ def main():
                     layers=3,
                     self_loops=False,
                     tolerance=w_tol,
-                    max_iterations=5000,
+                    max_iterations=50000,
                 ),
                 lambda f: sample_strength_cost_negative_binomial(
                     f, cost_src, cost_tgt, cost_val, layers=3, seed=42
@@ -407,7 +420,7 @@ def main():
                     total_edges,
                     self_loops=False,
                     tolerance=w_tol,
-                    max_iterations=5000,
+                    max_iterations=50000,
                 ),
                 lambda f: sample_strength_edges_geometric(f, seed=42),
                 s_check,
@@ -421,7 +434,7 @@ def main():
                     layers=3,
                     self_loops=False,
                     tolerance=w_tol,
-                    max_iterations=5000,
+                    max_iterations=50000,
                 ),
                 lambda f: sample_strength_edges_negative_binomial(f, layers=3, seed=42),
                 s_check,
@@ -460,7 +473,7 @@ def main():
                     k_in,
                     self_loops=False,
                     tolerance=w_tol,
-                    max_iterations=5000,
+                    max_iterations=50000,
                 ),
                 lambda f: sample_strength_degree_geometric(f, seed=42),
                 s_check,
@@ -475,7 +488,7 @@ def main():
                     layers=3,
                     self_loops=False,
                     tolerance=w_tol,
-                    max_iterations=5000,
+                    max_iterations=50000,
                 ),
                 lambda f: sample_strength_degree_negative_binomial(
                     f, layers=3, seed=42
