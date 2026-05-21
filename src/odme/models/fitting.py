@@ -361,30 +361,117 @@ def fit_strength_cost_binomial_coordinates(
     verbose: int = 0,
     max_iterations: int = 5000,
 ) -> StrengthCostFit:
-    """Fit binomial strength-cost from projected Euclidean XY coordinates."""
-    fit = fit_strength_cost_poisson_coordinates(
-        strength_out,
-        strength_in,
-        x,
-        y,
-        target_cost,
-        self_loops=self_loops,
-        tolerance=tolerance,
-        verbose=verbose,
-        max_iterations=max_iterations,
+    """Fit B(M) strength-cost from projected Euclidean XY coordinates.
+
+    Thesis equation: E[t_ij] = M * x_i * y_j * f / (1 + x_i * y_j * f), f=exp(-gamma*d).
+    """
+    s_out = np.asarray(strength_out, dtype=np.float64)
+    s_in = np.asarray(strength_in, dtype=np.float64)
+    coord_x = np.asarray(x, dtype=np.float64)
+    coord_y = np.asarray(y, dtype=np.float64)
+    _validate_balanced_sequences(s_out, s_in, name="strength")
+    if len(s_out) != len(coord_x) or len(s_out) != len(coord_y):
+        msg = "strength and coordinate arrays must have the same length"
+        raise ValueError(msg)
+    t0 = time.perf_counter()
+    x_list, y_list, gamma, converged, iters = (
+        _odme.fit_strength_cost_binomial_coordinates(
+            s_out.tolist(),
+            s_in.tolist(),
+            coord_x.tolist(),
+            coord_y.tolist(),
+            target_cost,
+            layers,
+            self_loops,
+            tolerance,
+            max_iterations,
+        )
     )
-    return StrengthCostFit(
-        node=fit.node,
-        x=fit.x,
-        y=fit.y,
-        gamma=fit.gamma,
-        self_loops=fit.self_loops,
-        converged=fit.converged,
-        iterations=fit.iterations,
+    result = StrengthCostFit(
+        node=np.arange(len(s_out), dtype=np.uint64),
+        x=np.asarray(x_list, dtype=np.float64),
+        y=np.asarray(y_list, dtype=np.float64),
+        gamma=gamma,
+        self_loops=self_loops,
+        converged=converged,
+        iterations=iters,
         family="binomial",
         layers=layers,
-        diagnostics=fit.diagnostics,
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status="solved" if converged else "inaccurate",
+            iterations=iters,
+        ),
     )
+    _log_fit_result(
+        "fit_strength_cost_binomial_coordinates",
+        converged,
+        iters,
+        time.perf_counter() - t0,
+        verbose,
+    )
+    return result
+
+
+def _fit_strength_cost_w_coordinates(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    x: NDArray[np.floating],
+    y: NDArray[np.floating],
+    target_cost: float,
+    *,
+    layers: int,
+    self_loops: bool,
+    tolerance: float,
+    verbose: int,
+    max_iterations: int,
+    family: str,
+) -> StrengthCostFit:
+    """Shared W coordinate strength-cost fitting (geometric or negative binomial)."""
+    s_out = np.asarray(strength_out, dtype=np.float64)
+    s_in = np.asarray(strength_in, dtype=np.float64)
+    coord_x = np.asarray(x, dtype=np.float64)
+    coord_y = np.asarray(y, dtype=np.float64)
+    _validate_balanced_sequences(s_out, s_in, name="strength")
+    if len(s_out) != len(coord_x) or len(s_out) != len(coord_y):
+        msg = "strength and coordinate arrays must have the same length"
+        raise ValueError(msg)
+    t0 = time.perf_counter()
+    x_list, y_list, gamma, converged, iters = _odme.fit_strength_cost_w_coordinates(
+        s_out.tolist(),
+        s_in.tolist(),
+        coord_x.tolist(),
+        coord_y.tolist(),
+        target_cost,
+        layers,
+        self_loops,
+        tolerance,
+        max_iterations,
+    )
+    result = StrengthCostFit(
+        node=np.arange(len(s_out), dtype=np.uint64),
+        x=np.asarray(x_list, dtype=np.float64),
+        y=np.asarray(y_list, dtype=np.float64),
+        gamma=gamma,
+        self_loops=self_loops,
+        converged=converged,
+        iterations=iters,
+        family=family,
+        layers=layers if layers > 1 else None,
+        diagnostics=OptimizationDiagnostics(
+            converged=converged,
+            status="solved" if converged else "inaccurate",
+            iterations=iters,
+        ),
+    )
+    _log_fit_result(
+        f"fit_strength_cost_{family}_coordinates",
+        converged,
+        iters,
+        time.perf_counter() - t0,
+        verbose,
+    )
+    return result
 
 
 def fit_strength_cost_geometric_coordinates(
@@ -399,28 +486,22 @@ def fit_strength_cost_geometric_coordinates(
     verbose: int = 0,
     max_iterations: int = 5000,
 ) -> StrengthCostFit:
-    """Fit W geometric strength-cost from projected Euclidean XY coordinates."""
-    fit = fit_strength_cost_poisson_coordinates(
+    """Fit W geometric strength-cost from projected Euclidean XY coordinates.
+
+    Thesis: E[t_ij] = exp(-r) / (1-exp(-r)), r = a_i + b_j + gamma*d_ij.
+    """
+    return _fit_strength_cost_w_coordinates(
         strength_out,
         strength_in,
         x,
         y,
         target_cost,
+        layers=1,
         self_loops=self_loops,
         tolerance=tolerance,
         verbose=verbose,
         max_iterations=max_iterations,
-    )
-    return StrengthCostFit(
-        node=fit.node,
-        x=fit.x,
-        y=fit.y,
-        gamma=fit.gamma,
-        self_loops=fit.self_loops,
-        converged=fit.converged,
-        iterations=fit.iterations,
         family="geometric",
-        diagnostics=fit.diagnostics,
     )
 
 
@@ -437,29 +518,22 @@ def fit_strength_cost_negative_binomial_coordinates(
     verbose: int = 0,
     max_iterations: int = 5000,
 ) -> StrengthCostFit:
-    """Fit W negative-binomial strength-cost from projected Euclidean XY coordinates."""
-    fit = fit_strength_cost_poisson_coordinates(
+    """Fit W negative-binomial strength-cost from projected Euclidean XY coordinates.
+
+    Thesis: E[t_ij] = M*exp(-r) / (1-exp(-r)), r = a_i + b_j + gamma*d_ij.
+    """
+    return _fit_strength_cost_w_coordinates(
         strength_out,
         strength_in,
         x,
         y,
         target_cost,
+        layers=layers,
         self_loops=self_loops,
         tolerance=tolerance,
         verbose=verbose,
         max_iterations=max_iterations,
-    )
-    return StrengthCostFit(
-        node=fit.node,
-        x=fit.x,
-        y=fit.y,
-        gamma=fit.gamma,
-        self_loops=fit.self_loops,
-        converged=fit.converged,
-        iterations=fit.iterations,
         family="negative_binomial",
-        layers=layers,
-        diagnostics=fit.diagnostics,
     )
 
 
