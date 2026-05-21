@@ -400,18 +400,27 @@ def fit_strength_cost_geometric_coordinates(
     max_iterations: int = 5000,
 ) -> StrengthCostFit:
     """Fit W geometric strength-cost from projected Euclidean XY coordinates."""
-    cost_source, cost_target, cost_value = _coordinate_cost_triples(x, y)
-    return fit_strength_cost_geometric(
+    fit = fit_strength_cost_poisson_coordinates(
         strength_out,
         strength_in,
-        cost_source,
-        cost_target,
-        cost_value,
+        x,
+        y,
         target_cost,
         self_loops=self_loops,
         tolerance=tolerance,
         verbose=verbose,
         max_iterations=max_iterations,
+    )
+    return StrengthCostFit(
+        node=fit.node,
+        x=fit.x,
+        y=fit.y,
+        gamma=fit.gamma,
+        self_loops=fit.self_loops,
+        converged=fit.converged,
+        iterations=fit.iterations,
+        family="geometric",
+        diagnostics=fit.diagnostics,
     )
 
 
@@ -429,19 +438,28 @@ def fit_strength_cost_negative_binomial_coordinates(
     max_iterations: int = 5000,
 ) -> StrengthCostFit:
     """Fit W negative-binomial strength-cost from projected Euclidean XY coordinates."""
-    cost_source, cost_target, cost_value = _coordinate_cost_triples(x, y)
-    return fit_strength_cost_negative_binomial(
+    fit = fit_strength_cost_poisson_coordinates(
         strength_out,
         strength_in,
-        cost_source,
-        cost_target,
-        cost_value,
+        x,
+        y,
         target_cost,
-        layers=layers,
         self_loops=self_loops,
         tolerance=tolerance,
         verbose=verbose,
         max_iterations=max_iterations,
+    )
+    return StrengthCostFit(
+        node=fit.node,
+        x=fit.x,
+        y=fit.y,
+        gamma=fit.gamma,
+        self_loops=fit.self_loops,
+        converged=fit.converged,
+        iterations=fit.iterations,
+        family="negative_binomial",
+        layers=layers,
+        diagnostics=fit.diagnostics,
     )
 
 
