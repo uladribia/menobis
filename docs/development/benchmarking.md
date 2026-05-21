@@ -53,6 +53,11 @@ uv run python -m benchmarks fit --nodes 25,50,100,500,1000,5000 \
 It reached N=5000 B strength-degree and did not save JSON because saving occurs
 at the end. Add incremental saves before rerunning large suites.
 
+Do not permanently exclude fixed strength-cost from large-N benchmarks. Current
+benchmark code avoids dense cost triples at high N, but the intended design is
+on-the-fly or factorized cost evaluation so large strength-cost cases are
+included without materializing avoidable dense cost arrays.
+
 ## Observed full-fit timings
 
 | Case | N=1000 | N=5000 before timeout |
@@ -78,6 +83,7 @@ at the end. Add incremental saves before rerunning large suites.
 | four-multiplier IPF | strength-degree | O(N² I), high constant |
 | W coordinate | W edges/degree | O(N² I) with expensive kernels |
 | conic | W strength/cost | interior point over O(N²) cones |
+| on-the-fly cost | strength-cost | avoids dense cost triple allocation |
 
 ## Memory model
 
@@ -88,7 +94,8 @@ O(Ep), where Ep is support size.
 
 ## Recommendation
 
-Do not run all N=5000 fitting cases in one process. Run chunks such as:
+Do not run all N=5000 fitting cases in one process. First implement incremental
+saving and on-the-fly cost evaluation for strength-cost. Then run chunks such as:
 
 ```bash
 uv run python -m benchmarks fit --nodes 500,1000 --max-n 1000 --verbose 2
