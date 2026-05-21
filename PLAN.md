@@ -60,10 +60,12 @@ written because results are saved at the end.
    it for fixed-strength W, and ensure Rust returns structured errors rather
    than panicking across PyO3.
 2. Refactor fixed-strength and strength-cost fitting around shared Rust kernels.
-   The current coordinate B/W wrappers are API-level placeholders over the ME
-   coordinate solver; that is not scientifically final. The next design should
-   share pair-potential logic across `NoCost`, sparse costs, and projected XY
-   costs, with family-specific expectation equations for ME, B, and W.
+   The current coordinate B/W wrappers are **not real implementations**: they
+   call the ME Poisson coordinate solver and relabel output as binomial,
+   geometric, or negative_binomial. This is why all families show identical
+   benchmark timings. The next design must implement family-specific expectation
+   equations (`E[t_ij]` differs per family) and share pair-potential/cost-provider
+   logic across `NoCost`, sparse costs, and projected XY costs.
 3. Make benchmarks save incrementally after each case or node size.
 4. Extend coordinate-based strength-cost coverage after the shared-kernel
    refactor: generation, filtering, true B/W coordinate fitting, and partial
