@@ -79,6 +79,28 @@ def fit_strength_cost_poisson_coordinates(
     tolerance: float,
     max_iterations: int,
 ) -> tuple[list[float], list[float], float, bool, int]: ...
+def fit_strength_cost_binomial_coordinates(
+    strength_out: list[float],
+    strength_in: list[float],
+    coord_x: list[float],
+    coord_y: list[float],
+    target_cost: float,
+    layers: int,
+    self_loops: bool,
+    tolerance: float,
+    max_iterations: int,
+) -> tuple[list[float], list[float], float, bool, int]: ...
+def fit_strength_cost_w_coordinates(
+    strength_out: list[float],
+    strength_in: list[float],
+    coord_x: list[float],
+    coord_y: list[float],
+    target_cost: float,
+    layers: int,
+    self_loops: bool,
+    tolerance: float,
+    max_iterations: int,
+) -> tuple[list[float], list[float], float, bool, int]: ...
 def fit_degree_bernoulli(
     degree_out: list[float],
     degree_in: list[float],
