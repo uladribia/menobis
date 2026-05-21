@@ -7,6 +7,7 @@ pub mod strength_cost;
 pub(crate) mod support;
 pub mod types;
 pub mod w;
+pub mod w_lbfgs;
 
 #[cfg(test)]
 use b::binary_probability;
@@ -41,6 +42,7 @@ pub use w::{
     independent_strength_residuals, strength_cost_residuals, strength_edges_residuals,
     DegreeEventsFitResult,
 };
+pub use w_lbfgs::fit_strength_cost_w_lbfgs;
 
 #[cfg(test)]
 mod tests {
