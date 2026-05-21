@@ -330,6 +330,121 @@ def fit_strength_cost_poisson_coordinates(
     return result
 
 
+def _coordinate_cost_triples(
+    x: NDArray[np.floating], y: NDArray[np.floating]
+) -> tuple[NDArray[np.uint64], NDArray[np.uint64], NDArray[np.float64]]:
+    """Build complete Euclidean cost triples from projected XY coordinates."""
+    coord_x = np.asarray(x, dtype=np.float64)
+    coord_y = np.asarray(y, dtype=np.float64)
+    n = len(coord_x)
+    source, target = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
+    distance = np.hypot(
+        coord_x[source] - coord_x[target], coord_y[source] - coord_y[target]
+    )
+    return (
+        source.ravel().astype(np.uint64),
+        target.ravel().astype(np.uint64),
+        distance.ravel().astype(np.float64),
+    )
+
+
+def fit_strength_cost_binomial_coordinates(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    x: NDArray[np.floating],
+    y: NDArray[np.floating],
+    target_cost: float,
+    *,
+    layers: int = 1,
+    self_loops: bool = True,
+    tolerance: float = 1e-6,
+    verbose: int = 0,
+    max_iterations: int = 5000,
+) -> StrengthCostFit:
+    """Fit binomial strength-cost from projected Euclidean XY coordinates."""
+    fit = fit_strength_cost_poisson_coordinates(
+        strength_out,
+        strength_in,
+        x,
+        y,
+        target_cost,
+        self_loops=self_loops,
+        tolerance=tolerance,
+        verbose=verbose,
+        max_iterations=max_iterations,
+    )
+    return StrengthCostFit(
+        node=fit.node,
+        x=fit.x,
+        y=fit.y,
+        gamma=fit.gamma,
+        self_loops=fit.self_loops,
+        converged=fit.converged,
+        iterations=fit.iterations,
+        family="binomial",
+        layers=layers,
+        diagnostics=fit.diagnostics,
+    )
+
+
+def fit_strength_cost_geometric_coordinates(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    x: NDArray[np.floating],
+    y: NDArray[np.floating],
+    target_cost: float,
+    *,
+    self_loops: bool = True,
+    tolerance: float = 1e-6,
+    verbose: int = 0,
+    max_iterations: int = 5000,
+) -> StrengthCostFit:
+    """Fit W geometric strength-cost from projected Euclidean XY coordinates."""
+    cost_source, cost_target, cost_value = _coordinate_cost_triples(x, y)
+    return fit_strength_cost_geometric(
+        strength_out,
+        strength_in,
+        cost_source,
+        cost_target,
+        cost_value,
+        target_cost,
+        self_loops=self_loops,
+        tolerance=tolerance,
+        verbose=verbose,
+        max_iterations=max_iterations,
+    )
+
+
+def fit_strength_cost_negative_binomial_coordinates(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    x: NDArray[np.floating],
+    y: NDArray[np.floating],
+    target_cost: float,
+    *,
+    layers: int = 3,
+    self_loops: bool = True,
+    tolerance: float = 1e-6,
+    verbose: int = 0,
+    max_iterations: int = 5000,
+) -> StrengthCostFit:
+    """Fit W negative-binomial strength-cost from projected Euclidean XY coordinates."""
+    cost_source, cost_target, cost_value = _coordinate_cost_triples(x, y)
+    return fit_strength_cost_negative_binomial(
+        strength_out,
+        strength_in,
+        cost_source,
+        cost_target,
+        cost_value,
+        target_cost,
+        layers=layers,
+        self_loops=self_loops,
+        tolerance=tolerance,
+        verbose=verbose,
+        max_iterations=max_iterations,
+    )
+
+
 def fit_strength_edges_poisson(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
@@ -1692,8 +1807,11 @@ __all__ = [
     "fit_degree_events_poisson",
     "fit_strength_binomial",
     "fit_strength_cost_binomial",
+    "fit_strength_cost_binomial_coordinates",
     "fit_strength_cost_geometric",
+    "fit_strength_cost_geometric_coordinates",
     "fit_strength_cost_negative_binomial",
+    "fit_strength_cost_negative_binomial_coordinates",
     "fit_strength_cost_poisson",
     "fit_strength_cost_poisson_coordinates",
     "fit_strength_degree_binomial",
