@@ -35,14 +35,20 @@ without verifying they come from a realistic network MUST be rewritten or remove
 
 ## Immediate next steps
 
-### 1. Fix E2E test script sampler calls
+### 1. ~~Fix E2E test script sampler calls~~ ✅ Done
 
-The true E2E benchmark (`/tmp/bench_e2e_true.py`) has wrong sampler API calls:
-- `sample_strength_poisson(fit, seed=)` needs `total_events` argument
-- `sample_degree_events_poisson(fit, seed=)` needs explicit parameters
-- Samplers return `EdgeTable`, not `(src, tgt, wt)` tuples
-
-Fix these to complete the generate → fit → sample → check loop.
+Fixed in branch `test/fix-e2e-benchmark`:
+- Created `tests/test_odme_e2e_pipeline.py` with 7 passing E2E tests covering
+  ME/B strength, ME strength-cost, ME strength-edges, ME strength-degree,
+  ME degree-events, plus an ensemble z-score test.
+- Rewrote `benchmarks/bench_e2e.py` with correct API calls for all 18 cases
+  (4 families × 4 constraint types + 2 strength-only families).
+- Fixed: `sample_strength_poisson(fit.x, fit.y, self_loops=..., seed=...)`
+  (not `sample_strength_poisson(fit, seed=...)`)
+- Fixed: `sample_degree_events_poisson(fit, total_events=..., seed=..., self_loops=...)`
+- Fixed: all samplers return `EdgeTable` (access `.source`, `.target`, `.weight`)
+- Made B `layers` adaptive: `max(10, ceil(max_s / (n-1)) + 1)` for feasibility.
+- Added proper sampler dispatch for all families in the benchmark.
 
 ### 2. Diagnose W Newton `self_loops=False` convergence failure
 
