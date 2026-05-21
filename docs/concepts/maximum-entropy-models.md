@@ -1,144 +1,82 @@
 ---
-description: Multi-edge model constraints implemented by ODME.
+description: Mathematical overview of ODME fitting, generation, and filtering.
 ---
 
-# Multi-edge models
+# Maximum entropy models
 
 ## TL;DR
 
-ODME implements directed multi-edge models derived from maximum entropy
-principles. ME stands for **multi-edge** throughout this project.
-The taxonomy is documented in [Thesis Cases](thesis-cases.md).
+ODME builds maximum-entropy null models by choosing pair distributions whose
+expected sufficient statistics match requested constraints. Fitting finds
+Lagrange multipliers; generation samples independent pair distributions;
+filtering computes p-values under the fitted null.
 
-## Implemented models
+## Families
 
-| Model | Case | Constraints | Fit API |
-|-------|------|-------------|----------|
-| Fixed strength | — | $s^{out}$, $s^{in}$ | `fit_strength_poisson`, `fit_strength_geometric` |
-| Custom probability | 1 | $p_{ij}$, $T$ | `sample_custom_*` |
-| Strength-cost | 2 | $s^{out}$, $s^{in}$, $C$ | `fit_strength_cost_poisson`, `fit_strength_cost_geometric` |
-| Strength-edges | 3 | $s^{out}$, $s^{in}$, $E$ | `fit_strength_edges_poisson`, `fit_strength_edges_geometric` |
-| Strength-degree | 4 | $s^{out}$, $s^{in}$, $k^{out}$, $k^{in}$ | `fit_strength_degree_poisson` |
-| Degree-events | 5 | $k^{out}$, $k^{in}$, $T$ | `fit_degree_bernoulli` |
+| Family | Pair law | Parameter idea |
+|---|---|---|
+| ME | Poisson | unbounded integer weights |
+| B | Binomial(M) | bounded layer count |
+| W geometric | geometric | unbounded weighted edges |
+| W negative-binomial | NB(M) | layered W model |
 
-All models support partial-constraint fitting except custom probability
-sampling; see [Partial Constraints](partial-constraints.md).
+## Constraints
 
-## Shared notation
+| Constraint | Matched statistic |
+|---|---|
+| strength | outgoing/incoming expected weights |
+| degree-events | binary degrees plus total events |
+| strength-edges | strengths plus expected occupied edges |
+| strength-degree | strengths plus binary degrees |
+| strength-cost | strengths plus expected cost |
 
-| Symbol | Meaning |
-|--------|---------|
-| $t_{ij}$ | Integer event count from node $i$ to node $j$ |
-| $T$ | Total events, $\sum_{ij} t_{ij}$ |
-| $E$ | Binary edge count, $\sum_{ij}\Theta(t_{ij})$ |
-| $s^{out}, s^{in}$ | Outgoing and incoming strength sequences |
-| $k^{out}, k^{in}$ | Outgoing and incoming binary degree sequences |
+## Fitting
 
-For integer networks, ODME validates:
+Fitting solves Lagrange multiplier equations. For a directed pair `(i,j)`,
+node multipliers usually appear as products such as `x_i y_j`. Additional
+multipliers encode edge, degree, or cost constraints.
 
-$$
-s_i^{out} \ge k_i^{out}, \qquad s_i^{in} \ge k_i^{in}.
-$$
+Examples:
 
-## Fixed-strength ME
+| Model | Mean or occupation form |
+|---|---|
+| Poisson strength | `mu_ij = x_i y_j` |
+| Binomial strength | `mu_ij = M x_i y_j / (1 + x_i y_j)` |
+| W strength | `mu_ij = M q_ij / (1 - q_ij)` |
+| zero-inflated | `pi_ij = v G(q) / (1 + v G(q))` |
 
-The fitted factors recover the analytical expectation:
+The W family uses `q = exp(-r)` and kernels derived from
+`G_M(r) = (1 - exp(-r))^{-M} - 1`.
 
-$$
-\mathbb{E}[t_{ij}] = x_i y_j = \frac{s_i^{out} s_j^{in}}{T}.
-$$
+## Solvers
 
-```python
-fit = fit_strength_poisson(s_out, s_in)
-```
+| Solver | Used for |
+|---|---|
+| analytic | Poisson fixed strength |
+| IPF/balancing | ME/B strength and degree equations |
+| scalar root + IPF | degree-events |
+| coordinate bisection | strength-edges and strength-degree |
+| sparse conic Clarabel | W independent strength and strength-cost |
 
-Sampler variants:
+Partial known-weight fitting is the same problem on residual constraints: known
+weighted pairs are subtracted from strengths/events/cost and removed from the
+free support.
 
-| Ensemble | Function | Exactly fixed |
-|----------|----------|---------------|
-| Grand-canonical | `sample_strength_poisson(fit.x, fit.y)` | nothing |
-| Canonical | `sample_strength_multinomial(fit.x, fit.y, total_events=T)` | $T$ |
-| Stub-matched | `sample_strength_stub_matching(s_out, s_in)` | $s^{out}$, $s^{in}$, $T$ |
+## Generation
 
-## Degree-events ME, thesis case 5
+After fitting, ODME constructs a provider for each candidate pair and samples
+independently unless the model is explicitly multinomial or stub-matching.
+Generation streams over candidate pairs and returns a sparse edge table.
 
-Binary occupation probability:
+## Filtering
 
-$$
-p_{ij} = \frac{x_i y_j}{1 + x_i y_j},
-\qquad
-\langle E \rangle = \sum_{ij} p_{ij}.
-$$
+Filtering evaluates observed weights under the fitted pair distributions. Upper
+p-values mark unexpectedly large weights; lower p-values mark unexpectedly small
+weights. Absent-edge filtering uses the model occupation probability.
 
-Positive edges receive weights with common mean $T / \langle E \rangle$:
+## Numerical policy
 
-$$
-\mathbb{E}[t_{ij}] = \frac{T}{\langle E \rangle} p_{ij}.
-$$
-
-```python
-fit = fit_degree_bernoulli(k_out, k_in)
-sample = sample_degree_events_poisson(fit, total_events=T, seed=42)
-```
-
-## Strength-cost ME, thesis case 2
-
-$$
-\mathbb{E}[t_{ij}] = x_i y_j e^{-\gamma d_{ij}}.
-$$
-
-```python
-fit = fit_strength_cost_poisson(s_out, s_in, cost_src, cost_tgt, cost_val, C)
-sample = sample_strength_cost_poisson(fit, cost_src, cost_tgt, cost_val, seed=42)
-```
-
-See [Spatial Costs](spatial-costs.md) and [W Ensemble](w-ensemble.md) for W
-geometric/negative-binomial variants and solver notes.
-
-## Strength-edges ME, thesis case 3
-
-Let $u_{ij}=x_i y_j$. Then:
-
-$$
-p_{ij}=\frac{\lambda(e^{u_{ij}}-1)}{1+\lambda(e^{u_{ij}}-1)},
-\qquad
-\mathbb{E}[t_{ij}]=\frac{\lambda u_{ij}e^{u_{ij}}}{1+\lambda(e^{u_{ij}}-1)}.
-$$
-
-```python
-fit = fit_strength_edges_poisson(s_out, s_in, target_edges=E)
-sample = sample_strength_edges_poisson(fit, seed=42)
-```
-
-The W strength-edges variant replaces the positive-weight Poisson term with the
-zero-inflated W equations in [W Ensemble](w-ensemble.md). Its current fitter uses
-an experimental monotone root/IPF solver over `lambda`.
-
-## Strength-degree ME, thesis case 4
-
-Let $u_{ij}=x_i y_j$ and $v_{ij}=z_i w_j$. Then:
-
-$$
-p_{ij}=\frac{v_{ij}(e^{u_{ij}}-1)}{1+v_{ij}(e^{u_{ij}}-1)},
-\qquad
-\mathbb{E}[t_{ij}]=\frac{v_{ij}u_{ij}e^{u_{ij}}}{1+v_{ij}(e^{u_{ij}}-1)}.
-$$
-
-```python
-fit = fit_strength_degree_poisson(s_out, s_in, k_out, k_in)
-sample = sample_strength_degree_poisson(fit, seed=42)
-```
-
-## Custom probability, thesis case 1
-
-The supplied probabilities are normalized before sampling:
-
-$$
-\mathbb{E}[t_{ij}] = T \frac{p_{ij}}{\sum_{ab} p_{ab}}.
-$$
-
-```python
-probabilities = normalize_probabilities(source, target, p)
-sample = sample_custom_multinomial(probabilities, total_events=T, seed=42)
-sample = sample_custom_poisson(probabilities, total_events=T, seed=42)
-```
+- Use approximate residual checks for floating point fits.
+- Expose convergence, iterations, and diagnostics.
+- Prefer Rust kernels for all heavy numerical loops.
+- Treat legacy code as scientific reference, not compatibility target.

@@ -48,4 +48,4 @@ See [Getting Started](getting-started.md) for installation and workflow details.
 | [CLI](cli/analyze.md) | Command-line interface reference |
 | [API](api/python.md) | Python and Rust API reference |
 | [Decisions](decisions/0001-rust-python-architecture.md) | Architectural decision records |
-| [Development](development/testing.md) | Testing, benchmarking, and release workflows |
+| [Development](development/testing.md) | Testing, benchmarking, scaling, and extension workflows |
