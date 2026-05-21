@@ -6,139 +6,110 @@ description: Strength-cost model for spatially constrained multi-edge networks.
 
 ## TL;DR
 
-The **strength-cost ME** model is thesis case 2. It constrains outgoing and
-incoming strengths plus total cost, with expectation
-$\mathbb{E}[t_{ij}] = x_i y_j e^{-\gamma d_{ij}}$.
+The strength-cost model adds a total-cost Lagrange multiplier $\gamma$ to the
+strength constraints. All three families (ME, B, W) share the same cost decay
+factor $f_{ij} = e^{-\gamma d_{ij}}$ but differ in expected-weight formula.
 
-For complete spatial costs, prefer projected XY coordinate APIs that compute
-Euclidean distances on the fly. Sparse custom cost triples remain supported, but
-dense all-pairs triples can overflow memory at large N.
+Coordinate APIs compute Euclidean distances on the fly in Rust. No dense cost
+triples are allocated when using coordinates.
 
-## Model
+## Family-specific expected weights
 
-Given pair costs $d_{ij}$, usually distances, the expected occupation is:
+| Family | $\mathbb{E}[t_{ij}]$ | Parameters |
+|--------|----------------------|------------|
+| ME (Poisson) | $x_i y_j f_{ij}$ | $x_i, y_j$ are rate multipliers |
+| B (Binomial M) | $\frac{M\, x_i y_j f_{ij}}{1 + x_i y_j f_{ij}}$ | $x_i, y_j$ are rate multipliers |
+| W (Geometric/NegBin M) | $\frac{M\, e^{-r_{ij}}}{1 - e^{-r_{ij}}}$ | $r_{ij} = a_i + b_j + \gamma d_{ij}$; returned as $x_i = e^{-a_i}$, $y_j = e^{-b_j}$ |
 
-$$
-\mathbb{E}[t_{ij}] = x_i y_j e^{-\gamma d_{ij}}.
-$$
+Here $f_{ij} = e^{-\gamma d_{ij}}$ in all cases.
 
-Here $x_i$ and $y_j$ are node multipliers and $\gamma \ge 0$ is the scalar cost
-multiplier. The observed total cost is:
+## Shared constraints
 
-$$
-C = \sum_{ij} t_{ij} d_{ij}.
-$$
-
-## Constraints
-
-The fitted expectation satisfies:
+All families satisfy:
 
 $$
-s_i^{out} = \sum_j x_i y_j e^{-\gamma d_{ij}},
-$$
-
-$$
-s_j^{in} = \sum_i x_i y_j e^{-\gamma d_{ij}},
-$$
-
-$$
-C = \sum_{ij} x_i y_j d_{ij} e^{-\gamma d_{ij}}.
+s_i^{\text{out}} = \sum_j \mathbb{E}[t_{ij}], \qquad
+s_j^{\text{in}} = \sum_i \mathbb{E}[t_{ij}], \qquad
+C = \sum_{ij} \mathbb{E}[t_{ij}]\, d_{ij}.
 $$
 
 When `self_loops=False`, diagonal pairs $(i,i)$ are omitted from all sums.
 
-## Cost entries
+## Cost providers
 
-ODME accepts costs as sparse `source,target,cost` entries. For current fitting
-and sampling, omitted pairs are treated as cost $d_{ij}=0$. Prefer passing a
-complete cost table unless zero-cost missing pairs are intentional.
+| Mode | Input | Memory | Use when |
+|------|-------|--------|----------|
+| Sparse triples | `cost_sources, cost_targets, cost_values` | O(K) where K = number of entries | Arbitrary costs, partial support |
+| Projected coordinates | `coord_x, coord_y` per node | O(N) | Complete Euclidean spatial costs |
 
-For large complete spatial supports, pass projected coordinates instead of dense
-triples. Full and partial coordinate strength-cost APIs compute Euclidean
-distances on the fly in Rust and do not materialize all-pairs cost triples.
-Coordinates must be in a Euclidean projected CRS such as UTM or a local metric
-projection. ODME does not transform CRS and does not compute geodesic distances.
+Coordinates must be in a projected CRS (UTM, local metric). ODME does not
+transform CRS or compute geodesic distances.
 
-## Solver
+## Solver strategies
 
-ODME currently uses a two-level structure:
+| Family | Gamma search | Inner solver | Notes |
+|--------|-------------|--------------|-------|
+| ME | Bisection | IPF balancing at fixed $\gamma$ | On-the-fly distances |
+| B | Bisection | IPF with saturation $z/(1+z)$ | On-the-fly distances |
+| W | Exponential-cone (Clarabel) | Conic formulation | Inline distances in CSC assembly |
 
-| Level | Method | What it uses |
-|-------|--------|--------------|
-| Inner | IPF balancing | exact multiplicative structure for $x,y$ at fixed $\gamma$ |
-| Outer | adaptive scalar search | warm-started updates of $\gamma$ to match $C$ |
+## Return value semantics
 
-The dual problem is convex under the usual feasible multi-edge setup, but
-the current implementation does **not** call a generic convex optimizer. It
-exploits separability/IPF and warm starts. Future work can replace the outer
-search with bracketed bisection/Brent or a gradient-based convex-dual solve.
+All coordinate functions return `StrengthCostFit(x, y, gamma, family, ...)`.
 
-## W strength-cost variant
-
-The W ensemble replaces the Poisson mean with geometric or negative-binomial
-weights. With `M=1` for geometric and `M>1` for negative binomial,
-$q_{ij}=x_i y_j e^{-\gamma d_{ij}}$ and:
-
-$$
-\mathbb{E}[t_{ij}] = \frac{M q_{ij}}{1-q_{ij}}, \quad 0 \le q_{ij}<1.
-$$
-
-ODME fits this variant with the Clarabel exponential-cone formulation used by
-other W strength fits. The result includes solver status, residuals, `max_q`,
-and lifted problem-size diagnostics.
-
-## Python API
+For ME and B, reconstruct rates as:
 
 ```python
-import numpy as np
+f_ij = np.exp(-fit.gamma * distance[i, j])
+# ME: rate = fit.x[i] * fit.y[j] * f_ij
+# B:  rate = layers * fit.x[i] * fit.y[j] * f_ij / (1 + fit.x[i] * fit.y[j] * f_ij)
+```
+
+For W, `x[i] = exp(-a_i)` and `y[j] = exp(-b_j)`:
+
+```python
+r_ij = -np.log(fit.x[i]) - np.log(fit.y[j]) + fit.gamma * distance[i, j]
+# W:  rate = layers * np.exp(-r_ij) / (1 - np.exp(-r_ij))
+```
+
+## Coordinate API
+
+```python
 from odme.models import (
-    fit_strength_cost_geometric,
-    fit_strength_cost_poisson,
-    sample_strength_cost_geometric,
-    sample_strength_cost_poisson,
+    fit_strength_cost_poisson_coordinates,
+    fit_strength_cost_binomial_coordinates,
+    fit_strength_cost_geometric_coordinates,
+    fit_strength_cost_negative_binomial_coordinates,
 )
 
-fit = fit_strength_cost_poisson(
-    s_out, s_in,
-    cost_sources, cost_targets, cost_values,
-    target_cost,
-)
-sample = sample_strength_cost_poisson(fit, cost_sources, cost_targets, cost_values, seed=42)
-
-w_fit = fit_strength_cost_geometric(
-    s_out, s_in,
-    cost_sources, cost_targets, cost_values,
-    target_cost,
-)
-w_sample = sample_strength_cost_geometric(
-    w_fit, cost_sources, cost_targets, cost_values, seed=42,
-)
+me = fit_strength_cost_poisson_coordinates(s_out, s_in, x, y, target_cost)
+b  = fit_strength_cost_binomial_coordinates(s_out, s_in, x, y, target_cost, layers=3)
+wg = fit_strength_cost_geometric_coordinates(s_out, s_in, x, y, target_cost)
+wnb = fit_strength_cost_negative_binomial_coordinates(s_out, s_in, x, y, target_cost, layers=3)
 ```
-
-## CLI
-
-```bash
-odme fit strength-cost-me edges.csv --costs costs.csv --target-cost 120.0
-odme generate strength-cost-me edges.csv --costs costs.csv --target-cost 120.0 --seed 42
-```
-
-If `--target-cost` is omitted, the CLI computes it from the observed edges and
-cost table. Observed edges missing from the cost table contribute zero cost.
 
 ## Partial-constraint variant
 
-When some rates are known, ODME subtracts their strength and cost contribution
-and fits the free pairs:
-
 ```python
-from odme.models.partial import fit_partial_strength_cost_poisson
-
-result = fit_partial_strength_cost_poisson(
-    s_out, s_in,
-    known_source, known_target, known_rate,
-    cost_sources, cost_targets, cost_values,
-    target_cost,
+from odme.models.partial import (
+    fit_partial_strength_cost_poisson_coordinates,
+    fit_partial_strength_cost_binomial_coordinates,
+    fit_partial_strength_cost_geometric_coordinates,
+    fit_partial_strength_cost_negative_binomial_coordinates,
 )
 ```
 
-See [Partial Constraints](partial-constraints.md).
+Partial fitting computes excess strengths and cost, calls the family-specific
+full solver on free pairs, and assembles the rate table using the correct
+family formula.
+
+## W memory and scalability
+
+The W conic solver requires exponential-cone variables for each pair, making
+its memory O(N²) regardless of cost representation. The inline coordinate
+version avoids allocating a separate 3×N² cost array by computing distances
+during CSC matrix assembly. Runtime is dominated by the conic solver's
+interior-point iterations, not distance computation.
+
+At N=500 the W solver takes ~200s (dev build). For larger N, prefer ME/B
+coordinate APIs or wait for a non-conic W solver.
