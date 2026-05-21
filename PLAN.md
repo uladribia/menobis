@@ -52,12 +52,12 @@ written because results are saved at the end.
 ## Remaining steps
 
 1. Make benchmarks save incrementally after each case or node size.
-2. Refactor strength-cost fitting/benchmarks to support on-the-fly or
-   factorized cost evaluation. Do not exclude fixed strength-cost cases from
-   large-N benchmarks solely because dense cost triples are inconvenient; costs
-   should be computed as needed instead of materializing avoidable dense arrays.
+2. Extend coordinate-based strength-cost coverage. ME coordinate fitting now
+   computes projected Euclidean XY distances on the fly; next add generation,
+   filtering, B/W coordinate wrappers, and benchmark coverage up to N=500.
+   Sparse custom cost arrays warn when they may create memory pressure.
 3. Rerun large release benchmarks in chunks, not one all-or-nothing process,
-   including fixed strength-cost at large N after the on-the-fly cost refactor.
+   including fixed strength-cost coordinate cases up to N=500 first.
 4. Decide practical published limits for N=5000 dense strength-edge and
    strength-degree fits.
 5. Benchmark legacy radiation and sequential gravity models before archiving.
