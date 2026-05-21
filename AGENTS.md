@@ -122,6 +122,59 @@ Additional ODME defaults:
 - no hidden global mutable state except logging configuration;
 - English for code, docs, tests, and logs.
 
+## Model implementation policy
+
+ODME implements three weight-distribution families: ME (Poisson), B (Binomial),
+and W (Geometric / Negative Binomial). These share mathematical structure but
+have distinct expectation equations.
+
+### Mandatory separation and reuse rules
+
+1. **Every family must have its own solver implementation.** Never implement B
+   or W by calling the ME solver and relabeling the output. Each family has a
+   different `E[t_ij]` formula; the code must reflect that.
+2. **Shared infrastructure must be factored into reusable Rust abstractions.**
+   Cost providers, IPF balancing loops, gamma search, mask handling, excess
+   computation, and rate-table assembly are shared across families and must live
+   in common factory functions or traits.
+3. **Constraint variants (strength, strength-cost, strength-edges,
+   strength-degree) add Lagrange multipliers to the same family-specific
+   kernel.** Implement them as compositions: family kernel + constraint layer.
+4. **Partial implementations must reuse their parent (non-partial) solver.**
+   A partial fit computes excess sequences and then calls the corresponding
+   full-fit solver on the free pairs. Never duplicate the inner solver logic
+   inside the partial path.
+5. **Cost providers are orthogonal to families.** The same cost abstraction
+   (no cost, sparse triples, Euclidean coordinates) must work with ME, B, and W
+   without per-family cost wrappers.
+
+### Mathematical verification checks
+
+When implementing or modifying a fitting kernel:
+
+- Write down the thesis equation being implemented in a code comment or
+  docstring.
+- Add a unit test that verifies the implemented formula against a hand-computed
+  example (small N=3 or N=4).
+- For each family, verify that `E[t_ij]` matches the thesis definition:
+  - ME/Poisson: `E[t_ij] = x_i * y_j * f_ij`
+  - B/Binomial(M): `E[t_ij] = M * p_ij / (1 - p_ij)` where `p_ij = x_i * y_j * f_ij / (1 + x_i * y_j * f_ij)`
+  - W/Geometric: `E[t_ij] = q_ij / (1 - q_ij)` conditioned on occupation
+  - W/NegBin(M): `E[t_ij] = M * q_ij / (1 - q_ij)` conditioned on occupation
+- Confirm that constraint recovery tests pass: fitted expectations must
+  reproduce the input constraint sequences within documented tolerance.
+- Add a comparative test showing ME ≠ B ≠ W results on the same input when
+  implementing a new constraint variant.
+
+### Current violations (to be fixed)
+
+- `fit_strength_cost_binomial_coordinates` calls ME Poisson and relabels.
+- `fit_strength_cost_geometric_coordinates` calls ME Poisson and relabels.
+- `fit_strength_cost_negative_binomial_coordinates` calls ME Poisson and relabels.
+- All partial coordinate B/W wrappers delegate to Poisson partial and relabel.
+- These produce identical numerical results across families, which is
+  scientifically wrong.
+
 ## Logging policy
 
 Python entry points must configure Loguru with:
