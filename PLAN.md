@@ -91,13 +91,48 @@ W cost-coord solver on the excess. But:
 
 ### P4. Sample check failures (△) are stochastic, not fitting bugs
 
-**Observation:** Many cases show "fit OK" but single-sample verification
-fails (err >> tolerance). This is NOT a bug — it's expected high variance
-from W/B families where per-pair variance scales as M*p*(1-p) or q/(1-q)².
+**Observation:** W/Wnb models show large single-sample errors even when
+fitting converges correctly. This is expected behavior:
+- W geometric per-pair variance = q/(1-q)² (diverges as q→1)
+- For high-strength nodes, q is close to 1, producing extreme variance
+- Ensemble verification (50 samples) confirms correct mean recovery
 
-**Recommendation:** Replace single-sample checks with ensemble z-scores
-(already implemented in `TestMEStrengthE2E::test_ensemble_z_score`). For
-benchmarks, report fit residual instead of single-sample error.
+**Recommendation:** Replace single-sample checks with ensemble z-scores.
+For benchmarks, report fit residual (`max_strength_residual`) not sample error.
+
+### P5. B strength-edges and B strength-degree use WRONG KERNEL (critical)
+
+**Symptom:** `fit_strength_edges_binomial` and `fit_strength_degree_binomial`
+fit correctly (ME) but sampling produces completely wrong strengths
+(err=2638 at N=50 for B edges, err=2888 for B degree).
+
+**Root cause:** Both Python functions call the **ME Poisson** Rust kernel:
+```python
+# In fit_strength_edges_binomial:
+x_list, y_list, lam, converged, iters = _odme.fit_strength_edges_poisson(...)  # BUG!
+
+# In fit_strength_degree_binomial:
+_odme.fit_strength_degree_poisson(...)  # BUG!
+```
+
+No B-specific Rust kernel exists for these constraint types. The fit
+"converges" because it runs the ME solver, but then the B sampler applies
+`Binomial(M, p/(1+p))` to ME-fitted parameters → nonsensical results.
+
+**Impact:** Any user calling `fit_strength_edges_binomial` or
+`fit_strength_degree_binomial` gets silently wrong results.
+
+**Fix required:**
+1. Implement B-specific Rust kernels for strength-edges and strength-degree.
+   These should use the same bisection-over-lambda/IPF structure as
+   `fit_strength_edges_geometric` but with the B formula:
+   `E[t_ij] = M * x_i*y_j*lam / (1 + x_i*y_j*lam)` (ZIP-Binomial).
+2. The W implementations (`fit_strength_edges_geometric`,
+   `fit_strength_degree_geometric`) in `crates/odme-core/src/fitting/w.rs`
+   ARE correctly implemented with their own kernels and can serve as
+   templates for the B versions.
+3. Until fixed: either remove the B strength-edges/degree functions or
+   clearly document them as unimplemented / raise NotImplementedError.
 
 ## Immediate next steps
 
