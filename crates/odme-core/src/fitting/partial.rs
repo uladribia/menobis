@@ -86,35 +86,17 @@ fn balance_excess(excess_out: &mut [f64], excess_in: &mut [f64]) {
     }
 }
 
-fn build_masked_cost_factors(
-    n: usize,
+/// IPF for masked ME strength-cost at fixed gamma. No dense N^2 factor matrix.
+/// Uses sparse per-column/row f_ij lookup (O(K) memory).
+#[allow(clippy::too_many_arguments)]
+fn balance_masked_strength_cost_poisson_fixed_gamma(
+    strength_out: &[f64],
+    strength_in: &[f64],
     cost_sources: &[usize],
     cost_targets: &[usize],
     cost_values: &[f64],
     mask: &[bool],
     gamma: f64,
-) -> Vec<f64> {
-    let mut factors = vec![1.0; n * n];
-    for (idx, (&source, &target)) in cost_sources.iter().zip(cost_targets.iter()).enumerate() {
-        if source < n && target < n && !mask[source * n + target] {
-            let exponent = (-gamma * cost_values[idx]).clamp(-700.0, 700.0);
-            factors[source * n + target] = exponent.exp();
-        }
-    }
-    for idx in 0..factors.len() {
-        if mask[idx] {
-            factors[idx] = 0.0;
-        }
-    }
-    factors
-}
-
-#[allow(clippy::too_many_arguments)]
-fn balance_masked_strength_cost_poisson_fixed_gamma(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    factors: &[f64],
-    mask: &[bool],
     tolerance: f64,
     max_iterations: usize,
     x_init: Option<&[f64]>,
@@ -142,39 +124,87 @@ fn balance_masked_strength_cost_poisson_fixed_gamma(
         <[f64]>::to_vec,
     );
 
+    // Build per-column/row sparse f_ij (only free pairs with cost entries)
+    let mut col_src: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
+    let mut row_tgt: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
+    for (idx, (&src, &tgt)) in cost_sources.iter().zip(cost_targets.iter()).enumerate() {
+        if src < n && tgt < n && !mask[src * n + tgt] {
+            let f_ij = (-gamma * cost_values[idx]).clamp(-700.0, 700.0).exp();
+            col_src[tgt].push((src, f_ij));
+            row_tgt[src].push((tgt, f_ij));
+        }
+    }
+    // Also add free pairs with no cost entry (f_ij = 1.0) using correction trick
+    let k = cost_sources.len();
+    let n_pairs: usize = (0..n * n).filter(|&idx| !mask[idx]).count();
+    let complete = k >= n_pairs;
+
     for iter in 0..max_iterations {
         let old_x = x.clone();
         let old_y = y.clone();
 
-        for j in 0..n {
-            if strength_in[j] <= 0.0 {
-                y[j] = 0.0;
-                continue;
+        if complete {
+            for j in 0..n {
+                if strength_in[j] <= 0.0 {
+                    y[j] = 0.0;
+                    continue;
+                }
+                let denom: f64 = col_src[j].iter().map(|&(i, f)| x[i] * f).sum();
+                y[j] = if denom > 0.0 {
+                    strength_in[j] / denom
+                } else {
+                    0.0
+                };
             }
-            let denom: f64 = (0..n)
-                .filter(|&i| !mask[i * n + j])
-                .map(|i| x[i] * factors[i * n + j])
-                .sum();
-            y[j] = if denom > 0.0 {
-                strength_in[j] / denom
-            } else {
-                0.0
-            };
-        }
-        for i in 0..n {
-            if strength_out[i] <= 0.0 {
-                x[i] = 0.0;
-                continue;
+            for i in 0..n {
+                if strength_out[i] <= 0.0 {
+                    x[i] = 0.0;
+                    continue;
+                }
+                let denom: f64 = row_tgt[i].iter().map(|&(j, f)| y[j] * f).sum();
+                x[i] = if denom > 0.0 {
+                    strength_out[i] / denom
+                } else {
+                    0.0
+                };
             }
-            let denom: f64 = (0..n)
-                .filter(|&j| !mask[i * n + j])
-                .map(|j| y[j] * factors[i * n + j])
-                .sum();
-            x[i] = if denom > 0.0 {
-                strength_out[i] / denom
-            } else {
-                0.0
-            };
+        } else {
+            // Sparse: base sum over free pairs (f=1), correct with entries
+            let sum_x: f64 = x.iter().sum();
+            for j in 0..n {
+                if strength_in[j] <= 0.0 {
+                    y[j] = 0.0;
+                    continue;
+                }
+                // base: sum of x[i] for free pairs in column j
+                let masked_out: f64 = (0..n).filter(|&i| mask[i * n + j]).map(|i| x[i]).sum();
+                let mut denom = sum_x - masked_out;
+                for &(src, f_ij) in &col_src[j] {
+                    denom += x[src] * (f_ij - 1.0);
+                }
+                y[j] = if denom > 0.0 {
+                    strength_in[j] / denom
+                } else {
+                    0.0
+                };
+            }
+            let sum_y: f64 = y.iter().sum();
+            for i in 0..n {
+                if strength_out[i] <= 0.0 {
+                    x[i] = 0.0;
+                    continue;
+                }
+                let masked_out: f64 = (0..n).filter(|&j| mask[i * n + j]).map(|j| y[j]).sum();
+                let mut denom = sum_y - masked_out;
+                for &(tgt, f_ij) in &row_tgt[i] {
+                    denom += y[tgt] * (f_ij - 1.0);
+                }
+                x[i] = if denom > 0.0 {
+                    strength_out[i] / denom
+                } else {
+                    0.0
+                };
+            }
         }
 
         if max_pair_delta(&x, &old_x, &y, &old_y) < tolerance {
@@ -186,7 +216,6 @@ fn balance_masked_strength_cost_poisson_fixed_gamma(
             };
         }
     }
-
     FitResult {
         x,
         y,
@@ -228,15 +257,15 @@ fn fit_masked_strength_cost_poisson(
     tolerance: f64,
     max_iterations: usize,
 ) -> StrengthCostFitResult {
-    let n = strength_out.len();
     let solve_at = |gamma: f64, x_init: Option<&[f64]>, y_init: Option<&[f64]>| {
-        let factors =
-            build_masked_cost_factors(n, cost_sources, cost_targets, cost_values, mask, gamma);
         let fit = balance_masked_strength_cost_poisson_fixed_gamma(
             strength_out,
             strength_in,
-            &factors,
+            cost_sources,
+            cost_targets,
+            cost_values,
             mask,
+            gamma,
             tolerance,
             max_iterations,
             x_init,

@@ -802,12 +802,19 @@ pub struct CostMatrix<'a> {
 }
 
 /// Balance x,y for a fixed gamma via IPF, with optional warm start.
+/// IPF balancing for ME strength-cost with sparse cost entries.
+///
+/// Computes f_ij = exp(-gamma * d_ij) on the fly from cost entries.
+/// No dense N*N matrix is allocated. Uses sum_x/sum_y fast path
+/// with sparse corrections for cost entries that differ from f=1.
 #[allow(clippy::too_many_arguments)]
-fn balance_xy_cost(
+fn balance_xy_cost_sparse(
     strength_out: &[f64],
     strength_in: &[f64],
-    f_mat: &[f64],
+    costs: &CostMatrix<'_>,
     n: usize,
+    gamma: f64,
+    self_loops: bool,
     tolerance: f64,
     max_iterations: usize,
     x_init: Option<&[f64]>,
@@ -830,37 +837,91 @@ fn balance_xy_cost(
             .collect(),
     };
 
+    // Build per-column and per-row f_ij lookup (O(K) memory, not O(N^2))
+    let mut col_src: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
+    let mut row_tgt: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
+    for (idx, (&src, &tgt)) in costs.sources.iter().zip(costs.targets.iter()).enumerate() {
+        if !self_loops && src == tgt {
+            continue;
+        }
+        if src < n && tgt < n {
+            let f_ij = (-gamma * costs.values[idx]).exp();
+            col_src[tgt].push((src, f_ij));
+            row_tgt[src].push((tgt, f_ij));
+        }
+    }
+    // Track which pairs have explicit costs for the sparse correction path
+    let k = costs.sources.len();
+    let n_pairs = if self_loops { n * n } else { n * (n - 1) };
+    let complete = k >= n_pairs;
+
     for iter in 0..max_iterations {
         let old_x = x.clone();
         let old_y = y.clone();
 
-        for j in 0..n {
-            if strength_in[j] <= 0.0 {
-                y[j] = 0.0;
-                continue;
+        if complete {
+            // All pairs covered: sum over explicit entries only
+            for j in 0..n {
+                if strength_in[j] <= 0.0 {
+                    y[j] = 0.0;
+                    continue;
+                }
+                let denom: f64 = col_src[j].iter().map(|&(i, f)| x[i] * f).sum();
+                y[j] = if denom > 0.0 {
+                    strength_in[j] / denom
+                } else {
+                    0.0
+                };
             }
-            let denom: f64 = (0..n).map(|i| x[i] * f_mat[i * n + j]).sum();
-            y[j] = if denom > 0.0 {
-                strength_in[j] / denom
-            } else {
-                0.0
-            };
-        }
-        for i in 0..n {
-            if strength_out[i] <= 0.0 {
-                x[i] = 0.0;
-                continue;
+            for i in 0..n {
+                if strength_out[i] <= 0.0 {
+                    x[i] = 0.0;
+                    continue;
+                }
+                let denom: f64 = row_tgt[i].iter().map(|&(j, f)| y[j] * f).sum();
+                x[i] = if denom > 0.0 {
+                    strength_out[i] / denom
+                } else {
+                    0.0
+                };
             }
-            let denom: f64 = (0..n).map(|j| y[j] * f_mat[i * n + j]).sum();
-            x[i] = if denom > 0.0 {
-                strength_out[i] / denom
-            } else {
-                0.0
-            };
+        } else {
+            // Sparse: base = sum (f=1 for missing pairs) + corrections from entries
+            let sum_x: f64 = x.iter().sum();
+            for j in 0..n {
+                if strength_in[j] <= 0.0 {
+                    y[j] = 0.0;
+                    continue;
+                }
+                let mut denom = if self_loops { sum_x } else { sum_x - x[j] };
+                for &(src, f_ij) in &col_src[j] {
+                    denom += x[src] * (f_ij - 1.0);
+                }
+                y[j] = if denom > 0.0 {
+                    strength_in[j] / denom
+                } else {
+                    0.0
+                };
+            }
+            let sum_y: f64 = y.iter().sum();
+            for i in 0..n {
+                if strength_out[i] <= 0.0 {
+                    x[i] = 0.0;
+                    continue;
+                }
+                let mut denom = if self_loops { sum_y } else { sum_y - y[i] };
+                for &(tgt, f_ij) in &row_tgt[i] {
+                    denom += y[tgt] * (f_ij - 1.0);
+                }
+                x[i] = if denom > 0.0 {
+                    strength_out[i] / denom
+                } else {
+                    0.0
+                };
+            }
         }
 
-        let delta = max_pair_delta(&x, &old_x, &y, &old_y);
-        if delta < tolerance {
+        if max_pair_delta(&x, &old_x, &y, &old_y) < tolerance {
             return FitResult {
                 x,
                 y,
@@ -876,25 +937,6 @@ fn balance_xy_cost(
         converged: false,
         iterations: max_iterations,
     }
-}
-
-/// Build dense f_mat = exp(-gamma * d_ij) from sparse cost entries.
-fn build_f_mat(n: usize, costs: &CostMatrix<'_>, gamma: f64, self_loops: bool) -> Vec<f64> {
-    let mut f_mat = vec![1.0; n * n];
-    if !self_loops {
-        for i in 0..n {
-            f_mat[i * n + i] = 0.0;
-        }
-    }
-    for (idx, (&src, &tgt)) in costs.sources.iter().zip(costs.targets.iter()).enumerate() {
-        if !self_loops && src == tgt {
-            continue;
-        }
-        if src < n && tgt < n {
-            f_mat[src * n + tgt] = (-gamma * costs.values[idx]).exp();
-        }
-    }
-    f_mat
 }
 
 /// Compute expected total cost given x, y, gamma and cost entries.
@@ -1062,12 +1104,13 @@ pub fn fit_strength_cost_poisson(
     let max_iterations = opts.max_iterations;
 
     let solve_at = |gamma: f64, x_init: Option<&[f64]>, y_init: Option<&[f64]>| {
-        let f_mat = build_f_mat(n, &costs, gamma, self_loops);
-        let fit = balance_xy_cost(
+        let fit = balance_xy_cost_sparse(
             strength_out,
             strength_in,
-            &f_mat,
+            &costs,
             n,
+            gamma,
+            self_loops,
             tolerance,
             max_iterations,
             x_init,
