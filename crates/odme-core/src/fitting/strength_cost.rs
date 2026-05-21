@@ -332,13 +332,15 @@ pub fn fit_strength_cost_binomial_coordinates(
 // W (Geometric / Negative Binomial M) strength-cost coordinate fitting
 // ===========================================================================
 
-/// Fit W(M) strength-cost model with coordinate costs.
+/// Fit W(M) strength-cost model with projected Euclidean XY coordinates.
 ///
-/// Computes Euclidean distance costs on the fly in Rust and delegates to
-/// the existing W conic solver. No dense cost triples cross the Python boundary.
+/// Computes distances inline during CSC matrix assembly. No dense 3*N^2
+/// cost-triple array is allocated. Memory is O(N^2) for the conic variables
+/// (unavoidable in the exponential-cone formulation).
 ///
 /// Thesis equation: E[t_ij] = M * exp(-r_ij) / (1 - exp(-r_ij))
-///   where r_ij = a_i + b_j + γ * d_ij and d_ij = ||coord_i - coord_j||.
+///   where r_ij = a_i + b_j + gamma * d_ij and d_ij = ||coord_i - coord_j||.
+#[cfg(feature = "w-conic")]
 #[must_use]
 #[allow(clippy::too_many_arguments)]
 pub fn fit_strength_cost_w_coordinates(
@@ -350,60 +352,192 @@ pub fn fit_strength_cost_w_coordinates(
     layers: u32,
     opts: &CostFitOptions,
 ) -> StrengthCostFitResult {
+    use clarabel::algebra::CscMatrix;
+    use clarabel::solver::{
+        DefaultSettings, DefaultSolver, ExponentialConeT, IPSolver, NonnegativeConeT, SolverStatus,
+        SupportedConeT, ZeroConeT,
+    };
+
     let n = strength_out.len();
-    // Build complete cost triples from coordinates (in Rust, memory-local)
-    let mut cost_sources = Vec::with_capacity(n * n);
-    let mut cost_targets = Vec::with_capacity(n * n);
-    let mut cost_values = Vec::with_capacity(n * n);
-    for i in 0..n {
-        for j in 0..n {
-            if !opts.self_loops && i == j {
-                continue;
-            }
-            let d = coord_distance(coord_x, coord_y, i, j);
-            cost_sources.push(i as u64);
-            cost_targets.push(j as u64);
-            cost_values.push(d);
-        }
+    if n == 0 || n != strength_in.len() || layers == 0 || !target_cost.is_finite() {
+        return StrengthCostFitResult {
+            x: vec![0.0; n],
+            y: vec![0.0; n],
+            gamma: 0.0,
+            converged: false,
+            iterations: 0,
+        };
     }
-    use super::w::{fit_strength_cost_geometric, fit_strength_cost_negative_binomial};
-    use super::WConicFitOptions;
-    let w_opts = WConicFitOptions {
-        self_loops: opts.self_loops,
-        tolerance: opts.tolerance,
-        max_iterations: opts.max_iterations,
+
+    let pairs: Vec<(usize, usize)> = (0..n)
+        .flat_map(|i| (0..n).map(move |j| (i, j)))
+        .filter(|&(i, j)| opts.self_loops || i != j)
+        .collect();
+    let pc = pairs.len();
+    let gamma_idx = 2 * n;
+    let t_offset = gamma_idx + 1;
+    let p_offset = t_offset + pc;
+    let q_offset = p_offset + pc;
+    let variable_count = 2 * n + 1 + 3 * pc;
+    let row_count = 1 + 6 * pc + pc;
+
+    let exp_base = 1_usize;
+    let nonneg_base = 1 + 6 * pc;
+
+    let mut rhs = vec![0.0_f64; row_count];
+    for k in 0..pc {
+        rhs[exp_base + 6 * k + 1] = 1.0;
+        rhs[exp_base + 6 * k + 4] = 1.0;
+    }
+    for k in 0..pc {
+        rhs[nonneg_base + k] = 1.0;
+    }
+
+    // CSC assembly — distances computed inline via coord_distance
+    let mut colptr = vec![0_usize; variable_count + 1];
+    let mut rowval = Vec::new();
+    let mut nzval = Vec::new();
+
+    for i in 0..n {
+        let start = rowval.len();
+        rowval.push(0);
+        nzval.push(1.0);
+        for (k, &(pi, _)) in pairs.iter().enumerate() {
+            if pi == i {
+                rowval.push(exp_base + 6 * k + 3);
+                nzval.push(1.0);
+            }
+        }
+        colptr[i + 1] = rowval.len() - start;
+    }
+    for j in 0..n {
+        let start = rowval.len();
+        rowval.push(0);
+        nzval.push(-1.0);
+        for (k, &(_, pj)) in pairs.iter().enumerate() {
+            if pj == j {
+                rowval.push(exp_base + 6 * k + 3);
+                nzval.push(1.0);
+            }
+        }
+        colptr[n + j + 1] = rowval.len() - start;
+    }
+    // Gamma column: inline distance computation
+    {
+        let start = rowval.len();
+        for (k, &(i, j)) in pairs.iter().enumerate() {
+            let cost = coord_distance(coord_x, coord_y, i, j);
+            if cost != 0.0 {
+                rowval.push(exp_base + 6 * k + 3);
+                nzval.push(cost);
+            }
+        }
+        colptr[gamma_idx + 1] = rowval.len() - start;
+    }
+    for k in 0..pc {
+        let start = rowval.len();
+        rowval.push(exp_base + 6 * k);
+        nzval.push(1.0);
+        colptr[t_offset + k + 1] = rowval.len() - start;
+    }
+    for k in 0..pc {
+        let start = rowval.len();
+        rowval.push(exp_base + 6 * k + 2);
+        nzval.push(-1.0);
+        rowval.push(nonneg_base + k);
+        nzval.push(1.0);
+        colptr[p_offset + k + 1] = rowval.len() - start;
+    }
+    for k in 0..pc {
+        let start = rowval.len();
+        rowval.push(exp_base + 6 * k + 5);
+        nzval.push(-1.0);
+        rowval.push(nonneg_base + k);
+        nzval.push(1.0);
+        colptr[q_offset + k + 1] = rowval.len() - start;
+    }
+    for i in 0..variable_count {
+        colptr[i + 1] += colptr[i];
+    }
+
+    let mut objective = vec![0.0_f64; variable_count];
+    objective[..n].copy_from_slice(strength_out);
+    objective[n..2 * n].copy_from_slice(strength_in);
+    objective[gamma_idx] = target_cost;
+    for k in 0..pc {
+        objective[t_offset + k] = f64::from(layers);
+    }
+
+    let p_matrix = CscMatrix::<f64>::zeros((variable_count, variable_count));
+    let a_matrix = CscMatrix::new(row_count, variable_count, colptr, rowval, nzval);
+    let mut cones: Vec<SupportedConeT<f64>> = Vec::with_capacity(2 * pc + 2);
+    cones.push(ZeroConeT(1));
+    for _ in 0..(2 * pc) {
+        cones.push(ExponentialConeT());
+    }
+    cones.push(NonnegativeConeT(pc));
+    let settings = DefaultSettings {
+        verbose: false,
+        max_iter: opts.max_iterations.try_into().unwrap_or(u32::MAX),
+        tol_gap_abs: opts.tolerance,
+        tol_gap_rel: opts.tolerance,
+        tol_feas: opts.tolerance,
+        ..DefaultSettings::default()
     };
-    let w_result = if layers == 1 {
-        fit_strength_cost_geometric(
-            strength_out,
-            strength_in,
-            &cost_sources,
-            &cost_targets,
-            &cost_values,
-            target_cost,
-            w_opts,
-        )
-    } else {
-        fit_strength_cost_negative_binomial(
-            strength_out,
-            strength_in,
-            &cost_sources,
-            &cost_targets,
-            &cost_values,
-            target_cost,
-            layers,
-            w_opts,
-        )
+
+    let Ok(mut solver) =
+        DefaultSolver::new(&p_matrix, &objective, &a_matrix, &rhs, &cones, settings)
+    else {
+        return StrengthCostFitResult {
+            x: vec![0.0; n],
+            y: vec![0.0; n],
+            gamma: 0.0,
+            converged: false,
+            iterations: 0,
+        };
     };
+    solver.solve();
+    let converged = matches!(
+        solver.solution.status,
+        SolverStatus::Solved
+            | SolverStatus::AlmostSolved
+            | SolverStatus::MaxIterations
+            | SolverStatus::MaxTime
+    );
+    let solution = &solver.solution.x;
+    let a = &solution[..n];
+    let b = &solution[n..2 * n];
+    let gamma = solution[gamma_idx];
+
     StrengthCostFitResult {
-        x: w_result.x,
-        y: w_result.y,
-        gamma: w_result.gamma,
-        converged: matches!(
-            w_result.status,
-            super::WFitStatus::Solved | super::WFitStatus::Inaccurate
-        ),
-        iterations: w_result.iterations,
+        x: a.iter().map(|&ai| (-ai).exp()).collect(),
+        y: b.iter().map(|&bj| (-bj).exp()).collect(),
+        gamma,
+        converged,
+        iterations: solver.solution.iterations as usize,
+    }
+}
+
+/// Fallback when w-conic feature is not enabled.
+#[cfg(not(feature = "w-conic"))]
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn fit_strength_cost_w_coordinates(
+    strength_out: &[f64],
+    _strength_in: &[f64],
+    _coord_x: &[f64],
+    _coord_y: &[f64],
+    _target_cost: f64,
+    _layers: u32,
+    _opts: &CostFitOptions,
+) -> StrengthCostFitResult {
+    let n = strength_out.len();
+    StrengthCostFitResult {
+        x: vec![0.0; n],
+        y: vec![0.0; n],
+        gamma: 0.0,
+        converged: false,
+        iterations: 0,
     }
 }
 
