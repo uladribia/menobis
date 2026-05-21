@@ -1,0 +1,320 @@
+[
+  {
+    "n": 25,
+    "case": "ME strength",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": true,
+    "seconds": 0.0,
+    "msg": ""
+  },
+  {
+    "n": 25,
+    "case": "B strength",
+    "fit_ok": false,
+    "sample_ok": false,
+    "check_ok": false,
+    "seconds": 0.042
+  },
+  {
+    "n": 25,
+    "case": "ME strength-cost",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": true,
+    "seconds": 0.001,
+    "msg": ""
+  },
+  {
+    "n": 25,
+    "case": "B strength-cost",
+    "fit_ok": false,
+    "sample_ok": false,
+    "check_ok": false,
+    "seconds": 0.018
+  },
+  {
+    "n": 25,
+    "case": "W strength-cost",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": false,
+    "seconds": 0.113,
+    "msg": "max_err=273.0 > tol=98.9"
+  },
+  {
+    "n": 25,
+    "case": "Wnb strength-cost",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": false,
+    "seconds": 0.06,
+    "msg": "max_err=191.0 > tol=98.9"
+  },
+  {
+    "n": 25,
+    "case": "ME strength-edges",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": true,
+    "seconds": 0.001,
+    "msg": ""
+  },
+  {
+    "n": 25,
+    "case": "B strength-edges",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": false,
+    "seconds": 0.001,
+    "msg": "max_err=286.0 > tol=98.9"
+  },
+  {
+    "n": 25,
+    "case": "W strength-edges",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": false,
+    "seconds": 0.005,
+    "msg": "max_err=382.0 > tol=98.9"
+  },
+  {
+    "n": 25,
+    "case": "Wnb strength-edges",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": true,
+    "seconds": 0.007,
+    "msg": ""
+  },
+  {
+    "n": 25,
+    "case": "ME strength-degree",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": true,
+    "seconds": 0.001,
+    "msg": ""
+  },
+  {
+    "n": 25,
+    "case": "B strength-degree",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": false,
+    "seconds": 0.001,
+    "msg": "max_err=369.0 > tol=98.9"
+  },
+  {
+    "n": 25,
+    "case": "W strength-degree",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": false,
+    "seconds": 0.033,
+    "msg": "max_err=1195.0 > tol=98.9"
+  },
+  {
+    "n": 25,
+    "case": "Wnb strength-degree",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": true,
+    "seconds": 0.005,
+    "msg": ""
+  },
+  {
+    "n": 25,
+    "case": "ME degree-events",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": true,
+    "seconds": 0.0,
+    "msg": ""
+  },
+  {
+    "n": 25,
+    "case": "B degree-events",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": true,
+    "seconds": 0.0,
+    "msg": ""
+  },
+  {
+    "n": 25,
+    "case": "W degree-events",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": true,
+    "seconds": 0.0,
+    "msg": ""
+  },
+  {
+    "n": 25,
+    "case": "Wnb degree-events",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": true,
+    "seconds": 0.0,
+    "msg": ""
+  },
+  {
+    "n": 50,
+    "case": "ME strength",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": true,
+    "seconds": 0.0,
+    "msg": ""
+  },
+  {
+    "n": 50,
+    "case": "B strength",
+    "fit_ok": false,
+    "sample_ok": false,
+    "check_ok": false,
+    "seconds": 0.116
+  },
+  {
+    "n": 50,
+    "case": "ME strength-cost",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": true,
+    "seconds": 0.019,
+    "msg": ""
+  },
+  {
+    "n": 50,
+    "case": "B strength-cost",
+    "fit_ok": false,
+    "sample_ok": false,
+    "check_ok": false,
+    "seconds": 0.111
+  },
+  {
+    "n": 50,
+    "case": "W strength-cost",
+    "fit_ok": false,
+    "sample_ok": false,
+    "check_ok": false,
+    "seconds": 1.75
+  },
+  {
+    "n": 50,
+    "case": "Wnb strength-cost",
+    "fit_ok": false,
+    "sample_ok": false,
+    "check_ok": false,
+    "seconds": 0.687
+  },
+  {
+    "n": 50,
+    "case": "ME strength-edges",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": true,
+    "seconds": 0.008,
+    "msg": ""
+  },
+  {
+    "n": 50,
+    "case": "B strength-edges",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": false,
+    "seconds": 0.008,
+    "msg": "max_err=641.0 > tol=119.9"
+  },
+  {
+    "n": 50,
+    "case": "W strength-edges",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": false,
+    "seconds": 0.021,
+    "msg": "max_err=775.0 > tol=119.9"
+  },
+  {
+    "n": 50,
+    "case": "Wnb strength-edges",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": false,
+    "seconds": 0.061,
+    "msg": "max_err=188.0 > tol=119.9"
+  },
+  {
+    "n": 50,
+    "case": "ME strength-degree",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": false,
+    "seconds": 0.003,
+    "msg": "max_err=190.0 > tol=119.9"
+  },
+  {
+    "n": 50,
+    "case": "B strength-degree",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": false,
+    "seconds": 0.003,
+    "msg": "max_err=652.0 > tol=119.9"
+  },
+  {
+    "n": 50,
+    "case": "W strength-degree",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": false,
+    "seconds": 0.021,
+    "msg": "max_err=836.0 > tol=119.9"
+  },
+  {
+    "n": 50,
+    "case": "Wnb strength-degree",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": false,
+    "seconds": 0.022,
+    "msg": "max_err=1353.0 > tol=119.9"
+  },
+  {
+    "n": 50,
+    "case": "ME degree-events",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": true,
+    "seconds": 0.0,
+    "msg": ""
+  },
+  {
+    "n": 50,
+    "case": "B degree-events",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": true,
+    "seconds": 0.0,
+    "msg": ""
+  },
+  {
+    "n": 50,
+    "case": "W degree-events",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": true,
+    "seconds": 0.0,
+    "msg": ""
+  },
+  {
+    "n": 50,
+    "case": "Wnb degree-events",
+    "fit_ok": true,
+    "sample_ok": true,
+    "check_ok": true,
+    "seconds": 0.0,
+    "msg": ""
+  }
+]

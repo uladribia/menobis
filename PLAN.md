@@ -50,20 +50,29 @@ Fixed in branch `test/fix-e2e-benchmark`:
 - Made B `layers` adaptive: `max(10, ceil(max_s / (n-1)) + 1)` for feasibility.
 - Added proper sampler dispatch for all families in the benchmark.
 
-### 2. Diagnose W Newton `self_loops=False` convergence failure
+### 2. ~~Diagnose W Newton `self_loops=False` convergence failure~~ ✅ Fixed
 
-**Symptom:** W strength-cost coordinate fitting fails to converge at N≥50
-when `self_loops=False` with realistic gravity-model inputs.
+**Root cause:** Joint Newton coordinate-descent on (a, b, γ) with fixed
+damping=0.8 oscillated indefinitely for heterogeneous networks (max_s >> avg_s).
+The gamma=0 initialization created a basin trap that the joint solver couldn't
+escape.
 
-**Hypothesis:** The feasibility projection `a_i >= r_min - min_j(b_j + γ·d_ij)`
-is too conservative when diagonal pairs are excluded but nearby nodes have
-small distances, causing the solver to hit the projection boundary repeatedly.
+**Fix applied** (branch `test/fix-e2e-benchmark`):
+1. **Bisection over gamma** (like the ME solver) instead of joint Newton.
+   At each gamma, solve (a,b) independently via Newton.
+2. **Adaptive damping with backtracking**: start at 0.5, increase on progress,
+   revert and halve on stall (3 stalls trigger revert).
+3. **Better initialization**: per-node `a_i` from individual strength targets
+   (not global average), and `r_min` reduced from 0.01 to 1e-4.
+4. **ME gamma bootstrap**: use the fast ME coordinate solver to find the
+   correct gamma bracket before W bisection.
 
-**Investigation plan:**
-- Compare the `self_loops=True` and `self_loops=False` paths at N=50
-- Log the number of projection activations per iteration
-- Test with increased `r_min` (currently 0.01) or adaptive damping
-- Compare Newton residual trajectory for both cases
+**Results:**
+- Before: Failed at N≥15 for ALL realistic inputs (0% convergence)
+- After: Converges at N=15 (1099 iters), N=25 (4510), N=50 (9824)
+- W strength-only (no cost): converges in 10-12 iterations at all sizes
+- N=100 needs more iterations (24k) but gamma is correct (~0.028)
+- Still slow compared to ME (~10x iterations); acceptable for now
 
 ### 3. Diagnose B fixed-strength slow convergence `self_loops=False`
 
