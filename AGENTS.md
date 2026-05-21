@@ -168,12 +168,11 @@ When implementing or modifying a fitting kernel:
 
 ### Current violations (to be fixed)
 
-- `fit_strength_cost_binomial_coordinates` calls ME Poisson and relabels.
-- `fit_strength_cost_geometric_coordinates` calls ME Poisson and relabels.
-- `fit_strength_cost_negative_binomial_coordinates` calls ME Poisson and relabels.
-- All partial coordinate B/W wrappers delegate to Poisson partial and relabel.
-- These produce identical numerical results across families, which is
-  scientifically wrong.
+- W Newton solver does not converge with `self_loops=False` at N≥50 for
+  realistic gravity-model inputs. Needs adaptive damping or better
+  feasibility projection.
+- B fixed-strength `self_loops=False` is very slow at N≥200 (28s).
+  The IPF convergence needs investigation.
 
 ## Logging policy
 
@@ -211,25 +210,47 @@ The documentation should map implementation names back to the thesis terminology
 
 ## Testing policy
 
+### Mandatory E2E pipeline
+
+All fitting, generation, and filtering tests MUST follow this pipeline:
+
+1. **Generate** a realistic weighted directed network with projected XY
+   coordinates using a gravity-like model.
+2. **Derive** constraints from the generated network: strengths, degrees,
+   edge counts, total cost. These are guaranteed feasible because they come
+   from an actual network.
+3. **Fit** the model using derived constraints.
+4. **Sample** from the fitted model.
+5. **Verify** that the sampled network recovers the original constraints
+   within documented stochastic tolerance.
+
+Tests that skip steps 1–2 and use arbitrary hand-picked values are permitted
+ONLY for:
+- Pure mathematical function unit tests (e.g., verifying `w_mean` formula).
+- API contract tests (return type, field names, error messages).
+- CLI smoke tests (exit codes, output format).
+
+Never write a fitting test with arbitrary `s_out = [10, 20, 30]` unless you
+first prove those values are feasible for the given model and constraint type.
+
+### Test ordering
+
 Prefer tests in this order:
 
-1. Scientific invariants.
-2. Fixture-based tests from existing `tests/` data.
-3. End-to-end workflow tests for modern ODME APIs and CLI commands.
+1. E2E pipeline tests (generate → fit → sample → check).
+2. Scientific invariants (sum conservation, non-negativity, reproducibility).
+3. API contract tests.
 4. CLI smoke tests.
-5. Performance regression tests after correctness is established.
+5. Performance regression tests.
 
-Useful invariants:
+### Tolerances
 
-- `sum(s_out) == sum(s_in) == T` for directed graphs.
-- Probability vectors sum to one within tolerance.
-- Generated weights are non-negative integers.
-- Self-loop removal behaves consistently.
-- Fixed-strength expectations recover requested strengths within tolerance.
-- Fixed-degree expectations recover requested degrees within tolerance.
-- Seeded generation is reproducible.
+Use **relative** tolerances for constraint recovery:
+- Fitting tolerance: `0.01 * max(constraint_sequence)`
+- Sampling check: allow 5× the fitting tolerance (stochastic noise)
+- W models may need looser tolerance: `max(rel_tol, 1.0)`
 
-Use approximate comparisons for floating-point values and document tolerances.
+Document all tolerance choices in test docstrings.
 
 ## Memory, performance, and graph-library policy
 
