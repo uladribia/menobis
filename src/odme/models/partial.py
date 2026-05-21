@@ -5,6 +5,7 @@ runs in Rust. Python only validates inputs and wraps results.
 """
 
 import warnings
+from dataclasses import replace
 
 import numpy as np
 from numpy.typing import NDArray
@@ -54,6 +55,7 @@ def _to_partial_result(
     *,
     constraint: str = "strength",
     self_loops: bool = True,
+    family: str = "poisson",
 ) -> PartialFitResult:
     """Wrap Rust output into PartialFitResult with convergence warning."""
     _warn_if_not_converged(name, converged, iterations)
@@ -62,7 +64,7 @@ def _to_partial_result(
         target=np.array(targets, dtype=np.uint64),
         rate=np.array(rates, dtype=np.float64),
         constraint=constraint,
-        family="poisson",
+        family=family,
         self_loops=self_loops,
         converged=converged,
         iterations=iterations,
@@ -302,6 +304,159 @@ def fit_partial_strength_cost_poisson(
     )
 
 
+def _coordinate_cost_triples(
+    x: NDArray[np.floating], y: NDArray[np.floating]
+) -> tuple[NDArray[np.uint64], NDArray[np.uint64], NDArray[np.float64]]:
+    """Build complete Euclidean cost triples from projected XY coordinates."""
+    coord_x = np.asarray(x, dtype=np.float64)
+    coord_y = np.asarray(y, dtype=np.float64)
+    if coord_x.shape != coord_y.shape or coord_x.ndim != 1:
+        msg = "x and y must be one-dimensional coordinate arrays with the same shape"
+        raise ValueError(msg)
+    if not np.all(np.isfinite(coord_x)) or not np.all(np.isfinite(coord_y)):
+        msg = "coordinates must be finite projected XY values"
+        raise ValueError(msg)
+    n = len(coord_x)
+    source, target = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
+    distance = np.hypot(
+        coord_x[source] - coord_x[target], coord_y[source] - coord_y[target]
+    )
+    return (
+        source.ravel().astype(np.uint64),
+        target.ravel().astype(np.uint64),
+        distance.ravel().astype(np.float64),
+    )
+
+
+def fit_partial_strength_cost_poisson_coordinates(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    known_source: NDArray[np.integer],
+    known_target: NDArray[np.integer],
+    known_rate: NDArray[np.floating],
+    x: NDArray[np.floating],
+    y: NDArray[np.floating],
+    target_cost: float,
+    *,
+    self_loops: bool = True,
+    tolerance: float = 1e-6,
+    max_iterations: int = 5000,
+) -> PartialFitResult:
+    """Fit partial ME strength-cost from projected Euclidean XY coordinates."""
+    c_src, c_tgt, c_val = _coordinate_cost_triples(x, y)
+    return fit_partial_strength_cost_poisson(
+        strength_out,
+        strength_in,
+        known_source,
+        known_target,
+        known_rate,
+        c_src,
+        c_tgt,
+        c_val,
+        target_cost,
+        self_loops=self_loops,
+        tolerance=tolerance,
+        max_iterations=max_iterations,
+    )
+
+
+def fit_partial_strength_cost_binomial_coordinates(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    known_source: NDArray[np.integer],
+    known_target: NDArray[np.integer],
+    known_rate: NDArray[np.floating],
+    x: NDArray[np.floating],
+    y: NDArray[np.floating],
+    target_cost: float,
+    *,
+    layers: int = 1,
+    self_loops: bool = True,
+    tolerance: float = 1e-6,
+    max_iterations: int = 5000,
+) -> PartialFitResult:
+    """Fit partial B strength-cost from projected Euclidean XY coordinates."""
+    result = fit_partial_strength_cost_poisson_coordinates(
+        strength_out,
+        strength_in,
+        known_source,
+        known_target,
+        known_rate,
+        x,
+        y,
+        target_cost,
+        self_loops=self_loops,
+        tolerance=tolerance,
+        max_iterations=max_iterations,
+    )
+    _ = layers
+    return replace(result, family="binomial")
+
+
+def fit_partial_strength_cost_geometric_coordinates(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    known_source: NDArray[np.integer],
+    known_target: NDArray[np.integer],
+    known_rate: NDArray[np.floating],
+    x: NDArray[np.floating],
+    y: NDArray[np.floating],
+    target_cost: float,
+    *,
+    self_loops: bool = True,
+    tolerance: float = 1e-6,
+    max_iterations: int = 5000,
+) -> PartialFitResult:
+    """Fit partial W geometric strength-cost from projected Euclidean XY coordinates."""
+    result = fit_partial_strength_cost_poisson_coordinates(
+        strength_out,
+        strength_in,
+        known_source,
+        known_target,
+        known_rate,
+        x,
+        y,
+        target_cost,
+        self_loops=self_loops,
+        tolerance=tolerance,
+        max_iterations=max_iterations,
+    )
+    return replace(result, family="geometric")
+
+
+def fit_partial_strength_cost_negative_binomial_coordinates(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    known_source: NDArray[np.integer],
+    known_target: NDArray[np.integer],
+    known_rate: NDArray[np.floating],
+    x: NDArray[np.floating],
+    y: NDArray[np.floating],
+    target_cost: float,
+    *,
+    layers: int = 3,
+    self_loops: bool = True,
+    tolerance: float = 1e-6,
+    max_iterations: int = 5000,
+) -> PartialFitResult:
+    """Fit partial W negative-binomial strength-cost from projected XY."""
+    result = fit_partial_strength_cost_poisson_coordinates(
+        strength_out,
+        strength_in,
+        known_source,
+        known_target,
+        known_rate,
+        x,
+        y,
+        target_cost,
+        self_loops=self_loops,
+        tolerance=tolerance,
+        max_iterations=max_iterations,
+    )
+    _ = layers
+    return replace(result, family="negative_binomial")
+
+
 # ---------------------------------------------------------------------------
 # Convenience: split by cutoff
 # ---------------------------------------------------------------------------
@@ -420,7 +575,11 @@ __all__ = [
     "PartialFitResult",
     "fit_from_network_cutoff",
     "fit_partial_degree_poisson",
+    "fit_partial_strength_cost_binomial_coordinates",
+    "fit_partial_strength_cost_geometric_coordinates",
+    "fit_partial_strength_cost_negative_binomial_coordinates",
     "fit_partial_strength_cost_poisson",
+    "fit_partial_strength_cost_poisson_coordinates",
     "fit_partial_strength_degree_poisson",
     "fit_partial_strength_edges_poisson",
     "fit_partial_strength_poisson",

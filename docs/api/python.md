@@ -45,6 +45,10 @@ description: Python API reference for ODME.
 | `fit_strength_negative_binomial` | Negative-binomial W | strengths + `layers > 1` |
 | `fit_strength_cost_geometric` | Geometric W with cost | strengths + spatial cost |
 | `fit_strength_cost_negative_binomial` | Negative-binomial W with cost | strengths + spatial cost + `layers > 1` |
+| `fit_strength_cost_poisson_coordinates` | Poisson with projected XY cost | strengths + Euclidean cost |
+| `fit_strength_cost_binomial_coordinates` | Binomial with projected XY cost | strengths + Euclidean cost |
+| `fit_strength_cost_geometric_coordinates` | Geometric W with projected XY cost | strengths + Euclidean cost |
+| `fit_strength_cost_negative_binomial_coordinates` | Negative-binomial W with projected XY cost | strengths + Euclidean cost + `layers > 1` |
 | `fit_strength_edges_geometric` | Geometric W zero-inflated | strengths + edge count |
 | `fit_strength_edges_negative_binomial` | Negative-binomial W zero-inflated | strengths + edge count + `layers > 1` |
 | `fit_degree_bernoulli` | Bernoulli | degrees |
@@ -81,5 +85,14 @@ description: Python API reference for ODME.
 | `filter_strength_degree_poisson` | zero-inflated, pre-fitted |
 | `filter_degree_events_poisson` | zero-inflated, manual parameters |
 | `filter_custom_poisson` | Poisson, user/partial rates |
+
+## Partial fitting
+
+| Function | Model | Constraints |
+|----------|-------|-------------|
+| `fit_partial_strength_cost_poisson_coordinates` | Poisson partial known weights | strengths + Euclidean cost |
+| `fit_partial_strength_cost_binomial_coordinates` | Binomial partial known weights | strengths + Euclidean cost |
+| `fit_partial_strength_cost_geometric_coordinates` | Geometric W partial known weights | strengths + Euclidean cost |
+| `fit_partial_strength_cost_negative_binomial_coordinates` | Negative-binomial W partial known weights | strengths + Euclidean cost |
 
 See [Filtering API](filtering.md) for detailed parameter tables and examples.
