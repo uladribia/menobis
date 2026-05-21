@@ -926,6 +926,121 @@ pub struct CostFitOptions {
     pub max_iterations: usize,
 }
 
+#[inline]
+fn euclidean_distance(x: &[f64], y: &[f64], i: usize, j: usize) -> f64 {
+    let dx = x[i] - x[j];
+    let dy = y[i] - y[j];
+    dx.hypot(dy)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn balance_xy_cost_coordinates(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    coord_x: &[f64],
+    coord_y: &[f64],
+    gamma: f64,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+    x_init: Option<&[f64]>,
+    y_init: Option<&[f64]>,
+) -> FitResult {
+    let n = strength_out.len();
+    let total: f64 = strength_out.iter().sum();
+    let sqrt_t = total.sqrt().max(1.0);
+    let mut x: Vec<f64> = x_init.map_or_else(
+        || {
+            strength_out
+                .iter()
+                .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+                .collect()
+        },
+        <[f64]>::to_vec,
+    );
+    let mut y: Vec<f64> = y_init.map_or_else(
+        || {
+            strength_in
+                .iter()
+                .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+                .collect()
+        },
+        <[f64]>::to_vec,
+    );
+
+    for iter in 0..max_iterations {
+        let old_x = x.clone();
+        let old_y = y.clone();
+        for j in 0..n {
+            if strength_in[j] <= 0.0 {
+                y[j] = 0.0;
+                continue;
+            }
+            let denom: f64 = (0..n)
+                .filter(|&i| self_loops || i != j)
+                .map(|i| x[i] * (-gamma * euclidean_distance(coord_x, coord_y, i, j)).exp())
+                .sum();
+            y[j] = if denom > 0.0 {
+                strength_in[j] / denom
+            } else {
+                0.0
+            };
+        }
+        for i in 0..n {
+            if strength_out[i] <= 0.0 {
+                x[i] = 0.0;
+                continue;
+            }
+            let denom: f64 = (0..n)
+                .filter(|&j| self_loops || i != j)
+                .map(|j| y[j] * (-gamma * euclidean_distance(coord_x, coord_y, i, j)).exp())
+                .sum();
+            x[i] = if denom > 0.0 {
+                strength_out[i] / denom
+            } else {
+                0.0
+            };
+        }
+        if max_pair_delta(&x, &old_x, &y, &old_y) < tolerance {
+            return FitResult {
+                x,
+                y,
+                converged: true,
+                iterations: iter + 1,
+            };
+        }
+    }
+    FitResult {
+        x,
+        y,
+        converged: false,
+        iterations: max_iterations,
+    }
+}
+
+#[allow(clippy::needless_range_loop)]
+fn expected_cost_coordinates(
+    x: &[f64],
+    y: &[f64],
+    coord_x: &[f64],
+    coord_y: &[f64],
+    gamma: f64,
+    self_loops: bool,
+) -> f64 {
+    let n = x.len();
+    let mut total = 0.0;
+    for i in 0..n {
+        for j in 0..n {
+            if !self_loops && i == j {
+                continue;
+            }
+            let d = euclidean_distance(coord_x, coord_y, i, j);
+            total += x[i] * y[j] * d * (-gamma * d).exp();
+        }
+    }
+    total
+}
+
 /// Fit the strength-cost model using adaptive search on gamma.
 ///
 /// Inner loop: IPF balancing of x, y for fixed gamma.
@@ -1033,6 +1148,99 @@ pub fn fit_strength_cost_poisson(
         gamma,
         converged: best_delta_c.abs() < tolerance,
         iterations: max_iterations,
+    }
+}
+
+/// Fit strength-cost using on-the-fly Euclidean distances from projected XY coordinates.
+#[must_use]
+pub fn fit_strength_cost_poisson_coordinates(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    coord_x: &[f64],
+    coord_y: &[f64],
+    target_cost: f64,
+    opts: &CostFitOptions,
+) -> StrengthCostFitResult {
+    let total: f64 = strength_out.iter().sum();
+    let mut gamma = if target_cost > 0.0 {
+        total / target_cost
+    } else {
+        1.0
+    };
+    let mut step = gamma.abs().max(1.0) * 0.5;
+    let mut direction = 1.0_f64;
+    let factor = 3.0;
+
+    let mut best_fit = balance_xy_cost_coordinates(
+        strength_out,
+        strength_in,
+        coord_x,
+        coord_y,
+        gamma,
+        opts.self_loops,
+        opts.tolerance,
+        opts.max_iterations,
+        None,
+        None,
+    );
+    let mut best_delta_c = expected_cost_coordinates(
+        &best_fit.x,
+        &best_fit.y,
+        coord_x,
+        coord_y,
+        gamma,
+        opts.self_loops,
+    ) - target_cost;
+
+    for iter in 0..opts.max_iterations {
+        if best_delta_c.abs() < opts.tolerance {
+            return StrengthCostFitResult {
+                x: best_fit.x,
+                y: best_fit.y,
+                gamma,
+                converged: true,
+                iterations: iter + 1,
+            };
+        }
+        let new_gamma = gamma + step * direction;
+        let fit = balance_xy_cost_coordinates(
+            strength_out,
+            strength_in,
+            coord_x,
+            coord_y,
+            new_gamma,
+            opts.self_loops,
+            opts.tolerance,
+            opts.max_iterations,
+            Some(&best_fit.x),
+            Some(&best_fit.y),
+        );
+        let new_delta_c =
+            expected_cost_coordinates(&fit.x, &fit.y, coord_x, coord_y, new_gamma, opts.self_loops)
+                - target_cost;
+        if new_delta_c.abs() < best_delta_c.abs() {
+            if new_delta_c.signum() != best_delta_c.signum() {
+                direction = -direction;
+            }
+            gamma = new_gamma;
+            best_delta_c = new_delta_c;
+            best_fit = fit;
+            step *= factor;
+        } else {
+            step /= factor;
+            direction = -direction;
+            if step < 1e-15 {
+                break;
+            }
+        }
+    }
+
+    StrengthCostFitResult {
+        x: best_fit.x,
+        y: best_fit.y,
+        gamma,
+        converged: best_delta_c.abs() < opts.tolerance,
+        iterations: opts.max_iterations,
     }
 }
 

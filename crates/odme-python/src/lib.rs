@@ -73,7 +73,10 @@ use odme_core::fitting::{
     fit_partial_strength_degree as core_fit_partial_strength_degree,
     fit_partial_strength_edges as core_fit_partial_strength_edges,
 };
-use odme_core::fitting::{fit_strength_cost_poisson as core_fit_strength_cost, CostFitOptions};
+use odme_core::fitting::{
+    fit_strength_cost_poisson as core_fit_strength_cost,
+    fit_strength_cost_poisson_coordinates as core_fit_strength_cost_coordinates, CostFitOptions,
+};
 use odme_core::generation::{
     sample_custom_multinomial as core_sample_custom_multinomial,
     sample_custom_poisson as core_sample_custom_poisson,
@@ -383,6 +386,47 @@ fn fit_strength_cost_poisson(
         &cost_sources,
         &cost_targets,
         &cost_values,
+        target_cost,
+        &CostFitOptions {
+            self_loops,
+            tolerance,
+            max_iterations,
+        },
+    );
+    Ok((
+        result.x,
+        result.y,
+        result.gamma,
+        result.converged,
+        result.iterations,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+#[pyfunction]
+fn fit_strength_cost_poisson_coordinates(
+    strength_out: Vec<f64>,
+    strength_in: Vec<f64>,
+    coord_x: Vec<f64>,
+    coord_y: Vec<f64>,
+    target_cost: f64,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<FitStrengthCost> {
+    if strength_out.len() != strength_in.len()
+        || strength_out.len() != coord_x.len()
+        || strength_out.len() != coord_y.len()
+    {
+        return Err(PyValueError::new_err(
+            "strength and coordinate arrays must have same length",
+        ));
+    }
+    let result = core_fit_strength_cost_coordinates(
+        &strength_out,
+        &strength_in,
+        &coord_x,
+        &coord_y,
         target_cost,
         &CostFitOptions {
             self_loops,
@@ -2964,6 +3008,10 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     module.add_function(wrap_pyfunction!(fit_masked_strength_poisson, module)?)?;
     module.add_function(wrap_pyfunction!(fit_strength_cost_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        fit_strength_cost_poisson_coordinates,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(fit_degree_bernoulli, module)?)?;
     module.add_function(wrap_pyfunction!(fit_strength_edges_poisson, module)?)?;
     module.add_function(wrap_pyfunction!(fit_strength_degree_poisson, module)?)?;

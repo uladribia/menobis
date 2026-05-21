@@ -53,10 +53,10 @@ uv run python -m benchmarks fit --nodes 25,50,100,500,1000,5000 \
 It reached N=5000 B strength-degree and did not save JSON because saving occurs
 at the end. Add incremental saves before rerunning large suites.
 
-Do not permanently exclude fixed strength-cost from large-N benchmarks. Current
-benchmark code avoids dense cost triples at high N, but the intended design is
-on-the-fly or factorized cost evaluation so large strength-cost cases are
-included without materializing avoidable dense cost arrays.
+Do not permanently exclude fixed strength-cost from large-N benchmarks. For
+complete spatial costs, use projected XY coordinate APIs so Euclidean distances
+are computed on the fly. Sparse custom cost triples should emit warnings when
+arrays become large enough to risk memory pressure.
 
 ## Observed full-fit timings
 
@@ -95,7 +95,8 @@ O(Ep), where Ep is support size.
 ## Recommendation
 
 Do not run all N=5000 fitting cases in one process. First implement incremental
-saving and on-the-fly cost evaluation for strength-cost. Then run chunks such as:
+saving. Strength-cost coordinate benchmarks should be run only up to N=500 until
+new timings establish safe larger limits. Then run chunks such as:
 
 ```bash
 uv run python -m benchmarks fit --nodes 500,1000 --max-n 1000 --verbose 2

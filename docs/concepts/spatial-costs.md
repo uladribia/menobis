@@ -10,6 +10,10 @@ The **strength-cost ME** model is thesis case 2. It constrains outgoing and
 incoming strengths plus total cost, with expectation
 $\mathbb{E}[t_{ij}] = x_i y_j e^{-\gamma d_{ij}}$.
 
+For complete spatial costs, prefer projected XY coordinate APIs that compute
+Euclidean distances on the fly. Sparse custom cost triples remain supported, but
+dense all-pairs triples can overflow memory at large N.
+
 ## Model
 
 Given pair costs $d_{ij}$, usually distances, the expected occupation is:
@@ -48,6 +52,11 @@ When `self_loops=False`, diagonal pairs $(i,i)$ are omitted from all sums.
 ODME accepts costs as sparse `source,target,cost` entries. For current fitting
 and sampling, omitted pairs are treated as cost $d_{ij}=0$. Prefer passing a
 complete cost table unless zero-cost missing pairs are intentional.
+
+For large complete spatial supports, pass projected coordinates instead of dense
+triples. Coordinates must be in a Euclidean projected CRS such as UTM or a local
+metric projection. ODME does not transform CRS and does not compute geodesic
+distances.
 
 ## Solver
 
