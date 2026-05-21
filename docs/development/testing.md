@@ -1,77 +1,61 @@
 ---
-description: Testing strategy and conventions for ODME.
+description: ODME testing strategy and commands.
 ---
 
 # Testing
 
 ## TL;DR
 
-ODME uses TDD red/green cycles with pytest (Python) and cargo test (Rust).
-Property-based tests cover scientific invariants. All tests must pass before
-merging.
-
-## Running tests
-
-```bash
-# Rust
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-
-# Python
-uv run pytest
-uv run ruff check .
-uv run ruff format --check .
-uv run ty check
-```
+Tests prioritize scientific invariants over legacy golden files. Run focused
+checks first, then the full suite before release.
 
 ## Test layers
 
-| Layer | Purpose | Tools |
-|-------|---------|-------|
-| Unit | Individual functions and edge cases | pytest, cargo test |
-| Integration | Full fit → generate → filter workflows | pytest |
-| Property | Scientific invariants across random inputs | hypothesis, proptest |
-| CLI smoke | Typer commands with CliRunner | pytest + typer.testing |
-| Benchmark | Performance regression guards | pytest (time assertions) |
+| Layer | Purpose |
+|---|---|
+| Rust unit tests | kernels, distributions, fitting invariants |
+| Python unit tests | public wrappers, dataclasses, validation |
+| CLI tests | command behavior and JSON output |
+| Benchmark tests | performance guardrails and case coverage |
+| Docs build | links, nav, API pages |
 
-## Scientific invariants
+## Common commands
 
-Tests verify these properties across models:
-
-| Invariant | Applies to |
-|-----------|-----------|
-| `sum(s_out) == sum(s_in) == T` | all directed graphs |
-| Probability vectors sum to one | all probability tables |
-| Generated weights are non-negative integers | all samplers |
-| Self-loop removal is consistent | all models with `--no-self-loops` |
-| Fixed-strength expectations recover strengths | Poisson models |
-| Fixed-degree expectations recover degrees | degree models |
-| Seeded generation is reproducible | all samplers |
-| Filter partitions cover all edges | all filter functions |
-| P-values are in [0, 1] | all filter functions |
-
-## Tolerances
-
-Floating-point comparisons use documented tolerances:
-
-| Context | Tolerance |
-|---------|-----------|
-| IPF convergence | `1e-8` default |
-| Ensemble mean recovery | `0.1 * sqrt(N)` typical |
-| P-value bounds | exact [0, 1] |
-| Strength balance | `sum(out) == sum(in)` exact for integers |
-
-## File organization
-
-One test file per module where practical:
-
+```bash
+uv run pytest
+cargo test --workspace
+uv run ruff check .
+uv run ruff format --check .
+uv run ty check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all -- --check
+uv run mkdocs build --strict
 ```
-tests/
-├── test_odme_filtering_all_models.py
-├── test_odme_cli_filter.py
-├── test_odme_cli_convert.py
-├── test_odme_generation.py
-├── test_odme_fitting.py
-├── test_odme_partial.py
-└── ...
-```
+
+## Invariants
+
+| Invariant | Where used |
+|---|---|
+| `sum(s_out) == sum(s_in)` | directed weighted networks |
+| probabilities sum to one | pair distributions |
+| weights are non-negative integers | generation |
+| known partial pairs are preserved | partial fitting |
+| residual constraints recover targets | fitting |
+| seeded generation is reproducible | samplers |
+
+## Partial fitting tests
+
+Partial tests use known weighted pairs. For degree and edge constraints,
+occupation is inferred from positive known weights. Occupation-only partial mode
+is intentionally outside current benchmark scope.
+
+## Benchmark coverage test
+
+`tests/test_odme_benchmark_cases.py` ensures the fitting benchmark covers full
+and partial ME/B/W combinations for the five constraint families.
+
+## Warnings policy
+
+Solver warnings should be actionable. Boundary cases may converge by residual
+rather than by multiplier delta; tests should assert the scientifically relevant
+residual behavior.

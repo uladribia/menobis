@@ -1,98 +1,84 @@
-Origin-Destination Multi-Edge Package.
-========================================================================
+# ODME
 
- Copyright 2014 Oleguer Sagarra. All rights reserved. Code under License GPLv3.
-______________________________________________________________________________________
+## TL;DR
 
+ODME is a Rust + Python toolkit for maximum-entropy null models of directed,
+weighted origin-destination networks. It fits model parameters, samples null
+networks, and filters statistically significant edges.
 
-## Introduction 
+## Install for development
 
-The Origin-Destination Multi-Edge network package (ODME) is a set of 
-codes that I have written during the development of my PhD thesis. It 
-is a package intended to be used for the analysis of many kinds of 
-networks, focusing specially on spatial, multi-edge networks.
+```bash
+git clone <repo-url> ODME_lite
+cd ODME_lite
+uv sync
+uv run maturin develop --release -m crates/odme-python/Cargo.toml
+```
 
-A multi-edge network is a non binary network composed of 
-distinguishable, integer weights. A paradigmatic example of it are 
-Origin-Destination matrices used to represent flows between nodes or 
-locations. The present package is able to analyze many types of any 
-general form of non binary networks (being binary networks a particular case of them), 
-be them spatial or not.
+## Quickstart: Python
 
-The package is structured in three separated modules which perform 
-different operations. The first one is an analysis tool, while the 
-second is used to solve the parametters needed for the generation of 
-null models. The third one is used for the generation of such models.
+```python
+import numpy as np
+from odme.models import fit_strength_poisson, sample_strength_poisson
 
-The package may be used to study spatial networks or non-spatial ones, 
-and the analysis tool can be used in any weighted network, as long as 
-the weights are integer numbers.
+strength_out = np.array([10.0, 20.0, 30.0])
+strength_in = np.array([15.0, 25.0, 20.0])
 
-## References 
+fit = fit_strength_poisson(strength_out, strength_in)
+sample = sample_strength_poisson(fit.x, fit.y, seed=42)
 
+print(sample.source, sample.target, sample.weight)
+```
 
-[1] Statistical mechanics of multiedge networks
-	Sagarra O., Pérez-Vicente C. and Díaz-Guilera, A.  Phys. Rev. E 88, 062806 (2013)
-    [Physical Review E](http://pre.aps.org/abstract/PRE/v88/i6/e062806)
+## Quickstart: CLI
 
-[2] The configuration multi-edge model: Assessing the effect of fixing node strengths on weighted network magnitudes
-	Sagarra O., Font-Clos F., Pérez-Vicente C. and Díaz-Guilera, A.
-	[Europhysics Letters](http://iopscience.iop.org/0295-5075/107/3/38002/article;jsessionid=D22CAAF312F43653DA0C1279853CBF0C.c3)
+```bash
+uv run odme --help
+uv run odme analyze tests/sample.tr --json
+uv run odme fit strength tests/sample.tr --json
+uv run odme generate strength tests/strengths.str --output sample.csv
+uv run odme filter strength tests/sample.tr --alpha 0.05 --json
+```
 
-[3] Supersampling and network reconstruction of urban mobility.
-	Sagarra, O., Szell, M., Santi, P., and Ratti, C. PLoS One 10, e0134508 (2015)
-	[arXiv:1504.01939v1](http://arxiv.org/abs/1504.01939)
-    [PLoS One 10, e0134508 (2015)](http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0134508)
+## Model families
 
-[4] Role of adjacency-matrix degeneracy in maximum-entropy-weighted network models.
-    Sagarra, O., Pérez-Vicente C. and Díaz-Guilera, A. Phys. Rev. E 92, 052816
-    [arxiv:1509.01383](http://arxiv.org/abs/1509.01383)
-    [Physical Review E 92, 052816 (2015)](http://journals.aps.org/pre/abstract/10.1103/PhysRevE.92.052816)
+| Family | Weight law | Typical use |
+|---|---|---|
+| ME | Poisson / multinomial | Multi-edge distinguishable events |
+| B | Binomial(M) | Bounded layer/event count |
+| W | Geometric / negative-binomial | Weighted non-binary null models |
 
+Supported constraints include strengths, degree-events, strengths plus total
+edges, strengths plus degrees, and strengths plus cost.
 
+## Benchmarks
 
+Run fitting benchmarks with exact sizes:
 
-## Contents of the package
+```bash
+uv run python -m benchmarks fit --nodes 100 --max-n 100 \
+  --known-fractions 0.05,0.40 --tolerance 1e-4
+```
 
-This package is structured in three separated modules. Each module has 
-its own README and documentation and the organization goes as follows:
-- Module 1: Network analysis. Codes are written in pure C and the 
-module constitutes a tool for the analysis of general purpose weighted networks (be them 
-spatial or not), as long as their weights are integer numbers.
-- Module 2: Model Fitting. Codes written in python (numpy and other 
-packages needed). This module serves to fit the parametters used for 
-the generation of maximum entropy null models.
-- Module 3: Model generation. Codes written in C. This module 
-generates expectations from different maximum entropy models, as well 
-as two well-known models: Radiation and sequential gravity model.
+Large dense fits are expensive. The N=5000 all-case run can take many hours and
+should be run in chunks after enabling incremental result saving.
 
+## Documentation
 
+```bash
+uv run mkdocs serve
+uv run mkdocs build --strict
+```
 
+Start with:
 
-## Acknowledgements
+- `docs/getting-started.md`
+- `docs/concepts/maximum-entropy-models.md`
+- `docs/development/benchmarking.md`
+- `docs/development/contributing-and-extending.md`
 
-I would like to thank Pol Colomer and Sergio Oller for their very useful comments and suggestions.
+## Legacy code
 
-
-
-## License
-
-(C) Copyright 2014 Oleguer Sagarra.
-All rights reserved. 
-Code under License GPLv3.
-
-Each file in this folder is part of the ODME package. This code has no warranty whatsoever nor any kind of support is provided. 
-You are free to do what you like with this code as long as you leave this copyright in place. Please cite us if you use our software.
-
-ODME is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
-
-ODME is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License along with the package. If not, see http://www.gnu.org/licenses/.
-
-
-## Additional notes
-
-
-Check the DOCS/ folder in each module as well as their separate README files for details.
-
+Folders named `1. Network analysis`, `2. Model Fitting`, and
+`3. Model Generation` are thesis-era reference material. The modern ODME
+implementation lives under `src/`, `crates/`, `tests/`, and `docs/`.

@@ -40,6 +40,7 @@ nav:
       - Testing: development/testing.md
       - Benchmarking: development/benchmarking.md
       - Scalability: development/scalability.md
+      - Contributing and Extending: development/contributing-and-extending.md
       - Release Process: development/release-process.md
   - Decisions:
       - Rust and Python Architecture: decisions/0001-rust-python-architecture.md
