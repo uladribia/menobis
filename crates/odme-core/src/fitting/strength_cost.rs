@@ -332,40 +332,18 @@ pub fn fit_strength_cost_binomial_coordinates(
 // B (Binomial M) strength-cost sparse fitting
 // ===========================================================================
 
-/// Build dense f_mat = exp(-gamma * d_ij) from sparse cost entries for B model.
-fn build_b_f_mat(
-    n: usize,
+/// IPF balancing for B(M) strength-cost with sparse cost entries (no dense f_mat).
+#[allow(clippy::too_many_arguments)]
+fn balance_b_strength_cost_sparse(
+    strength_out: &[f64],
+    strength_in: &[f64],
     cost_sources: &[usize],
     cost_targets: &[usize],
     cost_values: &[f64],
-    gamma: f64,
-    self_loops: bool,
-) -> Vec<f64> {
-    let mut f_mat = vec![1.0; n * n];
-    if !self_loops {
-        for i in 0..n {
-            f_mat[i * n + i] = 0.0;
-        }
-    }
-    for (idx, (&src, &tgt)) in cost_sources.iter().zip(cost_targets.iter()).enumerate() {
-        if !self_loops && src == tgt {
-            continue;
-        }
-        if src < n && tgt < n {
-            f_mat[src * n + tgt] = (-gamma * cost_values[idx]).exp();
-        }
-    }
-    f_mat
-}
-
-/// IPF balancing for B(M) strength-cost with precomputed f_mat.
-#[allow(clippy::too_many_arguments)]
-fn balance_b_strength_cost_fmat(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    f_mat: &[f64],
     n: usize,
+    gamma: f64,
     layers: u32,
+    self_loops: bool,
     tolerance: f64,
     max_iterations: usize,
     x_init: Option<&[f64]>,
@@ -395,6 +373,20 @@ fn balance_b_strength_cost_fmat(
     let k_out: Vec<f64> = strength_out.iter().map(|&s| s / m).collect();
     let k_in: Vec<f64> = strength_in.iter().map(|&s| s / m).collect();
 
+    // Build per-column/row f_ij lookup (O(K) memory)
+    let mut col_src: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
+    let mut row_tgt: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
+    for (idx, (&src, &tgt)) in cost_sources.iter().zip(cost_targets.iter()).enumerate() {
+        if !self_loops && src == tgt {
+            continue;
+        }
+        if src < n && tgt < n {
+            let f_ij = (-gamma * cost_values[idx]).exp();
+            col_src[tgt].push((src, f_ij));
+            row_tgt[src].push((tgt, f_ij));
+        }
+    }
+
     for iter in 0..max_iterations {
         for j in 0..n {
             if k_in[j] <= 0.0 {
@@ -402,11 +394,7 @@ fn balance_b_strength_cost_fmat(
                 continue;
             }
             let mut denom = 0.0;
-            for i in 0..n {
-                let f_ij = f_mat[i * n + j];
-                if f_ij == 0.0 {
-                    continue;
-                }
+            for &(i, f_ij) in &col_src[j] {
                 denom += x[i] * f_ij / (1.0 + x[i] * y[j] * f_ij);
             }
             y[j] = if denom > 0.0 { k_in[j] / denom } else { 0.0 };
@@ -417,11 +405,7 @@ fn balance_b_strength_cost_fmat(
                 continue;
             }
             let mut denom = 0.0;
-            for j in 0..n {
-                let f_ij = f_mat[i * n + j];
-                if f_ij == 0.0 {
-                    continue;
-                }
+            for &(j, f_ij) in &row_tgt[i] {
                 denom += y[j] * f_ij / (1.0 + x[i] * y[j] * f_ij);
             }
             x[i] = if denom > 0.0 { k_out[i] / denom } else { 0.0 };
@@ -429,11 +413,7 @@ fn balance_b_strength_cost_fmat(
         let mut max_err = 0.0_f64;
         for i in 0..n {
             let mut pred = 0.0;
-            for j in 0..n {
-                let f_ij = f_mat[i * n + j];
-                if f_ij == 0.0 {
-                    continue;
-                }
+            for &(j, f_ij) in &row_tgt[i] {
                 pred += b_expected(x[i], y[j], f_ij, layers);
             }
             max_err = max_err.max((pred - strength_out[i]).abs());
@@ -499,20 +479,16 @@ pub fn fit_strength_cost_binomial(
 ) -> StrengthCostFitResult {
     let n = strength_out.len();
     let solve_at = |gamma: f64, x_init: Option<&[f64]>, y_init: Option<&[f64]>| {
-        let f_mat = build_b_f_mat(
-            n,
+        let fit = balance_b_strength_cost_sparse(
+            strength_out,
+            strength_in,
             cost_sources,
             cost_targets,
             cost_values,
-            gamma,
-            opts.self_loops,
-        );
-        let fit = balance_b_strength_cost_fmat(
-            strength_out,
-            strength_in,
-            &f_mat,
             n,
+            gamma,
             layers,
+            opts.self_loops,
             opts.tolerance,
             opts.max_iterations,
             x_init,
