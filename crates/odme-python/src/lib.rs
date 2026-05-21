@@ -79,7 +79,7 @@ use odme_core::fitting::{
     fit_strength_cost_binomial_coordinates as core_fit_strength_cost_binomial_coordinates,
     fit_strength_cost_poisson as core_fit_strength_cost,
     fit_strength_cost_poisson_coordinates as core_fit_strength_cost_coordinates,
-    fit_strength_cost_w_coordinates as core_fit_strength_cost_w_coordinates,
+    fit_strength_cost_w_lbfgs as core_fit_strength_cost_w_coordinates,
     fit_strength_cost_w_lbfgs as core_fit_strength_cost_w_lbfgs, CostFitOptions,
 };
 use odme_core::generation::{

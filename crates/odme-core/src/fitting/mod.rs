@@ -27,8 +27,6 @@ pub use partial::{
 };
 pub use strength_cost::fit_strength_cost_binomial;
 pub use strength_cost::fit_strength_cost_binomial_coordinates;
-#[cfg(feature = "w-conic")]
-pub use strength_cost::fit_strength_cost_w_coordinates;
 pub use types::{
     FitResult, PartialFitResult, StrengthCostFitResult, StrengthDegreeFitResult,
     StrengthEdgesFitResult, WConicFitOptions, WFitStatus, WProblemMetrics, WStrengthCostFitResult,

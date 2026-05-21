@@ -7,6 +7,46 @@ use super::support::coord_distance;
 use super::w::w_mean;
 use super::{CostFitOptions, StrengthCostFitResult};
 
+/// How pair costs are provided to the W Newton solver.
+enum CostMode<'a> {
+    /// No cost constraint (gamma fixed at 0).
+    NoCost,
+    /// Sparse cost entries.
+    Sparse {
+        col_costs: Vec<Vec<(usize, f64)>>,
+        #[allow(dead_code)]
+        row_costs: Vec<Vec<(usize, f64)>>,
+    },
+    /// Projected Euclidean XY coordinates.
+    Coordinates { x: &'a [f64], y: &'a [f64] },
+}
+
+impl<'a> CostMode<'a> {
+    fn build_sparse(
+        n: usize,
+        sources: &'a [usize],
+        targets: &'a [usize],
+        values: &'a [f64],
+        self_loops: bool,
+    ) -> Self {
+        let mut col_costs: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
+        let mut row_costs: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
+        for (idx, (&src, &tgt)) in sources.iter().zip(targets.iter()).enumerate() {
+            if !self_loops && src == tgt {
+                continue;
+            }
+            if src < n && tgt < n {
+                col_costs[tgt].push((src, values[idx]));
+                row_costs[src].push((tgt, values[idx]));
+            }
+        }
+        CostMode::Sparse {
+            col_costs,
+            row_costs,
+        }
+    }
+}
+
 /// Derivative of w_mean(r, M) w.r.t. r.
 #[inline]
 fn w_mean_deriv(r: f64, layers: u32) -> f64 {
@@ -18,9 +58,56 @@ fn w_mean_deriv(r: f64, layers: u32) -> f64 {
     -f64::from(layers) * q / (omq * omq)
 }
 
+/// Fit W(M) fixed-strength (no cost constraint) using Newton coordinate-descent.
+#[must_use]
+pub fn fit_strength_w_newton(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    layers: u32,
+    opts: &CostFitOptions,
+) -> StrengthCostFitResult {
+    let n = strength_out.len();
+    // dummy coords (unused since CostMode::NoCost)
+    fit_w_newton_inner(
+        strength_out,
+        strength_in,
+        0.0,
+        layers,
+        opts,
+        &CostMode::NoCost,
+        n,
+    )
+}
+
+/// Fit W(M) strength-cost with sparse cost entries using Newton coordinate-descent.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn fit_strength_cost_w_sparse_newton(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    cost_sources: &[usize],
+    cost_targets: &[usize],
+    cost_values: &[f64],
+    target_cost: f64,
+    layers: u32,
+    opts: &CostFitOptions,
+) -> StrengthCostFitResult {
+    let n = strength_out.len();
+    let mode = CostMode::build_sparse(n, cost_sources, cost_targets, cost_values, opts.self_loops);
+    fit_w_newton_inner(
+        strength_out,
+        strength_in,
+        target_cost,
+        layers,
+        opts,
+        &mode,
+        n,
+    )
+}
+
 /// Fit W(M) strength-cost with projected coordinates using Newton coordinate-descent.
 ///
-/// No N² memory allocated. O(N²) per iteration, warm-started from ME solution.
+/// No N² memory allocated. O(N²) per iteration.
 #[must_use]
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::needless_range_loop)]
@@ -34,6 +121,49 @@ pub fn fit_strength_cost_w_lbfgs(
     opts: &CostFitOptions,
 ) -> StrengthCostFitResult {
     let n = strength_out.len();
+    let mode = CostMode::Coordinates {
+        x: coord_x,
+        y: coord_y,
+    };
+    fit_w_newton_inner(
+        strength_out,
+        strength_in,
+        target_cost,
+        layers,
+        opts,
+        &mode,
+        n,
+    )
+}
+
+#[inline]
+fn pair_dist(mode: &CostMode<'_>, i: usize, j: usize) -> f64 {
+    match mode {
+        CostMode::NoCost => 0.0,
+        CostMode::Coordinates { x, y } => coord_distance(x, y, i, j),
+        CostMode::Sparse { col_costs, .. } => {
+            // Find distance for pair (i,j) from col_costs[j]
+            for &(src, d) in &col_costs[j] {
+                if src == i {
+                    return d;
+                }
+            }
+            0.0
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::needless_range_loop)]
+fn fit_w_newton_inner(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    target_cost: f64,
+    layers: u32,
+    opts: &CostFitOptions,
+    cost_mode: &CostMode<'_>,
+    n: usize,
+) -> StrengthCostFitResult {
     let total: f64 = strength_out.iter().sum();
 
     // Initialize: r_avg = M * N_pairs / T, split between a and b.
@@ -70,7 +200,7 @@ pub fn fit_strength_cost_w_lbfgs(
                 if !opts.self_loops && i == j {
                     continue;
                 }
-                let d = coord_distance(coord_x, coord_y, i, j);
+                let d = pair_dist(cost_mode, i, j);
                 let r = (a[i] + b[j] + gamma * d).max(r_min);
                 pred += w_mean(r, layers);
                 dpred += w_mean_deriv(r, layers);
@@ -81,7 +211,7 @@ pub fn fit_strength_cost_w_lbfgs(
                 // Project: b_j >= r_min - min_i(a_i + gamma*d_ij)
                 let min_complement: f64 = (0..n)
                     .filter(|&i| opts.self_loops || i != j)
-                    .map(|i| a[i] + gamma * coord_distance(coord_x, coord_y, i, j))
+                    .map(|i| a[i] + gamma * pair_dist(cost_mode, i, j))
                     .fold(f64::INFINITY, f64::min);
                 b[j] = new_b.max(r_min - min_complement);
             }
@@ -98,7 +228,7 @@ pub fn fit_strength_cost_w_lbfgs(
                 if !opts.self_loops && i == j {
                     continue;
                 }
-                let d = coord_distance(coord_x, coord_y, i, j);
+                let d = pair_dist(cost_mode, i, j);
                 let r = (a[i] + b[j] + gamma * d).max(r_min);
                 pred += w_mean(r, layers);
                 dpred += w_mean_deriv(r, layers);
@@ -108,14 +238,16 @@ pub fn fit_strength_cost_w_lbfgs(
                 let new_a = a[i] + damping * step;
                 let min_complement: f64 = (0..n)
                     .filter(|&j| opts.self_loops || i != j)
-                    .map(|j| b[j] + gamma * coord_distance(coord_x, coord_y, i, j))
+                    .map(|j| b[j] + gamma * pair_dist(cost_mode, i, j))
                     .fold(f64::INFINITY, f64::min);
                 a[i] = new_a.max(r_min - min_complement);
             }
         }
 
-        // Update gamma: project so all r_ij remain feasible
-        {
+        // Update gamma (skip if no cost constraint)
+        if matches!(cost_mode, CostMode::NoCost) {
+            // No cost constraint; gamma stays at 0
+        } else {
             let mut pred_cost = 0.0;
             let mut dpred_cost = 0.0;
             for i in 0..n {
@@ -123,7 +255,7 @@ pub fn fit_strength_cost_w_lbfgs(
                     if !opts.self_loops && i == j {
                         continue;
                     }
-                    let d = coord_distance(coord_x, coord_y, i, j);
+                    let d = pair_dist(cost_mode, i, j);
                     let r = (a[i] + b[j] + gamma * d).max(r_min);
                     pred_cost += d * w_mean(r, layers);
                     dpred_cost += d * d * w_mean_deriv(r, layers);
@@ -140,7 +272,7 @@ pub fn fit_strength_cost_w_lbfgs(
                         if !opts.self_loops && i == j {
                             continue;
                         }
-                        let d = coord_distance(coord_x, coord_y, i, j);
+                        let d = pair_dist(cost_mode, i, j);
                         if d > 1e-15 {
                             gamma_lb = gamma_lb.max((r_min - a[i] - b[j]) / d);
                         }
@@ -158,7 +290,7 @@ pub fn fit_strength_cost_w_lbfgs(
                 if !opts.self_loops && i == j {
                     continue;
                 }
-                let d = coord_distance(coord_x, coord_y, i, j);
+                let d = pair_dist(cost_mode, i, j);
                 let r = (a[i] + b[j] + gamma * d).max(r_min);
                 p += w_mean(r, layers);
             }
@@ -170,7 +302,7 @@ pub fn fit_strength_cost_w_lbfgs(
                 if !opts.self_loops && i == j {
                     continue;
                 }
-                let d = coord_distance(coord_x, coord_y, i, j);
+                let d = pair_dist(cost_mode, i, j);
                 let r = (a[i] + b[j] + gamma * d).max(r_min);
                 p += w_mean(r, layers);
             }
@@ -253,6 +385,77 @@ mod tests {
             "ME and W should differ: me={} w={}",
             me.gamma,
             w.gamma
+        );
+    }
+    #[test]
+    fn w_newton_fixed_strength_no_cost() {
+        let s_out = vec![10.0, 20.0, 30.0];
+        let s_in = vec![15.0, 25.0, 20.0];
+        let opts = CostFitOptions {
+            self_loops: true,
+            tolerance: 1e-2,
+            max_iterations: 5000,
+        };
+        let fit = fit_strength_w_newton(&s_out, &s_in, 1, &opts);
+        assert!(fit.converged, "W fixed-strength Newton did not converge");
+        assert!((fit.gamma).abs() < 1e-10, "gamma should be 0 for no-cost");
+        // Verify strengths
+        let n = 3;
+        for (i, &expected) in s_out.iter().enumerate() {
+            let mut pred = 0.0;
+            for j in 0..n {
+                let r = (-fit.x[i].ln()) + (-fit.y[j].ln());
+                pred += w_mean(r.max(1e-10), 1);
+            }
+            assert!(
+                (pred - expected).abs() < 0.5,
+                "s_out[{i}]: expected {expected}, got {pred}"
+            );
+        }
+    }
+
+    #[test]
+    fn w_newton_sparse_cost_matches_coordinate() {
+        let s_out = vec![10.0, 20.0, 30.0];
+        let s_in = vec![15.0, 25.0, 20.0];
+        let cx = vec![0.0, 3.0, 0.0];
+        let cy = vec![0.0, 0.0, 4.0];
+        let n = 3;
+        let target_cost = 80.0;
+        let opts = CostFitOptions {
+            self_loops: true,
+            tolerance: 1e-2,
+            max_iterations: 5000,
+        };
+        // Build sparse costs from coordinates
+        let mut sources = Vec::new();
+        let mut targets = Vec::new();
+        let mut values = Vec::new();
+        for i in 0..n {
+            for j in 0..n {
+                sources.push(i);
+                targets.push(j);
+                values.push(coord_distance(&cx, &cy, i, j));
+            }
+        }
+        let sparse = fit_strength_cost_w_sparse_newton(
+            &s_out,
+            &s_in,
+            &sources,
+            &targets,
+            &values,
+            target_cost,
+            1,
+            &opts,
+        );
+        let coord = fit_strength_cost_w_lbfgs(&s_out, &s_in, &cx, &cy, target_cost, 1, &opts);
+        assert!(sparse.converged, "sparse W Newton did not converge");
+        assert!(coord.converged, "coord W Newton did not converge");
+        assert!(
+            (sparse.gamma - coord.gamma).abs() < 0.1,
+            "sparse={} coord={}",
+            sparse.gamma,
+            coord.gamma
         );
     }
 }
