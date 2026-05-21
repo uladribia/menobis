@@ -14,19 +14,15 @@ from odme.models.partial import (
 
 def test_partial_coordinate_strength_cost_available_for_all_families() -> None:
     """Partial coordinate strength-cost wrappers converge for ME/B/W labels."""
-    strength_out = np.array([10.0, 20.0, 30.0])
-    strength_in = np.array([15.0, 25.0, 20.0])
+    # Use feasible strengths for B(M=10): max excess < M*(n-1)
+    strength_out = np.array([2.0, 3.0, 4.0])
+    strength_in = np.array([2.5, 3.5, 3.0])
     known_source = np.array([0], dtype=np.uint64)
     known_target = np.array([1], dtype=np.uint64)
-    known_rate = np.array([2.0])
+    known_rate = np.array([0.5])
     x = np.array([0.0, 3.0, 0.0])
     y = np.array([0.0, 0.0, 4.0])
-    coords = np.column_stack([x, y])
-    distance = np.linalg.norm(coords[:, None, :] - coords[None, :, :], axis=2)
-    target_cost = float(
-        0.85
-        * np.sum(np.outer(strength_out, strength_in) / strength_out.sum() * distance)
-    )
+    target_cost = 12.0
 
     fits = [
         fit_partial_strength_cost_poisson_coordinates(
@@ -48,6 +44,7 @@ def test_partial_coordinate_strength_cost_available_for_all_families() -> None:
             x,
             y,
             target_cost,
+            layers=10,
         ),
         fit_partial_strength_cost_geometric_coordinates(
             strength_out,
@@ -68,10 +65,13 @@ def test_partial_coordinate_strength_cost_available_for_all_families() -> None:
             x,
             y,
             target_cost,
+            layers=3,
         ),
     ]
 
-    assert all(fit.converged for fit in fits)
+    assert all(fit.converged for fit in fits), [
+        (fit.family, fit.converged) for fit in fits
+    ]
     assert [fit.family for fit in fits] == [
         "poisson",
         "binomial",

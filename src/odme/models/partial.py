@@ -5,7 +5,7 @@ runs in Rust. Python only validates inputs and wraps results.
 """
 
 import warnings
-from dataclasses import replace
+from collections.abc import Callable
 
 import numpy as np
 from numpy.typing import NDArray
@@ -353,6 +353,145 @@ def fit_partial_strength_cost_poisson_coordinates(
     )
 
 
+def _w_rate_func(layers: int) -> Callable[[float, float, float, object], float]:
+    """Return W rate function for given M."""
+    import math
+
+    def _rate(xi: float, yj: float, f: float, fit: object) -> float:
+        # W: E[t_ij] = M * exp(-r) / (1 - exp(-r)), r = -ln(x_i) + (-ln(y_j)) + gamma*d
+        # f = exp(-gamma*d), so r = -ln(xi) - ln(yj) - ln(f) = -ln(xi*yj*f)
+        z = xi * yj * f
+        if z <= 0 or z >= 1:
+            return 0.0
+        r = -math.log(z)
+        if r <= 0:
+            return 0.0
+        q = math.exp(-r)
+        return float(layers) * q / (1.0 - q)
+
+    return _rate
+
+
+def _partial_family_coordinate(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    known_source: NDArray[np.integer],
+    known_target: NDArray[np.integer],
+    known_rate: NDArray[np.floating],
+    x: NDArray[np.floating],
+    y: NDArray[np.floating],
+    target_cost: float,
+    *,
+    self_loops: bool,
+    tolerance: float,
+    max_iterations: int,
+    family: str,
+    fit_func: object,
+    rate_func: object,
+) -> PartialFitResult:
+    """Shared partial coordinate fitting: compute excess, fit family, assemble rates."""
+    s_out = np.asarray(strength_out, dtype=np.float64)
+    s_in = np.asarray(strength_in, dtype=np.float64)
+    k_src = np.asarray(known_source, dtype=np.uint64)
+    k_tgt = np.asarray(known_target, dtype=np.uint64)
+    k_rate = np.asarray(known_rate, dtype=np.float64)
+    coord_x = np.asarray(x, dtype=np.float64)
+    coord_y = np.asarray(y, dtype=np.float64)
+    n = max(
+        len(s_out),
+        int(k_src.max()) + 1 if len(k_src) else 0,
+        int(k_tgt.max()) + 1 if len(k_tgt) else 0,
+    )
+    # Pad sequences
+    if len(s_out) < n:
+        s_out = np.pad(s_out, (0, n - len(s_out)))
+    if len(s_in) < n:
+        s_in = np.pad(s_in, (0, n - len(s_in)))
+    # Build mask
+    mask = np.zeros((n, n), dtype=bool)
+    for s, t in zip(k_src, k_tgt, strict=True):
+        mask[int(s), int(t)] = True
+    if not self_loops:
+        np.fill_diagonal(mask, True)
+    # Compute excess
+    excess_out = s_out.copy()
+    excess_in = s_in.copy()
+    for s, t, r in zip(k_src, k_tgt, k_rate, strict=True):
+        excess_out[int(s)] -= r
+        excess_in[int(t)] -= r
+    excess_out = np.maximum(excess_out, 0.0)
+    excess_in = np.maximum(excess_in, 0.0)
+    # Balance excess
+    diff = excess_out.sum() - excess_in.sum()
+    if abs(diff) > 1e-10:
+        if diff > 0:
+            idx = int(np.argmax(excess_in))
+            excess_in[idx] += diff
+        else:
+            idx = int(np.argmax(excess_out))
+            excess_out[idx] -= diff
+    # Known cost
+    known_cost = sum(
+        float(r)
+        * float(
+            np.hypot(
+                coord_x[int(s)] - coord_x[int(t)], coord_y[int(s)] - coord_y[int(t)]
+            )
+        )
+        for s, t, r in zip(k_src, k_tgt, k_rate, strict=True)
+    )
+    excess_cost = max(0.0, target_cost - known_cost)
+    # Fit on excess using family-specific solver
+    if excess_out.sum() <= 0:
+        # Nothing to fit
+        sources_list = k_src.tolist()
+        targets_list = k_tgt.tolist()
+        rates_list = k_rate.tolist()
+    else:
+        fit = fit_func(excess_out, excess_in, coord_x, coord_y, excess_cost)
+        # Assemble rate table: known + free pairs
+        sources_list = []
+        targets_list = []
+        rates_list = []
+        for s, t, r in zip(k_src, k_tgt, k_rate, strict=True):
+            sources_list.append(int(s))
+            targets_list.append(int(t))
+            rates_list.append(float(r))
+        for i in range(n):
+            for j in range(n):
+                if mask[i, j]:
+                    continue
+                d = float(np.hypot(coord_x[i] - coord_x[j], coord_y[i] - coord_y[j]))
+                f_ij = float(np.exp(-fit.gamma * d))
+                rate = rate_func(float(fit.x[i]), float(fit.y[j]), f_ij, fit)
+                if rate > 0:
+                    sources_list.append(i)
+                    targets_list.append(j)
+                    rates_list.append(rate)
+    _warn_if_not_converged(
+        f"fit_partial_strength_cost_{family}_coordinates",
+        fit.converged if excess_out.sum() > 0 else True,
+        fit.iterations if excess_out.sum() > 0 else 0,
+    )
+    return PartialFitResult(
+        source=np.array(sources_list, dtype=np.uint64),
+        target=np.array(targets_list, dtype=np.uint64),
+        rate=np.array(rates_list, dtype=np.float64),
+        constraint="strength_cost",
+        family=family,
+        self_loops=self_loops,
+        converged=fit.converged if excess_out.sum() > 0 else True,
+        iterations=fit.iterations if excess_out.sum() > 0 else 0,
+        diagnostics=OptimizationDiagnostics(
+            converged=fit.converged if excess_out.sum() > 0 else True,
+            status="solved"
+            if (excess_out.sum() <= 0 or fit.converged)
+            else "inaccurate",
+            iterations=fit.iterations if excess_out.sum() > 0 else 0,
+        ),
+    )
+
+
 def fit_partial_strength_cost_binomial_coordinates(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
@@ -368,8 +507,14 @@ def fit_partial_strength_cost_binomial_coordinates(
     tolerance: float = 1e-6,
     max_iterations: int = 5000,
 ) -> PartialFitResult:
-    """Fit partial B strength-cost from projected Euclidean XY coordinates."""
-    result = fit_partial_strength_cost_poisson_coordinates(
+    """Fit partial B(M) strength-cost from projected Euclidean XY coordinates.
+
+    Computes excess strengths and cost, fits B(M) on free pairs, assembles
+    rate table using E[t_ij] = M * x_i * y_j * f / (1 + x_i * y_j * f).
+    """
+    from odme.models.fitting import fit_strength_cost_binomial_coordinates as _fit_b
+
+    return _partial_family_coordinate(
         strength_out,
         strength_in,
         known_source,
@@ -381,9 +526,22 @@ def fit_partial_strength_cost_binomial_coordinates(
         self_loops=self_loops,
         tolerance=tolerance,
         max_iterations=max_iterations,
+        family="binomial",
+        fit_func=lambda s_o, s_i, cx, cy, tc: _fit_b(
+            s_o,
+            s_i,
+            cx,
+            cy,
+            tc,
+            layers=layers,
+            self_loops=self_loops,
+            tolerance=tolerance,
+            max_iterations=max_iterations,
+        ),
+        rate_func=lambda xi, yj, f, fit: (
+            float(layers) * xi * yj * f / (1.0 + xi * yj * f)
+        ),
     )
-    _ = layers
-    return replace(result, family="binomial")
 
 
 def fit_partial_strength_cost_geometric_coordinates(
@@ -400,8 +558,13 @@ def fit_partial_strength_cost_geometric_coordinates(
     tolerance: float = 1e-6,
     max_iterations: int = 5000,
 ) -> PartialFitResult:
-    """Fit partial W geometric strength-cost from projected Euclidean XY coordinates."""
-    result = fit_partial_strength_cost_poisson_coordinates(
+    """Fit partial W geometric strength-cost from projected Euclidean XY coordinates.
+
+    Uses W conic solver on excess, assembles rates with W formula.
+    """
+    from odme.models.fitting import fit_strength_cost_geometric_coordinates as _fit_wg
+
+    return _partial_family_coordinate(
         strength_out,
         strength_in,
         known_source,
@@ -413,8 +576,19 @@ def fit_partial_strength_cost_geometric_coordinates(
         self_loops=self_loops,
         tolerance=tolerance,
         max_iterations=max_iterations,
+        family="geometric",
+        fit_func=lambda s_o, s_i, cx, cy, tc: _fit_wg(
+            s_o,
+            s_i,
+            cx,
+            cy,
+            tc,
+            self_loops=self_loops,
+            tolerance=tolerance,
+            max_iterations=max_iterations,
+        ),
+        rate_func=_w_rate_func(layers=1),
     )
-    return replace(result, family="geometric")
 
 
 def fit_partial_strength_cost_negative_binomial_coordinates(
@@ -432,8 +606,15 @@ def fit_partial_strength_cost_negative_binomial_coordinates(
     tolerance: float = 1e-6,
     max_iterations: int = 5000,
 ) -> PartialFitResult:
-    """Fit partial W negative-binomial strength-cost from projected XY."""
-    result = fit_partial_strength_cost_poisson_coordinates(
+    """Fit partial W negative-binomial strength-cost from projected XY.
+
+    Uses W conic solver on excess, assembles rates with W(M) formula.
+    """
+    from odme.models.fitting import (
+        fit_strength_cost_negative_binomial_coordinates as _fit_wnb,
+    )
+
+    return _partial_family_coordinate(
         strength_out,
         strength_in,
         known_source,
@@ -445,9 +626,20 @@ def fit_partial_strength_cost_negative_binomial_coordinates(
         self_loops=self_loops,
         tolerance=tolerance,
         max_iterations=max_iterations,
+        family="negative_binomial",
+        fit_func=lambda s_o, s_i, cx, cy, tc: _fit_wnb(
+            s_o,
+            s_i,
+            cx,
+            cy,
+            tc,
+            layers=layers,
+            self_loops=self_loops,
+            tolerance=tolerance,
+            max_iterations=max_iterations,
+        ),
+        rate_func=_w_rate_func(layers=layers),
     )
-    _ = layers
-    return replace(result, family="negative_binomial")
 
 
 # ---------------------------------------------------------------------------
