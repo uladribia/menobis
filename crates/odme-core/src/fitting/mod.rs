@@ -24,6 +24,7 @@ pub use partial::{
     fit_partial_degree, fit_partial_strength, fit_partial_strength_cost,
     fit_partial_strength_cost_coordinates, fit_partial_strength_degree, fit_partial_strength_edges,
 };
+pub use strength_cost::fit_strength_cost_binomial;
 pub use strength_cost::fit_strength_cost_binomial_coordinates;
 #[cfg(feature = "w-conic")]
 pub use strength_cost::fit_strength_cost_w_coordinates;

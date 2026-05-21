@@ -1489,13 +1489,14 @@ def fit_strength_cost_binomial(
     c_tgt = c_tgt_arr.tolist()
     c_val = c_val_arr.tolist()
     t0 = time.perf_counter()
-    x_list, y_list, gamma, converged, iters = _odme.fit_strength_cost_poisson(
+    x_list, y_list, gamma, converged, iters = _odme.fit_strength_cost_binomial(
         s_out.tolist(),
         s_in.tolist(),
         c_src,
         c_tgt,
         c_val,
         target_cost,
+        layers,
         self_loops,
         tolerance,
         max_iterations,

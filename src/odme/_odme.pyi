@@ -79,6 +79,18 @@ def fit_strength_cost_poisson_coordinates(
     tolerance: float,
     max_iterations: int,
 ) -> tuple[list[float], list[float], float, bool, int]: ...
+def fit_strength_cost_binomial(
+    strength_out: list[float],
+    strength_in: list[float],
+    cost_sources: list[int],
+    cost_targets: list[int],
+    cost_values: list[float],
+    target_cost: float,
+    layers: int,
+    self_loops: bool,
+    tolerance: float,
+    max_iterations: int,
+) -> tuple[list[float], list[float], float, bool, int]: ...
 def fit_strength_cost_binomial_coordinates(
     strength_out: list[float],
     strength_in: list[float],
