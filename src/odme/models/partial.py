@@ -304,30 +304,6 @@ def fit_partial_strength_cost_poisson(
     )
 
 
-def _coordinate_cost_triples(
-    x: NDArray[np.floating], y: NDArray[np.floating]
-) -> tuple[NDArray[np.uint64], NDArray[np.uint64], NDArray[np.float64]]:
-    """Build complete Euclidean cost triples from projected XY coordinates."""
-    coord_x = np.asarray(x, dtype=np.float64)
-    coord_y = np.asarray(y, dtype=np.float64)
-    if coord_x.shape != coord_y.shape or coord_x.ndim != 1:
-        msg = "x and y must be one-dimensional coordinate arrays with the same shape"
-        raise ValueError(msg)
-    if not np.all(np.isfinite(coord_x)) or not np.all(np.isfinite(coord_y)):
-        msg = "coordinates must be finite projected XY values"
-        raise ValueError(msg)
-    n = len(coord_x)
-    source, target = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
-    distance = np.hypot(
-        coord_x[source] - coord_x[target], coord_y[source] - coord_y[target]
-    )
-    return (
-        source.ravel().astype(np.uint64),
-        target.ravel().astype(np.uint64),
-        distance.ravel().astype(np.float64),
-    )
-
-
 def fit_partial_strength_cost_poisson_coordinates(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
@@ -343,20 +319,37 @@ def fit_partial_strength_cost_poisson_coordinates(
     max_iterations: int = 5000,
 ) -> PartialFitResult:
     """Fit partial ME strength-cost from projected Euclidean XY coordinates."""
-    c_src, c_tgt, c_val = _coordinate_cost_triples(x, y)
-    return fit_partial_strength_cost_poisson(
-        strength_out,
-        strength_in,
-        known_source,
-        known_target,
-        known_rate,
-        c_src,
-        c_tgt,
-        c_val,
-        target_cost,
+    s_out = np.asarray(strength_out, dtype=np.float64)
+    s_in = np.asarray(strength_in, dtype=np.float64)
+    k_src = np.asarray(known_source, dtype=np.uint64)
+    k_tgt = np.asarray(known_target, dtype=np.uint64)
+    k_rate = np.asarray(known_rate, dtype=np.float64)
+    coord_x = np.asarray(x, dtype=np.float64)
+    coord_y = np.asarray(y, dtype=np.float64)
+    sources, targets, rates, converged, iters = (
+        _odme.fit_partial_strength_cost_poisson_coordinates_full(
+            s_out.tolist(),
+            s_in.tolist(),
+            k_src.tolist(),
+            k_tgt.tolist(),
+            k_rate.tolist(),
+            coord_x.tolist(),
+            coord_y.tolist(),
+            target_cost,
+            self_loops,
+            tolerance,
+            max_iterations,
+        )
+    )
+    return _to_partial_result(
+        "fit_partial_strength_cost_poisson_coordinates",
+        sources,
+        targets,
+        rates,
+        converged,
+        iters,
+        constraint="strength_cost",
         self_loops=self_loops,
-        tolerance=tolerance,
-        max_iterations=max_iterations,
     )
 
 

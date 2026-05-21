@@ -70,6 +70,7 @@ use odme_core::fitting::{
     fit_partial_degree as core_fit_partial_degree,
     fit_partial_strength as core_fit_partial_strength,
     fit_partial_strength_cost as core_fit_partial_strength_cost,
+    fit_partial_strength_cost_coordinates as core_fit_partial_strength_cost_coordinates,
     fit_partial_strength_degree as core_fit_partial_strength_degree,
     fit_partial_strength_edges as core_fit_partial_strength_edges,
 };
@@ -1573,6 +1574,45 @@ fn fit_partial_strength_cost_poisson_full(
         max_iterations,
     );
     (r.sources, r.targets, r.rates, r.converged, r.iterations)
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn fit_partial_strength_cost_poisson_coordinates_full(
+    strength_out: Vec<f64>,
+    strength_in: Vec<f64>,
+    known_src: Vec<u64>,
+    known_tgt: Vec<u64>,
+    known_rate: Vec<f64>,
+    coord_x: Vec<f64>,
+    coord_y: Vec<f64>,
+    target_cost: f64,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<PartialResult> {
+    if strength_out.len() != strength_in.len()
+        || strength_out.len() != coord_x.len()
+        || strength_out.len() != coord_y.len()
+    {
+        return Err(PyValueError::new_err(
+            "strength and coordinate arrays must have same length",
+        ));
+    }
+    let r = core_fit_partial_strength_cost_coordinates(
+        &strength_out,
+        &strength_in,
+        &known_src,
+        &known_tgt,
+        &known_rate,
+        &coord_x,
+        &coord_y,
+        target_cost,
+        self_loops,
+        tolerance,
+        max_iterations,
+    );
+    Ok((r.sources, r.targets, r.rates, r.converged, r.iterations))
 }
 
 #[pyfunction]
@@ -3097,6 +3137,10 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     module.add_function(wrap_pyfunction!(
         fit_partial_strength_cost_poisson_full,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        fit_partial_strength_cost_poisson_coordinates_full,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(filter_strength_poisson, module)?)?;

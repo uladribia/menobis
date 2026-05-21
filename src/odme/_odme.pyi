@@ -970,6 +970,20 @@ def fit_partial_strength_cost_poisson_full(
     max_iterations: int,
 ) -> tuple[list[int], list[int], list[float], bool, int]: ...
 
+def fit_partial_strength_cost_poisson_coordinates_full(
+    strength_out: list[float],
+    strength_in: list[float],
+    known_sources: list[int],
+    known_targets: list[int],
+    known_weights: list[float],
+    coord_x: list[float],
+    coord_y: list[float],
+    target_cost: float,
+    self_loops: bool,
+    tolerance: float,
+    max_iterations: int,
+) -> tuple[list[int], list[int], list[float], bool, int]: ...
+
 def absent_strength_edges_geometric(
     x: list[float],
     y: list[float],
