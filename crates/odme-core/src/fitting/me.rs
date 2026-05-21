@@ -926,12 +926,7 @@ pub struct CostFitOptions {
     pub max_iterations: usize,
 }
 
-#[inline]
-fn euclidean_distance(x: &[f64], y: &[f64], i: usize, j: usize) -> f64 {
-    let dx = x[i] - x[j];
-    let dy = y[i] - y[j];
-    dx.hypot(dy)
-}
+use super::support::coord_distance;
 
 #[allow(clippy::too_many_arguments)]
 fn balance_xy_cost_coordinates(
@@ -978,7 +973,7 @@ fn balance_xy_cost_coordinates(
             }
             let denom: f64 = (0..n)
                 .filter(|&i| self_loops || i != j)
-                .map(|i| x[i] * (-gamma * euclidean_distance(coord_x, coord_y, i, j)).exp())
+                .map(|i| x[i] * (-gamma * coord_distance(coord_x, coord_y, i, j)).exp())
                 .sum();
             y[j] = if denom > 0.0 {
                 strength_in[j] / denom
@@ -993,7 +988,7 @@ fn balance_xy_cost_coordinates(
             }
             let denom: f64 = (0..n)
                 .filter(|&j| self_loops || i != j)
-                .map(|j| y[j] * (-gamma * euclidean_distance(coord_x, coord_y, i, j)).exp())
+                .map(|j| y[j] * (-gamma * coord_distance(coord_x, coord_y, i, j)).exp())
                 .sum();
             x[i] = if denom > 0.0 {
                 strength_out[i] / denom
@@ -1034,7 +1029,7 @@ fn expected_cost_coordinates(
             if !self_loops && i == j {
                 continue;
             }
-            let d = euclidean_distance(coord_x, coord_y, i, j);
+            let d = coord_distance(coord_x, coord_y, i, j);
             total += x[i] * y[j] * d * (-gamma * d).exp();
         }
     }
@@ -1065,88 +1060,119 @@ pub fn fit_strength_cost_poisson(
     let self_loops = opts.self_loops;
     let tolerance = opts.tolerance;
     let max_iterations = opts.max_iterations;
-    let total: f64 = strength_out.iter().sum();
 
-    // Initial gamma guess.
-    let gamma_init = if target_cost > 0.0 {
-        total / target_cost
-    } else {
-        1.0
+    let solve_at = |gamma: f64, x_init: Option<&[f64]>, y_init: Option<&[f64]>| {
+        let f_mat = build_f_mat(n, &costs, gamma, self_loops);
+        let fit = balance_xy_cost(
+            strength_out,
+            strength_in,
+            &f_mat,
+            n,
+            tolerance,
+            max_iterations,
+            x_init,
+            y_init,
+        );
+        let delta = expected_cost(&fit.x, &fit.y, &costs, gamma, n, self_loops) - target_cost;
+        (fit, delta)
     };
-    let mut gamma = gamma_init;
-    let mut step = gamma_init * 0.5;
-    let mut direction = 1.0_f64;
-    let factor = 3.0;
 
-    // Initial fit.
-    let f_mat = build_f_mat(n, &costs, gamma, self_loops);
-    let mut best_fit = balance_xy_cost(
-        strength_out,
-        strength_in,
-        &f_mat,
-        n,
-        tolerance,
-        max_iterations,
-        None,
-        None,
-    );
-    let mut best_delta_c =
-        expected_cost(&best_fit.x, &best_fit.y, &costs, gamma, n, self_loops) - target_cost;
-
+    // At gamma=0, cost is maximized for ME.
+    let (fit_zero, delta_zero) = solve_at(0.0, None, None);
+    if delta_zero.abs() <= tolerance {
+        return StrengthCostFitResult {
+            x: fit_zero.x,
+            y: fit_zero.y,
+            gamma: 0.0,
+            converged: true,
+            iterations: 1,
+        };
+    }
+    // Bracket: increasing gamma decreases cost.
+    let mut low = 0.0_f64;
+    let mut high = 0.0_f64;
+    let low_fit = fit_zero.clone();
+    let mut high_fit = fit_zero.clone();
+    let low_delta = delta_zero;
+    let mut high_delta = delta_zero;
+    let mut step = 1.0_f64;
+    if delta_zero > 0.0 {
+        for _ in 0..64 {
+            high = step;
+            let (fit, delta) = solve_at(high, Some(&high_fit.x), Some(&high_fit.y));
+            high_fit = fit;
+            high_delta = delta;
+            if high_delta <= 0.0 {
+                break;
+            }
+            step *= 2.0;
+        }
+    } else {
+        return StrengthCostFitResult {
+            x: fit_zero.x,
+            y: fit_zero.y,
+            gamma: 0.0,
+            converged: delta_zero.abs() <= tolerance,
+            iterations: 1,
+        };
+    }
+    if !(low_delta >= 0.0 && high_delta <= 0.0) {
+        let (bf, bg) = if low_delta.abs() < high_delta.abs() {
+            (low_fit, low)
+        } else {
+            (high_fit, high)
+        };
+        return StrengthCostFitResult {
+            x: bf.x,
+            y: bf.y,
+            gamma: bg,
+            converged: false,
+            iterations: max_iterations,
+        };
+    }
+    // Bisection
+    let mut best_fit = if low_delta.abs() < high_delta.abs() {
+        low_fit
+    } else {
+        high_fit
+    };
+    let mut best_gamma = if low_delta.abs() < high_delta.abs() {
+        low
+    } else {
+        high
+    };
+    let mut best_delta = low_delta.abs().min(high_delta.abs());
     for iter in 0..max_iterations {
-        if best_delta_c.abs() < tolerance {
+        let mid = 0.5 * (low + high);
+        let (fit, delta) = solve_at(mid, Some(&best_fit.x), Some(&best_fit.y));
+        if delta.abs() < best_delta {
+            best_delta = delta.abs();
+            best_gamma = mid;
+            best_fit = fit.clone();
+        }
+        if delta.abs() <= tolerance {
             return StrengthCostFitResult {
-                x: best_fit.x,
-                y: best_fit.y,
-                gamma,
+                x: fit.x,
+                y: fit.y,
+                gamma: mid,
                 converged: true,
                 iterations: iter + 1,
             };
         }
-
-        let new_gamma = gamma + step * direction;
-        if new_gamma <= 0.0 {
-            step /= factor;
-            direction = -direction;
-            continue;
-        }
-
-        let f_mat_new = build_f_mat(n, &costs, new_gamma, self_loops);
-        let fit = balance_xy_cost(
-            strength_out,
-            strength_in,
-            &f_mat_new,
-            n,
-            tolerance,
-            max_iterations,
-            Some(&best_fit.x),
-            Some(&best_fit.y),
-        );
-        let new_delta_c =
-            expected_cost(&fit.x, &fit.y, &costs, new_gamma, n, self_loops) - target_cost;
-
-        if new_delta_c.abs() < best_delta_c.abs() {
-            if new_delta_c.signum() != best_delta_c.signum() {
-                direction = -direction;
-            }
-            gamma = new_gamma;
-            best_delta_c = new_delta_c;
-            best_fit = fit;
-            step *= factor;
+        if delta > 0.0 {
+            low = mid;
         } else {
-            step /= factor;
-            direction = -direction;
-            if step < 1e-15 {
-                break;
-            }
+            high = mid;
+        }
+        if (high - low) < 1e-15 {
+            break;
         }
     }
-
     StrengthCostFitResult {
         x: best_fit.x,
         y: best_fit.y,
-        gamma,
-        converged: best_delta_c.abs() < tolerance,
+        gamma: best_gamma,
+        converged: best_delta <= tolerance,
         iterations: max_iterations,
     }
 }
@@ -1161,85 +1187,118 @@ pub fn fit_strength_cost_poisson_coordinates(
     target_cost: f64,
     opts: &CostFitOptions,
 ) -> StrengthCostFitResult {
-    let total: f64 = strength_out.iter().sum();
-    let mut gamma = if target_cost > 0.0 {
-        total / target_cost
-    } else {
-        1.0
-    };
-    let mut step = gamma.abs().max(1.0) * 0.5;
-    let mut direction = 1.0_f64;
-    let factor = 3.0;
-
-    let mut best_fit = balance_xy_cost_coordinates(
-        strength_out,
-        strength_in,
-        coord_x,
-        coord_y,
-        gamma,
-        opts.self_loops,
-        opts.tolerance,
-        opts.max_iterations,
-        None,
-        None,
-    );
-    let mut best_delta_c = expected_cost_coordinates(
-        &best_fit.x,
-        &best_fit.y,
-        coord_x,
-        coord_y,
-        gamma,
-        opts.self_loops,
-    ) - target_cost;
-
-    for iter in 0..opts.max_iterations {
-        if best_delta_c.abs() < opts.tolerance {
-            return StrengthCostFitResult {
-                x: best_fit.x,
-                y: best_fit.y,
-                gamma,
-                converged: true,
-                iterations: iter + 1,
-            };
-        }
-        let new_gamma = gamma + step * direction;
+    let solve_at = |gamma: f64, x_init: Option<&[f64]>, y_init: Option<&[f64]>| {
         let fit = balance_xy_cost_coordinates(
             strength_out,
             strength_in,
             coord_x,
             coord_y,
-            new_gamma,
+            gamma,
             opts.self_loops,
             opts.tolerance,
             opts.max_iterations,
-            Some(&best_fit.x),
-            Some(&best_fit.y),
+            x_init,
+            y_init,
         );
-        let new_delta_c =
-            expected_cost_coordinates(&fit.x, &fit.y, coord_x, coord_y, new_gamma, opts.self_loops)
+        let delta =
+            expected_cost_coordinates(&fit.x, &fit.y, coord_x, coord_y, gamma, opts.self_loops)
                 - target_cost;
-        if new_delta_c.abs() < best_delta_c.abs() {
-            if new_delta_c.signum() != best_delta_c.signum() {
-                direction = -direction;
-            }
-            gamma = new_gamma;
-            best_delta_c = new_delta_c;
-            best_fit = fit;
-            step *= factor;
-        } else {
-            step /= factor;
-            direction = -direction;
-            if step < 1e-15 {
+        (fit, delta)
+    };
+
+    let (fit_zero, delta_zero) = solve_at(0.0, None, None);
+    if delta_zero.abs() <= opts.tolerance {
+        return StrengthCostFitResult {
+            x: fit_zero.x,
+            y: fit_zero.y,
+            gamma: 0.0,
+            converged: true,
+            iterations: 1,
+        };
+    }
+    let mut low = 0.0_f64;
+    let mut high = 0.0_f64;
+    let low_fit = fit_zero.clone();
+    let mut high_fit = fit_zero.clone();
+    let low_delta = delta_zero;
+    let mut high_delta = delta_zero;
+    let mut step = 1.0_f64;
+    if delta_zero > 0.0 {
+        for _ in 0..64 {
+            high = step;
+            let (fit, delta) = solve_at(high, Some(&high_fit.x), Some(&high_fit.y));
+            high_fit = fit;
+            high_delta = delta;
+            if high_delta <= 0.0 {
                 break;
             }
+            step *= 2.0;
+        }
+    } else {
+        return StrengthCostFitResult {
+            x: fit_zero.x,
+            y: fit_zero.y,
+            gamma: 0.0,
+            converged: delta_zero.abs() <= opts.tolerance,
+            iterations: 1,
+        };
+    }
+    if !(low_delta >= 0.0 && high_delta <= 0.0) {
+        let (bf, bg) = if low_delta.abs() < high_delta.abs() {
+            (low_fit, low)
+        } else {
+            (high_fit, high)
+        };
+        return StrengthCostFitResult {
+            x: bf.x,
+            y: bf.y,
+            gamma: bg,
+            converged: false,
+            iterations: opts.max_iterations,
+        };
+    }
+    let mut best_fit = if low_delta.abs() < high_delta.abs() {
+        low_fit
+    } else {
+        high_fit
+    };
+    let mut best_gamma = if low_delta.abs() < high_delta.abs() {
+        low
+    } else {
+        high
+    };
+    let mut best_delta = low_delta.abs().min(high_delta.abs());
+    for iter in 0..opts.max_iterations {
+        let mid = 0.5 * (low + high);
+        let (fit, delta) = solve_at(mid, Some(&best_fit.x), Some(&best_fit.y));
+        if delta.abs() < best_delta {
+            best_delta = delta.abs();
+            best_gamma = mid;
+            best_fit = fit.clone();
+        }
+        if delta.abs() <= opts.tolerance {
+            return StrengthCostFitResult {
+                x: fit.x,
+                y: fit.y,
+                gamma: mid,
+                converged: true,
+                iterations: iter + 1,
+            };
+        }
+        if delta > 0.0 {
+            low = mid;
+        } else {
+            high = mid;
+        }
+        if (high - low) < 1e-15 {
+            break;
         }
     }
-
     StrengthCostFitResult {
         x: best_fit.x,
         y: best_fit.y,
-        gamma,
-        converged: best_delta_c.abs() < opts.tolerance,
+        gamma: best_gamma,
+        converged: best_delta <= opts.tolerance,
         iterations: opts.max_iterations,
     }
 }

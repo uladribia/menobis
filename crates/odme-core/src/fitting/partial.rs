@@ -722,10 +722,7 @@ pub fn fit_partial_strength_edges(
     )
 }
 
-#[inline]
-fn coordinate_distance(coord_x: &[f64], coord_y: &[f64], i: usize, j: usize) -> f64 {
-    (coord_x[i] - coord_x[j]).hypot(coord_y[i] - coord_y[j])
-}
+use super::support::coord_distance;
 
 #[allow(clippy::too_many_arguments)]
 fn balance_masked_coordinate_strength_cost_fixed_gamma(
@@ -773,7 +770,7 @@ fn balance_masked_coordinate_strength_cost_fixed_gamma(
             let denom: f64 = (0..n)
                 .filter(|&i| !mask[i * n + j])
                 .map(|i| {
-                    let d = coordinate_distance(coord_x, coord_y, i, j);
+                    let d = coord_distance(coord_x, coord_y, i, j);
                     x[i] * (-gamma * d).clamp(-700.0, 700.0).exp()
                 })
                 .sum();
@@ -791,7 +788,7 @@ fn balance_masked_coordinate_strength_cost_fixed_gamma(
             let denom: f64 = (0..n)
                 .filter(|&j| !mask[i * n + j])
                 .map(|j| {
-                    let d = coordinate_distance(coord_x, coord_y, i, j);
+                    let d = coord_distance(coord_x, coord_y, i, j);
                     y[j] * (-gamma * d).clamp(-700.0, 700.0).exp()
                 })
                 .sum();
@@ -833,7 +830,7 @@ fn expected_masked_coordinate_cost(
             if mask[i * n + j] {
                 continue;
             }
-            let d = coordinate_distance(coord_x, coord_y, i, j);
+            let d = coord_distance(coord_x, coord_y, i, j);
             total += x[i] * y[j] * d * (-gamma * d).clamp(-700.0, 700.0).exp();
         }
     }
@@ -1110,7 +1107,7 @@ pub fn fit_partial_strength_cost_coordinates(
         .iter()
         .zip(known_tgt.iter())
         .zip(known_rate.iter())
-        .map(|((&s, &t), &r)| r * coordinate_distance(coord_x, coord_y, s as usize, t as usize))
+        .map(|((&s, &t), &r)| r * coord_distance(coord_x, coord_y, s as usize, t as usize))
         .sum();
     let excess_cost = (target_cost - known_cost).max(0.0);
     let (mut excess_out, mut excess_in) =
@@ -1162,7 +1159,7 @@ pub fn fit_partial_strength_cost_coordinates(
         known_rate,
         &mask,
         |i, j| {
-            let d = coordinate_distance(coord_x, coord_y, i, j);
+            let d = coord_distance(coord_x, coord_y, i, j);
             x[i] * y[j] * (-gamma * d).clamp(-700.0, 700.0).exp()
         },
         fit.converged,

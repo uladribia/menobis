@@ -15,10 +15,7 @@ use super::{CostFitOptions, FitResult, StrengthCostFitResult};
 // Shared coordinate distance helper
 // ---------------------------------------------------------------------------
 
-#[inline]
-fn coord_distance(coord_x: &[f64], coord_y: &[f64], i: usize, j: usize) -> f64 {
-    (coord_x[i] - coord_x[j]).hypot(coord_y[i] - coord_y[j])
-}
+use super::support::coord_distance;
 
 // ===========================================================================
 // B (Binomial M) strength-cost coordinate fitting
