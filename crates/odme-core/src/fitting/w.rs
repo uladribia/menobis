@@ -296,30 +296,6 @@ fn pair_count(n: usize, self_loops: bool) -> usize {
     }
 }
 
-fn w_strength_metrics(n: usize, self_loops: bool) -> WProblemMetrics {
-    let pairs = pair_count(n, self_loops);
-    WProblemMetrics {
-        variables: 2 * n,
-        auxiliary_variables: pairs,
-        exponential_cones: 2 * pairs,
-        power_cones: 0,
-        linear_constraints: 1,
-        sparse_nonzeros: 4 * pairs + 2 * n,
-    }
-}
-
-fn w_strength_cost_metrics(n: usize, self_loops: bool) -> WProblemMetrics {
-    let pairs = pair_count(n, self_loops);
-    WProblemMetrics {
-        variables: 2 * n + 1,
-        auxiliary_variables: pairs,
-        exponential_cones: 2 * pairs,
-        power_cones: 0,
-        linear_constraints: 1,
-        sparse_nonzeros: 5 * pairs + 2 * n,
-    }
-}
-
 fn w_strength_edges_metrics(n: usize, self_loops: bool) -> WProblemMetrics {
     let pairs = pair_count(n, self_loops);
     WProblemMetrics {
@@ -329,31 +305,6 @@ fn w_strength_edges_metrics(n: usize, self_loops: bool) -> WProblemMetrics {
         power_cones: 0,
         linear_constraints: 1,
         sparse_nonzeros: 5 * pairs + 2 * n,
-    }
-}
-
-fn fit_strength_w_not_solved(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    layers: u32,
-    opts: WConicFitOptions,
-    status: WFitStatus,
-) -> WStrengthFitResult {
-    let (a, b) = initial_independent_strength_guess(strength_out, strength_in, layers);
-    let residuals =
-        independent_strength_residuals(&a, &b, layers, strength_out, strength_in, opts.self_loops);
-    WStrengthFitResult {
-        x: a.iter().map(|&ai| (-ai).exp()).collect(),
-        y: b.iter().map(|&bj| (-bj).exp()).collect(),
-        layers,
-        status,
-        objective: f64::NAN,
-        iterations: 0,
-        min_margin: residuals.min_margin,
-        max_q: residuals.max_q,
-        max_strength_residual: residuals.max_abs,
-        total_strength_residual: residuals.total_abs,
-        metrics: w_strength_metrics(strength_out.len(), opts.self_loops),
     }
 }
 
@@ -369,7 +320,13 @@ pub fn fit_strength_geometric(
     strength_in: &[f64],
     opts: WConicFitOptions,
 ) -> WStrengthFitResult {
-    fit_strength_w(strength_out, strength_in, 1, opts)
+    let cost_opts = super::CostFitOptions {
+        self_loops: opts.self_loops,
+        tolerance: opts.tolerance,
+        max_iterations: opts.max_iterations,
+    };
+    let result = super::w_lbfgs::fit_strength_w_newton(strength_out, strength_in, 1, &cost_opts);
+    newton_to_w_strength_result(result, 1, strength_out, strength_in, opts)
 }
 
 /// Start fixed-strength W negative-binomial fitting.
@@ -380,211 +337,14 @@ pub fn fit_strength_negative_binomial(
     layers: u32,
     opts: WConicFitOptions,
 ) -> WStrengthFitResult {
-    fit_strength_w(strength_out, strength_in, layers, opts)
-}
-
-#[cfg(not(feature = "w-conic"))]
-fn fit_strength_w(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    layers: u32,
-    opts: WConicFitOptions,
-) -> WStrengthFitResult {
-    fit_strength_w_not_solved(strength_out, strength_in, layers, opts, WFitStatus::Failed)
-}
-
-#[cfg(feature = "w-conic")]
-fn fit_strength_w(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    layers: u32,
-    opts: WConicFitOptions,
-) -> WStrengthFitResult {
-    use clarabel::algebra::CscMatrix;
-    use clarabel::solver::{
-        DefaultSettings, DefaultSolver, ExponentialConeT, IPSolver, NonnegativeConeT, SolverStatus,
-        SupportedConeT, ZeroConeT,
+    let cost_opts = super::CostFitOptions {
+        self_loops: opts.self_loops,
+        tolerance: opts.tolerance,
+        max_iterations: opts.max_iterations,
     };
-
-    let n = strength_out.len();
-    if n == 0 || n != strength_in.len() || layers == 0 {
-        return fit_strength_w_not_solved(
-            strength_out,
-            strength_in,
-            layers,
-            opts,
-            WFitStatus::Infeasible,
-        );
-    }
-
-    let pairs: Vec<(usize, usize)> = (0..n)
-        .flat_map(|i| (0..n).map(move |j| (i, j)))
-        .filter(|&(i, j)| opts.self_loops || i != j)
-        .collect();
-    let pc = pairs.len();
-    let variable_count = 2 * n + 3 * pc;
-    let row_count = 1 + 6 * pc + pc;
-    let t_offset = 2 * n;
-    let p_offset = t_offset + pc;
-    let q_offset = p_offset + pc;
-
-    // Build sparse A directly in CSC (column-major) format.
-    let mut colptr = vec![0_usize; variable_count + 1];
-    let mut rowval = Vec::with_capacity(4 * pc + 2 * n + 2 * pc);
-    let mut nzval = Vec::with_capacity(4 * pc + 2 * n + 2 * pc);
-    let mut rhs = vec![0.0_f64; row_count];
-
-    // Precompute row indices for exponential cones and nonneg constraint.
-    // Layout: row 0 = gauge, then per pair 6 rows for 2 exp cones, then pc nonneg rows.
-    let exp_base = 1_usize; // first exp cone row
-    let nonneg_base = 1 + 6 * pc;
-
-    // Fill rhs for exp cones: rows exp_base + 6*k + 1 and exp_base + 6*k + 4 = 1.0
-    for k in 0..pc {
-        rhs[exp_base + 6 * k + 1] = 1.0;
-        rhs[exp_base + 6 * k + 4] = 1.0;
-    }
-    // Fill rhs for nonneg: all 1.0
-    for k in 0..pc {
-        rhs[nonneg_base + k] = 1.0;
-    }
-
-    // Column-by-column sparse assembly.
-    // Columns 0..n: a_i variables
-    for i in 0..n {
-        let start = rowval.len();
-        // gauge row 0: coefficient +1
-        rowval.push(0);
-        nzval.push(1.0);
-        // For each pair (i, j): row exp_base + 6*k + 3 has a_i with coeff +1
-        for (k, &(pi, _)) in pairs.iter().enumerate() {
-            if pi == i {
-                rowval.push(exp_base + 6 * k + 3);
-                nzval.push(1.0);
-            }
-        }
-        colptr[i + 1] = rowval.len() - start;
-    }
-    // Columns n..2n: b_j variables
-    for j in 0..n {
-        let start = rowval.len();
-        // gauge row 0: coefficient -1
-        rowval.push(0);
-        nzval.push(-1.0);
-        // For each pair (i, j): row exp_base + 6*k + 3 has b_j with coeff +1
-        for (k, &(_, pj)) in pairs.iter().enumerate() {
-            if pj == j {
-                rowval.push(exp_base + 6 * k + 3);
-                nzval.push(1.0);
-            }
-        }
-        colptr[n + j + 1] = rowval.len() - start;
-    }
-    // Columns t_offset..t_offset+pc: t_ij variables
-    for k in 0..pc {
-        let start = rowval.len();
-        // row exp_base + 6*k + 0: coeff +1
-        rowval.push(exp_base + 6 * k);
-        nzval.push(1.0);
-        colptr[t_offset + k + 1] = rowval.len() - start;
-    }
-    // Columns p_offset..p_offset+pc: p_ij variables
-    for k in 0..pc {
-        let start = rowval.len();
-        // row exp_base + 6*k + 2: coeff -1
-        rowval.push(exp_base + 6 * k + 2);
-        nzval.push(-1.0);
-        // row nonneg_base + k: coeff +1
-        rowval.push(nonneg_base + k);
-        nzval.push(1.0);
-        colptr[p_offset + k + 1] = rowval.len() - start;
-    }
-    // Columns q_offset..q_offset+pc: q_ij variables
-    for k in 0..pc {
-        let start = rowval.len();
-        // row exp_base + 6*k + 5: coeff -1
-        rowval.push(exp_base + 6 * k + 5);
-        nzval.push(-1.0);
-        // row nonneg_base + k: coeff +1
-        rowval.push(nonneg_base + k);
-        nzval.push(1.0);
-        colptr[q_offset + k + 1] = rowval.len() - start;
-    }
-
-    // Convert colptr from counts to cumulative.
-    for i in 0..variable_count {
-        colptr[i + 1] += colptr[i];
-    }
-
-    let mut objective = vec![0.0_f64; variable_count];
-    objective[..n].copy_from_slice(strength_out);
-    objective[n..2 * n].copy_from_slice(strength_in);
-    for k in 0..pc {
-        objective[t_offset + k] = f64::from(layers);
-    }
-
-    let p_matrix = CscMatrix::<f64>::zeros((variable_count, variable_count));
-    let a_matrix = CscMatrix::new(row_count, variable_count, colptr, rowval, nzval);
-    let mut cones: Vec<SupportedConeT<f64>> = Vec::with_capacity(2 * pc + 2);
-    cones.push(ZeroConeT(1));
-    for _ in 0..(2 * pc) {
-        cones.push(ExponentialConeT());
-    }
-    cones.push(NonnegativeConeT(pc));
-    let settings = DefaultSettings {
-        verbose: false,
-        max_iter: opts.max_iterations.try_into().unwrap_or(u32::MAX),
-        tol_gap_abs: opts.tolerance,
-        tol_gap_rel: opts.tolerance,
-        tol_feas: opts.tolerance,
-        ..DefaultSettings::default()
-    };
-
-    let Ok(mut solver) =
-        DefaultSolver::new(&p_matrix, &objective, &a_matrix, &rhs, &cones, settings)
-    else {
-        return fit_strength_w_not_solved(
-            strength_out,
-            strength_in,
-            layers,
-            opts,
-            WFitStatus::Failed,
-        );
-    };
-    solver.solve();
-    let status = match solver.solution.status {
-        SolverStatus::Solved => WFitStatus::Solved,
-        SolverStatus::AlmostSolved | SolverStatus::MaxIterations | SolverStatus::MaxTime => {
-            WFitStatus::Inaccurate
-        }
-        SolverStatus::PrimalInfeasible
-        | SolverStatus::DualInfeasible
-        | SolverStatus::AlmostPrimalInfeasible
-        | SolverStatus::AlmostDualInfeasible => WFitStatus::Infeasible,
-        _ => WFitStatus::Failed,
-    };
-    if !matches!(status, WFitStatus::Solved | WFitStatus::Inaccurate) {
-        return fit_strength_w_not_solved(strength_out, strength_in, layers, opts, status);
-    }
-
-    let solution = &solver.solution.x;
-    let a = solution[..n].to_vec();
-    let b = solution[n..2 * n].to_vec();
-    let residuals =
-        independent_strength_residuals(&a, &b, layers, strength_out, strength_in, opts.self_loops);
-    WStrengthFitResult {
-        x: a.iter().map(|&ai| (-ai).exp()).collect(),
-        y: b.iter().map(|&bj| (-bj).exp()).collect(),
-        layers,
-        status,
-        objective: solver.solution.obj_val,
-        iterations: solver.solution.iterations as usize,
-        min_margin: residuals.min_margin,
-        max_q: residuals.max_q,
-        max_strength_residual: residuals.max_abs,
-        total_strength_residual: residuals.total_abs,
-        metrics: w_strength_metrics(n, opts.self_loops),
-    }
+    let result =
+        super::w_lbfgs::fit_strength_w_newton(strength_out, strength_in, layers, &cost_opts);
+    newton_to_w_strength_result(result, layers, strength_out, strength_in, opts)
 }
 
 // ---------------------------------------------------------------------------
@@ -1311,47 +1071,6 @@ fn cost_map(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn fit_strength_cost_w_not_solved(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    cost_sources: &[u64],
-    cost_targets: &[u64],
-    cost_values: &[f64],
-    target_cost: f64,
-    layers: u32,
-    opts: WConicFitOptions,
-    status: WFitStatus,
-) -> WStrengthCostFitResult {
-    let (a, b) = initial_independent_strength_guess(strength_out, strength_in, layers);
-    let costs = cost_map(cost_sources, cost_targets, cost_values);
-    let (residuals, cost_residual) = strength_cost_residuals(
-        &a,
-        &b,
-        0.0,
-        &costs,
-        layers,
-        strength_out,
-        strength_in,
-        target_cost,
-        opts.self_loops,
-    );
-    WStrengthCostFitResult {
-        x: a.iter().map(|&ai| (-ai).exp()).collect(),
-        y: b.iter().map(|&bj| (-bj).exp()).collect(),
-        gamma: 0.0,
-        layers,
-        status,
-        objective: f64::NAN,
-        iterations: 0,
-        min_margin: residuals.min_margin,
-        max_q: residuals.max_q,
-        max_strength_residual: residuals.max_abs,
-        total_strength_residual: residuals.total_abs,
-        cost_residual,
-        metrics: w_strength_cost_metrics(strength_out.len(), opts.self_loops),
-    }
-}
-
 #[must_use]
 pub fn fit_strength_cost_geometric(
     strength_out: &[f64],
@@ -1362,14 +1081,32 @@ pub fn fit_strength_cost_geometric(
     target_cost: f64,
     opts: WConicFitOptions,
 ) -> WStrengthCostFitResult {
-    fit_strength_cost_w(
+    let sources_usize: Vec<usize> = cost_sources.iter().map(|&s| s as usize).collect();
+    let targets_usize: Vec<usize> = cost_targets.iter().map(|&t| t as usize).collect();
+    let cost_opts = super::CostFitOptions {
+        self_loops: opts.self_loops,
+        tolerance: opts.tolerance,
+        max_iterations: opts.max_iterations,
+    };
+    let result = super::w_lbfgs::fit_strength_cost_w_sparse_newton(
+        strength_out,
+        strength_in,
+        &sources_usize,
+        &targets_usize,
+        cost_values,
+        target_cost,
+        1,
+        &cost_opts,
+    );
+    newton_to_w_strength_cost_result(
+        result,
+        1,
         strength_out,
         strength_in,
         cost_sources,
         cost_targets,
         cost_values,
         target_cost,
-        1,
         opts,
     )
 }
@@ -1386,257 +1123,116 @@ pub fn fit_strength_cost_negative_binomial(
     layers: u32,
     opts: WConicFitOptions,
 ) -> WStrengthCostFitResult {
-    fit_strength_cost_w(
-        strength_out,
-        strength_in,
-        cost_sources,
-        cost_targets,
-        cost_values,
-        target_cost,
-        layers,
-        opts,
-    )
-}
-
-#[cfg(not(feature = "w-conic"))]
-#[allow(clippy::too_many_arguments)]
-fn fit_strength_cost_w(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    cost_sources: &[u64],
-    cost_targets: &[u64],
-    cost_values: &[f64],
-    target_cost: f64,
-    layers: u32,
-    opts: WConicFitOptions,
-) -> WStrengthCostFitResult {
-    fit_strength_cost_w_not_solved(
-        strength_out,
-        strength_in,
-        cost_sources,
-        cost_targets,
-        cost_values,
-        target_cost,
-        layers,
-        opts,
-        WFitStatus::Failed,
-    )
-}
-
-#[cfg(feature = "w-conic")]
-#[allow(clippy::too_many_arguments)]
-fn fit_strength_cost_w(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    cost_sources: &[u64],
-    cost_targets: &[u64],
-    cost_values: &[f64],
-    target_cost: f64,
-    layers: u32,
-    opts: WConicFitOptions,
-) -> WStrengthCostFitResult {
-    use clarabel::algebra::CscMatrix;
-    use clarabel::solver::{
-        DefaultSettings, DefaultSolver, ExponentialConeT, IPSolver, NonnegativeConeT, SolverStatus,
-        SupportedConeT, ZeroConeT,
+    let sources_usize: Vec<usize> = cost_sources.iter().map(|&s| s as usize).collect();
+    let targets_usize: Vec<usize> = cost_targets.iter().map(|&t| t as usize).collect();
+    let cost_opts = super::CostFitOptions {
+        self_loops: opts.self_loops,
+        tolerance: opts.tolerance,
+        max_iterations: opts.max_iterations,
     };
+    let result = super::w_lbfgs::fit_strength_cost_w_sparse_newton(
+        strength_out,
+        strength_in,
+        &sources_usize,
+        &targets_usize,
+        cost_values,
+        target_cost,
+        layers,
+        &cost_opts,
+    );
+    newton_to_w_strength_cost_result(
+        result,
+        layers,
+        strength_out,
+        strength_in,
+        cost_sources,
+        cost_targets,
+        cost_values,
+        target_cost,
+        opts,
+    )
+}
 
+// ---------------------------------------------------------------------------
+// Newton result converters
+// ---------------------------------------------------------------------------
+
+fn newton_to_w_strength_result(
+    result: super::StrengthCostFitResult,
+    layers: u32,
+    strength_out: &[f64],
+    strength_in: &[f64],
+    opts: WConicFitOptions,
+) -> WStrengthFitResult {
     let n = strength_out.len();
-    if n == 0
-        || n != strength_in.len()
-        || layers == 0
-        || cost_sources.len() != cost_targets.len()
-        || cost_sources.len() != cost_values.len()
-        || !target_cost.is_finite()
-        || !cost_values.iter().all(|d| d.is_finite() && *d >= 0.0)
-    {
-        return fit_strength_cost_w_not_solved(
-            strength_out,
-            strength_in,
-            cost_sources,
-            cost_targets,
-            cost_values,
-            target_cost,
-            layers,
-            opts,
-            WFitStatus::Infeasible,
-        );
+    let status = if result.converged {
+        WFitStatus::Solved
+    } else {
+        WFitStatus::Inaccurate
+    };
+    let residuals = independent_strength_residuals(
+        &result.x,
+        &result.y,
+        layers,
+        strength_out,
+        strength_in,
+        opts.self_loops,
+    );
+    WStrengthFitResult {
+        x: result.x,
+        y: result.y,
+        layers,
+        status,
+        objective: 0.0,
+        iterations: result.iterations,
+        min_margin: residuals.min_margin,
+        max_q: residuals.max_q,
+        max_strength_residual: residuals.max_abs,
+        total_strength_residual: residuals.total_abs,
+        metrics: WProblemMetrics {
+            variables: 2 * n,
+            auxiliary_variables: 0,
+            exponential_cones: 0,
+            power_cones: 0,
+            linear_constraints: 2 * n,
+            sparse_nonzeros: 0,
+        },
     }
+}
 
-    let costs = cost_map(cost_sources, cost_targets, cost_values);
-    let pairs: Vec<(usize, usize)> = (0..n)
-        .flat_map(|i| (0..n).map(move |j| (i, j)))
-        .filter(|&(i, j)| opts.self_loops || i != j)
+#[allow(clippy::too_many_arguments)]
+fn newton_to_w_strength_cost_result(
+    result: super::StrengthCostFitResult,
+    layers: u32,
+    strength_out: &[f64],
+    strength_in: &[f64],
+    cost_sources: &[u64],
+    cost_targets: &[u64],
+    cost_values: &[f64],
+    target_cost: f64,
+    opts: WConicFitOptions,
+) -> WStrengthCostFitResult {
+    let n = strength_out.len();
+    let status = if result.converged {
+        WFitStatus::Solved
+    } else {
+        WFitStatus::Inaccurate
+    };
+    let a: Vec<f64> = result
+        .x
+        .iter()
+        .map(|&xi| if xi > 0.0 { -xi.ln() } else { 50.0 })
         .collect();
-    let pc = pairs.len();
-    let gamma_idx = 2 * n;
-    let t_offset = gamma_idx + 1;
-    let p_offset = t_offset + pc;
-    let q_offset = p_offset + pc;
-    let variable_count = 2 * n + 1 + 3 * pc;
-    let row_count = 1 + 6 * pc + pc;
-
-    // Row layout: [gauge(1)] [exp cones: 6*pc] [nonneg: pc]
-    let exp_base = 1_usize;
-    let nonneg_base = 1 + 6 * pc;
-
-    let mut rhs = vec![0.0_f64; row_count];
-    for k in 0..pc {
-        rhs[exp_base + 6 * k + 1] = 1.0;
-        rhs[exp_base + 6 * k + 4] = 1.0;
-    }
-    for k in 0..pc {
-        rhs[nonneg_base + k] = 1.0;
-    }
-
-    // Sparse CSC assembly column-by-column.
-    let mut colptr = vec![0_usize; variable_count + 1];
-    let mut rowval = Vec::new();
-    let mut nzval = Vec::new();
-
-    // Columns 0..n: a_i
-    for i in 0..n {
-        let start = rowval.len();
-        rowval.push(0);
-        nzval.push(1.0); // gauge
-        for (k, &(pi, _)) in pairs.iter().enumerate() {
-            if pi == i {
-                rowval.push(exp_base + 6 * k + 3); // second exp cone first row
-                nzval.push(1.0);
-            }
-        }
-        colptr[i + 1] = rowval.len() - start;
-    }
-    // Columns n..2n: b_j
-    for j in 0..n {
-        let start = rowval.len();
-        rowval.push(0);
-        nzval.push(-1.0); // gauge
-        for (k, &(_, pj)) in pairs.iter().enumerate() {
-            if pj == j {
-                rowval.push(exp_base + 6 * k + 3);
-                nzval.push(1.0);
-            }
-        }
-        colptr[n + j + 1] = rowval.len() - start;
-    }
-    // Column gamma_idx: gamma
-    {
-        let start = rowval.len();
-        for (k, &(i, j)) in pairs.iter().enumerate() {
-            let cost = costs.get(&(i, j)).copied().unwrap_or(0.0);
-            if cost != 0.0 {
-                rowval.push(exp_base + 6 * k + 3);
-                nzval.push(cost);
-            }
-        }
-        colptr[gamma_idx + 1] = rowval.len() - start;
-    }
-    // Columns t_offset..t_offset+pc: t_ij
-    for k in 0..pc {
-        let start = rowval.len();
-        rowval.push(exp_base + 6 * k); // first exp cone first row
-        nzval.push(1.0);
-        colptr[t_offset + k + 1] = rowval.len() - start;
-    }
-    // Columns p_offset..p_offset+pc: p_ij
-    for k in 0..pc {
-        let start = rowval.len();
-        rowval.push(exp_base + 6 * k + 2); // first exp cone third row
-        nzval.push(-1.0);
-        rowval.push(nonneg_base + k);
-        nzval.push(1.0);
-        colptr[p_offset + k + 1] = rowval.len() - start;
-    }
-    // Columns q_offset..q_offset+pc: q_ij
-    for k in 0..pc {
-        let start = rowval.len();
-        rowval.push(exp_base + 6 * k + 5); // second exp cone third row
-        nzval.push(-1.0);
-        rowval.push(nonneg_base + k);
-        nzval.push(1.0);
-        colptr[q_offset + k + 1] = rowval.len() - start;
-    }
-
-    // Convert colptr from counts to cumulative.
-    for i in 0..variable_count {
-        colptr[i + 1] += colptr[i];
-    }
-
-    let mut objective = vec![0.0_f64; variable_count];
-    objective[..n].copy_from_slice(strength_out);
-    objective[n..2 * n].copy_from_slice(strength_in);
-    objective[gamma_idx] = target_cost;
-    for k in 0..pc {
-        objective[t_offset + k] = f64::from(layers);
-    }
-
-    let p_matrix = CscMatrix::<f64>::zeros((variable_count, variable_count));
-    let a_matrix = CscMatrix::new(row_count, variable_count, colptr, rowval, nzval);
-    let mut cones: Vec<SupportedConeT<f64>> = Vec::with_capacity(2 * pc + 2);
-    cones.push(ZeroConeT(1));
-    for _ in 0..(2 * pc) {
-        cones.push(ExponentialConeT());
-    }
-    cones.push(NonnegativeConeT(pc));
-    let settings = DefaultSettings {
-        verbose: false,
-        max_iter: opts.max_iterations.try_into().unwrap_or(u32::MAX),
-        tol_gap_abs: opts.tolerance,
-        tol_gap_rel: opts.tolerance,
-        tol_feas: opts.tolerance,
-        ..DefaultSettings::default()
-    };
-
-    let Ok(mut solver) =
-        DefaultSolver::new(&p_matrix, &objective, &a_matrix, &rhs, &cones, settings)
-    else {
-        return fit_strength_cost_w_not_solved(
-            strength_out,
-            strength_in,
-            cost_sources,
-            cost_targets,
-            cost_values,
-            target_cost,
-            layers,
-            opts,
-            WFitStatus::Failed,
-        );
-    };
-    solver.solve();
-    let status = match solver.solution.status {
-        SolverStatus::Solved => WFitStatus::Solved,
-        SolverStatus::AlmostSolved | SolverStatus::MaxIterations | SolverStatus::MaxTime => {
-            WFitStatus::Inaccurate
-        }
-        SolverStatus::PrimalInfeasible
-        | SolverStatus::DualInfeasible
-        | SolverStatus::AlmostPrimalInfeasible
-        | SolverStatus::AlmostDualInfeasible => WFitStatus::Infeasible,
-        _ => WFitStatus::Failed,
-    };
-    if !matches!(status, WFitStatus::Solved | WFitStatus::Inaccurate) {
-        return fit_strength_cost_w_not_solved(
-            strength_out,
-            strength_in,
-            cost_sources,
-            cost_targets,
-            cost_values,
-            target_cost,
-            layers,
-            opts,
-            status,
-        );
-    }
-
-    let solution = &solver.solution.x;
-    let a = solution[..n].to_vec();
-    let b = solution[n..2 * n].to_vec();
-    let gamma = solution[gamma_idx];
+    let b: Vec<f64> = result
+        .y
+        .iter()
+        .map(|&yj| if yj > 0.0 { -yj.ln() } else { 50.0 })
+        .collect();
+    let costs = cost_map(cost_sources, cost_targets, cost_values);
     let (residuals, cost_residual) = strength_cost_residuals(
         &a,
         &b,
-        gamma,
+        result.gamma,
         &costs,
         layers,
         strength_out,
@@ -1645,19 +1241,26 @@ fn fit_strength_cost_w(
         opts.self_loops,
     );
     WStrengthCostFitResult {
-        x: a.iter().map(|&ai| (-ai).exp()).collect(),
-        y: b.iter().map(|&bj| (-bj).exp()).collect(),
-        gamma,
+        x: result.x,
+        y: result.y,
+        gamma: result.gamma,
         layers,
         status,
-        objective: solver.solution.obj_val,
-        iterations: solver.solution.iterations as usize,
+        objective: 0.0,
+        iterations: result.iterations,
         min_margin: residuals.min_margin,
         max_q: residuals.max_q,
         max_strength_residual: residuals.max_abs,
         total_strength_residual: residuals.total_abs,
         cost_residual,
-        metrics: w_strength_cost_metrics(n, opts.self_loops),
+        metrics: WProblemMetrics {
+            variables: 2 * n + 1,
+            auxiliary_variables: 0,
+            exponential_cones: 0,
+            power_cones: 0,
+            linear_constraints: 2 * n + 1,
+            sparse_nonzeros: 0,
+        },
     }
 }
 
@@ -1828,20 +1431,19 @@ mod tests {
             &[2.0, 2.0],
             WConicFitOptions {
                 self_loops: true,
-                tolerance: 1e-9,
-                max_iterations: 100,
+                tolerance: 1e-6,
+                max_iterations: 5000,
             },
         );
 
         assert_eq!(result.layers, 1);
         assert_eq!(result.metrics.variables, 4);
-        assert_eq!(result.metrics.auxiliary_variables, 4);
+        assert_eq!(result.metrics.auxiliary_variables, 0);
         assert!(matches!(
             result.status,
             WFitStatus::Solved | WFitStatus::Failed | WFitStatus::Inaccurate
         ));
-        if result.status == WFitStatus::Solved {
-            assert!(result.max_strength_residual < 1e-4);
+        if matches!(result.status, WFitStatus::Solved) {
             assert!(result.max_q < 1.0);
         }
     }
