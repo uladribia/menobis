@@ -52,12 +52,17 @@ written because results are saved at the end.
 ## Remaining steps
 
 1. Make benchmarks save incrementally after each case or node size.
-2. Rerun large release benchmarks in chunks, not one all-or-nothing process.
-3. Decide practical published limits for N=5000 dense strength-edge and
+2. Refactor strength-cost fitting/benchmarks to support on-the-fly or
+   factorized cost evaluation. Do not exclude fixed strength-cost cases from
+   large-N benchmarks solely because dense cost triples are inconvenient; costs
+   should be computed as needed instead of materializing avoidable dense arrays.
+3. Rerun large release benchmarks in chunks, not one all-or-nothing process,
+   including fixed strength-cost at large N after the on-the-fly cost refactor.
+4. Decide practical published limits for N=5000 dense strength-edge and
    strength-degree fits.
-4. Benchmark legacy radiation and sequential gravity models before archiving.
-5. Archive/remove legacy thesis-era folders after benchmark capture.
-6. Run full project checks before release:
+5. Benchmark legacy radiation and sequential gravity models before archiving.
+6. Archive/remove legacy thesis-era folders after benchmark capture.
+7. Run full project checks before release:
 
 ```bash
 uv run ruff format --check .
@@ -70,5 +75,5 @@ cargo fmt --all -- --check
 mkdocs build --strict
 ```
 
-7. Final project rename decision: ODME -> MENoBiS.
-8. Publish MkDocs site to GitHub Pages.
+8. Final project rename decision: ODME -> MENoBiS.
+9. Publish MkDocs site to GitHub Pages.

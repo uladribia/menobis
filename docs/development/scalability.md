@@ -19,7 +19,7 @@ iterations.
 | degree-events fit | O(N² I) | usually few iterations |
 | strength-edges fit | O(N² I) | expensive at N >= 1000 |
 | strength-degree fit | O(N² I) | highest dense-IPF cost |
-| strength-cost fit | O(N² I K) | cost search or conic |
+| strength-cost fit | O(N² I K) | cost search/conic; costs should stream |
 | generation | O(P + Es) | P candidate pairs, Es sampled edges |
 | filtering | O(E) or O(P) | absent-edge filtering can use full support |
 
@@ -31,7 +31,7 @@ iterations.
 | sampled network | sparse edge list |
 | custom probabilities | sparse triples |
 | multipliers | O(N) arrays |
-| costs | sparse triples, dense only when needed |
+| costs | sparse triples or on-the-fly functions; avoid dense triples |
 | dense support | avoided except all-pairs fitting |
 
 ## Current practical limits
@@ -44,7 +44,7 @@ iterations.
 | ME/B strength-degree | 1000 | O(N² I), high constant |
 | W strength-edges | 1000 | W zero-inflated kernels |
 | W strength-degree | 1000 | W zero-inflated kernels |
-| W conic strength/cost | 100-150 | O(N²) cones |
+| W conic strength/cost | 100-150 today | O(N²) cones; cost values need streaming |
 
 ## Release-run lesson
 
@@ -56,6 +56,7 @@ pairs per sweep, repeated hundreds of times.
 
 1. Incremental benchmark persistence.
 2. Chunked benchmark presets.
-3. Sparse support fitting for user-provided masks.
-4. Better stopping diagnostics for W coordinate solvers.
-5. Parallel all-pairs sweeps where reproducibility is unaffected.
+3. On-the-fly or factorized cost providers for large strength-cost fits.
+4. Sparse support fitting for user-provided masks.
+5. Better stopping diagnostics for W coordinate solvers.
+6. Parallel all-pairs sweeps where reproducibility is unaffected.
