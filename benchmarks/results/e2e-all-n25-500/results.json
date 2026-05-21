@@ -1,0 +1,602 @@
+[
+  {
+    "n": 25,
+    "case": "ME strength",
+    "partial": false,
+    "seconds": 0.0,
+    "converged": true,
+    "iterations": 0
+  },
+  {
+    "n": 25,
+    "case": "B strength",
+    "partial": false,
+    "seconds": 0.0,
+    "converged": true,
+    "iterations": 3
+  },
+  {
+    "n": 25,
+    "case": "ME strength-cost",
+    "partial": false,
+    "seconds": 0.001,
+    "converged": true,
+    "iterations": 4
+  },
+  {
+    "n": 25,
+    "case": "B strength-cost",
+    "partial": false,
+    "seconds": 0.001,
+    "converged": true,
+    "iterations": 4
+  },
+  {
+    "n": 25,
+    "case": "W strength-cost",
+    "partial": false,
+    "seconds": 0.002,
+    "converged": true,
+    "iterations": 10
+  },
+  {
+    "n": 25,
+    "case": "Wnb strength-cost",
+    "partial": false,
+    "seconds": 0.002,
+    "converged": true,
+    "iterations": 9
+  },
+  {
+    "n": 25,
+    "case": "ME strength-edges",
+    "partial": false,
+    "seconds": 0.0,
+    "converged": false,
+    "iterations": 0
+  },
+  {
+    "n": 25,
+    "case": "partial ME strength 0.05",
+    "partial": true,
+    "seconds": 0.0,
+    "converged": true,
+    "iterations": 3
+  },
+  {
+    "n": 25,
+    "case": "partial ME cost 0.05",
+    "partial": true,
+    "seconds": 0.001,
+    "converged": true,
+    "iterations": 5
+  },
+  {
+    "n": 25,
+    "case": "partial B cost 0.05",
+    "partial": true,
+    "seconds": 0.002,
+    "converged": true,
+    "iterations": 6
+  },
+  {
+    "n": 25,
+    "case": "partial W cost 0.05",
+    "partial": true,
+    "seconds": 0.002,
+    "converged": true,
+    "iterations": 6
+  },
+  {
+    "n": 25,
+    "case": "partial ME strength 0.4",
+    "partial": true,
+    "seconds": 0.0,
+    "converged": true,
+    "iterations": 2
+  },
+  {
+    "n": 25,
+    "case": "partial ME cost 0.4",
+    "partial": true,
+    "seconds": 0.001,
+    "converged": true,
+    "iterations": 4
+  },
+  {
+    "n": 25,
+    "case": "partial B cost 0.4",
+    "partial": true,
+    "seconds": 0.002,
+    "converged": true,
+    "iterations": 5
+  },
+  {
+    "n": 25,
+    "case": "partial W cost 0.4",
+    "partial": true,
+    "seconds": 0.002,
+    "converged": true,
+    "iterations": 6
+  },
+  {
+    "n": 50,
+    "case": "ME strength",
+    "partial": false,
+    "seconds": 0.0,
+    "converged": true,
+    "iterations": 0
+  },
+  {
+    "n": 50,
+    "case": "B strength",
+    "partial": false,
+    "seconds": 0.001,
+    "converged": true,
+    "iterations": 3
+  },
+  {
+    "n": 50,
+    "case": "ME strength-cost",
+    "partial": false,
+    "seconds": 0.004,
+    "converged": true,
+    "iterations": 8
+  },
+  {
+    "n": 50,
+    "case": "B strength-cost",
+    "partial": false,
+    "seconds": 0.004,
+    "converged": true,
+    "iterations": 8
+  },
+  {
+    "n": 50,
+    "case": "W strength-cost",
+    "partial": false,
+    "seconds": 0.032,
+    "converged": true,
+    "iterations": 35
+  },
+  {
+    "n": 50,
+    "case": "Wnb strength-cost",
+    "partial": false,
+    "seconds": 0.01,
+    "converged": true,
+    "iterations": 11
+  },
+  {
+    "n": 50,
+    "case": "ME strength-edges",
+    "partial": false,
+    "seconds": 0.0,
+    "converged": false,
+    "iterations": 0
+  },
+  {
+    "n": 50,
+    "case": "partial ME strength 0.05",
+    "partial": true,
+    "seconds": 0.001,
+    "converged": true,
+    "iterations": 3
+  },
+  {
+    "n": 50,
+    "case": "partial ME cost 0.05",
+    "partial": true,
+    "seconds": 0.004,
+    "converged": true,
+    "iterations": 5
+  },
+  {
+    "n": 50,
+    "case": "partial B cost 0.05",
+    "partial": true,
+    "seconds": 0.006,
+    "converged": true,
+    "iterations": 5
+  },
+  {
+    "n": 50,
+    "case": "partial W cost 0.05",
+    "partial": true,
+    "seconds": 0.01,
+    "converged": true,
+    "iterations": 7
+  },
+  {
+    "n": 50,
+    "case": "partial ME strength 0.4",
+    "partial": true,
+    "seconds": 0.001,
+    "converged": true,
+    "iterations": 1
+  },
+  {
+    "n": 50,
+    "case": "partial ME cost 0.4",
+    "partial": true,
+    "seconds": 0.002,
+    "converged": true,
+    "iterations": 4
+  },
+  {
+    "n": 50,
+    "case": "partial B cost 0.4",
+    "partial": true,
+    "seconds": 0.005,
+    "converged": true,
+    "iterations": 4
+  },
+  {
+    "n": 50,
+    "case": "partial W cost 0.4",
+    "partial": true,
+    "seconds": 0.009,
+    "converged": true,
+    "iterations": 6
+  },
+  {
+    "n": 100,
+    "case": "ME strength",
+    "partial": false,
+    "seconds": 0.0,
+    "converged": true,
+    "iterations": 0
+  },
+  {
+    "n": 100,
+    "case": "B strength",
+    "partial": false,
+    "seconds": 0.002,
+    "converged": true,
+    "iterations": 3
+  },
+  {
+    "n": 100,
+    "case": "ME strength-cost",
+    "partial": false,
+    "seconds": 0.011,
+    "converged": true,
+    "iterations": 6
+  },
+  {
+    "n": 100,
+    "case": "B strength-cost",
+    "partial": false,
+    "seconds": 0.014,
+    "converged": true,
+    "iterations": 8
+  },
+  {
+    "n": 100,
+    "case": "W strength-cost",
+    "partial": false,
+    "seconds": 0.07,
+    "converged": true,
+    "iterations": 19
+  },
+  {
+    "n": 100,
+    "case": "Wnb strength-cost",
+    "partial": false,
+    "seconds": 0.049,
+    "converged": true,
+    "iterations": 13
+  },
+  {
+    "n": 100,
+    "case": "ME strength-edges",
+    "partial": false,
+    "seconds": 0.0,
+    "converged": false,
+    "iterations": 0
+  },
+  {
+    "n": 100,
+    "case": "partial ME strength 0.05",
+    "partial": true,
+    "seconds": 0.003,
+    "converged": true,
+    "iterations": 2
+  },
+  {
+    "n": 100,
+    "case": "partial ME cost 0.05",
+    "partial": true,
+    "seconds": 0.015,
+    "converged": true,
+    "iterations": 7
+  },
+  {
+    "n": 100,
+    "case": "partial B cost 0.05",
+    "partial": true,
+    "seconds": 0.026,
+    "converged": true,
+    "iterations": 8
+  },
+  {
+    "n": 100,
+    "case": "partial W cost 0.05",
+    "partial": true,
+    "seconds": 0.04,
+    "converged": true,
+    "iterations": 7
+  },
+  {
+    "n": 100,
+    "case": "partial ME strength 0.4",
+    "partial": true,
+    "seconds": 0.005,
+    "converged": true,
+    "iterations": 1
+  },
+  {
+    "n": 100,
+    "case": "partial ME cost 0.4",
+    "partial": true,
+    "seconds": 0.013,
+    "converged": true,
+    "iterations": 6
+  },
+  {
+    "n": 100,
+    "case": "partial B cost 0.4",
+    "partial": true,
+    "seconds": 0.024,
+    "converged": true,
+    "iterations": 6
+  },
+  {
+    "n": 100,
+    "case": "partial W cost 0.4",
+    "partial": true,
+    "seconds": 0.036,
+    "converged": true,
+    "iterations": 6
+  },
+  {
+    "n": 200,
+    "case": "ME strength",
+    "partial": false,
+    "seconds": 0.0,
+    "converged": true,
+    "iterations": 0
+  },
+  {
+    "n": 200,
+    "case": "B strength",
+    "partial": false,
+    "seconds": 0.008,
+    "converged": true,
+    "iterations": 3
+  },
+  {
+    "n": 200,
+    "case": "ME strength-cost",
+    "partial": false,
+    "seconds": 0.049,
+    "converged": true,
+    "iterations": 7
+  },
+  {
+    "n": 200,
+    "case": "B strength-cost",
+    "partial": false,
+    "seconds": 0.062,
+    "converged": true,
+    "iterations": 7
+  },
+  {
+    "n": 200,
+    "case": "W strength-cost",
+    "partial": false,
+    "seconds": 1.097,
+    "converged": true,
+    "iterations": 66
+  },
+  {
+    "n": 200,
+    "case": "Wnb strength-cost",
+    "partial": false,
+    "seconds": 0.267,
+    "converged": true,
+    "iterations": 18
+  },
+  {
+    "n": 200,
+    "case": "ME strength-edges",
+    "partial": false,
+    "seconds": 0.0,
+    "converged": false,
+    "iterations": 0
+  },
+  {
+    "n": 200,
+    "case": "partial ME strength 0.05",
+    "partial": true,
+    "seconds": 0.011,
+    "converged": true,
+    "iterations": 1
+  },
+  {
+    "n": 200,
+    "case": "partial ME cost 0.05",
+    "partial": true,
+    "seconds": 0.051,
+    "converged": true,
+    "iterations": 7
+  },
+  {
+    "n": 200,
+    "case": "partial B cost 0.05",
+    "partial": true,
+    "seconds": 0.098,
+    "converged": true,
+    "iterations": 7
+  },
+  {
+    "n": 200,
+    "case": "partial W cost 0.05",
+    "partial": true,
+    "seconds": 0.16,
+    "converged": true,
+    "iterations": 7
+  },
+  {
+    "n": 200,
+    "case": "partial ME strength 0.4",
+    "partial": true,
+    "seconds": 0.018,
+    "converged": true,
+    "iterations": 1
+  },
+  {
+    "n": 200,
+    "case": "partial ME cost 0.4",
+    "partial": true,
+    "seconds": 0.037,
+    "converged": true,
+    "iterations": 5
+  },
+  {
+    "n": 200,
+    "case": "partial B cost 0.4",
+    "partial": true,
+    "seconds": 0.09,
+    "converged": true,
+    "iterations": 5
+  },
+  {
+    "n": 200,
+    "case": "partial W cost 0.4",
+    "partial": true,
+    "seconds": 0.145,
+    "converged": true,
+    "iterations": 6
+  },
+  {
+    "n": 500,
+    "case": "ME strength",
+    "partial": false,
+    "seconds": 0.0,
+    "converged": true,
+    "iterations": 0
+  },
+  {
+    "n": 500,
+    "case": "B strength",
+    "partial": false,
+    "seconds": 0.033,
+    "converged": true,
+    "iterations": 2
+  },
+  {
+    "n": 500,
+    "case": "ME strength-cost",
+    "partial": false,
+    "seconds": 0.225,
+    "converged": true,
+    "iterations": 4
+  },
+  {
+    "n": 500,
+    "case": "B strength-cost",
+    "partial": false,
+    "seconds": 0.214,
+    "converged": true,
+    "iterations": 4
+  },
+  {
+    "n": 500,
+    "case": "W strength-cost",
+    "partial": false,
+    "seconds": 1.76,
+    "converged": true,
+    "iterations": 19
+  },
+  {
+    "n": 500,
+    "case": "Wnb strength-cost",
+    "partial": false,
+    "seconds": 1.654,
+    "converged": true,
+    "iterations": 18
+  },
+  {
+    "n": 500,
+    "case": "ME strength-edges",
+    "partial": false,
+    "seconds": 0.0,
+    "converged": false,
+    "iterations": 0
+  },
+  {
+    "n": 500,
+    "case": "partial ME strength 0.05",
+    "partial": true,
+    "seconds": 0.083,
+    "converged": true,
+    "iterations": 2
+  },
+  {
+    "n": 500,
+    "case": "partial ME cost 0.05",
+    "partial": true,
+    "seconds": 0.493,
+    "converged": true,
+    "iterations": 10
+  },
+  {
+    "n": 500,
+    "case": "partial B cost 0.05",
+    "partial": true,
+    "seconds": 0.76,
+    "converged": true,
+    "iterations": 10
+  },
+  {
+    "n": 500,
+    "case": "partial W cost 0.05",
+    "partial": true,
+    "seconds": 1.328,
+    "converged": true,
+    "iterations": 10
+  },
+  {
+    "n": 500,
+    "case": "partial ME strength 0.4",
+    "partial": true,
+    "seconds": 0.132,
+    "converged": true,
+    "iterations": 1
+  },
+  {
+    "n": 500,
+    "case": "partial ME cost 0.4",
+    "partial": true,
+    "seconds": 0.293,
+    "converged": true,
+    "iterations": 5
+  },
+  {
+    "n": 500,
+    "case": "partial B cost 0.4",
+    "partial": true,
+    "seconds": 0.675,
+    "converged": true,
+    "iterations": 7
+  },
+  {
+    "n": 500,
+    "case": "partial W cost 0.4",
+    "partial": true,
+    "seconds": 1.139,
+    "converged": true,
+    "iterations": 8
+  }
+]
