@@ -722,6 +722,247 @@ pub fn fit_partial_strength_edges(
     )
 }
 
+#[inline]
+fn coordinate_distance(coord_x: &[f64], coord_y: &[f64], i: usize, j: usize) -> f64 {
+    (coord_x[i] - coord_x[j]).hypot(coord_y[i] - coord_y[j])
+}
+
+#[allow(clippy::too_many_arguments)]
+fn balance_masked_coordinate_strength_cost_fixed_gamma(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    coord_x: &[f64],
+    coord_y: &[f64],
+    mask: &[bool],
+    gamma: f64,
+    tolerance: f64,
+    max_iterations: usize,
+    x_init: Option<&[f64]>,
+    y_init: Option<&[f64]>,
+) -> FitResult {
+    let n = strength_out.len();
+    let total: f64 = strength_out.iter().sum();
+    let sqrt_t = total.sqrt().max(1.0);
+    let mut x: Vec<f64> = x_init.map_or_else(
+        || {
+            strength_out
+                .iter()
+                .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+                .collect()
+        },
+        <[f64]>::to_vec,
+    );
+    let mut y: Vec<f64> = y_init.map_or_else(
+        || {
+            strength_in
+                .iter()
+                .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+                .collect()
+        },
+        <[f64]>::to_vec,
+    );
+
+    for iter in 0..max_iterations {
+        let old_x = x.clone();
+        let old_y = y.clone();
+        for j in 0..n {
+            if strength_in[j] <= 0.0 {
+                y[j] = 0.0;
+                continue;
+            }
+            let denom: f64 = (0..n)
+                .filter(|&i| !mask[i * n + j])
+                .map(|i| {
+                    let d = coordinate_distance(coord_x, coord_y, i, j);
+                    x[i] * (-gamma * d).clamp(-700.0, 700.0).exp()
+                })
+                .sum();
+            y[j] = if denom > 0.0 {
+                strength_in[j] / denom
+            } else {
+                0.0
+            };
+        }
+        for i in 0..n {
+            if strength_out[i] <= 0.0 {
+                x[i] = 0.0;
+                continue;
+            }
+            let denom: f64 = (0..n)
+                .filter(|&j| !mask[i * n + j])
+                .map(|j| {
+                    let d = coordinate_distance(coord_x, coord_y, i, j);
+                    y[j] * (-gamma * d).clamp(-700.0, 700.0).exp()
+                })
+                .sum();
+            x[i] = if denom > 0.0 {
+                strength_out[i] / denom
+            } else {
+                0.0
+            };
+        }
+        if max_pair_delta(&x, &old_x, &y, &old_y) < tolerance {
+            return FitResult {
+                x,
+                y,
+                converged: true,
+                iterations: iter + 1,
+            };
+        }
+    }
+    FitResult {
+        x,
+        y,
+        converged: false,
+        iterations: max_iterations,
+    }
+}
+
+fn expected_masked_coordinate_cost(
+    x: &[f64],
+    y: &[f64],
+    coord_x: &[f64],
+    coord_y: &[f64],
+    mask: &[bool],
+    gamma: f64,
+) -> f64 {
+    let n = x.len();
+    let mut total = 0.0;
+    for i in 0..n {
+        for j in 0..n {
+            if mask[i * n + j] {
+                continue;
+            }
+            let d = coordinate_distance(coord_x, coord_y, i, j);
+            total += x[i] * y[j] * d * (-gamma * d).clamp(-700.0, 700.0).exp();
+        }
+    }
+    total
+}
+
+#[allow(clippy::too_many_arguments)]
+fn fit_masked_strength_cost_poisson_coordinates(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    coord_x: &[f64],
+    coord_y: &[f64],
+    target_cost: f64,
+    mask: &[bool],
+    tolerance: f64,
+    max_iterations: usize,
+) -> StrengthCostFitResult {
+    let solve_at = |gamma: f64, x_init: Option<&[f64]>, y_init: Option<&[f64]>| {
+        let fit = balance_masked_coordinate_strength_cost_fixed_gamma(
+            strength_out,
+            strength_in,
+            coord_x,
+            coord_y,
+            mask,
+            gamma,
+            tolerance,
+            max_iterations,
+            x_init,
+            y_init,
+        );
+        let delta = expected_masked_coordinate_cost(&fit.x, &fit.y, coord_x, coord_y, mask, gamma)
+            - target_cost;
+        (fit, delta)
+    };
+
+    let (fit_zero, delta_zero) = solve_at(0.0, None, None);
+    if delta_zero.abs() <= tolerance {
+        return StrengthCostFitResult {
+            x: fit_zero.x,
+            y: fit_zero.y,
+            gamma: 0.0,
+            converged: fit_zero.converged,
+            iterations: fit_zero.iterations,
+        };
+    }
+    let mut low = 0.0;
+    let mut high = 0.0;
+    let mut low_fit = fit_zero.clone();
+    let mut high_fit = fit_zero.clone();
+    let mut low_delta = delta_zero;
+    let mut high_delta = delta_zero;
+    let mut step = 1.0_f64;
+    for _ in 0..64 {
+        if delta_zero > 0.0 {
+            high = step;
+            let (fit, delta) = solve_at(high, Some(&high_fit.x), Some(&high_fit.y));
+            high_fit = fit;
+            high_delta = delta;
+            if high_delta <= 0.0 {
+                break;
+            }
+        } else {
+            low = -step;
+            let (fit, delta) = solve_at(low, Some(&low_fit.x), Some(&low_fit.y));
+            low_fit = fit;
+            low_delta = delta;
+            if low_delta >= 0.0 {
+                break;
+            }
+        }
+        step *= 2.0;
+    }
+    if !(low_delta >= 0.0 && high_delta <= 0.0) {
+        let (best_fit, gamma) = if low_delta.abs() < high_delta.abs() {
+            (low_fit, low)
+        } else {
+            (high_fit, high)
+        };
+        return StrengthCostFitResult {
+            x: best_fit.x,
+            y: best_fit.y,
+            gamma,
+            converged: false,
+            iterations: max_iterations,
+        };
+    }
+    let mut best_gamma = if low_delta.abs() < high_delta.abs() {
+        low
+    } else {
+        high
+    };
+    let mut best_fit = if low_delta.abs() < high_delta.abs() {
+        low_fit
+    } else {
+        high_fit
+    };
+    let mut best_delta = low_delta.abs().min(high_delta.abs());
+    for iter in 0..max_iterations {
+        let mid = 0.5 * (low + high);
+        let (fit, delta) = solve_at(mid, Some(&best_fit.x), Some(&best_fit.y));
+        if delta.abs() < best_delta {
+            best_delta = delta.abs();
+            best_gamma = mid;
+            best_fit = fit.clone();
+        }
+        if delta.abs() <= tolerance {
+            return StrengthCostFitResult {
+                x: fit.x,
+                y: fit.y,
+                gamma: mid,
+                converged: fit.converged,
+                iterations: iter + 1,
+            };
+        }
+        if delta > 0.0 {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    StrengthCostFitResult {
+        x: best_fit.x,
+        y: best_fit.y,
+        gamma: best_gamma,
+        converged: best_delta <= tolerance,
+        iterations: max_iterations,
+    }
+}
+
 /// Full partial strength-cost fit: excess → fit on excess with free costs → rate table.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
@@ -839,6 +1080,90 @@ pub fn fit_partial_strength_cost(
         |i, j| {
             let d = cost_map.get(&(i, j)).copied().unwrap_or(0.0);
             x[i] * y[j] * (-gamma * d).exp()
+        },
+        fit.converged,
+        fit.iterations,
+    )
+}
+
+/// Full partial strength-cost fit with projected Euclidean coordinate costs.
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn fit_partial_strength_cost_coordinates(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    known_src: &[u64],
+    known_tgt: &[u64],
+    known_rate: &[f64],
+    coord_x: &[f64],
+    coord_y: &[f64],
+    target_cost: f64,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PartialFitResult {
+    let n = infer_n(strength_out.len(), known_src, known_tgt);
+    let s_out = pad_to_n(strength_out, n);
+    let s_in = pad_to_n(strength_in, n);
+    let mask = build_mask(n, known_src, known_tgt, self_loops);
+    let known_cost: f64 = known_src
+        .iter()
+        .zip(known_tgt.iter())
+        .zip(known_rate.iter())
+        .map(|((&s, &t), &r)| r * coordinate_distance(coord_x, coord_y, s as usize, t as usize))
+        .sum();
+    let excess_cost = (target_cost - known_cost).max(0.0);
+    let (mut excess_out, mut excess_in) =
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+            Some(v) => v,
+            None => {
+                return assemble_result(
+                    n,
+                    known_src,
+                    known_tgt,
+                    known_rate,
+                    &mask,
+                    |_, _| 0.0,
+                    false,
+                    0,
+                )
+            }
+        };
+    if excess_out.iter().sum::<f64>() <= 0.0 {
+        return assemble_result(
+            n,
+            known_src,
+            known_tgt,
+            known_rate,
+            &mask,
+            |_, _| 0.0,
+            true,
+            0,
+        );
+    }
+    balance_excess(&mut excess_out, &mut excess_in);
+    let fit = fit_masked_strength_cost_poisson_coordinates(
+        &excess_out,
+        &excess_in,
+        coord_x,
+        coord_y,
+        excess_cost,
+        &mask,
+        tolerance,
+        max_iterations,
+    );
+    let x = fit.x;
+    let y = fit.y;
+    let gamma = fit.gamma;
+    assemble_result(
+        n,
+        known_src,
+        known_tgt,
+        known_rate,
+        &mask,
+        |i, j| {
+            let d = coordinate_distance(coord_x, coord_y, i, j);
+            x[i] * y[j] * (-gamma * d).clamp(-700.0, 700.0).exp()
         },
         fit.converged,
         fit.iterations,

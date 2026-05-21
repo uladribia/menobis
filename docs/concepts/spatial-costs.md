@@ -54,9 +54,10 @@ and sampling, omitted pairs are treated as cost $d_{ij}=0$. Prefer passing a
 complete cost table unless zero-cost missing pairs are intentional.
 
 For large complete spatial supports, pass projected coordinates instead of dense
-triples. Coordinates must be in a Euclidean projected CRS such as UTM or a local
-metric projection. ODME does not transform CRS and does not compute geodesic
-distances.
+triples. Full and partial coordinate strength-cost APIs compute Euclidean
+distances on the fly in Rust and do not materialize all-pairs cost triples.
+Coordinates must be in a Euclidean projected CRS such as UTM or a local metric
+projection. ODME does not transform CRS and does not compute geodesic distances.
 
 ## Solver
 

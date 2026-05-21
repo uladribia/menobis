@@ -5,7 +5,7 @@
     "family": "poisson",
     "partial": false,
     "known_fraction": 0.0,
-    "seconds": 0.08619584899861366,
+    "seconds": 0.07811486800346756,
     "converged": true,
     "iterations": 36
   },
@@ -15,7 +15,7 @@
     "family": "poisson",
     "partial": true,
     "known_fraction": 0.05,
-    "seconds": 0.05990450200624764,
+    "seconds": 0.05071188799774973,
     "converged": true,
     "iterations": 20
   },
@@ -25,7 +25,7 @@
     "family": "poisson",
     "partial": true,
     "known_fraction": 0.4,
-    "seconds": 0.061109739006496966,
+    "seconds": 0.042219959999783896,
     "converged": true,
     "iterations": 17
   },
@@ -35,7 +35,7 @@
     "family": "binomial",
     "partial": false,
     "known_fraction": 0.0,
-    "seconds": 0.0815183490049094,
+    "seconds": 0.07845588000054704,
     "converged": true,
     "iterations": 36
   },
@@ -45,7 +45,7 @@
     "family": "binomial",
     "partial": true,
     "known_fraction": 0.05,
-    "seconds": 0.04226487100095255,
+    "seconds": 0.05122646100062411,
     "converged": true,
     "iterations": 20
   },
@@ -55,7 +55,7 @@
     "family": "binomial",
     "partial": true,
     "known_fraction": 0.4,
-    "seconds": 0.05298426299850689,
+    "seconds": 0.041881746001308784,
     "converged": true,
     "iterations": 17
   },
@@ -65,7 +65,7 @@
     "family": "geometric",
     "partial": false,
     "known_fraction": 0.0,
-    "seconds": 0.08748026999819558,
+    "seconds": 0.07839878300001146,
     "converged": true,
     "iterations": 36
   },
@@ -75,7 +75,7 @@
     "family": "geometric",
     "partial": true,
     "known_fraction": 0.05,
-    "seconds": 0.04160181699990062,
+    "seconds": 0.05201651899551507,
     "converged": true,
     "iterations": 20
   },
@@ -85,7 +85,7 @@
     "family": "geometric",
     "partial": true,
     "known_fraction": 0.4,
-    "seconds": 0.03938392900454346,
+    "seconds": 0.041694963998452295,
     "converged": true,
     "iterations": 17
   },
@@ -95,7 +95,7 @@
     "family": "negative_binomial",
     "partial": false,
     "known_fraction": 0.0,
-    "seconds": 0.08212118300434668,
+    "seconds": 0.07831245200213743,
     "converged": true,
     "iterations": 36
   },
@@ -105,7 +105,7 @@
     "family": "negative_binomial",
     "partial": true,
     "known_fraction": 0.05,
-    "seconds": 0.04151485900365515,
+    "seconds": 0.050552073000289965,
     "converged": true,
     "iterations": 20
   },
@@ -115,7 +115,7 @@
     "family": "negative_binomial",
     "partial": true,
     "known_fraction": 0.4,
-    "seconds": 0.04066914500435814,
+    "seconds": 0.041962080998928286,
     "converged": true,
     "iterations": 17
   },
@@ -125,7 +125,7 @@
     "family": "poisson",
     "partial": false,
     "known_fraction": 0.0,
-    "seconds": 2.1665200589995948,
+    "seconds": 2.112507060999633,
     "converged": true,
     "iterations": 42
   },
@@ -135,7 +135,7 @@
     "family": "poisson",
     "partial": true,
     "known_fraction": 0.05,
-    "seconds": 1.0899657650006702,
+    "seconds": 1.3167565379990265,
     "converged": true,
     "iterations": 23
   },
@@ -145,7 +145,7 @@
     "family": "poisson",
     "partial": true,
     "known_fraction": 0.4,
-    "seconds": 0.991196150003816,
+    "seconds": 1.0925797859963495,
     "converged": true,
     "iterations": 20
   },
@@ -155,7 +155,7 @@
     "family": "binomial",
     "partial": false,
     "known_fraction": 0.0,
-    "seconds": 2.0786674170012702,
+    "seconds": 2.1256846499964013,
     "converged": true,
     "iterations": 42
   },
@@ -165,7 +165,7 @@
     "family": "binomial",
     "partial": true,
     "known_fraction": 0.05,
-    "seconds": 1.07486886800325,
+    "seconds": 1.2436026009963825,
     "converged": true,
     "iterations": 23
   },
@@ -175,7 +175,7 @@
     "family": "binomial",
     "partial": true,
     "known_fraction": 0.4,
-    "seconds": 1.05750534300023,
+    "seconds": 0.9880549879962928,
     "converged": true,
     "iterations": 20
   },
@@ -185,7 +185,7 @@
     "family": "geometric",
     "partial": false,
     "known_fraction": 0.0,
-    "seconds": 2.155600541002059,
+    "seconds": 2.0744709270002204,
     "converged": true,
     "iterations": 42
   },
@@ -195,7 +195,7 @@
     "family": "geometric",
     "partial": true,
     "known_fraction": 0.05,
-    "seconds": 1.08940303199779,
+    "seconds": 1.2751041630035616,
     "converged": true,
     "iterations": 23
   },
@@ -205,7 +205,7 @@
     "family": "geometric",
     "partial": true,
     "known_fraction": 0.4,
-    "seconds": 0.9911117170049693,
+    "seconds": 0.9877999579985044,
     "converged": true,
     "iterations": 20
   },
@@ -215,7 +215,7 @@
     "family": "negative_binomial",
     "partial": false,
     "known_fraction": 0.0,
-    "seconds": 2.0735932320021675,
+    "seconds": 2.070315500997822,
     "converged": true,
     "iterations": 42
   },
@@ -225,7 +225,7 @@
     "family": "negative_binomial",
     "partial": true,
     "known_fraction": 0.05,
-    "seconds": 1.069207168999128,
+    "seconds": 1.2447880079998868,
     "converged": true,
     "iterations": 23
   },
@@ -235,7 +235,7 @@
     "family": "negative_binomial",
     "partial": true,
     "known_fraction": 0.4,
-    "seconds": 0.9987587029972929,
+    "seconds": 0.992814790995908,
     "converged": true,
     "iterations": 20
   }
