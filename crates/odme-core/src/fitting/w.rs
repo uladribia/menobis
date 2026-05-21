@@ -1170,9 +1170,20 @@ fn newton_to_w_strength_result(
     } else {
         WFitStatus::Inaccurate
     };
+    // Convert probability-space x,y to log-space a,b for residual computation
+    let a: Vec<f64> = result
+        .x
+        .iter()
+        .map(|&xi| if xi > 0.0 { -xi.ln() } else { 50.0 })
+        .collect();
+    let b: Vec<f64> = result
+        .y
+        .iter()
+        .map(|&yj| if yj > 0.0 { -yj.ln() } else { 50.0 })
+        .collect();
     let residuals = independent_strength_residuals(
-        &result.x,
-        &result.y,
+        &a,
+        &b,
         layers,
         strength_out,
         strength_in,
