@@ -56,9 +56,10 @@ pub fn fit_strength_cost_w_lbfgs(
         .collect();
     let mut gamma = 0.0_f64;
     let damping = 0.8_f64;
+    let r_min = 0.01_f64; // feasibility margin: all r_ij >= r_min
 
     for iter in 0..opts.max_iterations {
-        // Update b_j (columns) with a, gamma fixed
+        // Update b_j: solve pred_in_j = s_in_j via Newton, project to feasibility
         for j in 0..n {
             if strength_in[j] <= 0.0 {
                 continue;
@@ -70,17 +71,23 @@ pub fn fit_strength_cost_w_lbfgs(
                     continue;
                 }
                 let d = coord_distance(coord_x, coord_y, i, j);
-                let r = (a[i] + b[j] + gamma * d).max(1e-10);
+                let r = (a[i] + b[j] + gamma * d).max(r_min);
                 pred += w_mean(r, layers);
                 dpred += w_mean_deriv(r, layers);
             }
             if dpred.abs() > 1e-15 {
                 let step = -(pred - strength_in[j]) / dpred;
-                b[j] += damping * step;
+                let new_b = b[j] + damping * step;
+                // Project: b_j >= r_min - min_i(a_i + gamma*d_ij)
+                let min_complement: f64 = (0..n)
+                    .filter(|&i| opts.self_loops || i != j)
+                    .map(|i| a[i] + gamma * coord_distance(coord_x, coord_y, i, j))
+                    .fold(f64::INFINITY, f64::min);
+                b[j] = new_b.max(r_min - min_complement);
             }
         }
 
-        // Update a_i (rows) with b, gamma fixed
+        // Update a_i: solve pred_out_i = s_out_i via Newton, project to feasibility
         for i in 0..n {
             if strength_out[i] <= 0.0 {
                 continue;
@@ -92,17 +99,22 @@ pub fn fit_strength_cost_w_lbfgs(
                     continue;
                 }
                 let d = coord_distance(coord_x, coord_y, i, j);
-                let r = (a[i] + b[j] + gamma * d).max(1e-10);
+                let r = (a[i] + b[j] + gamma * d).max(r_min);
                 pred += w_mean(r, layers);
                 dpred += w_mean_deriv(r, layers);
             }
             if dpred.abs() > 1e-15 {
                 let step = -(pred - strength_out[i]) / dpred;
-                a[i] += damping * step;
+                let new_a = a[i] + damping * step;
+                let min_complement: f64 = (0..n)
+                    .filter(|&j| opts.self_loops || i != j)
+                    .map(|j| b[j] + gamma * coord_distance(coord_x, coord_y, i, j))
+                    .fold(f64::INFINITY, f64::min);
+                a[i] = new_a.max(r_min - min_complement);
             }
         }
 
-        // Update gamma with a, b fixed
+        // Update gamma: project so all r_ij remain feasible
         {
             let mut pred_cost = 0.0;
             let mut dpred_cost = 0.0;
@@ -112,18 +124,33 @@ pub fn fit_strength_cost_w_lbfgs(
                         continue;
                     }
                     let d = coord_distance(coord_x, coord_y, i, j);
-                    let r = (a[i] + b[j] + gamma * d).max(1e-10);
+                    let r = (a[i] + b[j] + gamma * d).max(r_min);
                     pred_cost += d * w_mean(r, layers);
                     dpred_cost += d * d * w_mean_deriv(r, layers);
                 }
             }
             if dpred_cost.abs() > 1e-15 {
                 let step = -(pred_cost - target_cost) / dpred_cost;
-                gamma += damping * step;
+                let new_gamma = gamma + damping * step;
+                // gamma lower bound: for all (i,j), a_i + b_j + gamma*d_ij >= r_min
+                // gamma >= (r_min - a_i - b_j) / d_ij for all pairs with d_ij > 0
+                let mut gamma_lb = f64::NEG_INFINITY;
+                for i in 0..n {
+                    for j in 0..n {
+                        if !opts.self_loops && i == j {
+                            continue;
+                        }
+                        let d = coord_distance(coord_x, coord_y, i, j);
+                        if d > 1e-15 {
+                            gamma_lb = gamma_lb.max((r_min - a[i] - b[j]) / d);
+                        }
+                    }
+                }
+                gamma = new_gamma.max(gamma_lb);
             }
         }
 
-        // Check convergence on out-strengths
+        // Convergence check
         let mut max_err = 0.0_f64;
         for i in 0..n {
             let mut p = 0.0;
@@ -132,7 +159,7 @@ pub fn fit_strength_cost_w_lbfgs(
                     continue;
                 }
                 let d = coord_distance(coord_x, coord_y, i, j);
-                let r = (a[i] + b[j] + gamma * d).max(1e-10);
+                let r = (a[i] + b[j] + gamma * d).max(r_min);
                 p += w_mean(r, layers);
             }
             max_err = max_err.max((p - strength_out[i]).abs());
@@ -144,7 +171,7 @@ pub fn fit_strength_cost_w_lbfgs(
                     continue;
                 }
                 let d = coord_distance(coord_x, coord_y, i, j);
-                let r = (a[i] + b[j] + gamma * d).max(1e-10);
+                let r = (a[i] + b[j] + gamma * d).max(r_min);
                 p += w_mean(r, layers);
             }
             max_err = max_err.max((p - strength_in[j]).abs());
