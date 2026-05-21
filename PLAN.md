@@ -51,14 +51,25 @@ written because results are saved at the end.
 
 ## Remaining steps
 
-1. Make benchmarks save incrementally after each case or node size.
-2. Extend coordinate-based strength-cost coverage. ME coordinate fitting now
-   computes projected Euclidean XY distances on the fly; next add generation,
-   filtering, B/W coordinate wrappers, and benchmark coverage up to N=500.
-   Sparse custom cost arrays warn when they may create memory pressure.
-3. Rerun large release benchmarks in chunks, not one all-or-nothing process,
-   including fixed strength-cost coordinate cases up to N=500 first.
-4. Decide practical published limits for N=5000 dense strength-edge and
+1. Fix W fixed-strength no-self-loop fitting before further large W benchmarks.
+   The N=1000 no-self-loop fixed-strength benchmark panicked inside the Clarabel
+   AMD sparse ordering path (`attempt to add with overflow`). This is separate
+   from coordinate strength-cost and must be diagnosed directly: reproduce in a
+   Rust/Python regression test, determine whether the conic formulation is too
+   large/ill-structured or whether a non-conic IPF/shared kernel should replace
+   it for fixed-strength W, and ensure Rust returns structured errors rather
+   than panicking across PyO3.
+2. Refactor fixed-strength and strength-cost fitting around shared Rust kernels.
+   The current coordinate B/W wrappers are API-level placeholders over the ME
+   coordinate solver; that is not scientifically final. The next design should
+   share pair-potential logic across `NoCost`, sparse costs, and projected XY
+   costs, with family-specific expectation equations for ME, B, and W.
+3. Make benchmarks save incrementally after each case or node size.
+4. Extend coordinate-based strength-cost coverage after the shared-kernel
+   refactor: generation, filtering, true B/W coordinate fitting, and partial
+   variants without dense cost triples.
+5. Rerun large release benchmarks in chunks, not one all-or-nothing process.
+6. Decide practical published limits for N=5000 dense strength-edge and
    strength-degree fits.
 5. Benchmark legacy radiation and sequential gravity models before archiving.
 6. Archive/remove legacy thesis-era folders after benchmark capture.
