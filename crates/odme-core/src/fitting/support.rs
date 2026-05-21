@@ -29,3 +29,10 @@ pub(crate) fn max_abs_delta(current: &[f64], previous: &[f64]) -> f64 {
 pub(crate) fn max_pair_delta(x: &[f64], old_x: &[f64], y: &[f64], old_y: &[f64]) -> f64 {
     max_abs_delta(x, old_x).max(max_abs_delta(y, old_y))
 }
+
+/// Euclidean distance between projected XY coordinates of nodes i and j.
+#[inline]
+#[must_use]
+pub(crate) fn coord_distance(coord_x: &[f64], coord_y: &[f64], i: usize, j: usize) -> f64 {
+    (coord_x[i] - coord_x[j]).hypot(coord_y[i] - coord_y[j])
+}
