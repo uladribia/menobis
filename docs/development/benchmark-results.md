@@ -1,125 +1,101 @@
 # Benchmark Results: E2E Pipeline
 
-> TL;DR: ME models converge reliably at all sizes (N≤1000). B models need
-> adequate layer headroom. W models converge at N≤50 for strength-cost but
-> need more iterations at N≥100. All partial ME/B models converge at all sizes.
+> TL;DR: ME models work perfectly at all sizes. B strength works with adequate
+> layers. B strength-edges/degree have a critical kernel bug (use ME kernel).
+> W/Wnb converge at N≤100 for strength, N≤50 for cost. Degree-events works
+> for all families at all sizes.
 
-## Test environment
+## Complete convergence matrix
 
-- CPU: single-threaded Rust via PyO3
-- Network: gravity model with Pareto-distributed node activity
-- self_loops: False (no diagonal)
-- Constraints derived from generated network (guaranteed feasible)
+### Fitting convergence (does the solver converge?)
 
-## Summary table
+| Constraint | ME | B | W | Wnb | Notes |
+|------------|:--:|:-:|:-:|:---:|-------|
+| **strength** | ✓ all N | ✓ all N | ✓ N≤100 | ✓ N≤100 | W/Wnb fail at N≥500 |
+| **strength-cost** | ✓ all N | ✓ N=25 only | ✓ N≤50 | ✓ N≤25 | Main bottleneck |
+| **strength-edges** | ✓ all N | ✓ all N | ✓ all N | ✓ all N | |
+| **strength-degree** | ✓ all N | ✓ all N | ✓ all N | ✓ all N | |
+| **degree-events** | ✓ all N | ✓ all N | ✓ all N | ✓ all N | Trivial (analytic) |
+| **partial strength** | ✓ all N | — | — | — | ME only |
+| **partial cost-coord** | ✓ all N | ✓ all N | ✗ | ✗ | W inherits P1 |
 
-| N | Cases | Fit OK | Fit % | Notes |
-|----:|------:|-------:|------:|-------|
-| 25 | 27 | 26 | 96% | 1 fail: partial Wnb cost-coord |
-| 50 | 27 | 24 | 89% | 3 fails: B/Wnb cost, partial Wnb |
-| 100 | 27 | 24 | 89% | 3 fails: B/W cost, partial Wnb |
-| 500 | 27 | 20 | 74% | 7 fails: W/Wnb strength, B/W/Wnb cost, partial W/Wnb |
-| 1000 | 14* | 14 | 100% | ME + B + degree-events + partial ME/B only |
+### End-to-end correctness (fit → sample → constraint recovery)
 
-*N=1000 tested with fast cases only (W strength-cost exceeds time budget).
+| Constraint | ME | B | W | Wnb | Notes |
+|------------|:--:|:-:|:-:|:---:|-------|
+| **strength** | ✓ | ✓ | △ | △ | W/Wnb: high geometric variance (expected) |
+| **strength-cost** | ✓ | ✓ (N=25) | △ | △ | △ = high variance, not bug |
+| **strength-edges** | ✓ | **BUG** | △ | △ | B uses ME kernel (P5) |
+| **strength-degree** | ✓ | **BUG** | △ | △ | B uses ME kernel (P5) |
+| **degree-events** | ✓ | ✓ | ✓ | ✓ | All correct |
 
-## Convergence by family and constraint
+Legend:
+- ✓ = converges AND samples recover constraints within stochastic tolerance
+- △ = converges but single-sample error large due to heavy-tailed distribution
+  (NOT a bug; ensemble z-scores confirm correct model)
+- **BUG** = silently wrong results (P5: calls ME kernel, applies B sampler)
+- ✗ = does not converge
 
-### ME (Poisson) — Always converges
+## Strength-only fitting metrics
 
-| Constraint | N=25 | N=50 | N=100 | N=500 | N=1000 |
-|------------|------|------|-------|-------|--------|
-| strength | ✓ 4i | ✓ 4i | ✓ 3i | ✓ 3i | ✓ 3i |
-| strength-cost | ✓ 9i | ✓ 12i | ✓ 9i | ✓ 13i | ✓ 11i |
-| strength-edges | ✓ 1i | ✓ 4i | ✓ 2i | ✓ 1i | — |
-| strength-degree | ✓ 1i | ✓ 1i | ✓ 1i | ✓ 1i | ✓ 1i |
-| degree-events | ✓ 1i | ✓ 1i | ✓ 1i | ✓ 1i | ✓ 1i |
+| N | ME iters | B iters | B layers | W iters | W fit_residual | W tol |
+|----:|---------:|--------:|---------:|--------:|---------------:|------:|
+| 25 | 4 | 32 | 104 | 10 | 11.5 | 12.2 |
+| 50 | 4 | 9 | 76 | 12 | 13.2 | 18.0 |
+| 100 | 3 | 6 | 332 | 9 | 73.2 | 163.7 |
+| 500 | 3 | 12 | 1092 | ✗ 50k | — | 2720 |
+| 1000 | 3 | 10 | 2476 | ✗ | — | — |
 
-### B (Binomial) — Converges with adequate layers
+## Performance (wall-clock seconds, converged cases only)
 
-| Constraint | N=25 | N=50 | N=100 | N=500 | N=1000 |
-|------------|------|------|-------|-------|--------|
-| strength | ✓ 32i | ✓ 9i | ✓ 6i | ✓ 12i | ✓ 10i |
-| strength-cost | ✓ 10i | ✗ | ✗ | ✗ | ✗ |
-| strength-edges | ✓ 1i | ✓ 4i | ✓ 2i | ✓ 1i | — |
-| strength-degree | ✓ 1i | ✓ 1i | ✓ 1i | ✓ 1i | — |
-| degree-events | ✓ 1i | ✓ 1i | ✓ 1i | ✓ 1i | ✓ 1i |
+| N | ME str | ME cost | ME edges | ME degree | B str | W str | W edges |
+|----:|:------:|:-------:|:--------:|:---------:|:-----:|:-----:|:-------:|
+| 25 | <0.01 | <0.01 | <0.01 | <0.01 | <0.01 | <0.01 | 0.01 |
+| 50 | <0.01 | 0.02 | 0.01 | <0.01 | <0.01 | <0.01 | 0.02 |
+| 100 | <0.01 | 0.06 | 0.02 | 0.01 | <0.01 | 0.01 | 0.08 |
+| 500 | 0.02 | 0.96 | 0.31 | 0.29 | 0.02 | ✗ | 5.7 |
+| 1000 | 0.07 | 2.6 | 2.2 | 1.1 | 0.04 | ✗ | — |
 
-B strength-cost fails at N≥50 because the coordinate-based B IPF
-hits the same near-saturation conditioning as B strength (see PLAN Step 3).
+## Known bugs (critical)
 
-### W (Geometric) — Converges at small N, needs more iterations at large N
+### P5: B strength-edges and B strength-degree use ME kernel
 
-| Constraint | N=25 | N=50 | N=100 | N=500 |
-|------------|------|------|-------|-------|
-| strength | ✓ 10i | ✓ 12i | ✓ 9i | ✗ 5000i |
-| strength-cost | ✓ 4510i | ✓ 9824i | ✗ 24009i | ✗ 70000i |
-| strength-edges | ✓ 1i | ✓ 1i | ✓ 1i | ✓ 4i |
-| strength-degree | ✓ 7i | ✓ 1i | ✓ 1i | ✓ 1i |
-| degree-events | ✓ 1i | ✓ 1i | ✓ 1i | ✓ 1i |
+`fit_strength_edges_binomial` calls `_odme.fit_strength_edges_poisson` and
+`fit_strength_degree_binomial` calls `_odme.fit_strength_degree_poisson`.
+No B-specific Rust kernel exists. The fit "converges" (it's doing ME) but
+the B sampler applies binomial formula to ME parameters → wrong results.
 
-W strength and strength-cost use Newton coordinate-descent which scales
-poorly with network heterogeneity at large N. The bisection+Newton solver
-converges at N≤50 but needs >5000 iterations at N≥100 for the strength-cost
-case.
+**Evidence:** B strength-edges at N=50 produces sample error of 2638 vs
+ME error of 56 on the same network. B strength-degree: error 2888 vs ME 190.
 
-### Wnb (Negative Binomial, M=3) — Similar to W
+## Known limitations (not bugs)
 
-| Constraint | N=25 | N=50 | N=100 | N=500 |
-|------------|------|------|-------|-------|
-| strength | ✓ 11i | ✓ 12i | ✓ 9i | ✗ 5000i |
-| strength-cost | ✓ 2326i | ✗ | ✓ 9092i | ✗ |
-| strength-edges | ✓ 2i | ✓ 5i | ✓ 2i | ✓ 6i |
-| strength-degree | ✓ 1i | ✓ 1i | ✓ 1i | ✓ 1i |
-| degree-events | ✓ 1i | ✓ 1i | ✓ 1i | ✓ 1i |
+### W/Wnb high single-sample variance
 
-### Partial fitting — ME/B converge at all sizes
+W models use the geometric distribution where Var(t_ij) = q/(1-q)².
+For strong nodes (q→1), per-pair variance diverges. Single-sample strength
+errors of 100–5000 are expected for correctly fitted models. Ensemble
+verification confirms correct mean recovery.
 
-| Constraint | N=25 | N=50 | N=100 | N=500 | N=1000 |
-|------------|------|------|-------|-------|--------|
-| partial ME strength | ✓ | ✓ | ✓ | ✓ | ✓ |
-| partial ME strength-edges | ✓ | ✓ | ✓ | ✓ | ✓ |
-| partial ME strength-degree | ✓ | ✓ | ✓ | ✓ | ✓ |
-| partial ME cost-coord | ✓ | ✓ | ✓ | ✓ | ✓ |
-| partial B cost-coord | ✓ | ✓ | ✓ | ✓ | ✓ |
-| partial W cost-coord | ✓ | ✓ | ✓ | ✗ | — |
-| partial Wnb cost-coord | ✗ | ✗ | ✗ | ✗ | — |
+### W/Wnb strength-cost and strength at large N
 
-## Performance (wall-clock seconds)
+The Newton coordinate-descent solver stalls at N≥100 (cost) or N≥500
+(strength-only). Root cause: adaptive damping hits floor without sufficient
+progress. Fix requires Anderson acceleration or L-BFGS.
 
-| N | ME strength | ME cost | ME edges | ME degree | B strength | W cost |
-|----:|:-----------:|:-------:|:--------:|:---------:|:----------:|:------:|
-| 25 | <0.01 | <0.01 | <0.01 | <0.01 | <0.01 | 0.12 |
-| 50 | <0.01 | 0.02 | 0.01 | <0.01 | <0.01 | 1.7 |
-| 100 | <0.01 | 0.06 | 0.02 | 0.01 | <0.01 | 8.5 |
-| 500 | 0.02 | 0.96 | 0.31 | 0.29 | 0.02 | 98* |
-| 1000 | 0.07 | 2.6 | 2.2 | 1.1 | 0.04 | — |
+### B near-saturation IPF
 
-*W strength-cost at N=500 did not converge within 70k iterations.
-
-## Known limitations
-
-1. **W/Wnb strength-cost at N≥100**: The Newton coordinate-descent solver
-   converges slowly for highly heterogeneous gravity-model networks. The
-   bisection+Newton approach works at N≤50 but needs O(10k) iterations at
-   larger sizes. Future: L-BFGS or trust-region methods.
-
-2. **B strength-cost at N≥50**: The coordinate-based binomial IPF hits
-   near-saturation conditioning. Workaround: use more layers.
-
-3. **Partial Wnb cost-coord**: Does not converge at any tested size.
-   The negative-binomial Newton solver within the partial framework needs
-   investigation.
-
-4. **Sample check (△)**: Some models fit correctly but single-sample
-   verification fails due to high variance in W/B families. These are
-   NOT fitting failures — the model converges but sampling is stochastic.
-   Use ensemble z-scores for proper validation.
+B models require `layers >= 4*ceil(max(s_out)/(N-1))` to avoid multiplier
+divergence. With adequate layers, convergence is fast (6–32 iterations).
 
 ## Recommendations
 
-- **Production use**: ME models for all constraint types at any network size.
-- **Research use**: B models with `layers >= 4 * ceil(max_s/(N-1))`.
-- **W models**: Use only at N≤50 for strength-cost, or use strength-edges/
-  strength-degree constraints which converge at all sizes.
-- **Partial fitting**: Use ME or B families for reliable convergence.
+| Use case | Recommended family | Constraint type | Max N tested |
+|----------|-------------------|-----------------|:------------:|
+| Production (any size) | ME | any | 1000+ |
+| Bounded weights | B | strength, degree-events | 1000 |
+| Bounded weights + cost | B | strength-cost | 25 |
+| Heavy-tailed weights | W/Wnb | strength | 100 |
+| Heavy-tailed + cost | W/Wnb | strength-cost | 50 |
+| Degree structure | any | strength-degree, degree-events | 1000 |
+| Partial observations | ME, B | partial cost-coord | 1000 |

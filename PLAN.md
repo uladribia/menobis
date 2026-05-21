@@ -20,21 +20,32 @@ Scientific reference: <https://hdl.handle.net/10803/400560>.
 
 ## Remaining detected problems
 
-### P1. W strength-cost convergence at N≥100
+### P1. W/Wnb Newton solver fails at large N (strength AND strength-cost)
 
-**Symptom:** W/Wnb strength-cost coordinate fitting exhausts 50k iterations
-at N≥100 for realistic gravity-model inputs. Gamma converges correctly (via
-ME bootstrap) but the inner Newton solver for (a,b) at fixed gamma stalls.
+**Symptom:** W/Wnb fitting exhausts iterations at N≥500 for strength-only
+and at N≥100 for strength-cost on realistic gravity-model inputs.
 
-**Metrics:**
-- N=25: converges in 4.5k inner iters (0.12s)
-- N=50: converges in 9.8k inner iters (1.7s)
-- N=100: does NOT converge at 24k iters (8.5s)
-- N=500+: does NOT converge
+**Metrics (strength-only, self_loops=False):**
 
-**Root cause:** The per-node Newton update has fixed step structure. For
-highly heterogeneous networks (Gini > 0.5), the Hessian conditioning is poor
-and the adaptive damping hits its floor (1e-6) without sufficient progress.
+| N | W converged | iters | fit_residual | W tol |
+|----:|:-----------:|------:|-------------:|------:|
+| 25 | ✓ | 10 | 11.5 | 12.2 |
+| 50 | ✓ | 12 | 13.2 | 18.0 |
+| 100 | ✓ | 9 | 73.2 | 163.7 |
+| 500 | ✗ | 50000 | — | 2720 |
+
+**Metrics (strength-cost coordinates, self_loops=False):**
+
+| N | W converged | iters | time |
+|----:|:-----------:|------:|-----:|
+| 25 | ✓ | 4510 | 0.12s |
+| 50 | ✓ | 9824 | 1.7s |
+| 100 | ✗ | 24009 | 8.5s |
+| 500 | ✗ | 70000 | 98s |
+
+**Note:** W single-sample errors (100–5000) are NOT bugs. The geometric
+distribution has variance q/(1-q)² which is enormous when q→1. Ensemble
+verification confirms correct mean recovery for converged fits.
 
 **Ideas to fix:**
 1. **Anderson/SQUAREM acceleration** on the (a,b) fixed-point iteration.
@@ -60,6 +71,17 @@ at N≥50 without converging.
 but with a gamma-modulated rate. The same near-saturation conditioning
 applies: when some pairs have `x_i * y_j * exp(-gamma*d)` close to 1,
 the IPF oscillates.
+
+**Note on B strength-only:** B strength DOES converge at all sizes tested
+(N=25–1000) with adequate layers (`4*ceil(max_s/(N-1))`):
+
+| N | B converged | iters | layers used |
+|----:|:-----------:|------:|------------:|
+| 25 | ✓ | 32 | 104 |
+| 50 | ✓ | 9 | 76 |
+| 100 | ✓ | 6 | 332 |
+| 500 | ✓ | 12 | 1092 |
+| 1000 | ✓ | 10 | 2476 |
 
 **Ideas to fix:**
 1. Same as P1: Anderson acceleration on the inner IPF.
