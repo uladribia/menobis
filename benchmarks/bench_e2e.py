@@ -248,6 +248,15 @@ def bench_e2e(max_n: int = 100, nodes: list[int] | None = None):
         # Cost triples
         cost_src, cost_tgt, cost_val = _cost_triples(dist, self_loops=False)
 
+        # Clip degrees to n-2 for degree-events models (n-1 is boundary/infeasible)
+        capacity = float(n - 1)
+        k_out = np.minimum(k_out, capacity - 1.0)
+        k_in = np.minimum(k_in, capacity - 1.0)
+        # Rebalance after clipping
+        k_diff = k_out.sum() - k_in.sum()
+        if abs(k_diff) > 0.01:
+            k_in[0] += k_diff
+
         # Tolerances
         fit_tol = 0.02 * max(float(s_out.max()), 1.0)
         w_tol = max(fit_tol, 1.0)

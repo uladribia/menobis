@@ -308,6 +308,15 @@ class TestMEDegreeEventsE2E:
         k_out = constraints["k_out"]
         k_in = constraints["k_in"]
         total_events = constraints["total_events"]
+
+        # Clip degrees to n-2 (n-1 is boundary for Bernoulli model)
+        capacity = float(n - 1)
+        k_out = np.minimum(k_out, capacity - 1.0)
+        k_in = np.minimum(k_in, capacity - 1.0)
+        k_diff = k_out.sum() - k_in.sum()
+        if abs(k_diff) > 0.01:
+            k_in[0] += k_diff
+
         tol = 0.02 * max(k_out.max(), 1.0)
 
         fit = fit_degree_events_poisson(
