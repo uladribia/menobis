@@ -66,6 +66,14 @@ written because results are saved at the end.
    benchmark timings. The next design must implement family-specific expectation
    equations (`E[t_ij]` differs per family) and share pair-potential/cost-provider
    logic across `NoCost`, sparse costs, and projected XY costs.
+3. Verify `w_mean` against thesis `E[T]` for the W exponential family. The
+   function `w_mean(r, M) = M*exp(-r)/(1-exp(-r))` may differ from the true
+   expected value `E[T] = -d/dr ln(G_M(r))` by a factor `A_M/G_M`. The Newton
+   coordinate-descent prototype (`w_lbfgs.rs`) uses `w_mean` as the predicted
+   strength, which may be incorrect. Must reconcile with the thesis before the
+   Newton solver can replace the conic solver. The conic solver remains correct
+   because it solves the full coupled system via exponential cones without
+   relying on `w_mean` for internal gradient computation.
 3. Make benchmarks save incrementally after each case or node size.
 4. Extend coordinate-based strength-cost coverage after the shared-kernel
    refactor: generation, filtering, true B/W coordinate fitting, and partial
