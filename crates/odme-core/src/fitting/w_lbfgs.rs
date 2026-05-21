@@ -296,7 +296,12 @@ pub fn fit_strength_cost_w_lbfgs(
         max_iterations: 200,
     };
     let me_fit = fit_strength_cost_poisson_coordinates(
-        strength_out, strength_in, coord_x, coord_y, target_cost, &me_opts,
+        strength_out,
+        strength_in,
+        coord_x,
+        coord_y,
+        target_cost,
+        &me_opts,
     );
     let me_gamma = if me_fit.converged {
         me_fit.gamma.max(0.01)

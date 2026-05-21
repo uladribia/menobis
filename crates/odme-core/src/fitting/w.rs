@@ -1181,14 +1181,8 @@ fn newton_to_w_strength_result(
         .iter()
         .map(|&yj| if yj > 0.0 { -yj.ln() } else { 50.0 })
         .collect();
-    let residuals = independent_strength_residuals(
-        &a,
-        &b,
-        layers,
-        strength_out,
-        strength_in,
-        opts.self_loops,
-    );
+    let residuals =
+        independent_strength_residuals(&a, &b, layers, strength_out, strength_in, opts.self_loops);
     WStrengthFitResult {
         x: result.x,
         y: result.y,
