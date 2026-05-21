@@ -1013,6 +1013,7 @@ fn fit_strength_degree_w(
         opts.tolerance,
         opts.max_iterations,
     );
+
     let total_strength = strength_out.iter().sum::<f64>().max(1.0);
     let total_degree = degree_out.iter().sum::<f64>().max(1.0);
     let (residuals, max_degree_residual) = strength_degree_residuals(

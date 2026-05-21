@@ -68,7 +68,7 @@ def test_strength_cost_rejects_bad_cost_entries_across_families(
 
 def test_degree_events_rejects_capacity_and_layers_consistently() -> None:
     """Degree-events fits reject explicit infeasibility before native code."""
-    with pytest.raises(ValueError, match="boundary or infeasible"):
+    with pytest.raises(ValueError, match="infeasible"):
         fit_degree_events_geometric(
             np.array([2.0, 1.0]),
             np.array([1.5, 1.5]),

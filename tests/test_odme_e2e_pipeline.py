@@ -21,30 +21,28 @@ from odme.models import (
     sample_strength_edges_poisson,
     sample_strength_poisson,
 )
+from odme.synthetic import generate_pa_geographic_network
 
 
 def _generate_network(
     n: int, seed: int = 42
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Generate a realistic weighted directed network with coordinates.
-
-    Uses a gravity model: rates = activity_i * attract_j * exp(-gamma * dist_ij).
-    """
-    rng = np.random.default_rng(seed)
-    cx = rng.normal(size=n) * 10.0
-    cy = rng.normal(size=n) * 10.0
-    # Distance matrix
-    dx = cx[:, None] - cx[None, :]
-    dy = cy[:, None] - cy[None, :]
+    """Generate the canonical PA geographic benchmark network."""
+    network = generate_pa_geographic_network(
+        n,
+        average_degree=6.0,
+        events_per_edge=4.0,
+        seed=seed,
+        self_loops=False,
+    )
+    weights = np.zeros((n, n), dtype=int)
+    weights[network.edges.source.astype(int), network.edges.target.astype(int)] = (
+        network.edges.weight.astype(int)
+    )
+    dx = network.x[:, None] - network.x[None, :]
+    dy = network.y[:, None] - network.y[None, :]
     dist = np.sqrt(dx**2 + dy**2)
-    # Gravity rates
-    activity = rng.pareto(1.2, size=n) + 1.0
-    attract = rng.pareto(1.2, size=n) + 1.0
-    gamma = 0.15
-    rates = np.outer(activity, attract) * np.exp(-gamma * dist)
-    np.fill_diagonal(rates, 0.0)  # no self-loops
-    weights = rng.poisson(rates).astype(int)
-    return weights, cx, cy, dist
+    return weights, network.x, network.y, dist
 
 
 def _derive_constraints(weights: np.ndarray, dist: np.ndarray) -> dict[str, object]:
@@ -262,7 +260,8 @@ class TestMEStrengthEdgesE2E:
         # Sample: (fit, *, seed)
         sample = sample_strength_edges_poisson(fit, seed=42)
         assert isinstance(sample, EdgeTable)
-        _check_strength_recovery(sample, s_out, s_in, tolerance=tol * 2)
+        sample_tol = max(4.0 * np.sqrt(s_out.max()), 10.0)
+        _check_strength_recovery(sample, s_out, s_in, tolerance=sample_tol)
 
 
 class TestMEStrengthDegreeE2E:
@@ -344,3 +343,56 @@ class TestMEDegreeEventsE2E:
         np.testing.assert_allclose(
             sampled_k_out, k_out, atol=degree_tol, err_msg="k_out mismatch"
         )
+
+
+def _generate_network_self_loops(
+    n: int, seed: int = 42
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Generate the canonical PA geographic benchmark network with self-loops."""
+    network = generate_pa_geographic_network(
+        n,
+        average_degree=6.0,
+        events_per_edge=4.0,
+        seed=seed,
+        self_loops=True,
+    )
+    weights = np.zeros((n, n), dtype=int)
+    weights[network.edges.source.astype(int), network.edges.target.astype(int)] = (
+        network.edges.weight.astype(int)
+    )
+    dx = network.x[:, None] - network.x[None, :]
+    dy = network.y[:, None] - network.y[None, :]
+    dist = np.sqrt(dx**2 + dy**2)
+    return weights, network.x, network.y, dist
+
+
+class TestMEStrengthSelfLoopsE2E:
+    """E2E pipeline for ME Poisson fixed-strength model with self-loops."""
+
+    def test_generate_fit_sample_verify(self) -> None:
+        """Full pipeline with self_loops=True respects the same philosophy."""
+        n = 25
+        weights, _cx, _cy, dist = _generate_network_self_loops(n, seed=800)
+        constraints = _derive_constraints(weights, dist)
+        s_out = constraints["s_out"]
+        s_in = constraints["s_in"]
+
+        diff = s_out.sum() - s_in.sum()
+        if abs(diff) > 0.01:
+            s_in[0] += diff
+
+        fit = fit_strength_poisson(s_out, s_in, self_loops=True, tolerance=1e-4)
+        assert fit.converged
+
+        sample = sample_strength_poisson(
+            fit.x, fit.y, self_loops=fit.self_loops, seed=42
+        )
+        assert isinstance(sample, EdgeTable)
+
+        # Verify: self-loops may be present
+        tol = max(4.0 * np.sqrt(s_out.max()), 10.0)
+        _check_strength_recovery(sample, s_out, s_in, tolerance=tol)
+
+        # Confirm self-loops are present in the generated network
+        has_diag = np.any(np.diag(weights) > 0)
+        assert has_diag, "self_loops=True network should have diagonal entries"

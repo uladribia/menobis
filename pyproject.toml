@@ -16,6 +16,7 @@ dependencies = [
 
 [project.scripts]
 odme = "odme.cli.main:app"
+odme-bench = "odme.benchmark_cli:app"
 
 [dependency-groups]
 dev = [

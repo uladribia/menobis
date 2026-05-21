@@ -10,7 +10,6 @@ import json
 import time
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 from odme.analysis import directed_strengths
@@ -22,6 +21,7 @@ from odme.models import (
     sample_strength_poisson,
     sample_strength_stub_matching,
 )
+from odme.synthetic import generate_pa_geographic_network
 
 BASELINES_PATH = (
     Path(__file__).resolve().parent.parent / "benchmarks" / "regression_baselines.json"
@@ -35,22 +35,14 @@ def _load_threshold(name: str) -> float:
 
 
 def _large_network(n: int = 10000, avg_s: int = 100) -> EdgeTable:
-    """Build a synthetic Pareto-strength network at given scale."""
-    rng = np.random.default_rng(42)
-    raw = rng.pareto(1.5, size=n) + 1.0
-    p_out = raw / raw.sum()
-    raw = rng.pareto(1.5, size=n) + 1.0
-    p_in = raw / raw.sum()
-    total = n * avg_s
-    s_out = np.round(p_out * total).astype(np.uint64)
-    s_in = np.round(p_in * total).astype(np.uint64)
-    diff = int(s_out.sum()) - int(s_in.sum())
-    if diff > 0:
-        s_in[np.argmax(s_in)] += abs(diff)
-    elif diff < 0:
-        s_out[np.argmax(s_out)] += abs(diff)
-    fit = fit_strength_poisson(s_out, s_in)
-    return sample_strength_poisson(fit.x, fit.y, seed=42)
+    """Build the canonical PA geographic benchmark network at scale."""
+    return generate_pa_geographic_network(
+        n,
+        average_degree=10.0,
+        events_per_edge=max(1.0, avg_s / 10.0),
+        seed=42,
+        self_loops=False,
+    ).edges
 
 
 @pytest.fixture(scope="module")

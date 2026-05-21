@@ -18,6 +18,8 @@ description: Python API reference for ODME.
 | `ConicDiagnostics` | `odme.models.fitting` | W-only lifted conic metrics nested under `diagnostics.conic` |
 | `FilterResult` | `odme.filtering` | Filtering output with upper, lower, compatible, absent tables |
 | `FilteredEdges` | `odme.filtering` | Edge subset with p-values, expected weights, occupation |
+| `SyntheticNetwork` | `odme.synthetic` | Canonical PA geographic network for tests/benchmarks |
+| `SyntheticConstraints` | `odme.synthetic` | Constraints derived from a synthetic network |
 
 ## I/O
 
@@ -55,6 +57,14 @@ description: Python API reference for ODME.
 | `fit_strength_edges_poisson` | zero-inflated | strengths + edge count |
 | `fit_strength_degree_poisson` | zero-inflated | strengths + degrees |
 | `fit_strength_cost_poisson` | Poisson with cost | strengths + spatial cost |
+
+## Synthetic fixtures
+
+| Function | Description |
+|----------|-------------|
+| `generate_pa_geographic_network` | Preferential-attachment support with geographic degree-weighted events |
+| `derive_synthetic_constraints` | Strengths, degrees, edge count, total events, total cost, B layers |
+| `known_pairs_from_network` | Deterministic strongest-edge known pairs for partial tests |
 
 ## Generation
 

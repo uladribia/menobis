@@ -168,8 +168,11 @@ def _validate_degree_events_constraints(
         msg = "total_events must be >= sum(degree_out)"
         raise ValueError(msg)
     capacity = float(len(degree_out) if self_loops else max(len(degree_out) - 1, 0))
-    if np.any(degree_out >= capacity) or np.any(degree_in >= capacity):
-        msg = "degree-events fitting received boundary or infeasible degree constraints"
+    if np.any(degree_out > capacity) or np.any(degree_in > capacity):
+        msg = (
+            "degree-events fitting received infeasible degree"
+            " constraints (above capacity)"
+        )
         raise ValueError(msg)
 
 

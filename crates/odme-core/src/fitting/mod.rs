@@ -127,4 +127,26 @@ mod tests {
         let ztnb_mean = m * q / ((1.0 - q) * (1.0 - p0));
         assert!((ztnb_mean - result.positive_mean).abs() < 1e-8);
     }
+
+    #[test]
+    fn degree_saturated_node_converges_bernoulli() {
+        // Node 0 has degree = N-1 = 2 (saturated without self-loops)
+        let k_out = vec![2.0, 0.8, 1.2];
+        let k_in = vec![1.5, 1.3, 1.2];
+        let result = balance_degree_bernoulli(&k_out, &k_in, false, 1e-8, 50000);
+        assert!(result.converged, "degree-saturated Bernoulli must converge");
+        // Saturated node should have large multiplier
+        assert!(result.x[0] > 100.0);
+    }
+
+    #[test]
+    fn b_strength_saturated_node_converges() {
+        use super::b::balance_strength_binomial;
+        // Node 0 has strength = M*(N-1) = 3*2 = 6 (saturated, M=3, no self-loops)
+        let s_out = vec![6.0, 2.0, 1.0];
+        let s_in = vec![4.0, 3.0, 2.0];
+        let result = balance_strength_binomial(&s_out, &s_in, 3, false, 1e-6, 50000);
+        assert!(result.converged, "B-strength-saturated must converge");
+        assert!(result.x[0] > 100.0);
+    }
 }
