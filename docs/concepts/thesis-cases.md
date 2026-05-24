@@ -1,14 +1,15 @@
 ---
-description: Taxonomy of ODME models, ensembles, and API mapping.
+description: Taxonomy of ODME model cases, ensembles, and public names.
 ---
 
 # Thesis cases and taxonomy
 
 ## TL;DR
 
-ODME models are organized by **constraint** (what is fixed), **ensemble type**
-(ME/W/B), and **distribution** (how weights are drawn). All public names follow
-`{operation}_{constraint}_{distribution}`.
+Public ODME names should make the thesis ontology explicit:
+`{operation}_{constraint}_{distribution}`. The mathematical source of truth is
+[Model ontology](model-ontology.md); this page maps that ontology to API and CLI
+names.
 
 ## Naming convention
 
@@ -17,81 +18,61 @@ ODME models are organized by **constraint** (what is fixed), **ensemble type**
 ```
 
 | Token | Values |
-|-------|--------|
+|---|---|
 | operation | `fit`, `sample`, `filter` |
-| constraint | `strength`, `strength_edges`, `strength_degree`, `strength_cost`, `degree`, `custom` |
-| distribution | `poisson`, `geometric`, `binomial`, `negative_binomial`, `multinomial`, `stub_matching`, `bernoulli` |
+| constraint | `strength`, `strength_cost`, `strength_edges`, `strength_degree`, `degree_events`, `custom` |
+| distribution | `poisson`, `binomial`, `geometric`, `negative_binomial`, `multinomial`, `stub_matching`, `bernoulli` |
 
-## Ensemble types
+## Ensemble support
 
-The distribution name implies the ensemble type:
+| Ensemble | Families | Pair coupling | Public examples |
+|---|---|---|---|
+| Grand canonical | ME, B, W | independent pairs | `fit_strength_poisson`, `fit_strength_binomial`, `fit_strength_geometric` |
+| Canonical | ME only | fixed total events | `sample_strength_multinomial` |
+| Microcanonical | ME fixed strength only | exact strength sequence | `sample_strength_stub_matching` |
 
-| Ensemble | Legacy | Distributions | Weight support | Fitting |
-|----------|--------|---------------|----------------|---------|
-| ME (multi-edge) | `ME` | Poisson, Multinomial, Stub matching | $\{0, 1, 2, \ldots\}$ | IPF / scalar search |
-| W (weighted) | `W` | Geometric, Negative binomial | $\{0, 1, 2, \ldots\}$ | conic / root-IPF by constraint |
-| B (binary layers) | `B` | Binomial, Bernoulli | $\{0, \ldots, M\}$ | IPF with correction |
+B and W must reject canonical or microcanonical requests until a supported
+thesis formulation is implemented.
 
-## Constraint × distribution matrix
+## Constraint families
 
-| Constraint | Poisson | Geometric | Binomial | Neg. binomial |
-|------------|---------|-----------|----------|---------------|
-| strength | ✅ | ✅ | ✅ | ✅ |
-| strength-cost | ✅ | ✅ | ✅ | ✅ |
-| strength-edges | ✅ (zero-inflated) | ✅ (zero-inflated) | ✅ (zero-inflated) | ✅ (zero-inflated) |
-| strength-degree | ✅ (zero-inflated) | sampling/filtering ✅ | ✅ (zero-inflated) | sampling/filtering ✅ |
-| degree | Bernoulli ✅ | — | — | — |
-| degree-events | ✅ (zero-inflated) | ✅ (zero-inflated) | ✅ (zero-inflated) | ✅ (zero-inflated) |
-| custom | ✅ | — | — | — |
+| Constraint | Linear in $\mathbb{E}[t]$ | Uses $\mathbb{E}[\Theta(t>0)]$ | Notes |
+|---|:---:|:---:|---|
+| strength | ✅ | — | Total events are induced by strengths. |
+| strength-cost | ✅ | — | Adds family-orthogonal cost provider. |
+| degree-events | — | ✅ | Occupation + positive-weight family parameter. |
+| strength-edges | ✅ | ✅ | Zero-inflated global edge-count constraint. |
+| strength-degree | ✅ | ✅ | Zero-inflated node-degree constraint. |
+| partial | depends on parent | depends on parent | Frozen pairs are deducted first. |
 
-## Case mapping
+## ME thesis case map
 
-| Case | Constraint | Equation | Fit | Sample |
-|------|-----------|----------|-----|--------|
-| — | strength | $\mathbb{E}[t_{ij}] = x_i y_j$ | `fit_strength_poisson` | `sample_strength_poisson` |
-| 1 | custom | $\mathbb{E}[t_{ij}] = T p_{ij}$ | — | `sample_custom_poisson` |
-| 2 | strength-cost | $\mathbb{E}[t_{ij}] = x_i y_j e^{-\gamma d_{ij}}$ | `fit_strength_cost_poisson` | `sample_strength_cost_poisson` |
-| 3 | strength-edges | zero-inflated occupation + positive Poisson weight | `fit_strength_edges_poisson` | `sample_strength_edges_poisson` |
-| 4 | strength-degree | zero-inflated occupation + positive Poisson weight | `fit_strength_degree_poisson` | `sample_strength_degree_poisson` |
-| 5 | degree-events | Bernoulli occupation + positive Poisson weight | `fit_degree_bernoulli` | `sample_degree_events_poisson` |
+| Case | Constraint | Fit | Sample |
+|---|---|---|---|
+| 1 | custom pair probabilities | — | `sample_custom_poisson`, `sample_custom_multinomial` |
+| 2 | strength-cost | `fit_strength_cost_poisson` | `sample_strength_cost_poisson` |
+| 3 | strength-edges | `fit_strength_edges_poisson` | `sample_strength_edges_poisson` |
+| 4 | strength-degree | `fit_strength_degree_poisson` | `sample_strength_degree_poisson` |
+| 5 | degree-events | `fit_degree_events_poisson` | `sample_degree_events_poisson` |
 
-W fixed-strength and strength-cost fitting use Clarabel exponential cones.
-W degree-events uses a scalar `q` solve plus Bernoulli IPF. W strength-edges
-currently uses an experimental monotone root/IPF solver over `lambda`. W fits
-return constraint-oriented result types with `family`, optional `layers`, and
-nested diagnostics; see [W Ensemble](w-ensemble.md).
+Strength-only ME uses `fit_strength_poisson`; canonical and microcanonical
+strength samplers are `sample_strength_multinomial` and
+`sample_strength_stub_matching`.
 
-Additional strength samplers for ensemble comparison:
+## Current CLI coverage
 
-| Sampler | Ensemble | Total weight |
-|---------|----------|-------------|
-| `sample_strength_multinomial` | canonical | exactly $T$ |
-| `sample_strength_stub_matching` | stub_matching | exactly $T$ |
-| `sample_strength_poisson_multinomial` | mixed | Poisson $T$ then multinomial |
+| CLI group | Implemented model names |
+|---|---|
+| `odme fit` | `strength-poisson`, `strength-geometric`, `strength-negative-binomial`, `degree-bernoulli`, `strength-cost-poisson`, `strength-edges-poisson`, `strength-degree-poisson` |
+| `odme generate` | ME Poisson strength, cost, edges, degree, custom, multinomial variants |
+| `odme filter` | ME Poisson strength, cost, edges, degree, custom |
 
-## CLI mapping
-
-| Constraint | `odme fit` | `odme generate` | `odme filter` |
-|-----------|------------|-----------------|---------------|
-| strength | `strength-poisson` | `strength-poisson` | `strength-poisson` |
-| strength (W geometric) | `strength-geometric` | — | — |
-| strength (W negative binomial) | `strength-negative-binomial` | — | — |
-| strength (B) | — | — | — |
-| strength-cost | `strength-cost-poisson` | `strength-cost-poisson` | `strength-cost-poisson` |
-| strength-edges | `strength-edges-poisson` | `strength-edges-poisson` | `strength-edges-poisson` |
-| strength-degree | `strength-degree-poisson` | `strength-degree-poisson` | `strength-degree-poisson` |
-| degree | `degree-bernoulli` | `degree-events-poisson` | `degree-events-poisson` |
-| custom | — | `custom-poisson` | `custom-poisson` |
-
-## Zero-inflated models
-
-Cases 3, 4, and 5 use zero-inflated distributions: a Bernoulli occupation
-draw followed by a positive-weight conditional draw. The occupation formula
-depends on the constraint; the positive-weight distribution follows the chosen
-family (Poisson, geometric, negative binomial, or binomial where implemented).
+The Python API exposes more B/W functions than the CLI. B strength-edges and
+strength-degree fitting currently have a known wrapper bug, and the required
+unified Python router is not implemented yet; see the
+[Ontology conformance audit](../development/ontology-conformance-audit.md).
 
 ## Reference
 
-[1] Sagarra, O. *Statistical mechanics of multi-edge networks*.
-    PhD thesis, Universitat de Barcelona, 2015.
-    <https://hdl.handle.net/10803/400560>
+Sagarra, O. *Statistical mechanics of multi-edge networks*. PhD thesis,
+Universitat de Barcelona, 2015. <https://hdl.handle.net/10803/400560>

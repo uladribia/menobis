@@ -1,23 +1,19 @@
-"""Tests for rustworkx interop."""
+"""Tests for graph-library dependency boundaries."""
 
-import numpy as np
-import rustworkx as rx
-
-from odme.data.frames import normalize_edges
-from odme.interop.rustworkx import edges_to_rustworkx
+import tomllib
+from pathlib import Path
 
 
-def test_directed_graph() -> None:
-    edges = normalize_edges(np.array([0, 1]), np.array([1, 2]), np.array([3, 4]))
-    graph = edges_to_rustworkx(edges, directed=True)
-    assert isinstance(graph, rx.PyDiGraph)
-    assert graph.num_nodes() == 3
-    assert graph.num_edges() == 2
+def test_no_interop_package_is_shipped() -> None:
+    """ODME should not ship graph-library adapter packages."""
+    interop_dir = Path(__file__).parents[1] / "src" / "odme" / "interop"
+    assert not interop_dir.exists()
 
 
-def test_undirected_graph() -> None:
-    edges = normalize_edges(np.array([0]), np.array([1]), np.array([3]))
-    graph = edges_to_rustworkx(edges, directed=False)
-    assert isinstance(graph, rx.PyGraph)
-    assert graph.num_nodes() == 2
-    assert graph.num_edges() == 1
+def test_project_has_no_graph_library_runtime_dependency() -> None:
+    """ODME runtime dependencies must stay decoupled from graph libraries."""
+    pyproject_path = Path(__file__).parents[1] / "pyproject.toml"
+    project = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))["project"]
+    dependencies = "\n".join(project["dependencies"])
+    assert "networkx" not in dependencies.lower()
+    assert "rustworkx" not in dependencies.lower()

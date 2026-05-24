@@ -40,7 +40,7 @@ support.
 
 ## Consequences
 
-- Generation and filtering share Poisson and zero-inflated Poisson with positive weights math.
+- Generation and filtering share ME/B/W and zero-inflated positive-weight math.
 - Filtering reports absent edges by streaming provider support, not by creating
   dense matrices.
 - Custom sparse rates preserve input support order before optional truncation.

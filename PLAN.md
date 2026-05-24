@@ -6,13 +6,13 @@ Scientific reference: <https://hdl.handle.net/10803/400560>.
 
 - [x] Rust + Python scaffold with PyO3/maturin
 - [x] Edge-list data model, I/O, analysis
-- [x] ME/B/W fitting for all constraint types
-- [x] Generation and filtering for ME/B/W
-- [x] Partial known-weight fitting with family-specific formulas
+- [x] ME/W fitting for main constraint types; B strength and strength-cost fitting
+- [x] Generation and filtering providers for ME/B/W
+- [x] Partial known-weight fitting scaffold; full Rust/family conformance pending
 - [x] Unified `coord_distance`, bisection gamma, O(K) sparse IPF
 - [x] Removed Clarabel/cvxrust — all W uses Newton solver
 - [x] MkDocs documentation site
-- [x] E2E pipeline tests (276 pass)
+- [x] E2E pipeline tests
 - [x] B feasibility validation (`max_s <= M*(N-1)`)
 - [x] W Newton solver rewrite (bisection + adaptive damping)
 - [x] Degree-events boundary fix (clip to `n-2`)

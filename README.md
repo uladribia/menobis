@@ -34,10 +34,10 @@ print(sample.source, sample.target, sample.weight)
 
 ```bash
 uv run odme --help
-uv run odme analyze tests/sample.tr --json
-uv run odme fit strength tests/sample.tr --json
-uv run odme generate strength tests/strengths.str --output sample.csv
-uv run odme filter strength tests/sample.tr --alpha 0.05 --json
+uv run odme analyze strengths tests/sample.tr --json
+uv run odme fit strength-poisson tests/sample.tr --json
+uv run odme generate strength-poisson tests/sample.tr --output sample.csv
+uv run odme filter strength-poisson tests/sample.tr --alpha 0.05
 ```
 
 ## Model families
@@ -53,15 +53,15 @@ edges, strengths plus degrees, and strengths plus cost.
 
 ## Benchmarks
 
-Run fitting benchmarks with exact sizes:
+Run repository benchmarks without installing an ODME benchmark entry point:
 
 ```bash
-uv run python -m benchmarks fit --nodes 100 --max-n 100 \
-  --known-fractions 0.05,0.40 --tolerance 1e-4
+uv run python -m benchmarks fit --nodes 100 --families me,b,w,wnb \
+  --constraints strength --output benchmarks/results/example
 ```
 
-Large dense fits are expensive. The N=5000 all-case run can take many hours and
-should be run in chunks after enabling incremental result saving.
+Large all-case runs are expensive. Run them in chunks and keep benchmark code in
+`benchmarks/`, not under `src/odme`.
 
 ## Documentation
 

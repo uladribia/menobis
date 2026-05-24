@@ -34,7 +34,7 @@ uv run mkdocs build --strict
 
 ## Canonical synthetic fixture
 
-End-to-end tests and benchmarks must use `odme.synthetic.generate_pa_geographic_network` unless they are pure math/API smoke tests. The fixture is deliberately not an ODME null model; it supplies realistic constraints for fit/sample/filter workflows.
+End-to-end tests and benchmarks must use `odme.utilities.synthetic.generate_pa_geographic_network` unless they are pure math/API smoke tests. The fixture is deliberately not an ODME null model; it supplies realistic constraints for fit/sample/filter workflows.
 
 ## Invariants
 
@@ -73,6 +73,8 @@ residual behavior.
 | ME/W/Wnb **strength-degree** | Does NOT converge when any node has degree = capacity. Clip to `capacity - 1` or use degree-events. |
 | ME/W/Wnb **strength-edges** | Rejects `target_edges ≥ capacity`. Use strength-only when all pairs are occupied. |
 | B **strength-edges** / **strength-degree** | Known P5 bug: calls ME kernel. Do not use until fixed. |
+| W **self_loops=False** realistic N≥50 | Newton solver may fail to converge; needs adaptive damping/projection. |
+| B **strength self_loops=False** N≥200 | IPF is slow; needs convergence/performance investigation. |
 
 Saturation peeling is implemented for B strength and all degree-events families
 (Bernoulli IPF). The coupled strength-degree case requires a mixed-constraint

@@ -64,5 +64,7 @@ Options:
 |---|---|
 | B strength-edges | skipped: known P5 wrapper uses ME kernel |
 | B strength-degree | skipped: known P5 wrapper uses ME kernel |
+| W no-self-loop N≥50 | track convergence separately until damping/projection is fixed |
+| B strength no-self-loop N≥200 | track wall time as a performance regression |
 
-Do not compare these B cases until family-specific Rust kernels are added.
+Do not compare the skipped B zero-inflated cases until family-specific Rust kernels are added.

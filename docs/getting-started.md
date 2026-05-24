@@ -57,6 +57,6 @@ sample = sample_strength_poisson(fit.x, fit.y, seed=42)
 
 ```bash
 odme analyze strengths network.csv --json
-odme fit strengths network.csv --output fit.csv
-odme generate poisson network.csv --seed 42 --output sample.csv
+odme fit strength-poisson network.csv --output fit.csv
+odme generate strength-poisson network.csv --seed 42 --output sample.csv
 ```

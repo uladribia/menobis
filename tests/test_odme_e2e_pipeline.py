@@ -21,7 +21,7 @@ from odme.models import (
     sample_strength_edges_poisson,
     sample_strength_poisson,
 )
-from odme.synthetic import generate_pa_geographic_network
+from odme.utilities.synthetic import generate_pa_geographic_network
 
 
 def _generate_network(

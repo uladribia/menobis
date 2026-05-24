@@ -1,9 +1,10 @@
 """Tests for ensemble averaging."""
 
+from pathlib import Path
+
 import numpy as np
 
-from odme.analysis import directed_strengths
-from odme.ensemble import ensemble_average, ensemble_scalar_average
+from odme.analysis import directed_strengths, ensemble_average, ensemble_scalar_average
 from odme.models import fit_strength_poisson, sample_strength_poisson
 
 
@@ -11,6 +12,11 @@ def _gen(n: int, total: int):
     s = np.full(n, total // n, dtype=np.float64)
     r = fit_strength_poisson(s, s)
     return lambda seed: sample_strength_poisson(r.x, r.y, seed=seed)
+
+
+def test_ensemble_module_belongs_to_analysis_package() -> None:
+    """Ensemble helpers should live under the analysis domain."""
+    assert not (Path(__file__).parents[1] / "src" / "odme" / "ensemble.py").exists()
 
 
 def test_ensemble_average() -> None:

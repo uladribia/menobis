@@ -32,21 +32,20 @@ not materialize dense $N^2$ rate matrices.
 
 ## Supported nulls
 
-Filtering supports all independent grand-canonical distributions:
+Filtering supports independent grand-canonical distributions through the shared
+provider pipeline:
 
-| Model | Distribution |
+| Constraint | Families |
 |-------|--------------|
-| strength Poisson | Poisson($x_i y_j$) |
-| strength-cost Poisson | Poisson($x_i y_j e^{-\gamma d_{ij}}$) |
-| custom Poisson | Poisson($\lambda_{ij}$), where $\lambda_{ij}=T p_{ij}$ |
-| strength-edges Poisson (zero-inflated) | zero-inflated Poisson with positive weights with fitted occupation and rate $x_i y_j$ |
-| strength-degree Poisson (zero-inflated) | zero-inflated Poisson with positive weights with fitted occupation and rate $x_i y_j$ |
-| degree-events Poisson (zero-inflated) | zero-inflated Poisson with positive weights with binary degree occupation and shared rate |
+| strength | ME Poisson, B Binomial(M), W Geometric/Negative-Binomial(M) |
+| strength-cost | ME, B, W with cost factor $e^{-\gamma d_{ij}}$ |
+| strength-edges | zero-inflated ME, B, W |
+| strength-degree | zero-inflated ME, B, W |
+| degree-events | Bernoulli occupation plus family-specific positive weights |
+| custom / partial | sparse Poisson rates from combined known + free-pair rates |
 
-| partial constraints | Poisson rates from combined known + free-pair rates |
-
-Partial-constraint filtering uses `filter_custom_poisson` with the
-combined rate table from `PartialFitResult.as_probability_table()`.
+Partial-constraint filtering uses `filter_custom_poisson` with the combined
+rate table from `PartialFitResult.as_probability_table()`.
 
 Canonical multinomial filters are intentionally out of scope because pair tests
 are coupled by the fixed total event count. Custom inputs therefore use

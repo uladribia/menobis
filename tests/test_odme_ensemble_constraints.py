@@ -18,7 +18,7 @@ from odme.models import (
     sample_strength_poisson,
     sample_strength_poisson_multinomial,
 )
-from odme.synthetic import generate_pa_geographic_network
+from odme.utilities.synthetic import generate_pa_geographic_network
 
 
 def _pa_network(seed: int = 20240521) -> EdgeTable:

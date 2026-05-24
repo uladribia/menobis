@@ -29,6 +29,7 @@ nav:
   - API:
       - Python: api/python.md
       - Rust: api/rust.md
+      - Network Metrics: api/network-metrics.md
       - Filtering: api/filtering.md
   - CLI:
       - Analyze: cli/analyze.md
@@ -52,6 +53,8 @@ nav:
       - API Consistency Audit: decisions/0006-api-consistency-audit.md
       - PA Geographic Benchmark Fixture: decisions/0007-pa-geographic-benchmark-fixture.md
       - Saturation Peeling: decisions/0008-saturation-peeling.md
+      - External Graph Libraries: decisions/0009-external-graph-libraries.md
+      - Python Domain Layout: decisions/0010-python-domain-layout.md
 
 plugins:
   - search

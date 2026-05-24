@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from odme.synthetic import (
+from odme.utilities.synthetic import (
     derive_synthetic_constraints,
     generate_pa_geographic_network,
 )

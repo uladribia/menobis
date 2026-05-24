@@ -15,11 +15,11 @@ description: Python API reference for ODME.
 | `StrengthEdgesFit` | `odme.models.fitting` | Fitted strength-edges model with `x`, `y`, `lam`, `family`, optional `layers`, and diagnostics |
 | `StrengthDegreeFit` | `odme.models.fitting` | Fitted strength-degree model with `x`, `y`, `z`, `w` |
 | `OptimizationDiagnostics` | `odme.models.fitting` | Shared convergence/status/objective/residual diagnostics |
-| `ConicDiagnostics` | `odme.models.fitting` | W-only lifted conic metrics nested under `diagnostics.conic` |
+| `ConicDiagnostics` | `odme.models.fitting` | W solver metrics; historically conic-named and nested under `diagnostics.conic` |
 | `FilterResult` | `odme.filtering` | Filtering output with upper, lower, compatible, absent tables |
 | `FilteredEdges` | `odme.filtering` | Edge subset with p-values, expected weights, occupation |
-| `SyntheticNetwork` | `odme.synthetic` | Canonical PA geographic network for tests/benchmarks |
-| `SyntheticConstraints` | `odme.synthetic` | Constraints derived from a synthetic network |
+| `SyntheticNetwork` | `odme.utilities.synthetic` | Canonical PA geographic network for tests/benchmarks |
+| `SyntheticConstraints` | `odme.utilities.synthetic` | Constraints derived from a synthetic network |
 
 ## I/O
 
@@ -37,26 +37,28 @@ description: Python API reference for ODME.
 | `directed_degrees(edges)` | Out/in degree sequences |
 | `compute_all_stats(edges)` | Full node-level statistics |
 | `weight_distribution(edges)` | Edge weight histogram |
+| `clustering_coefficient(edges)` | Binary clustering coefficient |
+| `weighted_clustering_coefficient(edges)` | Weighted clustering coefficient |
+| `ensemble_average(generate=..., analyze=..., repetitions=...)` | Mean/std of per-node statistics across samples |
+| `ensemble_scalar_average(generate=..., compute=..., repetitions=...)` | Mean/std of scalar statistics across samples |
+
+See [Network Metrics](network-metrics.md) for optional NetworkX/rustworkx user-side recipes.
 
 ## Fitting
 
-| Function | Model | Constraints |
-|----------|-------|-------------|
-| `fit_strength_poisson` | Poisson | strengths |
-| `fit_strength_geometric` | Geometric W | strengths |
-| `fit_strength_negative_binomial` | Negative-binomial W | strengths + `layers > 1` |
-| `fit_strength_cost_geometric` | Geometric W with cost | strengths + spatial cost |
-| `fit_strength_cost_negative_binomial` | Negative-binomial W with cost | strengths + spatial cost + `layers > 1` |
-| `fit_strength_cost_poisson_coordinates` | Poisson with projected XY cost | strengths + Euclidean cost |
-| `fit_strength_cost_binomial_coordinates` | Binomial with projected XY cost | strengths + Euclidean cost |
-| `fit_strength_cost_geometric_coordinates` | Geometric W with projected XY cost | strengths + Euclidean cost |
-| `fit_strength_cost_negative_binomial_coordinates` | Negative-binomial W with projected XY cost | strengths + Euclidean cost + `layers > 1` |
-| `fit_strength_edges_geometric` | Geometric W zero-inflated | strengths + edge count |
-| `fit_strength_edges_negative_binomial` | Negative-binomial W zero-inflated | strengths + edge count + `layers > 1` |
-| `fit_degree_bernoulli` | Bernoulli | degrees |
-| `fit_strength_edges_poisson` | zero-inflated | strengths + edge count |
-| `fit_strength_degree_poisson` | zero-inflated | strengths + degrees |
-| `fit_strength_cost_poisson` | Poisson with cost | strengths + spatial cost |
+| Group | Functions |
+|---|---|
+| Strength | `fit_strength_poisson`, `fit_strength_binomial`, `fit_strength_geometric`, `fit_strength_negative_binomial` |
+| Strength-cost | `fit_strength_cost_poisson`, `fit_strength_cost_binomial`, `fit_strength_cost_geometric`, `fit_strength_cost_negative_binomial` |
+| Coordinate strength-cost | `fit_strength_cost_*_coordinates` for ME, B, W, Wnb |
+| Strength-edges | `fit_strength_edges_poisson`, `fit_strength_edges_binomial`, `fit_strength_edges_geometric`, `fit_strength_edges_negative_binomial` |
+| Strength-degree | `fit_strength_degree_poisson`, `fit_strength_degree_binomial`, `fit_strength_degree_geometric`, `fit_strength_degree_negative_binomial` |
+| Degree-events | `fit_degree_events_poisson`, `fit_degree_events_binomial`, `fit_degree_events_geometric`, `fit_degree_events_negative_binomial` |
+| Degree-only | `fit_degree_bernoulli` |
+
+Known caveat: B strength-edges and B strength-degree fitting wrappers currently
+call ME kernels and must not be used for scientific results until fixed. See the
+[ontology audit](../development/ontology-conformance-audit.md).
 
 ## Synthetic fixtures
 
@@ -93,7 +95,7 @@ description: Python API reference for ODME.
 | `filter_strength_cost_poisson` | Poisson with costs, pre-fitted |
 | `filter_strength_edges_poisson` | zero-inflated, pre-fitted |
 | `filter_strength_degree_poisson` | zero-inflated, pre-fitted |
-| `filter_degree_events_poisson` | zero-inflated, manual parameters |
+| `filter_degree_events_poisson` | zero-inflated; should migrate from manual rate parameters to `DegreeEventsFit` |
 | `filter_custom_poisson` | Poisson, user/partial rates |
 
 ## Partial fitting

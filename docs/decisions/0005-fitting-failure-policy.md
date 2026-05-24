@@ -9,9 +9,9 @@ raise only through an explicit policy, not through one-off custom behavior.
 ## Context
 
 ODME has several fitting families: ME, W, B, and partial constraints. Some use
-IPF, some use scalar root finding, and W strength-family fits may use Clarabel
-or experimental monotone coordinate solves. Each solver can fail differently,
-but users need one mental model.
+IPF, some use scalar root finding, and W strength-family fits use Newton or
+coordinate/root solves. Each solver can fail differently, but users need one
+mental model.
 
 ## Decision
 
@@ -29,7 +29,7 @@ Use a shared failure policy for all fitting wrappers:
 
 Fit result types should carry common diagnostics: `converged`, `status`,
 `iterations`, residuals where available, and solver-specific nested diagnostics.
-W conic/root metrics belong under nested diagnostics rather than bespoke result
+W solver metrics belong under nested diagnostics rather than bespoke result
 classes.
 
 ## Consequences

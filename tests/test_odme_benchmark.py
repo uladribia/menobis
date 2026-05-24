@@ -21,7 +21,7 @@ from odme.models import (
     sample_strength_poisson,
     sample_strength_stub_matching,
 )
-from odme.synthetic import generate_pa_geographic_network
+from odme.utilities.synthetic import generate_pa_geographic_network
 
 BASELINES_PATH = (
     Path(__file__).resolve().parent.parent / "benchmarks" / "regression_baselines.json"

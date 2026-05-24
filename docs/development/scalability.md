@@ -19,7 +19,7 @@ iterations.
 | degree-events fit | O(N² I) | usually few iterations |
 | strength-edges fit | O(N² I) | expensive at N >= 1000 |
 | strength-degree fit | O(N² I) | highest dense-IPF cost |
-| strength-cost fit | O(N² I K) | cost search/conic; costs should stream |
+| strength-cost fit | O(N² I) plus cost lookup | cost search; costs should stream or compute on demand |
 | generation | O(P + Es) | P candidate pairs, Es sampled edges |
 | filtering | O(E) or O(P) | absent-edge filtering can use full support |
 
@@ -44,7 +44,7 @@ iterations.
 | ME/B strength-degree | 1000 | O(N² I), high constant |
 | W strength-edges | 1000 | W zero-inflated kernels |
 | W strength-degree | 1000 | W zero-inflated kernels |
-| W conic strength/cost | 100-150 today | O(N²) cones; cost values need streaming |
+| W strength/cost | 100-500 today | O(N² I), sensitive to heterogeneity and self-loop policy |
 
 ## Release-run lesson
 
