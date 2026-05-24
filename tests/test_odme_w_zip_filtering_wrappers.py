@@ -7,6 +7,7 @@ import pytest
 
 from odme.data.frames import EdgeTable
 from odme.filtering import (
+    FilterResult,
     filter_degree_events_geometric,
     filter_degree_events_negative_binomial,
     filter_strength_cost_geometric,
@@ -16,7 +17,6 @@ from odme.filtering import (
     filter_strength_edges_geometric,
     filter_strength_edges_negative_binomial,
 )
-from odme.filtering_types import FilterResult
 from odme.models import FitResult, StrengthCostFit, StrengthDegreeFit, StrengthEdgesFit
 
 

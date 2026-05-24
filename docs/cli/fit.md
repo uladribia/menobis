@@ -43,7 +43,7 @@ odme fit degree-bernoulli edges.csv --json
 | `--self-loops/--no-self-loops` | Diagonal handling |
 | `--target-edges` | Target $E$ (strength-edges) |
 | `--layers` | Negative-binomial layer count $M > 1$ |
-| `--tolerance` | Conic solver tolerance for W fitting |
-| `--max-iterations` | Conic solver iteration cap for W fitting |
+| `--tolerance` | Solver tolerance |
+| `--max-iterations` | Solver iteration cap |
 | `--target-cost` | Target $C$ (strength-cost) |
 | `--costs` | Cost CSV path (strength-cost) |

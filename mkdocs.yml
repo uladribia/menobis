@@ -29,6 +29,7 @@ nav:
   - API:
       - Python: api/python.md
       - Rust: api/rust.md
+      - Network Metrics: api/network-metrics.md
       - Filtering: api/filtering.md
   - CLI:
       - Analyze: cli/analyze.md
@@ -39,6 +40,7 @@ nav:
   - Development:
       - Testing: development/testing.md
       - Benchmarking: development/benchmarking.md
+      - Benchmark Results: development/benchmark-results.md
       - Scalability: development/scalability.md
       - Contributing and Extending: development/contributing-and-extending.md
       - Release Process: development/release-process.md
@@ -49,6 +51,10 @@ nav:
       - W Conic Solver Boundary: decisions/0004-w-conic-solver-boundary.md
       - Fitting Failure Policy: decisions/0005-fitting-failure-policy.md
       - API Consistency Audit: decisions/0006-api-consistency-audit.md
+      - PA Geographic Benchmark Fixture: decisions/0007-pa-geographic-benchmark-fixture.md
+      - Saturation Peeling: decisions/0008-saturation-peeling.md
+      - External Graph Libraries: decisions/0009-external-graph-libraries.md
+      - Python Domain Layout: decisions/0010-python-domain-layout.md
 
 plugins:
   - search

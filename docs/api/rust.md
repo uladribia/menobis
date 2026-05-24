@@ -1,51 +1,71 @@
 ---
-description: Rust API reference for ODME.
+description: Rust API reference for ODME core abstractions.
 ---
 
 # Rust API
 
-The public Rust API lives in the `odme-core` crate under `crates/odme-core/`.
+## TL;DR
+
+`odme-core` owns numerical kernels, fitting loops, pair providers, generation,
+and filtering. Python should reach these through PyO3 wrappers only.
 
 ## Modules
 
-| Module | Description |
-|--------|-------------|
-| `distribution` | `PairDistribution` enum with sampling, expectations, p-values |
-| `pairs` | `PairDistributionProvider` trait and all null-model providers |
-| `filter` | Observed and absent filtering sinks, Benjamini–Hochberg FDR |
-| `generation` | Seeded network samplers for all model cases |
-| `fitting` | IPF solvers for strength, degree, and combined constraints |
-| `cost` | Strength-cost fitting with spatial distance penalties |
-| `graph` | Directed strengths, degrees from sparse edge lists |
-| `stats` | Node-level statistics and weight distributions |
-| `clustering` | Unweighted and weighted clustering coefficients |
+| Module | Role |
+|---|---|
+| `distribution` | Pair laws for ME, B, W, and zero-inflated variants |
+| `pairs` | `PairDistributionProvider` and candidate support abstractions |
+| `fitting` | ME/B/W solvers, support masks, partial excess helpers |
+| `generation` | Seeded samplers over provider-backed pair streams |
+| `filter` | Observed and absent-edge p-value sinks |
+| `graph`, `stats`, `clustering` | Rust-native graph statistics |
+| `cost` / support helpers | Cost and distance utilities used by fitting/provider code |
 
 ## Key types
 
-| Type | Module | Description |
-|------|--------|-------------|
-| `PairDistribution` | `distribution` | Poisson or ZeroInflatedPoisson pair distribution |
-| `PairDistributionProvider` | `pairs` | Trait: compute distribution for any pair on demand |
-| `CandidateSupport` | `pairs` | AllPairs or SparsePairs support declaration |
-| `SampledEdges` | `generation` | Sparse sampled edge output |
-| `ObservedFilterResult` | `filter` | P-values and expectations for observed edges |
-| `AbsentFilterResult` | `filter` | Significant absent pairs |
-| `AbsentFilterOptions` | `filter` | Thresholds for absent-edge detection |
+| Type | Description |
+|---|---|
+| `WeightFamily` | ME Poisson, B Binomial(M), W Geometric/NegativeBinomial(M) selector |
+| `PairDistribution` | Concrete pair law with sampling, expectation, occupation, p-values |
+| `PairDistributionProvider` | Computes a pair distribution on demand |
+| `CandidateSupport` | All-pairs or sparse-pairs support declaration |
+| `SampledEdges` | Sparse generated edge output |
+| `FitResult` and constraint results | Native fit multipliers and convergence flags |
 
-## Providers
+## Provider pipeline
 
-| Provider | Model | Distribution |
-|----------|-------|--------------|
-| `FixedStrengthPoissonProvider` | fixed-strength | Poisson |
-| `StrengthCostPoissonProvider` | strength-cost | Poisson |
-| `StrengthEdgesPoissonProvider` | strength-edges | Poisson (zero-inflated) |
-| `StrengthDegreePoissonProvider` | strength-degree | Poisson (zero-inflated) |
-| `DegreeEventsPoissonProvider` | degree-events | Poisson (zero-inflated) |
-| `SparsePoissonRateProvider` | custom sparse | Poisson |
-| `NormalizedSparsePoissonProvider` | custom normalized | Poisson |
+```text
+FamilyKernel + ConstraintLayer + CostProvider -> PairDistributionProvider -> sink
+```
 
-## Python bindings
+Generation and filtering should share providers. Fitting should share the same
+family kernels and cost providers where possible, instead of duplicating ME/B/W
+formula code.
 
-The `odme-python` crate in `crates/odme-python/` exposes `odme-core` functions
-to Python via PyO3. Python code should use `odme._odme` only through the typed
-wrappers in `src/odme/`.
+## Current provider coverage
+
+This is generation/filtering provider coverage, not proof that every fitting
+solver is conforming.
+
+| Provider concept | Families |
+|---|---|
+| fixed strength | ME, B, W |
+| strength-cost | ME, B, W |
+| degree-events | ME, B, W |
+| strength-edges | ME, B, W |
+| strength-degree | ME, B, W |
+| custom sparse rates | ME Poisson |
+
+## Required conformance
+
+- B and W solver implementations must not call ME fitters and relabel results.
+- Zero-inflated providers must follow the AGENTS occupation ontology.
+- Partial paths must compute excess constraints and call the corresponding full
+  solver on the free support.
+- Heavy graph/statistical loops stay in Rust.
+- External graph libraries remain downstream adapters unless ODME adopts a
+  metric as supported core functionality.
+
+See [Network Metrics](network-metrics.md) for optional graph-library extension
+recipes and [Ontology conformance audit](../development/ontology-conformance-audit.md)
+for current gaps.

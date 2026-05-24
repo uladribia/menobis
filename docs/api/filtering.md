@@ -6,45 +6,38 @@ description: Python API for ODME statistical filtering.
 
 ## TL;DR
 
-All filtering functions accept observed edges and a fitted null model, then
-return a `FilterResult` with upper, lower, compatible, and absent-lower tables.
+Filtering compares observed edges with a fitted independent null model and
+returns upper, lower, compatible, and absent-edge tables. It should use the same
+pair-provider math as generation.
 
-## Functions
+## Function groups
 
-| Function | Null model | Key parameters |
-|----------|------------|----------------|
-| `filter_strength_poisson` | Poisson, auto-fitted | edges |
-| `filter_strength_cost_poisson` | Poisson with costs | edges, fit, cost arrays |
-| `filter_strength_edges_poisson` | zero-inflated, pre-fitted | edges, fit |
-| `filter_strength_degree_poisson` | zero-inflated, pre-fitted | edges, fit |
-| `filter_degree_events_poisson` | zero-inflated, manual | edges, x, y, rate |
-| `filter_custom_poisson` | Poisson, user/partial rates | edges, rates table |
+| Group | Functions |
+|---|---|
+| ME strength/cost/binary | `filter_strength_poisson`, `filter_strength_cost_poisson`, `filter_strength_edges_poisson`, `filter_strength_degree_poisson`, `filter_degree_events_poisson` |
+| B | `filter_strength_binomial`, `filter_strength_cost_binomial`, `filter_strength_edges_binomial`, `filter_strength_degree_binomial`, `filter_degree_events_binomial` |
+| W | `filter_strength_geometric`, `filter_strength_negative_binomial`, `filter_strength_cost_geometric`, `filter_strength_cost_negative_binomial`, zero-inflated W filters |
+| Custom/partial | `filter_custom_poisson` over sparse expected-rate tables |
+
+Independent-strength filters accept raw `x`, `y` multipliers. Multi-parameter
+models should prefer fitted result objects so `family`, `layers`, `self_loops`,
+and positive-weight parameters stay consistent.
 
 ## Common options
 
-All functions accept:
-
 | Parameter | Type | Default |
-|-----------|------|---------|
+|---|---|---|
 | `alpha` | `float` | `0.05` |
 | `tail` | `"upper"`, `"lower"`, `"two-sided"` | `"two-sided"` |
 | `correction` | `"none"`, `"bonferroni"`, `"fdr"` | `"none"` |
 | `detect_absent` | `bool` | `False` |
 | `min_occupation` | `float` | `0.5` |
 | `min_expected` | `float` | `0.0` |
-| `max_absent` | `int \| None` | `None` |
+| `max_absent` | `int | None` | `None` |
 
 ## Result types
 
 ```python
-@dataclass(frozen=True)
-class FilteredEdges:
-    edges: EdgeTable
-    upper_pvalue: NDArray[np.float64]
-    lower_pvalue: NDArray[np.float64]
-    expected: NDArray[np.float64]
-    occupation: NDArray[np.float64]
-
 @dataclass(frozen=True)
 class FilterResult:
     upper: FilteredEdges
@@ -56,6 +49,9 @@ class FilterResult:
     correction: Correction
 ```
 
+`FilteredEdges` stores the sparse `EdgeTable`, p-values, expected weights, and
+occupation probabilities.
+
 ## Example
 
 ```python
@@ -65,8 +61,11 @@ from odme.data.io import read_edges
 edges = read_edges("network.csv")
 result = filter_strength_poisson(edges, alpha=0.05, detect_absent=True)
 
-print(f"Upper: {len(result.upper.edges)} edges")
-print(f"Lower: {len(result.lower.edges)} edges")
-print(f"Compatible: {len(result.compatible.edges)} edges")
-print(f"Absent: {len(result.absent_lower.edges)} pairs")
+print(len(result.upper.edges), len(result.lower.edges))
 ```
+
+## Conformance note
+
+Degree-events filtering still exposes some positive-weight parameters manually.
+The target API is to read all such parameters from `DegreeEventsFit`; see the
+[Ontology conformance audit](../development/ontology-conformance-audit.md).

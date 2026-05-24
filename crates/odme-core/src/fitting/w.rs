@@ -1013,6 +1013,7 @@ fn fit_strength_degree_w(
         opts.tolerance,
         opts.max_iterations,
     );
+
     let total_strength = strength_out.iter().sum::<f64>().max(1.0);
     let total_degree = degree_out.iter().sum::<f64>().max(1.0);
     let (residuals, max_degree_residual) = strength_degree_residuals(
@@ -1170,14 +1171,19 @@ fn newton_to_w_strength_result(
     } else {
         WFitStatus::Inaccurate
     };
-    let residuals = independent_strength_residuals(
-        &result.x,
-        &result.y,
-        layers,
-        strength_out,
-        strength_in,
-        opts.self_loops,
-    );
+    // Convert probability-space x,y to log-space a,b for residual computation
+    let a: Vec<f64> = result
+        .x
+        .iter()
+        .map(|&xi| if xi > 0.0 { -xi.ln() } else { 50.0 })
+        .collect();
+    let b: Vec<f64> = result
+        .y
+        .iter()
+        .map(|&yj| if yj > 0.0 { -yj.ln() } else { 50.0 })
+        .collect();
+    let residuals =
+        independent_strength_residuals(&a, &b, layers, strength_out, strength_in, opts.self_loops);
     WStrengthFitResult {
         x: result.x,
         y: result.y,

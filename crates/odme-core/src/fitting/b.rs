@@ -1,6 +1,8 @@
 //! Binary and binomial fitting routines.
 
-use super::support::{max_pair_delta, self_loop_mask};
+use super::support::{
+    max_pair_delta, peel_b_strength_saturation, peel_degree_saturation, self_loop_mask,
+};
 use super::FitResult;
 
 pub fn balance_masked_degree_bernoulli(
@@ -115,7 +117,11 @@ pub fn balance_masked_degree_bernoulli(
 }
 
 /// IPF balancing for directed Bernoulli fixed-degree constraints.
+///
+/// Automatically peels degree-saturated nodes (k_i = capacity) before solving
+/// the residual sub-problem, guaranteeing convergence at the boundary.
 #[must_use]
+#[allow(clippy::needless_range_loop)]
 pub fn balance_degree_bernoulli(
     degree_out: &[f64],
     degree_in: &[f64],
@@ -123,6 +129,35 @@ pub fn balance_degree_bernoulli(
     tolerance: f64,
     max_iterations: usize,
 ) -> FitResult {
+    let peeling = peel_degree_saturation(degree_out, degree_in, self_loops, 1.0);
+    if peeling.has_saturation {
+        // Solve the reduced problem on excess degrees with the saturated mask
+        let mut result = balance_masked_degree_bernoulli(
+            &peeling.excess_out,
+            &peeling.excess_in,
+            &peeling.mask,
+            tolerance,
+            max_iterations,
+        );
+        // Saturated nodes get multiplier large enough that p_ij ≈ 1
+        let n = degree_out.len();
+        let capacity = if self_loops {
+            n as f64
+        } else {
+            (n.saturating_sub(1)) as f64
+        };
+        for i in 0..n {
+            if degree_out[i] >= capacity - 1e-9 {
+                result.x[i] = 1e6;
+            }
+        }
+        for j in 0..n {
+            if degree_in[j] >= capacity - 1e-9 {
+                result.y[j] = 1e6;
+            }
+        }
+        return result;
+    }
     let mask = self_loop_mask(degree_out.len(), self_loops);
     balance_masked_degree_bernoulli(degree_out, degree_in, &mask, tolerance, max_iterations)
 }
@@ -133,7 +168,11 @@ pub(crate) fn binary_probability(x: f64, y: f64) -> f64 {
 }
 
 /// Iterative proportional fitting for binomial(M) fixed-strength constraints.
+///
+/// Automatically peels strength-saturated nodes (s_i = M*capacity) before
+/// solving the residual sub-problem, guaranteeing convergence at the boundary.
 #[must_use]
+#[allow(clippy::needless_range_loop)]
 pub fn balance_strength_binomial(
     strength_out: &[f64],
     strength_in: &[f64],
@@ -142,6 +181,37 @@ pub fn balance_strength_binomial(
     tolerance: f64,
     max_iterations: usize,
 ) -> FitResult {
+    let peeling = peel_b_strength_saturation(strength_out, strength_in, layers, self_loops);
+    if peeling.has_saturation {
+        let mut result = balance_masked_strength_binomial(
+            &peeling.excess_out,
+            &peeling.excess_in,
+            &peeling.mask,
+            layers,
+            tolerance,
+            max_iterations,
+        );
+        // Saturated nodes get very large multipliers so p_ij -> 1, t_ij -> M
+        let n = strength_out.len();
+        let m = f64::from(layers);
+        let capacity = if self_loops {
+            n as f64
+        } else {
+            (n.saturating_sub(1)) as f64
+        };
+        let max_s = m * capacity;
+        for i in 0..n {
+            if strength_out[i] >= max_s - 1e-9 {
+                result.x[i] = 1e6;
+            }
+        }
+        for j in 0..n {
+            if strength_in[j] >= max_s - 1e-9 {
+                result.y[j] = 1e6;
+            }
+        }
+        return result;
+    }
     let mask = self_loop_mask(strength_out.len(), self_loops);
     balance_masked_strength_binomial(
         strength_out,
@@ -154,6 +224,9 @@ pub fn balance_strength_binomial(
 }
 
 /// Masked binomial(M) IPF for partial-constraint fitting.
+///
+/// Uses log-space geometric damping to prevent multiplier explosion
+/// in ill-conditioned cases (high saturation, heterogeneous strengths).
 #[must_use]
 #[allow(clippy::needless_range_loop)]
 pub fn balance_masked_strength_binomial(
@@ -178,6 +251,8 @@ pub fn balance_masked_strength_binomial(
         .collect();
     let k_in: Vec<f64> = strength_in.iter().map(|&s| s / m).collect();
     let k_out: Vec<f64> = strength_out.iter().map(|&s| s / m).collect();
+    let mut prev_err = f64::INFINITY;
+    let mut damping = 1.0_f64; // geometric damping factor (1.0 = no damping)
 
     for iter in 0..max_iterations {
         for j in 0..n {
@@ -191,7 +266,13 @@ pub fn balance_masked_strength_binomial(
                 }
                 denom += x[i] / (1.0 + x[i] * y[j]);
             }
-            y[j] = if denom > 0.0 { k_in[j] / denom } else { 0.0 };
+            let new_y = if denom > 0.0 { k_in[j] / denom } else { 0.0 };
+            if damping < 1.0 && y[j] > 0.0 && new_y > 0.0 {
+                // Geometric interpolation in log-space
+                y[j] = (y[j].ln() * (1.0 - damping) + new_y.ln() * damping).exp();
+            } else {
+                y[j] = new_y;
+            }
         }
         for i in 0..n {
             if k_out[i] <= 0.0 {
@@ -204,7 +285,12 @@ pub fn balance_masked_strength_binomial(
                 }
                 denom += y[j] / (1.0 + x[i] * y[j]);
             }
-            x[i] = if denom > 0.0 { k_out[i] / denom } else { 0.0 };
+            let new_x = if denom > 0.0 { k_out[i] / denom } else { 0.0 };
+            if damping < 1.0 && x[i] > 0.0 && new_x > 0.0 {
+                x[i] = (x[i].ln() * (1.0 - damping) + new_x.ln() * damping).exp();
+            } else {
+                x[i] = new_x;
+            }
         }
 
         let mut max_err = 0.0_f64;
@@ -236,6 +322,19 @@ pub fn balance_masked_strength_binomial(
                 iterations: iter + 1,
             };
         }
+
+        // Detect stalling and enable damping
+        if max_err >= prev_err * 0.99 && damping >= 1.0 {
+            // Switch to damped mode
+            damping = 0.5;
+        } else if max_err >= prev_err * 0.999 && damping < 1.0 {
+            // Already damped but still stalling: reduce further
+            damping = (damping * 0.8).max(0.1);
+        } else if max_err < prev_err * 0.95 && damping < 1.0 {
+            // Good progress: relax damping
+            damping = (damping * 1.2).min(1.0);
+        }
+        prev_err = max_err;
     }
 
     FitResult {

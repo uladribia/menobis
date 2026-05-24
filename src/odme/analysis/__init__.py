@@ -1,5 +1,9 @@
 """Analysis routines for ODME weighted networks."""
 
+from odme.analysis.ensemble import (
+    ensemble_average,
+    ensemble_scalar_average,
+)
 from odme.analysis.graph_algorithms import (
     clustering_coefficient,
     weighted_clustering_coefficient,
@@ -28,6 +32,8 @@ __all__ = [
     "compute_all_stats",
     "directed_degrees",
     "directed_strengths",
+    "ensemble_average",
+    "ensemble_scalar_average",
     "weight_distribution",
     "weighted_clustering_coefficient",
 ]

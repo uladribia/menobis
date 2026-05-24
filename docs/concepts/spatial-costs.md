@@ -1,115 +1,73 @@
 ---
-description: Strength-cost model for spatially constrained multi-edge networks.
+description: Strength-cost constraints and family-orthogonal cost providers.
 ---
 
 # Spatial costs
 
 ## TL;DR
 
-The strength-cost model adds a total-cost Lagrange multiplier $\gamma$ to the
-strength constraints. All three families (ME, B, W) share the same cost decay
-factor $f_{ij} = e^{-\gamma d_{ij}}$ but differ in expected-weight formula.
+The strength-cost constraint adds a cost multiplier `gamma` and a pair factor
+$f_{ij}=\exp(-\gamma d_{ij})$. Cost providers are orthogonal to ME, B, and W:
+the same no-cost, sparse-triple, or coordinate provider should feed every
+family kernel.
 
-Coordinate APIs compute Euclidean distances on the fly in Rust. No dense cost
-triples are allocated when using coordinates.
+## Constraint
 
-## Family-specific expected weights
-
-| Family | $\mathbb{E}[t_{ij}]$ | Parameters |
-|--------|----------------------|------------|
-| ME (Poisson) | $x_i y_j f_{ij}$ | $x_i, y_j$ are rate multipliers |
-| B (Binomial M) | $\frac{M\, x_i y_j f_{ij}}{1 + x_i y_j f_{ij}}$ | $x_i, y_j$ are rate multipliers |
-| W (Geometric/NegBin M) | $\frac{M\, e^{-r_{ij}}}{1 - e^{-r_{ij}}}$ | $r_{ij} = a_i + b_j + \gamma d_{ij}$; returned as $x_i = e^{-a_i}$, $y_j = e^{-b_j}$ |
-
-Here $f_{ij} = e^{-\gamma d_{ij}}$ in all cases.
-
-## Shared constraints
-
-All families satisfy:
+All strength-cost families match:
 
 $$
-s_i^{\text{out}} = \sum_j \mathbb{E}[t_{ij}], \qquad
-s_j^{\text{in}} = \sum_i \mathbb{E}[t_{ij}], \qquad
-C = \sum_{ij} \mathbb{E}[t_{ij}]\, d_{ij}.
+s_i^{out}=\sum_j \mathbb{E}[t_{ij}],\qquad
+s_j^{in}=\sum_i \mathbb{E}[t_{ij}],\qquad
+C=\sum_{ij}\mathbb{E}[t_{ij}]d_{ij}.
 $$
 
-When `self_loops=False`, diagonal pairs $(i,i)$ are omitted from all sums.
+When `self_loops=False`, diagonal pairs are omitted before evaluating all sums.
+The family-specific expectation is defined in
+[Model ontology](model-ontology.md).
 
 ## Cost providers
 
-| Mode | Input | Memory | Use when |
-|------|-------|--------|----------|
-| Sparse triples | `cost_sources, cost_targets, cost_values` | O(K) where K = number of entries | Arbitrary costs, partial support |
-| Projected coordinates | `coord_x, coord_y` per node | O(N) | Complete Euclidean spatial costs |
+| Provider | Input | Memory target | Use when |
+|---|---|---:|---|
+| No cost | none | O(1) | strength-only kernels |
+| Sparse triples | `cost_sources`, `cost_targets`, `cost_values` | O(K) | arbitrary or incomplete costs |
+| Euclidean coordinates | projected `x`, `y` per node | O(N) provider state | complete spatial cost from coordinates |
 
-Coordinates must be in a projected CRS (UTM, local metric). ODME does not
-transform CRS or compute geodesic distances.
+Coordinates must be projected planar coordinates. ODME does not transform CRS or
+compute geodesic distances.
 
-## Solver strategies
+## Required implementation shape
 
-| Family | Gamma search | Inner solver | Notes |
-|--------|-------------|--------------|-------|
-| ME | Bisection | IPF balancing at fixed $\gamma$ | On-the-fly distances |
-| B | Bisection | IPF with saturation $z/(1+z)$ | On-the-fly distances |
-| W | Exponential-cone (Clarabel) | Conic formulation | Inline distances in CSC assembly |
-
-## Return value semantics
-
-All coordinate functions return `StrengthCostFit(x, y, gamma, family, ...)`.
-
-For ME and B, reconstruct rates as:
-
-```python
-f_ij = np.exp(-fit.gamma * distance[i, j])
-# ME: rate = fit.x[i] * fit.y[j] * f_ij
-# B:  rate = layers * fit.x[i] * fit.y[j] * f_ij / (1 + fit.x[i] * fit.y[j] * f_ij)
+```text
+CostProvider + FamilyKernel + ConstraintLayer -> Rust solver/provider
 ```
 
-For W, `x[i] = exp(-a_i)` and `y[j] = exp(-b_j)`:
+The provider computes `f_ij` on demand. The family kernel then maps
+`q_ij = x_i y_j f_ij` to an expected weight. This avoids per-family cost wrappers
+and dense `N x N` matrices.
 
-```python
-r_ij = -np.log(fit.x[i]) - np.log(fit.y[j]) + fit.gamma * distance[i, j]
-# W:  rate = layers * np.exp(-r_ij) / (1 - np.exp(-r_ij))
-```
-
-## Coordinate API
+## Python examples
 
 ```python
 from odme.models import (
     fit_strength_cost_poisson_coordinates,
     fit_strength_cost_binomial_coordinates,
     fit_strength_cost_geometric_coordinates,
-    fit_strength_cost_negative_binomial_coordinates,
 )
 
 me = fit_strength_cost_poisson_coordinates(s_out, s_in, x, y, target_cost)
-b  = fit_strength_cost_binomial_coordinates(s_out, s_in, x, y, target_cost, layers=3)
-wg = fit_strength_cost_geometric_coordinates(s_out, s_in, x, y, target_cost)
-wnb = fit_strength_cost_negative_binomial_coordinates(s_out, s_in, x, y, target_cost, layers=3)
+b = fit_strength_cost_binomial_coordinates(s_out, s_in, x, y, target_cost, layers=3)
+w = fit_strength_cost_geometric_coordinates(s_out, s_in, x, y, target_cost)
 ```
 
-## Partial-constraint variant
+## Partial strength-cost
 
-```python
-from odme.models.partial import (
-    fit_partial_strength_cost_poisson_coordinates,
-    fit_partial_strength_cost_binomial_coordinates,
-    fit_partial_strength_cost_geometric_coordinates,
-    fit_partial_strength_cost_negative_binomial_coordinates,
-)
-```
+Partial strength-cost fitting must:
 
-Partial fitting computes excess strengths and cost, calls the family-specific
-full solver on free pairs, and assembles the rate table using the correct
-family formula.
+1. subtract known weighted-pair contributions from strengths and cost;
+2. remove frozen pairs from support;
+3. call the corresponding full strength-cost family solver on free pairs;
+4. assemble the combined known + free sparse rate table in Rust.
 
-## W memory and scalability
-
-The W conic solver requires exponential-cone variables for each pair, making
-its memory O(N²) regardless of cost representation. The inline coordinate
-version avoids allocating a separate 3×N² cost array by computing distances
-during CSC matrix assembly. Runtime is dominated by the conic solver's
-interior-point iterations, not distance computation.
-
-At N=500 the W solver takes ~200s (dev build). For larger N, prefer ME/B
-coordinate APIs or wait for a non-conic W solver.
+Current Python partial coordinate helpers do not fully satisfy this requirement;
+see the [Ontology conformance audit](../development/ontology-conformance-audit.md).

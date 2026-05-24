@@ -31,7 +31,11 @@ on a support with fixed known weighted-pair contributions.
 | `crates/odme-core/src/generation.rs` | sampling |
 | `crates/odme-core/src/filter.rs` | p-values and filters |
 | `crates/odme-python/src/lib.rs` | PyO3 bridge |
-| `src/odme/models/` | Python public wrappers |
+| `src/odme/analysis/` | Python analysis and ensemble helpers |
+| `src/odme/models/` | Python fitting, generation, and partial wrappers |
+| `src/odme/filtering/` | Python filtering wrappers and result types |
+| `src/odme/utilities/` | Synthetic fixtures and logging configuration |
+| `benchmarks/` | Repository benchmark CLI, not installed as `odme` |
 
 ## Add a new linear constraint
 

@@ -6,6 +6,8 @@ Guidance for coding agents and contributors working on the ODME modernization.
 
 Replace the thesis-era codebase with **ODME**, a modern Rust + Python project that is fast, memory efficient, well tested, and thoroughly documented. Preserve the thesis-level scientific concepts and equations, but do not preserve old CLI behavior, old module layout, or backward compatibility.
 
+**No backward compatibility is required.** ODME is an experimental package undergoing a full rewrite. Agents must never introduce shims, re-export facades, deprecated aliases, or compatibility layers. When code moves, all call sites update in the same change. When APIs change shape, old signatures are deleted, not preserved.
+
 Primary scientific reference: <https://hdl.handle.net/10803/400560>.
 
 ## Pi skills
@@ -107,7 +109,7 @@ ODME should use a clean, modern, Pythonic style. Required conventions:
 - `typer.testing.CliRunner` for CLI tests.
 - MkDocs Material documentation under `docs/`.
 - numpy arrays for data exchange and pyarrow for file I/O.
-- `rustworkx` for efficient standard graph algorithms in Python.
+- Rust-native kernels for ODME graph statistics; external graph libraries such as NetworkX or rustworkx must remain optional user-side adapters, not runtime dependencies.
 - Makefile targets that call `uv run --frozen` for reproducible checks once the lockfile exists.
 
 Additional ODME defaults:
@@ -126,14 +128,15 @@ Additional ODME defaults:
 
 ODME implements three weight-distribution families: ME (Poisson), B (Binomial),
 and W (Geometric / Negative Binomial). These share mathematical structure but
-have distinct expectation equations.
+have distinct expectation equations. As such, they should share the maximum number of common abstractions via factory methods.
 
 ### Mandatory separation and reuse rules
 
 1. **Every family must have its own solver implementation.** Never implement B
    or W by calling the ME solver and relabeling the output. Each family has a
-   different `E[t_ij]` formula; the code must reflect that.
-2. **Shared infrastructure must be factored into reusable Rust abstractions.**
+   different `E[t_ij]` formula; the code must reflect that. Also the public PYTHON API should call separate method per family (specially for fitting).
+2. **Unified entry point in python**: A single function should route the choice ensemble (grand canonical, canonical (ME only), microcanonical (ME with strengths only)), plus type ME/W/B, plus constraint to the different public API python endpoints that defer to rust for each case. Failing with custom errors if the choice is not supported. 
+3. **Shared infrastructure must be factored into reusable Rust abstractions.**
    Cost providers, IPF balancing loops, gamma search, mask handling, excess
    computation, and rate-table assembly are shared across families and must live
    in common factory functions or traits.
@@ -155,12 +158,35 @@ When implementing or modifying a fitting kernel:
 - Write down the thesis equation being implemented in a code comment or
   docstring.
 - Add a unit test that verifies the implemented formula against a hand-computed
-  example (small N=3 or N=4).
-- For each family, verify that `E[t_ij]` matches the thesis definition:
-  - ME/Poisson: `E[t_ij] = x_i * y_j * f_ij`
-  - B/Binomial(M): `E[t_ij] = M * p_ij / (1 - p_ij)` where `p_ij = x_i * y_j * f_ij / (1 + x_i * y_j * f_ij)`
-  - W/Geometric: `E[t_ij] = q_ij / (1 - q_ij)` conditioned on occupation
-  - W/NegBin(M): `E[t_ij] = M * q_ij / (1 - q_ij)` conditioned on occupation
+  example (small N=5 or N=10).
+- The formulation follows a clear ontology:
+  - There are three cases that induce different statistics: ME, B and W.
+  - B and W cases only implement the "grand canonical" ensemble, for which all node-pair `ij` statistics are independent.
+  - ME implements additionally the "canonical" ensemble, based on multinomial statistics, and, exceptionally, the "microcanonical ensemble" only for fixed strength via stub matching.
+  - All "grand canonical" ensembles contemplate two kinds of constraints, some of which are implemented in ODME (others can be added in the future)
+    - Those that depend linearly on the occupation number $E[t_ij]$, like strength sequence, strength plus average cost. In this case, the statistics are independent.
+    - Those that additionally depend on the occupation probability $E[\Theta(t_ij>0)] $, like fixed total binary edges E, fixed degree sequence. In this case, the statistics are always Zero Inflated.
+  - All cases contemplate different constraints at three levels. When a constraint reaches saturation level (like total degree=N or N-1), it must be deducted from the problem.
+    - Global level: Total events (always), total binary edges, total cost.
+    - Node level: Strength sequence, degree sequence.
+    - Node pair level: Some node pair statistics might be frozen (so the network is partially frozen).
+- For the "grand canonical" ensemble, the mapping family to statistics are as follows:
+  - ME maps to Poisson and Zero Inflated Poisson.
+  - B maps to Binomial on M layers and zero inflated Binomial. The special case M=1 is a Bernoulli (binary network). This special case has total occupation per node pair bounded by M layers.
+  - W maps on M layers to Negative Binomial and zero inflated Negative Binomial. The special case M=1 is geometric.
+- Each grand-canonical family depends on `q_ij = x_i y_j f_ij`, where `f_ij` only applies when cost constraints are considered. Zero-inflated constraints additionally use a binary multiplier `l_ij` (`l_ij = w_i z_j` for degree constraints, or a scalar for global edge constraints). The zero-inflated occupation is not `l_ij / (1 + l_ij)` unless `l_ij` has already absorbed the positive-support partition factor.
+  - Non zero inflated:
+    - ME/Poisson: `E[t_ij] = q_ij \in (0,\infty)`.
+    - B/Binomial(M): `E[t_ij] = M q_ij / (1+q_ij)` with `q_ij \in (0,\infty)`.
+    - W/NegBin(M): `E[t_ij] = M q_ij / (1 - q_ij)` with `q_ij \in (0,1)`.
+  - Zero inflated:
+    - Define the positive-support partition factors `G_ME(q)=exp(q)-1`, `G_B(q)=(1+q)^M-1`, and `G_W(q)=(1-q)^(-M)-1`.
+    - Binary occupation is `E[\Theta(t_ij>0)] = l_ij G_F(q_ij) / (1 + l_ij G_F(q_ij))`.
+    - Expected weight is `E[t_ij] = l_ij q_ij G'_F(q_ij) / (1 + l_ij G_F(q_ij))`.
+    - Equivalently, `E[t_ij | t_ij > 0] = q_ij G'_F(q_ij) / G_F(q_ij)`.
+    - ME/Poisson: `E[t_ij | t_ij > 0] = q_ij exp(q_ij)/(exp(q_ij)-1) = q_ij/(1-exp(-q_ij))` with `q_ij, l_ij \in (0,\infty)`.
+    - B/Binomial(M): `E[t_ij | t_ij > 0] = M q_ij (1+q_ij)^(M-1) / ((1+q_ij)^M - 1)` with `q_ij, l_ij \in (0,\infty)`.
+    - W/NegBin(M): `E[t_ij | t_ij > 0] = M q_ij (1-q_ij)^(-M-1) / ((1-q_ij)^(-M) - 1)` with `l_ij \in (0,\infty)` and `q_ij \in (0,1)`.
 - Confirm that constraint recovery tests pass: fitted expectations must
   reproduce the input constraint sequences within documented tolerance.
 - Add a comparative test showing ME ≠ B ≠ W results on the same input when
@@ -215,7 +241,7 @@ The documentation should map implementation names back to the thesis terminology
 All fitting, generation, and filtering tests MUST follow this pipeline:
 
 1. **Generate** a realistic weighted directed network with projected XY
-   coordinates using a gravity-like model.
+   coordinates using a gravity-like model (present in the synthethic module).
 2. **Derive** constraints from the generated network: strengths, degrees,
    edge counts, total cost. These are guaranteed feasible because they come
    from an actual network.
@@ -226,7 +252,7 @@ All fitting, generation, and filtering tests MUST follow this pipeline:
 
 Tests that skip steps 1–2 and use arbitrary hand-picked values are permitted
 ONLY for:
-- Pure mathematical function unit tests (e.g., verifying `w_mean` formula).
+- Pure mathematical function unit tests (e.g., verifying formulas).
 - API contract tests (return type, field names, error messages).
 - CLI smoke tests (exit codes, output format).
 
@@ -257,16 +283,12 @@ Document all tolerance choices in test docstrings.
 - Prefer streaming I/O.
 - Use numpy arrays as the canonical data exchange format between Rust and Python.
 - Network readers must accept non-negative integer weights, ignore zero-weight edges, and reject negative or non-integer weights at the boundary.
-- Prefer sparse or edge-list representations over dense `N x N` matrices.
-- Allocate dense matrices only when scientifically or algorithmically required.
-- Use efficient existing graph libraries for standard algorithms; do not reimplement common graph routines.
-- Use `rustworkx` as the only Python graph library dependency for standard graph algorithms.
+- Never use dense `N x N` matrices, unless it is absolutely unavoidable.
 - All computation-heavy code must be implemented in Rust (`odme-core`), not in Python.
 - Python modules are thin wrappers: validate inputs, call Rust via `_odme`, wrap results in numpy arrays and typed dataclasses.
 - Never implement loops, numerical kernels, or graph algorithms in Python when they can run in Rust.
-- Use rustworkx only when its algorithm is not already implemented in `odme-core`. Prefer Rust-native implementations for ODME-specific statistics.
-- Always prefer rustworkx implementations over custom code for standard graph-theoretic computations that ODME does not already implement in Rust. Before implementing any graph algorithm, check if rustworkx or `odme-core` already provides it.
-- Keep custom Rust graph kernels only for ODME-specific flow, fitting, and sampling work.
+- Use Rust-native implementations for ODME-specific statistics.
+- Before implementing any graph algorithm, check if `odme-core` already provides it.
 - Benchmark before optimizing.
 - Record performance-sensitive design choices in `docs/decisions/`.
 
@@ -278,6 +300,7 @@ Document all tolerance choices in test docstrings.
 - Prefer thesis equations, hand-checked examples, and property tests over golden-file compatibility.
 - Fully replace the legacy code once ODME covers the selected scientific scope.
 - When behavior differs from the old code, document whether the difference is intentional, numerical, stochastic, or a bug fix.
+- **Never add backward-compatibility shims, re-export wrappers, or deprecation aliases.** Move code cleanly and update all call sites in the same commit. Old paths are simply deleted.
 
 ## Handoff checklist
 

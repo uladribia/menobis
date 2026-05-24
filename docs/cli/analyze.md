@@ -1,6 +1,7 @@
 # `odme analyze`
 
-Network analysis workflows for ODME edge tables.
+Network analysis workflows for ODME edge tables. Metrics exposed by ODME use
+Rust-native kernels and do not require NetworkX or rustworkx.
 
 ## Directed strengths
 
