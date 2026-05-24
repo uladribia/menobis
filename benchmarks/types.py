@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from odme.synthetic import SyntheticConstraints, SyntheticNetwork
+from odme.utilities.synthetic import SyntheticConstraints, SyntheticNetwork
 
 
 @dataclass(frozen=True)

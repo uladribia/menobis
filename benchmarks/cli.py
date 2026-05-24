@@ -8,10 +8,13 @@ from typing import Annotated, Literal
 
 import typer
 
-from benchmarks.filter import filter_null_samples
-from benchmarks.fit import CONSTRAINTS, FAMILIES, fit_cases
-from benchmarks.generate import generate_cases
-from benchmarks.sample import sample_and_check
+from benchmarks.dispatch import CONSTRAINTS, FAMILIES
+from benchmarks.pipeline import (
+    filter_null_samples,
+    fit_cases,
+    generate_cases,
+    sample_and_check,
+)
 from benchmarks.types import BenchmarkOptions, BenchmarkRow
 
 app = typer.Typer(help="ODME benchmark suite.", no_args_is_help=True)
@@ -22,8 +25,12 @@ Stage = Literal["all", "generate", "fit", "sample", "filter"]
 @app.command("run")
 def run_command(
     stage: Annotated[Stage, typer.Argument(help="Stage to run.")] = "all",
-    nodes: Annotated[str, typer.Option("--nodes", help="Comma-separated node sizes.")] = "100,500",
-    families: Annotated[str, typer.Option("--families", help="Comma-separated families: me,b,w,wnb.")] = "me,b,w,wnb",
+    nodes: Annotated[
+        str, typer.Option("--nodes", help="Comma-separated node sizes.")
+    ] = "100,500",
+    families: Annotated[
+        str, typer.Option("--families", help="Comma-separated families: me,b,w,wnb.")
+    ] = "me,b,w,wnb",
     constraints: Annotated[
         str,
         typer.Option("--constraints", help="Comma-separated constraints."),
@@ -31,11 +38,16 @@ def run_command(
     seed: Annotated[int, typer.Option("--seed", help="Base random seed.")] = 10_000,
     average_degree: Annotated[
         float,
-        typer.Option("--average-degree", help="PA support mean out-degree when density is omitted."),
+        typer.Option(
+            "--average-degree",
+            help="PA support mean out-degree when density is omitted.",
+        ),
     ] = 8.0,
     density: Annotated[
         float | None,
-        typer.Option("--density", help="Directed graph density. Overrides average degree."),
+        typer.Option(
+            "--density", help="Directed graph density. Overrides average degree."
+        ),
     ] = None,
     events_per_edge: Annotated[
         float,
@@ -49,21 +61,32 @@ def run_command(
         int,
         typer.Option("--max-iterations", help="Maximum fitting iterations."),
     ] = 5_000,
-    sample_count: Annotated[int, typer.Option("--samples", help="Samples per fitted model check.")] = 5,
+    sample_count: Annotated[
+        int, typer.Option("--samples", help="Samples per fitted model check.")
+    ] = 5,
     filter_sample_count: Annotated[
         int,
         typer.Option("--filter-samples", help="Null samples per filter calibration."),
     ] = 5,
-    alpha: Annotated[float, typer.Option("--alpha", help="Filter significance level.")] = 0.05,
+    alpha: Annotated[
+        float, typer.Option("--alpha", help="Filter significance level.")
+    ] = 0.05,
     self_loops: Annotated[
         bool,
-        typer.Option("--self-loops/--no-self-loops", help="Allow self-loops in generated networks and models."),
+        typer.Option(
+            "--self-loops/--no-self-loops",
+            help="Allow self-loops in generated networks and models.",
+        ),
     ] = False,
-    output: Annotated[Path, typer.Option("--output", "-o", help="Output directory.")] = Path(
-        "benchmarks/results/canonical"
-    ),
-    output_json: Annotated[bool, typer.Option("--json", help="Emit summary JSON to stdout.")] = False,
-    quiet: Annotated[bool, typer.Option("--quiet", help="Suppress progress table.")] = False,
+    output: Annotated[
+        Path, typer.Option("--output", "-o", help="Output directory.")
+    ] = Path("benchmarks/results/canonical"),
+    output_json: Annotated[
+        bool, typer.Option("--json", help="Emit summary JSON to stdout.")
+    ] = False,
+    quiet: Annotated[
+        bool, typer.Option("--quiet", help="Suppress progress table.")
+    ] = False,
 ) -> None:
     """Run canonical generate → fit → sample → filter benchmarks."""
     rows = run_pipeline(
@@ -92,7 +115,9 @@ def run_command(
         typer.echo(f"Results: {output / 'summary.json'}", err=True)
 
 
-def run_pipeline(options: BenchmarkOptions, *, stage: Stage, output: Path) -> list[BenchmarkRow]:
+def run_pipeline(
+    options: BenchmarkOptions, *, stage: Stage, output: Path
+) -> list[BenchmarkRow]:
     """Run the benchmark pipeline up to the requested stage."""
     output.mkdir(parents=True, exist_ok=True)
     all_rows: list[BenchmarkRow] = []
@@ -119,8 +144,8 @@ def _finalize(rows: list[BenchmarkRow], output: Path) -> list[BenchmarkRow]:
     by_stage: dict[str, list[BenchmarkRow]] = {}
     for row in rows:
         by_stage.setdefault(row.stage, []).append(row)
-    for stage, stage_rows in by_stage.items():
-        path = output / f"{stage.replace('-', '_')}_log.jsonl"
+    for stage_name, stage_rows in by_stage.items():
+        path = output / f"{stage_name.replace('-', '_')}_log.jsonl"
         path.write_text(
             "".join(json.dumps(row.to_json()) + "\n" for row in stage_rows),
             encoding="utf-8",
@@ -158,7 +183,9 @@ def _print_rows(rows: list[BenchmarkRow]) -> None:
                 f"e_err={row.edge_count_error:.2f}"
             )
         if row.stage == "filter-null" and row.false_positive_rate is not None:
-            detail = f"fpr={row.false_positive_rate:.4f} edges≈{row.sampled_edges_mean:.1f}"
+            detail = (
+                f"fpr={row.false_positive_rate:.4f} edges≈{row.sampled_edges_mean:.1f}"
+            )
         typer.echo(
             f"{row.stage:<13} {row.node_count:>5} {row.case:<25} "
             f"{row.status:<14} {row.seconds:>8.2f} {detail}"
