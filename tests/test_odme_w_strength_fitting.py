@@ -32,6 +32,8 @@ def test_fit_strength_geometric_recovers_homogeneous_strengths() -> None:
 
     assert result.converged
     assert result.layers == 1
+    assert result.max_strength_residual is not None
+    assert result.max_q is not None
     assert result.max_strength_residual < 1e-4
     assert result.max_q < 1.0
 
@@ -102,6 +104,7 @@ def test_fit_strength_geometric_null_ensemble_recovers_generated_strengths() -> 
     )
 
     assert fit.converged
+    assert fit.max_strength_residual is not None
     assert fit.max_strength_residual < 1e-4
     assert max(np.max(np.abs(z_out)), np.max(np.abs(z_in))) < 4.0
 

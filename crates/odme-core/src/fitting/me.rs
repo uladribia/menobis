@@ -62,7 +62,7 @@ pub fn balance_strength_edges_poisson(
         cur_x = x;
         cur_y = y;
         let edges = expected_edges_me(&cur_x, &cur_y, high, self_loops);
-        if edges >= target_edges || high > 1e12 {
+        if edges >= target_edges || high > 1e30 {
             break;
         }
         low = high;
@@ -236,13 +236,40 @@ pub fn balance_strength_degree_poisson(
         .collect();
     let k_total = degree_out.iter().sum::<f64>().max(1.0);
     let k_scale = (k_total / n.max(1) as f64).sqrt().max(0.1);
+    let capacity = if self_loops {
+        n as f64
+    } else {
+        n.saturating_sub(1) as f64
+    };
+    let saturated_out: Vec<bool> = degree_out
+        .iter()
+        .map(|&k| k >= capacity - tolerance.max(1e-9))
+        .collect();
+    let saturated_in: Vec<bool> = degree_in
+        .iter()
+        .map(|&k| k >= capacity - tolerance.max(1e-9))
+        .collect();
     let mut z: Vec<f64> = degree_out
         .iter()
-        .map(|&k| (k / k_total * k_scale).max(1e-12))
+        .enumerate()
+        .map(|(i, &k)| {
+            if saturated_out[i] {
+                1e30
+            } else {
+                (k / k_total * k_scale).max(1e-12)
+            }
+        })
         .collect();
     let mut w: Vec<f64> = degree_in
         .iter()
-        .map(|&k| (k / k_total * k_scale).max(1e-12))
+        .enumerate()
+        .map(|(j, &k)| {
+            if saturated_in[j] {
+                1e30
+            } else {
+                (k / k_total * k_scale).max(1e-12)
+            }
+        })
         .collect();
     let mut others_q = vec![0.0_f64; n];
     let mut others_v = vec![0.0_f64; n];
@@ -279,8 +306,13 @@ pub fn balance_strength_degree_poisson(
             }
             x[i] = solve_me_sd_factor_s(strength_out[i], &others_q, &others_v);
         }
-        // Update w (degree_in)
+        // Update w (degree_in). Degree-saturated nodes keep a large multiplier,
+        // forcing occupation pi_ij -> 1 while x/y continue fitting positive weights.
         for j in 0..n {
+            if saturated_in[j] {
+                w[j] = 1e30;
+                continue;
+            }
             for i in 0..n {
                 if self_loops || i != j {
                     others_q[i] = x[i] * y[j];
@@ -292,8 +324,12 @@ pub fn balance_strength_degree_poisson(
             }
             w[j] = solve_me_sd_factor_k(degree_in[j], &others_q, &others_v);
         }
-        // Update z (degree_out)
+        // Update z (degree_out). Degree-saturated nodes keep a large multiplier.
         for i in 0..n {
+            if saturated_out[i] {
+                z[i] = 1e30;
+                continue;
+            }
             for j in 0..n {
                 if self_loops || i != j {
                     others_q[j] = x[i] * y[j];
@@ -393,8 +429,19 @@ fn solve_me_sd_factor_k(target: f64, others_q: &[f64], others_v: &[f64]) -> f64 
         return 0.0;
     }
     let mut low = 0.0_f64;
-    let mut high = 1e6_f64;
-    for _ in 0..60 {
+    let mut high = 1.0_f64;
+    for _ in 0..80 {
+        let value: f64 = others_q
+            .iter()
+            .zip(others_v.iter())
+            .map(|(&oq, &ov)| me_sd_occupation(oq, high * ov))
+            .sum();
+        if value >= target || high >= 1e30 {
+            break;
+        }
+        high *= 2.0;
+    }
+    for _ in 0..80 {
         let mid = 0.5 * (low + high);
         let value: f64 = others_q
             .iter()

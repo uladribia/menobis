@@ -13,7 +13,7 @@ pub mod w_lbfgs;
 use b::binary_probability;
 pub use b::{
     balance_degree_bernoulli, balance_masked_degree_bernoulli, balance_masked_strength_binomial,
-    balance_strength_binomial,
+    balance_strength_binomial, fit_strength_degree_binomial, fit_strength_edges_binomial,
 };
 pub use me::{
     balance_masked_strength_degree_poisson, balance_masked_strength_poisson,

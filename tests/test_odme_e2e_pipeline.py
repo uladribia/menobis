@@ -4,6 +4,8 @@ These tests follow the mandatory testing policy: constraints are always
 derived from a generated network, guaranteeing feasibility.
 """
 
+from typing import TypedDict
+
 import numpy as np
 
 from odme.data.frames import EdgeTable
@@ -45,7 +47,17 @@ def _generate_network(
     return weights, network.x, network.y, dist
 
 
-def _derive_constraints(weights: np.ndarray, dist: np.ndarray) -> dict[str, object]:
+class _Constraints(TypedDict):
+    s_out: np.ndarray
+    s_in: np.ndarray
+    k_out: np.ndarray
+    k_in: np.ndarray
+    total_edges: float
+    total_events: int
+    total_cost: float
+
+
+def _derive_constraints(weights: np.ndarray, dist: np.ndarray) -> _Constraints:
     """Derive all constraint sequences from an observed network."""
     s_out = weights.sum(axis=1).astype(np.float64)
     s_in = weights.sum(axis=0).astype(np.float64)
