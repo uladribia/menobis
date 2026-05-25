@@ -30,7 +30,11 @@ CLI, tests, and documentation directly.
 
 A throwaway script compared legacy feature groups with modern public symbols.
 Required groups were present for analysis, fitting, generation, filtering,
-partial constraints, custom probability sampling, and clustering.
+partial constraints, custom probability sampling, and clustering. Regression
+coverage now lives in `tests/test_odme_legacy_regression.py`: a stable fixture
+checks modern Rust statistics against archived analyzer values, and an optional
+live test can compile the archived C analyzer from git history when GSL is
+available.
 
 Known intentional non-goals remain:
 
