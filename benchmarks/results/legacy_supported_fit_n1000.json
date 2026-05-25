@@ -1,0 +1,200 @@
+[
+  {
+    "node_count": 1000,
+    "case": "me-strength",
+    "layers": null,
+    "modern": {
+      "seconds": 0.20785544299906178,
+      "peak_rss_kb": 78668
+    },
+    "legacy": {
+      "seconds": 0.26139522999983456,
+      "peak_rss_kb": 56804
+    },
+    "modern_status": "ok",
+    "legacy_status": "ok",
+    "modern_inner_seconds": 0.000829384998723981,
+    "legacy_inner_seconds": 0.036314512999524595,
+    "modern_iterations": null,
+    "max_observable_abs_diff": 2.540190280342358e-13,
+    "modern_max_error": 1.801936377887614e-11,
+    "legacy_max_error": 6.821210263296962e-13,
+    "message": ""
+  },
+  {
+    "node_count": 1000,
+    "case": "b-strength",
+    "layers": 10,
+    "modern": {
+      "seconds": 1.4165895710011682,
+      "peak_rss_kb": 94592
+    },
+    "legacy": {
+      "seconds": 0.30665824199968483,
+      "peak_rss_kb": 63304
+    },
+    "modern_status": "ok",
+    "legacy_status": "ok",
+    "modern_inner_seconds": 1.173169252999287,
+    "legacy_inner_seconds": 0.15244309599984263,
+    "modern_iterations": null,
+    "max_observable_abs_diff": 3.4777780655304014e-10,
+    "modern_max_error": 5.820766091346741e-09,
+    "legacy_max_error": 1.0967016805807361e-07,
+    "message": ""
+  },
+  {
+    "node_count": 1000,
+    "case": "w-strength",
+    "layers": null,
+    "modern": {
+      "seconds": 20.683373035999466,
+      "peak_rss_kb": 175196
+    },
+    "legacy": {
+      "seconds": 7.762370974000078,
+      "peak_rss_kb": 191608
+    },
+    "modern_status": "ok",
+    "legacy_status": "ok",
+    "modern_inner_seconds": 20.03264783299892,
+    "legacy_inner_seconds": 7.29473808000148,
+    "modern_iterations": 107,
+    "max_observable_abs_diff": 0.00022788629155456874,
+    "modern_max_error": 8.040842658374459e-09,
+    "legacy_max_error": 0.00032359436499973526,
+    "message": ""
+  },
+  {
+    "node_count": 1000,
+    "case": "me-strength-cost",
+    "layers": null,
+    "modern": {
+      "seconds": 12.642539215999932,
+      "peak_rss_kb": 191820
+    },
+    "legacy": {
+      "seconds": 2.926823822001097,
+      "peak_rss_kb": 199100
+    },
+    "modern_status": "ok",
+    "legacy_status": "ok",
+    "modern_inner_seconds": 11.958117791000404,
+    "legacy_inner_seconds": 2.38055760700081,
+    "modern_iterations": 33,
+    "max_observable_abs_diff": 1.4933476677470026e-09,
+    "modern_max_error": 2.0454535842873156e-09,
+    "legacy_max_error": 2.2737367544323206e-12,
+    "message": ""
+  },
+  {
+    "node_count": 1000,
+    "case": "me-strength-edges",
+    "layers": null,
+    "modern": {
+      "seconds": 34.663231378999626,
+      "peak_rss_kb": 78936
+    },
+    "legacy": {
+      "seconds": 450.10145514300166,
+      "peak_rss_kb": null
+    },
+    "modern_status": "ok",
+    "legacy_status": "process_error",
+    "modern_inner_seconds": 34.435205273000975,
+    "legacy_inner_seconds": null,
+    "modern_iterations": 21,
+    "max_observable_abs_diff": null,
+    "modern_max_error": null,
+    "legacy_max_error": null,
+    "message": "legacy timed out after 450 s without output JSON"
+  },
+  {
+    "node_count": 1000,
+    "case": "b-strength-edges",
+    "layers": null,
+    "modern": {
+      "seconds": 12.031701277001048,
+      "peak_rss_kb": 78968
+    },
+    "legacy": {
+      "seconds": 300.10154648500065,
+      "peak_rss_kb": null
+    },
+    "modern_status": "ok",
+    "legacy_status": "process_error",
+    "modern_inner_seconds": 11.652804033999928,
+    "legacy_inner_seconds": null,
+    "modern_iterations": 2,
+    "max_observable_abs_diff": null,
+    "modern_max_error": null,
+    "legacy_max_error": null,
+    "message": "legacy timed out after 300 s without output JSON"
+  },
+  {
+    "node_count": 1000,
+    "case": "me-strength-degree",
+    "layers": null,
+    "modern": {
+      "seconds": 8.18971983099982,
+      "peak_rss_kb": 79520
+    },
+    "legacy": {
+      "seconds": 9.948589700001321,
+      "peak_rss_kb": 96740
+    },
+    "modern_status": "ok",
+    "legacy_status": "error",
+    "modern_inner_seconds": 7.97314100299991,
+    "legacy_inner_seconds": null,
+    "modern_iterations": 2,
+    "max_observable_abs_diff": null,
+    "modern_max_error": null,
+    "legacy_max_error": null,
+    "message": "Something is wrong, algorithm did not converge. Check constraints or change method"
+  },
+  {
+    "node_count": 1000,
+    "case": "b-strength-degree",
+    "layers": 10,
+    "modern": {
+      "seconds": 6.863042798999231,
+      "peak_rss_kb": 79196
+    },
+    "legacy": {
+      "seconds": 34.07243081299748,
+      "peak_rss_kb": 110784
+    },
+    "modern_status": "ok",
+    "legacy_status": "error",
+    "modern_inner_seconds": 6.634177142999761,
+    "legacy_inner_seconds": null,
+    "modern_iterations": 1,
+    "max_observable_abs_diff": null,
+    "modern_max_error": null,
+    "legacy_max_error": null,
+    "message": "Something is wrong, algorithm did not converge. Check constraints or change method"
+  },
+  {
+    "node_count": 1000,
+    "case": "degree",
+    "layers": null,
+    "modern": {
+      "seconds": 1.1842130170007295,
+      "peak_rss_kb": 175544
+    },
+    "legacy": {
+      "seconds": 1.4592992509988107,
+      "peak_rss_kb": 183664
+    },
+    "modern_status": "ok",
+    "legacy_status": "ok",
+    "modern_inner_seconds": 0.6646974909999699,
+    "legacy_inner_seconds": 0.5826974600004178,
+    "modern_iterations": 9,
+    "max_observable_abs_diff": 6.517314465881441e-12,
+    "modern_max_error": 7.199929541457095e-11,
+    "legacy_max_error": 1.0638387948347372e-09,
+    "message": ""
+  }
+]

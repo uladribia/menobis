@@ -33,7 +33,7 @@ Scientific reference: <https://hdl.handle.net/10803/400560>.
 
 ### P1 — B fixed-strength no-self-loop solver is slower than legacy
 
-`uv run python -m benchmarks.legacy_fit_compare --nodes 1000 --families me,b`
+`uv run --with scipy python -m benchmarks.legacy_supported_fit_compare --nodes 1000`
 shows B fixed-strength no-self-loop expectations match the archived fitter, but
 modern inner solver time is slower. Investigate sparse IPF update costs and
 stopping criteria.
@@ -44,6 +44,13 @@ stopping criteria.
 cases converge, but W strength-cost takes ~707 s, WNB strength-cost ~212 s, WNB
 strength-edges ~162 s, and W strength-edges ~118 s. Memory is stable around
 77-78 MB per case.
+
+### Informational: legacy solver failures on realistic N=1000 PA fixture
+
+The archived fitter matches modern ODME for ME strength, B strength, W strength,
+ME strength-cost, and fixed degree where legacy converges. Archived
+strength-edges timed out or failed, and archived strength-degree failed, on the
+same feasible N=1000 PA fixture that modern ODME solves.
 
 ### Informational: P4 — W single-sample errors are stochastic, not bugs
 

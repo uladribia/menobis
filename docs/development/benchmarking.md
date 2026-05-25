@@ -44,6 +44,7 @@ uv run python -m benchmarks filter --nodes 100 --json --output benchmarks/result
 uv run python -m benchmarks.legacy_compare --nodes 100,500
 uv run python -m benchmarks.legacy_fit_compare --nodes 100,500 --families me,b
 uv run python -m benchmarks.fit_memory_matrix --nodes 1000
+uv run --with scipy python -m benchmarks.legacy_supported_fit_compare --nodes 1000
 ```
 
 Options:
@@ -84,10 +85,15 @@ N=1000 results are stored in `benchmarks/results/`:
 | Benchmark | Main result |
 |---|---|
 | `legacy_fit_n1000.json` | ME matches and modern is faster; B matches but modern is slower. |
+| `legacy_supported_fit_n1000.json` | legacy-supported ME/B/W/degree cases compared or recorded as legacy failures/timeouts. |
 | `fit_memory_n1000.json` | all 20 modern cases converged; per-process RSS was ~77-78 MB. |
 
-Slowest N=1000 modern fits were W strength-cost (~707 s), WNB strength-cost
-(~212 s), WNB strength-edges (~162 s), and W strength-edges (~118 s).
+Legacy-supported N=1000 comparisons show ME strength, W strength, ME
+strength-cost, and degree observables match. Legacy strength-edges timed out or
+failed on the PA fixture, and legacy strength-degree failed; modern ODME solved
+those same cases. Slowest N=1000 modern fits were W strength-cost (~707 s), WNB
+strength-cost (~212 s), WNB strength-edges (~162 s), and W strength-edges
+(~118 s).
 
 ## Known skips
 
