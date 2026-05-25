@@ -55,6 +55,7 @@ nav:
       - Saturation Peeling: decisions/0008-saturation-peeling.md
       - External Graph Libraries: decisions/0009-external-graph-libraries.md
       - Python Domain Layout: decisions/0010-python-domain-layout.md
+      - Archive Legacy Thesis Folders: decisions/0011-archive-legacy-thesis-folders.md
 
 plugins:
   - search

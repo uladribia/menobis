@@ -27,6 +27,7 @@ Scientific reference: <https://hdl.handle.net/10803/400560>.
 - [x] Re-checked partial W/Wnb coordinate cost tests; P3 not reproducible after W solver rewrite
 - [x] Mixed strength-degree degree-saturation handling for ME/W/Wnb
 - [x] `uv run ty check`
+- [x] Archived/removed legacy thesis-era folders after coverage audit
 
 ## Open problems (by priority)
 
@@ -71,7 +72,6 @@ mkdocs build --strict
 
 ## Next steps (priority order)
 
-1. Archive/remove legacy thesis-era folders (`1. Network analysis/`, etc.)
-2. Final rename decision: ODME → MENoBiS
-3. Publish MkDocs site
-4. Write tutorials and notebooks with real-world examples
+1. Final rename decision: ODME → MENoBiS
+2. Publish MkDocs site
+3. Write tutorials and notebooks with real-world examples
