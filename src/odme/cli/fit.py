@@ -365,23 +365,29 @@ def strength_cost_me(
 def _write_w_strength_result(
     result: FitResult, path: Path | None, output_json: bool
 ) -> None:
+    def _float_or_nan(value: float | None) -> float:
+        return float("nan") if value is None else float(value)
+
+    def _int_or_zero(value: int | None) -> int:
+        return 0 if value is None else int(value)
+
     if output_json:
         data = {
             "status": result.status,
-            "layers": int(result.layers),
-            "objective": float(result.objective),
+            "layers": _int_or_zero(result.layers),
+            "objective": _float_or_nan(result.objective),
             "iterations": int(result.iterations),
-            "min_margin": float(result.min_margin),
-            "max_q": float(result.max_q),
-            "max_strength_residual": float(result.max_strength_residual),
-            "total_strength_residual": float(result.total_strength_residual),
+            "min_margin": _float_or_nan(result.min_margin),
+            "max_q": _float_or_nan(result.max_q),
+            "max_strength_residual": _float_or_nan(result.max_strength_residual),
+            "total_strength_residual": _float_or_nan(result.total_strength_residual),
             "metrics": {
-                "variables": int(result.variables),
-                "auxiliary_variables": int(result.auxiliary_variables),
-                "exponential_cones": int(result.exponential_cones),
-                "power_cones": int(result.power_cones),
-                "linear_constraints": int(result.linear_constraints),
-                "sparse_nonzeros": int(result.sparse_nonzeros),
+                "variables": _int_or_zero(result.variables),
+                "auxiliary_variables": _int_or_zero(result.auxiliary_variables),
+                "exponential_cones": _int_or_zero(result.exponential_cones),
+                "power_cones": _int_or_zero(result.power_cones),
+                "linear_constraints": _int_or_zero(result.linear_constraints),
+                "sparse_nonzeros": _int_or_zero(result.sparse_nonzeros),
             },
             "nodes": [
                 {"node": int(n), "x": float(x), "y": float(y)}

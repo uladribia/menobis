@@ -124,13 +124,11 @@ def generate_cases(
 def case_specs(
     families: Iterable[str], constraints: Iterable[str], binomial_layers: int
 ) -> list[CaseSpec]:
-    """Build benchmark case specs, marking known-invalid cases as skipped."""
+    """Build benchmark case specs."""
     specs: list[CaseSpec] = []
     for family in families:
         for constraint in constraints:
             skip_reason = None
-            if family == "b" and constraint in {"strength-edges", "strength-degree"}:
-                skip_reason = "known P5: Python wrapper calls ME kernel"
             layers = (
                 binomial_layers if family == "b" else 3 if family == "wnb" else None
             )

@@ -6,6 +6,7 @@ runs in Rust. Python only validates inputs and wraps results.
 
 import warnings
 from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -386,8 +387,17 @@ def _partial_family_coordinate(
     tolerance: float,
     max_iterations: int,
     family: str,
-    fit_func: object,
-    rate_func: object,
+    fit_func: Callable[
+        [
+            NDArray[np.float64],
+            NDArray[np.float64],
+            NDArray[np.float64],
+            NDArray[np.float64],
+            float,
+        ],
+        Any,
+    ],
+    rate_func: Callable[[float, float, float, Any], float],
 ) -> PartialFitResult:
     """Shared partial coordinate fitting: compute excess, fit family, assemble rates."""
     s_out = np.asarray(strength_out, dtype=np.float64)

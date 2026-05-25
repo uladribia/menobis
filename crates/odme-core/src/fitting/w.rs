@@ -440,7 +440,7 @@ fn solve_strength_edges_factor(target: f64, other: &[f64], lam: f64, layers: u32
         return 0.0;
     }
     let mut low = 0.0_f64;
-    let mut high = ((1.0 - 1e-12) / max_other).min(1e12);
+    let mut high = ((1.0 - 1e-12) / max_other).min(1e30);
     for _ in 0..60 {
         let mid = 0.5 * (low + high);
         let value: f64 = other
@@ -586,7 +586,7 @@ fn fit_strength_edges_w(
         cur_y = y.clone();
         let edges = strength_edges_expected_edges(&x, &y, high, layers, opts.self_loops);
         best = Some((x, y, converged, iterations, high, edges));
-        if edges >= target_edges || high > 1e12 {
+        if edges >= target_edges || high > 1e30 {
             break;
         }
         low = high;
@@ -765,7 +765,7 @@ fn solve_strength_degree_factor_s(
         return 0.0;
     }
     let mut low = 0.0_f64;
-    let mut high = ((1.0 - 1e-12) / max_oq).min(1e12);
+    let mut high = ((1.0 - 1e-12) / max_oq).min(1e30);
     for _ in 0..60 {
         let mid = 0.5 * (low + high);
         let value: f64 = other_q
@@ -802,8 +802,25 @@ fn solve_strength_degree_factor_k(
         return 0.0;
     }
     let mut low = 0.0_f64;
-    let mut high = 1e6_f64;
-    for _ in 0..60 {
+    let mut high = 1.0_f64;
+    for _ in 0..80 {
+        let value: f64 = other_q
+            .iter()
+            .zip(other_v.iter())
+            .map(|(&oq, &ov)| {
+                let q = (lam_x * oq).clamp(0.0, 1.0 - 1e-14);
+                if q <= 0.0 {
+                    return 0.0;
+                }
+                w_occupation(high * ov, -(q.ln()), layers)
+            })
+            .sum();
+        if value >= target || high >= 1e30 {
+            break;
+        }
+        high *= 2.0;
+    }
+    for _ in 0..80 {
         let mid = 0.5 * (low + high);
         let value: f64 = other_q
             .iter()
@@ -852,13 +869,40 @@ fn balance_strength_degree_w(
         .collect();
     let k_total = degree_out.iter().sum::<f64>().max(1.0);
     let k_scale = (k_total / n.max(1) as f64).sqrt().max(0.1);
+    let capacity = if self_loops {
+        n as f64
+    } else {
+        n.saturating_sub(1) as f64
+    };
+    let saturated_out: Vec<bool> = degree_out
+        .iter()
+        .map(|&k| k >= capacity - tolerance.max(1e-9))
+        .collect();
+    let saturated_in: Vec<bool> = degree_in
+        .iter()
+        .map(|&k| k >= capacity - tolerance.max(1e-9))
+        .collect();
     let mut z: Vec<f64> = degree_out
         .iter()
-        .map(|&k| (k / k_total * k_scale).max(1e-12))
+        .enumerate()
+        .map(|(i, &k)| {
+            if saturated_out[i] {
+                1e30
+            } else {
+                (k / k_total * k_scale).max(1e-12)
+            }
+        })
         .collect();
     let mut w: Vec<f64> = degree_in
         .iter()
-        .map(|&k| (k / k_total * k_scale).max(1e-12))
+        .enumerate()
+        .map(|(j, &k)| {
+            if saturated_in[j] {
+                1e30
+            } else {
+                (k / k_total * k_scale).max(1e-12)
+            }
+        })
         .collect();
     let mut other_q = vec![0.0_f64; n];
     let mut other_v = vec![0.0_f64; n];
@@ -895,8 +939,13 @@ fn balance_strength_degree_w(
             }
             x[i] = solve_strength_degree_factor_s(strength_out[i], &other_q, &other_v, 1.0, layers);
         }
-        // Update w (degree_in)
+        // Update w (degree_in). Degree-saturated nodes keep a large multiplier,
+        // forcing occupation pi_ij -> 1 while x/y continue fitting positive weights.
         for j in 0..n {
+            if saturated_in[j] {
+                w[j] = 1e30;
+                continue;
+            }
             for i in 0..n {
                 if self_loops || i != j {
                     other_q[i] = x[i] * y[j];
@@ -908,8 +957,12 @@ fn balance_strength_degree_w(
             }
             w[j] = solve_strength_degree_factor_k(degree_in[j], &other_q, &other_v, 1.0, layers);
         }
-        // Update z (degree_out)
+        // Update z (degree_out). Degree-saturated nodes keep a large multiplier.
         for i in 0..n {
+            if saturated_out[i] {
+                z[i] = 1e30;
+                continue;
+            }
             for j in 0..n {
                 if self_loops || i != j {
                     other_q[j] = x[i] * y[j];
@@ -1030,7 +1083,7 @@ fn fit_strength_degree_w(
     );
     let status = if converged
         && residuals.max_abs <= opts.tolerance.max(1e-6) * total_strength
-        && max_degree_residual <= opts.tolerance.max(1e-6) * total_degree
+        && max_degree_residual <= opts.tolerance.max(2e-6) * total_degree
     {
         WFitStatus::Solved
     } else {

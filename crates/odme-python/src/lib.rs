@@ -58,8 +58,10 @@ use odme_core::fitting::{
     fit_degree_events_negative_binomial as core_fit_degree_events_negative_binomial,
     fit_strength_cost_geometric as core_fit_strength_cost_geometric,
     fit_strength_cost_negative_binomial as core_fit_strength_cost_negative_binomial,
+    fit_strength_degree_binomial as core_fit_strength_degree_binomial,
     fit_strength_degree_geometric as core_fit_strength_degree_geometric,
     fit_strength_degree_negative_binomial as core_fit_strength_degree_negative_binomial,
+    fit_strength_edges_binomial as core_fit_strength_edges_binomial,
     fit_strength_edges_geometric as core_fit_strength_edges_geometric,
     fit_strength_edges_negative_binomial as core_fit_strength_edges_negative_binomial,
     fit_strength_geometric as core_fit_strength_geometric,
@@ -674,6 +676,39 @@ fn fit_strength_edges_poisson(
 }
 
 #[pyfunction]
+fn fit_strength_edges_binomial(
+    strength_out: Vec<f64>,
+    strength_in: Vec<f64>,
+    target_edges: f64,
+    layers: u32,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<FitStrengthEdges> {
+    if strength_out.len() != strength_in.len() {
+        return Err(PyValueError::new_err(
+            "strength arrays must have same length",
+        ));
+    }
+    let result = core_fit_strength_edges_binomial(
+        &strength_out,
+        &strength_in,
+        target_edges,
+        layers,
+        self_loops,
+        tolerance,
+        max_iterations,
+    );
+    Ok((
+        result.x,
+        result.y,
+        result.lam,
+        result.converged,
+        result.iterations,
+    ))
+}
+
+#[pyfunction]
 fn fit_strength_degree_poisson(
     strength_out: Vec<f64>,
     strength_in: Vec<f64>,
@@ -738,6 +773,46 @@ fn fit_weighted_factors(
         max_iterations,
     );
     Ok((result.x, result.y, result.converged, result.iterations))
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn fit_strength_degree_binomial(
+    strength_out: Vec<f64>,
+    strength_in: Vec<f64>,
+    degree_out: Vec<f64>,
+    degree_in: Vec<f64>,
+    layers: u32,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<FitStrengthDegree> {
+    if strength_out.len() != strength_in.len()
+        || strength_out.len() != degree_out.len()
+        || strength_out.len() != degree_in.len()
+    {
+        return Err(PyValueError::new_err(
+            "strength and degree arrays must have same length",
+        ));
+    }
+    let result = core_fit_strength_degree_binomial(
+        &strength_out,
+        &strength_in,
+        &degree_out,
+        &degree_in,
+        layers,
+        self_loops,
+        tolerance,
+        max_iterations,
+    );
+    Ok((
+        result.x,
+        result.y,
+        result.z,
+        result.w,
+        result.converged,
+        result.iterations,
+    ))
 }
 
 #[pyfunction]
@@ -3237,6 +3312,8 @@ fn _odme(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(fit_degree_bernoulli, module)?)?;
     module.add_function(wrap_pyfunction!(fit_strength_edges_poisson, module)?)?;
     module.add_function(wrap_pyfunction!(fit_strength_degree_poisson, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_strength_edges_binomial, module)?)?;
+    module.add_function(wrap_pyfunction!(fit_strength_degree_binomial, module)?)?;
     module.add_function(wrap_pyfunction!(fit_weighted_factors, module)?)?;
     module.add_function(wrap_pyfunction!(fit_strength_poisson, module)?)?;
     module.add_function(wrap_pyfunction!(fit_strength_geometric, module)?)?;

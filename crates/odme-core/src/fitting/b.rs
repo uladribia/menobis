@@ -3,7 +3,7 @@
 use super::support::{
     max_pair_delta, peel_b_strength_saturation, peel_degree_saturation, self_loop_mask,
 };
-use super::FitResult;
+use super::{FitResult, StrengthDegreeFitResult, StrengthEdgesFitResult};
 
 pub fn balance_masked_degree_bernoulli(
     degree_out: &[f64],
@@ -343,4 +343,489 @@ pub fn balance_masked_strength_binomial(
         converged: false,
         iterations: max_iterations,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Zero-inflated binomial(M) strength-edges and strength-degree fitting
+// ---------------------------------------------------------------------------
+
+#[inline]
+fn b_g(q: f64, layers: u32) -> f64 {
+    (1.0 + q.max(0.0)).powi(layers as i32) - 1.0
+}
+
+#[inline]
+fn b_zip_mean(lam: f64, q: f64, layers: u32) -> f64 {
+    if lam <= 0.0 || q <= 0.0 || layers == 0 {
+        return 0.0;
+    }
+    // Thesis zero-inflated B formula:
+    // E[t_ij] = l_ij q_ij G'_B(q_ij) / (1 + l_ij G_B(q_ij)),
+    // G_B(q) = (1 + q)^M - 1, q G'_B(q) = M q (1 + q)^(M-1).
+    let one_plus = 1.0 + q;
+    let numerator = lam * f64::from(layers) * q * one_plus.powi(layers as i32 - 1);
+    let denominator = 1.0 + lam * (one_plus.powi(layers as i32) - 1.0);
+    (numerator / denominator).clamp(0.0, f64::from(layers))
+}
+
+#[inline]
+fn b_zip_occupation(lam: f64, q: f64, layers: u32) -> f64 {
+    if lam <= 0.0 || q <= 0.0 || layers == 0 {
+        return 0.0;
+    }
+    let lg = lam * b_g(q, layers);
+    (lg / (1.0 + lg)).clamp(0.0, 1.0)
+}
+
+fn solve_b_strength_edges_factor(target: f64, other: &[f64], lam: f64, layers: u32) -> f64 {
+    if target <= 0.0 || other.iter().all(|&v| v <= 0.0) {
+        return 0.0;
+    }
+    let mut low = 0.0_f64;
+    let mut high = 1.0_f64;
+    for _ in 0..80 {
+        let value: f64 = other
+            .iter()
+            .map(|&v| b_zip_mean(lam, high * v, layers))
+            .sum();
+        if value >= target || high >= 1e18 {
+            break;
+        }
+        high *= 2.0;
+    }
+    for _ in 0..80 {
+        let mid = 0.5 * (low + high);
+        let value: f64 = other
+            .iter()
+            .map(|&v| b_zip_mean(lam, mid * v, layers))
+            .sum();
+        if value < target {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    0.5 * (low + high)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn balance_strength_edges_binomial_for_lambda(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    lam: f64,
+    layers: u32,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+    x_init: &[f64],
+    y_init: &[f64],
+) -> (Vec<f64>, Vec<f64>, bool, usize) {
+    let n = strength_out.len();
+    let mut x = x_init.to_vec();
+    let mut y = y_init.to_vec();
+    let mut other = vec![0.0; n];
+    for iter in 0..max_iterations {
+        for j in 0..n {
+            for i in 0..n {
+                other[i] = if self_loops || i != j { x[i] } else { 0.0 };
+            }
+            y[j] = solve_b_strength_edges_factor(strength_in[j], &other, lam, layers);
+        }
+        for i in 0..n {
+            for j in 0..n {
+                other[j] = if self_loops || i != j { y[j] } else { 0.0 };
+            }
+            x[i] = solve_b_strength_edges_factor(strength_out[i], &other, lam, layers);
+        }
+        let err =
+            b_strength_edges_max_error(&x, &y, lam, layers, strength_out, strength_in, self_loops)
+                .0;
+        if err <= tolerance.max(1e-10) {
+            return (x, y, true, iter + 1);
+        }
+    }
+    (x, y, false, max_iterations)
+}
+
+fn b_strength_edges_max_error(
+    x: &[f64],
+    y: &[f64],
+    lam: f64,
+    layers: u32,
+    strength_out: &[f64],
+    strength_in: &[f64],
+    self_loops: bool,
+) -> (f64, f64) {
+    let n = x.len();
+    let mut pred_out = vec![0.0; n];
+    let mut pred_in = vec![0.0; n];
+    let mut edges = 0.0;
+    for i in 0..n {
+        for j in 0..n {
+            if self_loops || i != j {
+                let q = x[i] * y[j];
+                let mean = b_zip_mean(lam, q, layers);
+                pred_out[i] += mean;
+                pred_in[j] += mean;
+                edges += b_zip_occupation(lam, q, layers);
+            }
+        }
+    }
+    let mut max_err = 0.0_f64;
+    for i in 0..n {
+        max_err = max_err.max((pred_out[i] - strength_out[i]).abs());
+        max_err = max_err.max((pred_in[i] - strength_in[i]).abs());
+    }
+    (max_err, edges)
+}
+
+#[must_use]
+pub fn fit_strength_edges_binomial(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    target_edges: f64,
+    layers: u32,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> StrengthEdgesFitResult {
+    let n = strength_out.len();
+    let pairs = if self_loops {
+        n * n
+    } else {
+        n * n.saturating_sub(1)
+    } as f64;
+    if n == 0
+        || n != strength_in.len()
+        || layers == 0
+        || target_edges <= 0.0
+        || target_edges > pairs
+    {
+        return StrengthEdgesFitResult {
+            x: vec![0.0; n],
+            y: vec![0.0; n],
+            lam: 0.0,
+            converged: false,
+            iterations: 0,
+        };
+    }
+    let total = strength_out.iter().sum::<f64>().max(1.0);
+    let scale = total.sqrt().max(1.0);
+    let mut cur_x: Vec<f64> = strength_out
+        .iter()
+        .map(|&s| (s / scale).max(1e-12))
+        .collect();
+    let mut cur_y: Vec<f64> = strength_in
+        .iter()
+        .map(|&s| (s / scale).max(1e-12))
+        .collect();
+    let mut low = 1e-14_f64;
+    let mut high = 1.0_f64;
+    let mut best = (
+        cur_x.clone(),
+        cur_y.clone(),
+        false,
+        0_usize,
+        high,
+        0.0_f64,
+        f64::INFINITY,
+    );
+    for _ in 0..80 {
+        let (x, y, conv, it) = balance_strength_edges_binomial_for_lambda(
+            strength_out,
+            strength_in,
+            high,
+            layers,
+            self_loops,
+            tolerance,
+            max_iterations.min(5000),
+            &cur_x,
+            &cur_y,
+        );
+        let (err, edges) =
+            b_strength_edges_max_error(&x, &y, high, layers, strength_out, strength_in, self_loops);
+        cur_x = x.clone();
+        cur_y = y.clone();
+        best = (x, y, conv, it, high, edges, err);
+        if edges >= target_edges || high >= 1e14 {
+            break;
+        }
+        low = high;
+        high *= 2.0;
+    }
+    let mut total_it = 0;
+    for _ in 0..70 {
+        let mid = 0.5 * (low + high);
+        let (x, y, conv, it) = balance_strength_edges_binomial_for_lambda(
+            strength_out,
+            strength_in,
+            mid,
+            layers,
+            self_loops,
+            tolerance,
+            max_iterations.min(5000),
+            &cur_x,
+            &cur_y,
+        );
+        total_it += it;
+        let (err, edges) =
+            b_strength_edges_max_error(&x, &y, mid, layers, strength_out, strength_in, self_loops);
+        cur_x = x.clone();
+        cur_y = y.clone();
+        best = (x, y, conv, total_it, mid, edges, err);
+        if (edges - target_edges).abs() <= tolerance.max(1e-8) * target_edges.max(1.0)
+            && err <= tolerance.max(1e-8) * total.max(1.0)
+        {
+            break;
+        }
+        if edges < target_edges {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    StrengthEdgesFitResult {
+        x: best.0,
+        y: best.1,
+        lam: best.4,
+        converged: best.2
+            || (best.5 - target_edges).abs() <= tolerance.max(1e-7) * target_edges.max(1.0),
+        iterations: best.3,
+    }
+}
+
+fn solve_b_strength_degree_factor_s(
+    target: f64,
+    other_q: &[f64],
+    other_v: &[f64],
+    lam_x: f64,
+    layers: u32,
+) -> f64 {
+    if target <= 0.0 {
+        return 0.0;
+    }
+    let mut low = 0.0_f64;
+    let mut high = 1.0_f64;
+    for _ in 0..80 {
+        let value: f64 = other_q
+            .iter()
+            .zip(other_v)
+            .map(|(&oq, &ov)| b_zip_mean(ov, lam_x * high * oq, layers))
+            .sum();
+        if value >= target || high >= 1e18 {
+            break;
+        }
+        high *= 2.0;
+    }
+    for _ in 0..80 {
+        let mid = 0.5 * (low + high);
+        let value: f64 = other_q
+            .iter()
+            .zip(other_v)
+            .map(|(&oq, &ov)| b_zip_mean(ov, lam_x * mid * oq, layers))
+            .sum();
+        if value < target {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    0.5 * (low + high)
+}
+
+fn solve_b_strength_degree_factor_k(
+    target: f64,
+    other_q: &[f64],
+    other_v: &[f64],
+    lam_z: f64,
+    layers: u32,
+) -> f64 {
+    if target <= 0.0 {
+        return 0.0;
+    }
+    let mut low = 0.0_f64;
+    let mut high = 1.0_f64;
+    for _ in 0..80 {
+        let value: f64 = other_q
+            .iter()
+            .zip(other_v)
+            .map(|(&oq, &ov)| b_zip_occupation(lam_z * high * ov, oq, layers))
+            .sum();
+        if value >= target || high >= 1e18 {
+            break;
+        }
+        high *= 2.0;
+    }
+    for _ in 0..80 {
+        let mid = 0.5 * (low + high);
+        let value: f64 = other_q
+            .iter()
+            .zip(other_v)
+            .map(|(&oq, &ov)| b_zip_occupation(lam_z * mid * ov, oq, layers))
+            .sum();
+        if value < target {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    0.5 * (low + high)
+}
+
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn fit_strength_degree_binomial(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    degree_out: &[f64],
+    degree_in: &[f64],
+    layers: u32,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> StrengthDegreeFitResult {
+    let n = strength_out.len();
+    let total = strength_out.iter().sum::<f64>().max(1.0);
+    let scale = total.sqrt().max(1.0);
+    let mut x: Vec<f64> = strength_out
+        .iter()
+        .map(|&s| (s / scale).max(1e-12))
+        .collect();
+    let mut y: Vec<f64> = strength_in
+        .iter()
+        .map(|&s| (s / scale).max(1e-12))
+        .collect();
+    let k_total = degree_out.iter().sum::<f64>().max(1.0);
+    let mut z: Vec<f64> = degree_out
+        .iter()
+        .map(|&k| (k / k_total).max(1e-12))
+        .collect();
+    let mut w: Vec<f64> = degree_in
+        .iter()
+        .map(|&k| (k / k_total).max(1e-12))
+        .collect();
+    let mut oq = vec![0.0; n];
+    let mut ov = vec![0.0; n];
+    let mut converged = false;
+    let mut iterations = 0;
+    for iter in 0..max_iterations {
+        for j in 0..n {
+            for i in 0..n {
+                if self_loops || i != j {
+                    oq[i] = x[i];
+                    ov[i] = z[i] * w[j];
+                } else {
+                    oq[i] = 0.0;
+                    ov[i] = 0.0;
+                }
+            }
+            y[j] = solve_b_strength_degree_factor_s(strength_in[j], &oq, &ov, 1.0, layers);
+        }
+        for i in 0..n {
+            for j in 0..n {
+                if self_loops || i != j {
+                    oq[j] = y[j];
+                    ov[j] = z[i] * w[j];
+                } else {
+                    oq[j] = 0.0;
+                    ov[j] = 0.0;
+                }
+            }
+            x[i] = solve_b_strength_degree_factor_s(strength_out[i], &oq, &ov, 1.0, layers);
+        }
+        for j in 0..n {
+            for i in 0..n {
+                if self_loops || i != j {
+                    oq[i] = x[i] * y[j];
+                    ov[i] = z[i];
+                } else {
+                    oq[i] = 0.0;
+                    ov[i] = 0.0;
+                }
+            }
+            w[j] = solve_b_strength_degree_factor_k(degree_in[j], &oq, &ov, 1.0, layers);
+        }
+        for i in 0..n {
+            for j in 0..n {
+                if self_loops || i != j {
+                    oq[j] = x[i] * y[j];
+                    ov[j] = w[j];
+                } else {
+                    oq[j] = 0.0;
+                    ov[j] = 0.0;
+                }
+            }
+            z[i] = solve_b_strength_degree_factor_k(degree_out[i], &oq, &ov, 1.0, layers);
+        }
+        let (s_err, k_err) = b_strength_degree_errors(
+            &x,
+            &y,
+            &z,
+            &w,
+            layers,
+            strength_out,
+            strength_in,
+            degree_out,
+            degree_in,
+            self_loops,
+        );
+        iterations = iter + 1;
+        if s_err <= tolerance.max(1e-6) * total && k_err <= tolerance.max(1e-6) * k_total {
+            converged = true;
+            break;
+        }
+    }
+    StrengthDegreeFitResult {
+        x,
+        y,
+        z,
+        w,
+        converged,
+        iterations,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn b_strength_degree_errors(
+    x: &[f64],
+    y: &[f64],
+    z: &[f64],
+    w: &[f64],
+    layers: u32,
+    strength_out: &[f64],
+    strength_in: &[f64],
+    degree_out: &[f64],
+    degree_in: &[f64],
+    self_loops: bool,
+) -> (f64, f64) {
+    let n = x.len();
+    let mut so = vec![0.0; n];
+    let mut si = vec![0.0; n];
+    let mut ko = vec![0.0; n];
+    let mut ki = vec![0.0; n];
+    for i in 0..n {
+        for j in 0..n {
+            if self_loops || i != j {
+                let q = x[i] * y[j];
+                let v = z[i] * w[j];
+                let mean = b_zip_mean(v, q, layers);
+                let occ = b_zip_occupation(v, q, layers);
+                so[i] += mean;
+                si[j] += mean;
+                ko[i] += occ;
+                ki[j] += occ;
+            }
+        }
+    }
+    let mut se = 0.0_f64;
+    let mut ke = 0.0_f64;
+    for i in 0..n {
+        se = se
+            .max((so[i] - strength_out[i]).abs())
+            .max((si[i] - strength_in[i]).abs());
+        ke = ke
+            .max((ko[i] - degree_out[i]).abs())
+            .max((ki[i] - degree_in[i]).abs());
+    }
+    (se, ke)
 }

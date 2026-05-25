@@ -137,6 +137,25 @@ def fit_strength_degree_poisson(
     tolerance: float,
     max_iterations: int,
 ) -> tuple[list[float], list[float], list[float], list[float], bool, int]: ...
+def fit_strength_edges_binomial(
+    strength_out: list[float],
+    strength_in: list[float],
+    target_edges: float,
+    layers: int,
+    self_loops: bool,
+    tolerance: float,
+    max_iterations: int,
+) -> tuple[list[float], list[float], float, bool, int]: ...
+def fit_strength_degree_binomial(
+    strength_out: list[float],
+    strength_in: list[float],
+    degree_out: list[float],
+    degree_in: list[float],
+    layers: int,
+    self_loops: bool,
+    tolerance: float,
+    max_iterations: int,
+) -> tuple[list[float], list[float], list[float], list[float], bool, int]: ...
 def fit_weighted_factors(
     excess_out: list[float],
     excess_in: list[float],

@@ -167,7 +167,7 @@ def sample_strength_poisson(
 
 
 def sample_degree_events_poisson(
-    fit: FitResult,
+    fit: FitResult | DegreeEventsFit,
     *,
     total_events: int,
     seed: int = 0,

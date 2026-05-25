@@ -43,7 +43,7 @@ def _strength_degree_fit() -> StrengthDegreeFit:
     )
 
 
-def _degree_fit() -> "DegreeEventsFit":  # noqa: F821
+def _degree_fit():
     from odme.models.types import DegreeEventsFit
 
     return DegreeEventsFit(

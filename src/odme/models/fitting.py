@@ -1576,10 +1576,11 @@ def fit_strength_edges_binomial(
     )
     _validate_binomial_feasibility(s_out, s_in, layers, self_loops=self_loops)
     t0 = time.perf_counter()
-    x_list, y_list, lam, converged, iters = _odme.fit_strength_edges_poisson(
+    x_list, y_list, lam, converged, iters = _odme.fit_strength_edges_binomial(
         s_out.tolist(),
         s_in.tolist(),
         target_edges,
+        layers,
         self_loops,
         tolerance,
         max_iterations,
@@ -1631,11 +1632,12 @@ def fit_strength_degree_binomial(
     _validate_binomial_feasibility(s_out, s_in, layers, self_loops=self_loops)
     t0 = time.perf_counter()
     x_list, y_list, z_list, w_list, converged, iters = (
-        _odme.fit_strength_degree_poisson(
+        _odme.fit_strength_degree_binomial(
             s_out.tolist(),
             s_in.tolist(),
             k_out.tolist(),
             k_in.tolist(),
+            layers,
             self_loops,
             tolerance,
             max_iterations,
