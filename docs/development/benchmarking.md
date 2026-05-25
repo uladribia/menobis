@@ -41,6 +41,7 @@ network itself. The PA network supplies constraints only.
 uv run python -m benchmarks all --nodes 100,500 --samples 5 --filter-samples 5
 uv run python -m benchmarks fit --nodes 500 --families me,w --constraints strength
 uv run python -m benchmarks filter --nodes 100 --json --output benchmarks/results/run
+uv run python -m benchmarks.legacy_compare --nodes 100,500
 ```
 
 Options:
@@ -57,6 +58,19 @@ Options:
 | `--filter-samples 5` | null-filter calibration samples |
 | `--json` | machine-readable stdout |
 | `--output DIR` | logs, networks, summary JSON |
+
+## Legacy comparison
+
+`benchmarks.legacy_compare` extracts the archived C analyzer from git history,
+compiles it with `gcc`, runs the same generated input network through both
+implementations, and reports JSON with:
+
+- strength/degree/Y2 maximum absolute differences;
+- modern Python process time and peak RSS;
+- modern load+Rust-compute time excluding import/startup;
+- legacy C process time and peak RSS.
+
+It requires GSL development headers and libraries for the archived analyzer.
 
 ## Known skips
 
