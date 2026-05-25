@@ -217,9 +217,8 @@ def compare_fit(
         legacy_inner_seconds=float(legacy_data["seconds"]),
         modern_max_strength_error=float(modern_data["max_strength_error"]),
         legacy_max_strength_error=float(legacy_data["max_strength_error"]),
-        max_expected_weight_abs_diff=max_abs(
-            np.asarray(modern_data["expectation"], dtype=float),
-            np.asarray(legacy_data["expectation"], dtype=float),
+        max_expected_weight_abs_diff=expectation_diff(
+            modern_data, legacy_data, family=family, layers=layers
         ),
     )
 
@@ -259,7 +258,8 @@ def _modern_script(
         data = {{
             "seconds": seconds,
             "max_strength_error": float(max(out_error, in_error)),
-            "expectation": expected.ravel().tolist(),
+            "x": fit.x.tolist(),
+            "y": fit.y.tolist(),
         }}
         Path({str(output_file)!r}).write_text(json.dumps(data))
         """
@@ -316,7 +316,8 @@ def _legacy_script(
         data = {{
             "seconds": seconds,
             "max_strength_error": float(max(out_error, in_error)),
-            "expectation": expected.ravel().tolist(),
+            "x": x.tolist(),
+            "y": y.tolist(),
         }}
         Path({str(output_file)!r}).write_text(json.dumps(data))
         """
@@ -342,9 +343,26 @@ def parse_peak_rss(stderr: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def max_abs(left: np.ndarray[Any, Any], right: np.ndarray[Any, Any]) -> float:
-    """Return maximum absolute difference between arrays."""
-    return float(np.max(np.abs(left - right)))
+def expectation_diff(
+    modern_data: dict[str, Any],
+    legacy_data: dict[str, Any],
+    *,
+    family: Family,
+    layers: int,
+) -> float:
+    """Return max expected-weight difference without subprocess dense JSON."""
+    modern_x = np.asarray(modern_data["x"], dtype=float)
+    modern_y = np.asarray(modern_data["y"], dtype=float)
+    legacy_x = np.asarray(legacy_data["x"], dtype=float)
+    legacy_y = np.asarray(legacy_data["y"], dtype=float)
+    modern_q = np.outer(modern_x, modern_y)
+    legacy_q = np.outer(legacy_x, legacy_y)
+    np.fill_diagonal(modern_q, 0.0)
+    np.fill_diagonal(legacy_q, 0.0)
+    if family == "b":
+        modern_q = layers * modern_q / (1.0 + modern_q)
+        legacy_q = layers * legacy_q / (1.0 + legacy_q)
+    return float(np.max(np.abs(modern_q - legacy_q)))
 
 
 def run(command: list[str]) -> subprocess.CompletedProcess[str]:

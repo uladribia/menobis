@@ -31,12 +31,19 @@ Scientific reference: <https://hdl.handle.net/10803/400560>.
 
 ## Open problems (by priority)
 
-### P1 — B fixed-strength no-self-loop solver is slower than legacy at N=500
+### P1 — B fixed-strength no-self-loop solver is slower than legacy
 
-`uv run python -m benchmarks.legacy_fit_compare --nodes 100,500 --families me,b`
+`uv run python -m benchmarks.legacy_fit_compare --nodes 1000 --families me,b`
 shows B fixed-strength no-self-loop expectations match the archived fitter, but
-modern inner solver time is slower at N=500. Investigate sparse IPF update costs
-and stopping criteria.
+modern inner solver time is slower. Investigate sparse IPF update costs and
+stopping criteria.
+
+### P2 — W/WNB strength-cost and strength-edges fits are slow at N=1000
+
+`uv run python -m benchmarks.fit_memory_matrix --nodes 1000` shows all modern
+cases converge, but W strength-cost takes ~707 s, WNB strength-cost ~212 s, WNB
+strength-edges ~162 s, and W strength-edges ~118 s. Memory is stable around
+77-78 MB per case.
 
 ### Informational: P4 — W single-sample errors are stochastic, not bugs
 
