@@ -67,10 +67,11 @@ strength samplers are `sample_strength_multinomial` and
 | `odme generate` | ME Poisson strength, cost, edges, degree, custom, multinomial variants |
 | `odme filter` | ME Poisson strength, cost, edges, degree, custom |
 
-The Python API exposes more B/W functions than the CLI. B strength-edges and
-strength-degree fitting currently have a known wrapper bug, and the required
-unified Python router is not implemented yet; see the
-[Ontology conformance audit](../development/ontology-conformance-audit.md).
+The Python API exposes more B/W functions than the CLI. A unified Python router
+for `{ensemble, family, constraint}` dispatch is still planned; direct typed
+entry points are the supported API until then. Radiation and sequential gravity
+are intentional gaps after the legacy archive; see
+[Archive legacy thesis folders](../decisions/0011-archive-legacy-thesis-folders.md).
 
 ## Reference
 

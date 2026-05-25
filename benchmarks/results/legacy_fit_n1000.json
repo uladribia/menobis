@@ -1,0 +1,40 @@
+[
+  {
+    "node_count": 1000,
+    "family": "me",
+    "layers": 1,
+    "total_events": 64000,
+    "modern": {
+      "seconds": 0.20785544299906178,
+      "peak_rss_kb": 78668
+    },
+    "legacy": {
+      "seconds": 0.26139522999983456,
+      "peak_rss_kb": 56804
+    },
+    "modern_inner_seconds": 0.000829384998723981,
+    "legacy_inner_seconds": 0.036314512999524595,
+    "modern_max_strength_error": 1.801936377887614e-11,
+    "legacy_max_strength_error": 6.821210263296962e-13,
+    "max_expected_weight_abs_diff": 2.540190280342358e-13
+  },
+  {
+    "node_count": 1000,
+    "family": "b",
+    "layers": 10,
+    "total_events": 64000,
+    "modern": {
+      "seconds": 1.4165895710011682,
+      "peak_rss_kb": 94592
+    },
+    "legacy": {
+      "seconds": 0.30665824199968483,
+      "peak_rss_kb": 63304
+    },
+    "modern_inner_seconds": 1.173169252999287,
+    "legacy_inner_seconds": 0.15244309599984263,
+    "modern_max_strength_error": 5.820766091346741e-09,
+    "legacy_max_strength_error": 1.0967016805807361e-07,
+    "max_expected_weight_abs_diff": 3.4777780655304014e-10
+  }
+]

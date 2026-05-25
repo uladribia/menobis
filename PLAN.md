@@ -27,8 +27,28 @@ Scientific reference: <https://hdl.handle.net/10803/400560>.
 - [x] Re-checked partial W/Wnb coordinate cost tests; P3 not reproducible after W solver rewrite
 - [x] Mixed strength-degree degree-saturation handling for ME/W/Wnb
 - [x] `uv run ty check`
+- [x] Archived/removed legacy thesis-era folders after coverage audit
 
 ## Open problems (by priority)
+
+### P1 — (RESOLVED) B fixed-strength solver was slower than legacy
+
+Fixed by switching to O(N) multiplier-delta convergence check with periodic
+O(N²) residual verification. B strength N=1000: 1.17s → 0.033s.
+
+### P2 — W/WNB strength-cost fits remain slow at N=1000
+
+`uv run python -m benchmarks.fit_memory_matrix --nodes 1000` shows W
+strength-cost still takes ~565 s. The coordinate-descent Newton solver
+converges slowly (2594 iterations). Future work: implement log-space
+L-BFGS-B with bisection fallback for superlinear convergence.
+
+### Informational: legacy solver failures on realistic N=1000 PA fixture
+
+The archived fitter matches modern ODME for ME strength, B strength, W strength,
+ME strength-cost, and fixed degree where legacy converges. Archived
+strength-edges timed out or failed, and archived strength-degree failed, on the
+same feasible N=1000 PA fixture that modern ODME solves.
 
 ### Informational: P4 — W single-sample errors are stochastic, not bugs
 
@@ -71,7 +91,6 @@ mkdocs build --strict
 
 ## Next steps (priority order)
 
-1. Archive/remove legacy thesis-era folders (`1. Network analysis/`, etc.)
-2. Final rename decision: ODME → MENoBiS
-3. Publish MkDocs site
-4. Write tutorials and notebooks with real-world examples
+1. Final rename decision: ODME → MENoBiS
+2. Publish MkDocs site
+3. Write tutorials and notebooks with real-world examples

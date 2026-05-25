@@ -588,7 +588,47 @@ fn fit_w_newton_inner(
             }
         }
 
-        // Convergence check
+        // Convergence: primary O(N) multiplier-delta check
+        let max_delta = a
+            .iter()
+            .zip(a_before.iter())
+            .chain(b.iter().zip(b_before.iter()))
+            .map(|(&cur, &prev)| (cur - prev).abs())
+            .fold(0.0_f64, f64::max)
+            .max((gamma - gamma_before).abs());
+        if max_delta < opts.tolerance * 1e-8 {
+            let x: Vec<f64> = a.iter().map(|&ai| (-ai).exp()).collect();
+            let y: Vec<f64> = b.iter().map(|&bj| (-bj).exp()).collect();
+            return StrengthCostFitResult {
+                x,
+                y,
+                gamma,
+                converged: true,
+                iterations: iter + 1,
+            };
+        }
+
+        // Periodic O(N²) residual check
+        let check_residual = (iter + 1) % 10 == 0 || max_delta < opts.tolerance * 0.01;
+        if !check_residual {
+            // Skip expensive residual check, just update damping heuristic
+            if max_delta < prev_max_err {
+                stall_count = 0;
+                if damping < 0.9 {
+                    damping = (damping * 1.05).min(0.9);
+                }
+            } else {
+                stall_count += 1;
+                if stall_count >= 5 {
+                    damping = (damping * 0.5).max(1e-4);
+                    stall_count = 0;
+                }
+            }
+            prev_max_err = max_delta;
+            continue;
+        }
+
+        // Full convergence check
         let mut max_err = 0.0_f64;
         for i in 0..n {
             let mut p = 0.0;

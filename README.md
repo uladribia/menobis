@@ -77,8 +77,8 @@ Start with:
 - `docs/development/benchmarking.md`
 - `docs/development/contributing-and-extending.md`
 
-## Legacy code
+## Repository layout
 
-Folders named `1. Network analysis`, `2. Model Fitting`, and
-`3. Model Generation` are thesis-era reference material. The modern ODME
-implementation lives under `src/`, `crates/`, `tests/`, and `docs/`.
+The modern ODME implementation lives under `src/`, `crates/`, `tests/`, and
+`docs/`. Thesis-era C/Python folders were removed from the active tree; git
+history remains the archive.

@@ -1052,6 +1052,26 @@ fn balance_xy_cost_coordinates(
         <[f64]>::to_vec,
     );
 
+    // Tiered strategy: cache f_ij = exp(-gamma*d_ij) when memory fits within
+    // ~256 MB (N < ~5700 for f64). Otherwise recompute per pair.
+    let use_cache = n * n * 8 <= 256 * 1024 * 1024;
+    let f_cache: Vec<f64> = if use_cache {
+        let mut cache = vec![0.0_f64; n * n];
+        for i in 0..n {
+            for j in 0..n {
+                cache[i * n + j] = (-gamma * coord_distance(coord_x, coord_y, i, j)).exp();
+            }
+        }
+        if !self_loops {
+            for i in 0..n {
+                cache[i * n + i] = 0.0;
+            }
+        }
+        cache
+    } else {
+        Vec::new()
+    };
+
     for iter in 0..max_iterations {
         let old_x = x.clone();
         let old_y = y.clone();
@@ -1060,10 +1080,14 @@ fn balance_xy_cost_coordinates(
                 y[j] = 0.0;
                 continue;
             }
-            let denom: f64 = (0..n)
-                .filter(|&i| self_loops || i != j)
-                .map(|i| x[i] * (-gamma * coord_distance(coord_x, coord_y, i, j)).exp())
-                .sum();
+            let denom: f64 = if use_cache {
+                (0..n).map(|i| x[i] * f_cache[i * n + j]).sum()
+            } else {
+                (0..n)
+                    .filter(|&i| self_loops || i != j)
+                    .map(|i| x[i] * (-gamma * coord_distance(coord_x, coord_y, i, j)).exp())
+                    .sum()
+            };
             y[j] = if denom > 0.0 {
                 strength_in[j] / denom
             } else {
@@ -1075,10 +1099,14 @@ fn balance_xy_cost_coordinates(
                 x[i] = 0.0;
                 continue;
             }
-            let denom: f64 = (0..n)
-                .filter(|&j| self_loops || i != j)
-                .map(|j| y[j] * (-gamma * coord_distance(coord_x, coord_y, i, j)).exp())
-                .sum();
+            let denom: f64 = if use_cache {
+                (0..n).map(|j| y[j] * f_cache[i * n + j]).sum()
+            } else {
+                (0..n)
+                    .filter(|&j| self_loops || i != j)
+                    .map(|j| y[j] * (-gamma * coord_distance(coord_x, coord_y, i, j)).exp())
+                    .sum()
+            };
             x[i] = if denom > 0.0 {
                 strength_out[i] / denom
             } else {
