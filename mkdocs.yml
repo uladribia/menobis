@@ -56,6 +56,7 @@ nav:
       - External Graph Libraries: decisions/0009-external-graph-libraries.md
       - Python Domain Layout: decisions/0010-python-domain-layout.md
       - Archive Legacy Thesis Folders: decisions/0011-archive-legacy-thesis-folders.md
+      - Solver Performance Optimization: decisions/0012-solver-performance-optimization.md
 
 plugins:
   - search

@@ -254,7 +254,11 @@ pub fn balance_masked_strength_binomial(
     let mut prev_err = f64::INFINITY;
     let mut damping = 1.0_f64; // geometric damping factor (1.0 = no damping)
 
+    // Check interval for expensive residual verification (every N iterations)
+    let residual_check_interval = 50;
+
     for iter in 0..max_iterations {
+        let mut max_delta = 0.0_f64;
         for j in 0..n {
             if k_in[j] <= 0.0 {
                 continue;
@@ -268,9 +272,11 @@ pub fn balance_masked_strength_binomial(
             }
             let new_y = if denom > 0.0 { k_in[j] / denom } else { 0.0 };
             if damping < 1.0 && y[j] > 0.0 && new_y > 0.0 {
-                // Geometric interpolation in log-space
-                y[j] = (y[j].ln() * (1.0 - damping) + new_y.ln() * damping).exp();
+                let damped = (y[j].ln() * (1.0 - damping) + new_y.ln() * damping).exp();
+                max_delta = max_delta.max((damped - y[j]).abs());
+                y[j] = damped;
             } else {
+                max_delta = max_delta.max((new_y - y[j]).abs());
                 y[j] = new_y;
             }
         }
@@ -287,34 +293,17 @@ pub fn balance_masked_strength_binomial(
             }
             let new_x = if denom > 0.0 { k_out[i] / denom } else { 0.0 };
             if damping < 1.0 && x[i] > 0.0 && new_x > 0.0 {
-                x[i] = (x[i].ln() * (1.0 - damping) + new_x.ln() * damping).exp();
+                let damped = (x[i].ln() * (1.0 - damping) + new_x.ln() * damping).exp();
+                max_delta = max_delta.max((damped - x[i]).abs());
+                x[i] = damped;
             } else {
+                max_delta = max_delta.max((new_x - x[i]).abs());
                 x[i] = new_x;
             }
         }
 
-        let mut max_err = 0.0_f64;
-        for i in 0..n {
-            let mut pred = 0.0;
-            for j in 0..n {
-                if mask[i * n + j] {
-                    continue;
-                }
-                pred += m * x[i] * y[j] / (1.0 + x[i] * y[j]);
-            }
-            max_err = max_err.max((pred - strength_out[i]).abs());
-        }
-        for j in 0..n {
-            let mut pred = 0.0;
-            for i in 0..n {
-                if mask[i * n + j] {
-                    continue;
-                }
-                pred += m * x[i] * y[j] / (1.0 + x[i] * y[j]);
-            }
-            max_err = max_err.max((pred - strength_in[j]).abs());
-        }
-        if max_err < tolerance {
+        // Primary convergence: O(N) multiplier-delta check
+        if max_delta < tolerance * 1e-6 {
             return FitResult {
                 x,
                 y,
@@ -323,18 +312,47 @@ pub fn balance_masked_strength_binomial(
             };
         }
 
-        // Detect stalling and enable damping
-        if max_err >= prev_err * 0.99 && damping >= 1.0 {
-            // Switch to damped mode
-            damping = 0.5;
-        } else if max_err >= prev_err * 0.999 && damping < 1.0 {
-            // Already damped but still stalling: reduce further
-            damping = (damping * 0.8).max(0.1);
-        } else if max_err < prev_err * 0.95 && damping < 1.0 {
-            // Good progress: relax damping
-            damping = (damping * 1.2).min(1.0);
+        // Periodic O(N²) residual check for tolerance on constraints
+        if (iter + 1) % residual_check_interval == 0 || max_delta < tolerance * 0.01 {
+            let mut max_err = 0.0_f64;
+            for i in 0..n {
+                let mut pred = 0.0;
+                for j in 0..n {
+                    if mask[i * n + j] {
+                        continue;
+                    }
+                    pred += m * x[i] * y[j] / (1.0 + x[i] * y[j]);
+                }
+                max_err = max_err.max((pred - strength_out[i]).abs());
+            }
+            for j in 0..n {
+                let mut pred = 0.0;
+                for i in 0..n {
+                    if mask[i * n + j] {
+                        continue;
+                    }
+                    pred += m * x[i] * y[j] / (1.0 + x[i] * y[j]);
+                }
+                max_err = max_err.max((pred - strength_in[j]).abs());
+            }
+            if max_err < tolerance {
+                return FitResult {
+                    x,
+                    y,
+                    converged: true,
+                    iterations: iter + 1,
+                };
+            }
+            // Detect stalling and enable damping
+            if max_err >= prev_err * 0.99 && damping >= 1.0 {
+                damping = 0.5;
+            } else if max_err >= prev_err * 0.999 && damping < 1.0 {
+                damping = (damping * 0.8).max(0.1);
+            } else if max_err < prev_err * 0.95 && damping < 1.0 {
+                damping = (damping * 1.2).min(1.0);
+            }
+            prev_err = max_err;
         }
-        prev_err = max_err;
     }
 
     FitResult {

@@ -31,19 +31,17 @@ Scientific reference: <https://hdl.handle.net/10803/400560>.
 
 ## Open problems (by priority)
 
-### P1 — B fixed-strength no-self-loop solver is slower than legacy
+### P1 — (RESOLVED) B fixed-strength solver was slower than legacy
 
-`uv run --with scipy python -m benchmarks.legacy_supported_fit_compare --nodes 1000`
-shows B fixed-strength no-self-loop expectations match the archived fitter, but
-modern inner solver time is slower. Investigate sparse IPF update costs and
-stopping criteria.
+Fixed by switching to O(N) multiplier-delta convergence check with periodic
+O(N²) residual verification. B strength N=1000: 1.17s → 0.033s.
 
-### P2 — W/WNB strength-cost and strength-edges fits are slow at N=1000
+### P2 — W/WNB strength-cost fits remain slow at N=1000
 
-`uv run python -m benchmarks.fit_memory_matrix --nodes 1000` shows all modern
-cases converge, but W strength-cost takes ~707 s, WNB strength-cost ~212 s, WNB
-strength-edges ~162 s, and W strength-edges ~118 s. Memory is stable around
-77-78 MB per case.
+`uv run python -m benchmarks.fit_memory_matrix --nodes 1000` shows W
+strength-cost still takes ~565 s. The coordinate-descent Newton solver
+converges slowly (2594 iterations). Future work: implement log-space
+L-BFGS-B with bisection fallback for superlinear convergence.
 
 ### Informational: legacy solver failures on realistic N=1000 PA fixture
 
