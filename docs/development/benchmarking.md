@@ -42,6 +42,7 @@ uv run python -m benchmarks all --nodes 100,500 --samples 5 --filter-samples 5
 uv run python -m benchmarks fit --nodes 500 --families me,w --constraints strength
 uv run python -m benchmarks filter --nodes 100 --json --output benchmarks/results/run
 uv run python -m benchmarks.legacy_compare --nodes 100,500
+uv run python -m benchmarks.legacy_fit_compare --nodes 100,500 --families me,b
 ```
 
 Options:
@@ -71,6 +72,13 @@ implementations, and reports JSON with:
 - legacy C process time and peak RSS.
 
 It requires GSL development headers and libraries for the archived analyzer.
+
+`benchmarks.legacy_fit_compare` extracts the archived Python strength fitter,
+converts `fitter_s.py` to Python 3 in a temporary directory, and compares ME and
+B fixed-strength no-self-loop solvers. It reports expectation differences,
+constraint recovery, process time/RSS, and inner solver time. Current N=500
+results show ME matches and is faster in modern ODME, while B matches but the
+modern solver is slower than the archived dense IPF implementation.
 
 ## Known skips
 

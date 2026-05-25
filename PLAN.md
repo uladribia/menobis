@@ -31,6 +31,13 @@ Scientific reference: <https://hdl.handle.net/10803/400560>.
 
 ## Open problems (by priority)
 
+### P1 — B fixed-strength no-self-loop solver is slower than legacy at N=500
+
+`uv run python -m benchmarks.legacy_fit_compare --nodes 100,500 --families me,b`
+shows B fixed-strength no-self-loop expectations match the archived fitter, but
+modern inner solver time is slower at N=500. Investigate sparse IPF update costs
+and stopping criteria.
+
 ### Informational: P4 — W single-sample errors are stochastic, not bugs
 
 W/Wnb geometric variance = q/(1−q)² diverges as q→1. Single-sample strength
