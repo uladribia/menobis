@@ -44,7 +44,7 @@ See [Getting Started](getting-started.md) for installation and workflow details.
 
 | Section | Contents |
 |---------|----------|
-| [Concepts](concepts/multi-edge-networks.md) | Scientific background and model equations |
+| [Concepts](concepts/non-binary-networks.md) | Scientific background and model equations |
 | [CLI](cli/analyze.md) | Command-line interface reference |
 | [API](api/python.md) | Python and Rust API reference |
 | [Decisions](decisions/0001-rust-python-architecture.md) | Architectural decision records |

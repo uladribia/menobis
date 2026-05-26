@@ -18,7 +18,7 @@ nav:
   - Thesis Context: thesis-context.md
   - Getting Started: getting-started.md
   - Concepts:
-      - Multi-edge Networks: concepts/multi-edge-networks.md
+      - Non-binary Networks: concepts/non-binary-networks.md
       - Maximum Entropy Models: concepts/maximum-entropy-models.md
       - Thesis Cases: concepts/thesis-cases.md
       - Spatial Costs: concepts/spatial-costs.md
