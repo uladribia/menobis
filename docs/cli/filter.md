@@ -1,13 +1,13 @@
 ---
-description: Filter observed edges against ODME null models.
+description: Filter observed edges against MENoBiS null models.
 ---
 
-# `odme filter`
+# `menobis filter`
 
 ## TL;DR
 
-Use `odme filter` to classify observed edges as upper-significant,
-lower-significant, or compatible with an independent ODME null model.
+Use `menobis filter` to classify observed edges as upper-significant,
+lower-significant, or compatible with an independent MENoBiS null model.
 
 ## Commands
 
@@ -23,12 +23,12 @@ lower-significant, or compatible with an independent ODME null model.
 ## Examples
 
 ```bash
-odme filter strength-poisson edges.csv --output-prefix filtered/
-odme filter strength-edges-poisson edges.csv --target-edges 500 --output-prefix filtered/
-odme filter strength-cost-poisson edges.csv --costs costs.csv --target-cost 1.5 --output-prefix filtered/
-odme filter strength-degree-poisson edges.csv --output-prefix filtered/
-odme filter degree-events-poisson edges.csv --output-prefix filtered/
-odme filter custom-poisson edges.csv --rates rates.csv --output-prefix filtered/
+menobis filter strength-poisson edges.csv --output-prefix filtered/
+menobis filter strength-edges-poisson edges.csv --target-edges 500 --output-prefix filtered/
+menobis filter strength-cost-poisson edges.csv --costs costs.csv --target-cost 1.5 --output-prefix filtered/
+menobis filter strength-degree-poisson edges.csv --output-prefix filtered/
+menobis filter degree-events-poisson edges.csv --output-prefix filtered/
+menobis filter custom-poisson edges.csv --rates rates.csv --output-prefix filtered/
 ```
 
 ## Outputs

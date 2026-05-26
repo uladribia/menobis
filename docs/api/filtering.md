@@ -1,5 +1,5 @@
 ---
-description: Python API for ODME statistical filtering.
+description: Python API for MENoBiS statistical filtering.
 ---
 
 # Filtering API
@@ -20,8 +20,8 @@ pair-provider math as generation.
 | Custom/partial | `filter_custom_poisson` over sparse expected-rate tables |
 
 Independent-strength filters accept raw `x`, `y` multipliers. Multi-parameter
-models should prefer fitted result objects so `family`, `layers`, `self_loops`,
-and positive-weight parameters stay consistent.
+models, including degree-events filters, accept fitted result objects so `family`,
+`layers`, `self_loops`, and positive-weight parameters stay consistent.
 
 ## Common options
 
@@ -55,8 +55,8 @@ occupation probabilities.
 ## Example
 
 ```python
-from odme.filtering import filter_strength_poisson
-from odme.data.io import read_edges
+from menobis.filtering import filter_strength_poisson
+from menobis.data.io import read_edges
 
 edges = read_edges("network.csv")
 result = filter_strength_poisson(edges, alpha=0.05, detect_absent=True)
@@ -66,6 +66,6 @@ print(len(result.upper.edges), len(result.lower.edges))
 
 ## Conformance note
 
-Degree-events filtering still exposes some positive-weight parameters manually.
-The target API is to read all such parameters from `DegreeEventsFit`; see the
-[Ontology conformance audit](../development/ontology-conformance-audit.md).
+Degree-events generation and filtering read ME/B/W positive-weight parameters
+from `DegreeEventsFit`. Low-level PyO3 bindings still expose primitive arrays for
+internal wrappers; see the [Ontology conformance audit](../development/ontology-conformance-audit.md).

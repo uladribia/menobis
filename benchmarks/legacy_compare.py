@@ -1,9 +1,9 @@
-"""Compare archived thesis analyzer with modern ODME on identical inputs.
+"""Compare archived thesis analyzer with modern MENoBiS on identical inputs.
 
-This is intentionally a benchmark/regression utility, not a packaged ODME API.
+This is intentionally a benchmark/regression utility, not a packaged MENoBiS API.
 It extracts the removed C analyzer from git history, compiles it in a temporary
 folder, generates realistic PA-geographic networks, and compares key node-level
-outputs with modern Rust-backed ODME statistics.
+outputs with modern Rust-backed MENoBiS statistics.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from typing import Any
 
 import numpy as np
 
-from odme.utilities.synthetic import generate_pa_geographic_network
+from menobis.utilities.synthetic import generate_pa_geographic_network
 
 
 @dataclass(frozen=True)
@@ -66,10 +66,10 @@ def main() -> None:
     args = parser.parse_args()
 
     node_counts = [int(value) for value in args.nodes.split(",") if value]
-    with tempfile.TemporaryDirectory(prefix="odme-legacy-compare-") as tmp_name:
+    with tempfile.TemporaryDirectory(prefix="menobis-legacy-compare-") as tmp_name:
         workdir = Path(tmp_name)
         if args.keep_workdir:
-            workdir = Path(tempfile.mkdtemp(prefix="odme-legacy-compare-keep-"))
+            workdir = Path(tempfile.mkdtemp(prefix="menobis-legacy-compare-keep-"))
         try:
             analyzer = prepare_legacy_analyzer(workdir, args.legacy_ref)
             results = [
@@ -216,8 +216,8 @@ def _modern_script(edge_file: Path, output_file: Path) -> str:
         import time
         from pathlib import Path
         import numpy as np
-        from odme.analysis import compute_all_stats
-        from odme.data import normalize_edges
+        from menobis.analysis import compute_all_stats
+        from menobis.data import normalize_edges
 
         started = time.perf_counter()
         raw = np.loadtxt({str(edge_file)!r}, dtype=np.uint64)

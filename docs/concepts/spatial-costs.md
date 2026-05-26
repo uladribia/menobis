@@ -33,7 +33,7 @@ The family-specific expectation is defined in
 | Sparse triples | `cost_sources`, `cost_targets`, `cost_values` | O(K) | arbitrary or incomplete costs |
 | Euclidean coordinates | projected `x`, `y` per node | O(N) provider state | complete spatial cost from coordinates |
 
-Coordinates must be projected planar coordinates. ODME does not transform CRS or
+Coordinates must be projected planar coordinates. MENoBiS does not transform CRS or
 compute geodesic distances.
 
 ## Required implementation shape
@@ -49,7 +49,7 @@ and dense `N x N` matrices.
 ## Python examples
 
 ```python
-from odme.models import (
+from menobis.models import (
     fit_strength_cost_poisson_coordinates,
     fit_strength_cost_binomial_coordinates,
     fit_strength_cost_geometric_coordinates,

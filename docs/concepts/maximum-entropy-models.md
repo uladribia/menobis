@@ -1,12 +1,12 @@
 ---
-description: Mathematical overview of ODME fitting, generation, and filtering.
+description: Mathematical overview of MENoBiS fitting, generation, and filtering.
 ---
 
 # Maximum entropy models
 
 ## TL;DR
 
-ODME fits maximum-entropy null models by matching expected sufficient statistics.
+MENoBiS fits maximum-entropy null models by matching expected sufficient statistics.
 The source ontology is [Model ontology](model-ontology.md): ensemble + family +
 constraint layer. This page explains the workflow without repeating all formulas.
 

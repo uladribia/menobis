@@ -1,18 +1,18 @@
 # AGENTS.md
 
-Guidance for coding agents and contributors working on the ODME modernization.
+Guidance for coding agents and contributors working on the MENoBiS modernization.
 
 ## Mission
 
-Replace the thesis-era codebase with **ODME**, a modern Rust + Python project that is fast, memory efficient, well tested, and thoroughly documented. Preserve the thesis-level scientific concepts and equations, but do not preserve old CLI behavior, old module layout, or backward compatibility.
+Replace the thesis-era codebase with **MENoBiS**, a modern Rust + Python project that is fast, memory efficient, well tested, and thoroughly documented. Preserve the thesis-level scientific concepts and equations, but do not preserve old CLI behavior, old module layout, or backward compatibility.
 
-**No backward compatibility is required.** ODME is an experimental package undergoing a full rewrite. Agents must never introduce shims, re-export facades, deprecated aliases, or compatibility layers. When code moves, all call sites update in the same change. When APIs change shape, old signatures are deleted, not preserved.
+**No backward compatibility is required.** MENoBiS is an experimental package undergoing a full rewrite. Agents must never introduce shims, re-export facades, deprecated aliases, or compatibility layers. When code moves, all call sites update in the same change. When APIs change shape, old signatures are deleted, not preserved.
 
 Primary scientific reference: <https://hdl.handle.net/10803/400560>.
 
 ## Pi skills
 
-The following pi skills must be used when working on ODME:
+The following pi skills must be used when working on MENoBiS:
 
 - **`/skill:commit`** — Use for all git commits. Follows Conventional Commits format. Never commit without using this skill.
 - **`/skill:create-cli`** — Use when designing or modifying CLI commands, flags, output formats, or error handling. Ensures consistent UX patterns (stdout for data, stderr for progress, `--json`, `--quiet`, `--output`, long options preferred, exit codes).
@@ -99,20 +99,20 @@ If a command is not available yet because the scaffold has not been created, sta
 
 ## Python style
 
-ODME should use a clean, modern, Pythonic style. Required conventions:
+MENoBiS should use a clean, modern, Pythonic style. Required conventions:
 
 - `uv`-managed `pyproject.toml` with explicit dependency groups.
 - Strict Ruff linting, Ruff formatting, and `ty` type checking.
 - Google-style docstrings for modules, classes, functions, and methods.
-- Typer CLI with a central `app`, subcommands in separate modules, `--version`, and `python -m odme` support.
+- Typer CLI with a central `app`, subcommands in separate modules, `--version`, and `python -m menobis` support.
 - Tests organized clearly, with one test file per module where practical.
 - `typer.testing.CliRunner` for CLI tests.
 - MkDocs Material documentation under `docs/`.
 - numpy arrays for data exchange and pyarrow for file I/O.
-- Rust-native kernels for ODME graph statistics; external graph libraries such as NetworkX or rustworkx must remain optional user-side adapters, not runtime dependencies.
+- Rust-native kernels for MENoBiS graph statistics; external graph libraries such as NetworkX or rustworkx must remain optional user-side adapters, not runtime dependencies.
 - Makefile targets that call `uv run --frozen` for reproducible checks once the lockfile exists.
 
-Additional ODME defaults:
+Additional MENoBiS defaults:
 
 - explicit names over abbreviations;
 - typed public APIs;
@@ -126,7 +126,7 @@ Additional ODME defaults:
 
 ## Model implementation policy
 
-ODME implements three weight-distribution families: ME (Poisson), B (Binomial),
+MENoBiS implements three weight-distribution families: ME (Poisson), B (Binomial),
 and W (Geometric / Negative Binomial). These share mathematical structure but
 have distinct expectation equations. As such, they should share the maximum number of common abstractions via factory methods.
 
@@ -163,7 +163,7 @@ When implementing or modifying a fitting kernel:
   - There are three cases that induce different statistics: ME, B and W.
   - B and W cases only implement the "grand canonical" ensemble, for which all node-pair `ij` statistics are independent.
   - ME implements additionally the "canonical" ensemble, based on multinomial statistics, and, exceptionally, the "microcanonical ensemble" only for fixed strength via stub matching.
-  - All "grand canonical" ensembles contemplate two kinds of constraints, some of which are implemented in ODME (others can be added in the future)
+  - All "grand canonical" ensembles contemplate two kinds of constraints, some of which are implemented in MENoBiS (others can be added in the future)
     - Those that depend linearly on the occupation number $E[t_ij]$, like strength sequence, strength plus average cost. In this case, the statistics are independent.
     - Those that additionally depend on the occupation probability $E[\Theta(t_ij>0)] $, like fixed total binary edges E, fixed degree sequence. In this case, the statistics are always Zero Inflated.
   - All cases contemplate different constraints at three levels. When a constraint reaches saturation level (like total degree=N or N-1), it must be deducted from the problem.
@@ -284,11 +284,11 @@ Document all tolerance choices in test docstrings.
 - Use numpy arrays as the canonical data exchange format between Rust and Python.
 - Network readers must accept non-negative integer weights, ignore zero-weight edges, and reject negative or non-integer weights at the boundary.
 - Never use dense `N x N` matrices, unless it is absolutely unavoidable.
-- All computation-heavy code must be implemented in Rust (`odme-core`), not in Python.
-- Python modules are thin wrappers: validate inputs, call Rust via `_odme`, wrap results in numpy arrays and typed dataclasses.
+- All computation-heavy code must be implemented in Rust (`menobis-core`), not in Python.
+- Python modules are thin wrappers: validate inputs, call Rust via `_menobis`, wrap results in numpy arrays and typed dataclasses.
 - Never implement loops, numerical kernels, or graph algorithms in Python when they can run in Rust.
-- Use Rust-native implementations for ODME-specific statistics.
-- Before implementing any graph algorithm, check if `odme-core` already provides it.
+- Use Rust-native implementations for MENoBiS-specific statistics.
+- Before implementing any graph algorithm, check if `menobis-core` already provides it.
 - Benchmark before optimizing.
 - Record performance-sensitive design choices in `docs/decisions/`.
 
@@ -298,7 +298,7 @@ Document all tolerance choices in test docstrings.
 - Do not reformat or churn legacy code unnecessarily during early branches.
 - Do not preserve historical CLI flags or module names unless they are still the best modern design.
 - Prefer thesis equations, hand-checked examples, and property tests over golden-file compatibility.
-- Fully replace the legacy code once ODME covers the selected scientific scope.
+- Fully replace the legacy code once MENoBiS covers the selected scientific scope.
 - When behavior differs from the old code, document whether the difference is intentional, numerical, stochastic, or a bug fix.
 - **Never add backward-compatibility shims, re-export wrappers, or deprecation aliases.** Move code cleanly and update all call sites in the same commit. Old paths are simply deleted.
 

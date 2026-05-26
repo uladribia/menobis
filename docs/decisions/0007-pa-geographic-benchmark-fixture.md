@@ -24,7 +24,7 @@ All end-to-end tests and benchmarks use a canonical synthetic fixture:
 4. exponential geographic damping by Euclidean distance;
 5. global normalization to an exact positive integer event total.
 
-The fixture is intentionally not sampled from an ODME null model. ODME nulls are
+The fixture is intentionally not sampled from an MENoBiS null model. MENoBiS nulls are
 fitted afterward from derived constraints.
 
 ## Filter calibration
@@ -37,7 +37,7 @@ positive behavior.
 
 | Benefit | Cost |
 |---|---|
-| realistic heterogeneous constraints | not a closed-form ODME data generator |
+| realistic heterogeneous constraints | not a closed-form MENoBiS data generator |
 | exact density and total events | support generation is benchmark-only |
 | spatial costs are always available | large complete cost triples remain O(N²) |
 

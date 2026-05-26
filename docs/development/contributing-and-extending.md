@@ -1,5 +1,5 @@
 ---
-description: How to contribute and extend ODME with new constraints.
+description: How to contribute and extend MENoBiS with new constraints.
 ---
 
 # Contributing and extending
@@ -25,17 +25,17 @@ on a support with fixed known weighted-pair contributions.
 
 | Path | Role |
 |---|---|
-| `crates/odme-core/src/distribution.rs` | pair distributions |
-| `crates/odme-core/src/pairs.rs` | provider abstractions |
-| `crates/odme-core/src/fitting/` | fitting solvers |
-| `crates/odme-core/src/generation.rs` | sampling |
-| `crates/odme-core/src/filter.rs` | p-values and filters |
-| `crates/odme-python/src/lib.rs` | PyO3 bridge |
-| `src/odme/analysis/` | Python analysis and ensemble helpers |
-| `src/odme/models/` | Python fitting, generation, and partial wrappers |
-| `src/odme/filtering/` | Python filtering wrappers and result types |
-| `src/odme/utilities/` | Synthetic fixtures and logging configuration |
-| `benchmarks/` | Repository benchmark CLI, not installed as `odme` |
+| `crates/menobis-core/src/distribution.rs` | pair distributions |
+| `crates/menobis-core/src/pairs.rs` | provider abstractions |
+| `crates/menobis-core/src/fitting/` | fitting solvers |
+| `crates/menobis-core/src/generation.rs` | sampling |
+| `crates/menobis-core/src/filter.rs` | p-values and filters |
+| `crates/menobis-python/src/lib.rs` | PyO3 bridge |
+| `src/menobis/analysis/` | Python analysis and ensemble helpers |
+| `src/menobis/models/` | Python fitting, generation, and partial wrappers |
+| `src/menobis/filtering/` | Python filtering wrappers and result types |
+| `src/menobis/utilities/` | Synthetic fixtures and logging configuration |
+| `benchmarks/` | Repository benchmark CLI, not installed as `menobis` |
 
 ## Add a new linear constraint
 

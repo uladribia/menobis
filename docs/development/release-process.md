@@ -1,12 +1,12 @@
 ---
-description: Release process for ODME.
+description: Release process for MENoBiS.
 ---
 
 # Release process
 
 ## TL;DR
 
-ODME is not yet published to PyPI or crates.io. The current release process is
+MENoBiS is not yet published to PyPI or crates.io. The current release process is
 local development builds with maturin.
 
 ## Development build
@@ -33,11 +33,11 @@ Before any future release:
 
 ## Versioning
 
-ODME follows semantic versioning. The current version is `0.1.0` (pre-release).
+MENoBiS follows semantic versioning. The current version is `0.1.0` (pre-release).
 
 ## Future plans
 
-- Publish to PyPI as `odme` with maturin-built wheels.
-- Publish `odme-core` to crates.io for Rust-only users.
+- Publish to PyPI as `menobis` with maturin-built wheels.
+- Publish `menobis-core` to crates.io for Rust-only users.
 - Add CI/CD pipeline with GitHub Actions.
 - Add benchmarking regression thresholds to CI.

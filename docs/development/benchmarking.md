@@ -7,7 +7,7 @@ description: Canonical benchmark pipeline and commands.
 ## TL;DR
 
 Use the canonical PA geographic generator for every benchmark. It intentionally
-creates networks outside the ODME null family, then fits ODME nulls to the
+creates networks outside the MENoBiS null family, then fits MENoBiS nulls to the
 derived constraints.
 
 ## Canonical network
@@ -28,7 +28,7 @@ heterogeneous strengths, and spatially damped weights.
 | Stage | Purpose |
 |---|---|
 | `generate` | Build PA geographic networks and derive constraints |
-| `fit` | Fit requested ODME families/constraints to those constraints |
+| `fit` | Fit requested MENoBiS families/constraints to those constraints |
 | `sample` | Sample fitted nulls and compare ensemble means to constraints |
 | `filter` | Sample from fitted nulls, filter those null samples, assess FPR |
 
@@ -90,7 +90,7 @@ N=1000 results are stored in `benchmarks/results/`:
 
 Legacy-supported N=1000 comparisons show ME strength, W strength, ME
 strength-cost, and degree observables match. Legacy strength-edges timed out or
-failed on the PA fixture, and legacy strength-degree failed; modern ODME solved
+failed on the PA fixture, and legacy strength-degree failed; modern MENoBiS solved
 those same cases. After solver optimizations, the slowest N=1000 modern fits are
 W strength-cost (~228 s), W strength-edges (~107 s), WNB strength-edges (~109 s),
 and WNB strength-cost (~71 s).

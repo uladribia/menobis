@@ -36,7 +36,7 @@ $$
 s_i^{out} \ge k_i^{out}, \quad s_j^{in} \ge k_j^{in}.
 $$
 
-ODME enforces this at the data boundary by rejecting fractional weights and
+MENoBiS enforces this at the data boundary by rejecting fractional weights and
 validating $s \ge k$ before coupled model fitting.
 
 ## Higher-order statistics

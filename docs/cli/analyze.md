@@ -1,12 +1,12 @@
-# `odme analyze`
+# `menobis analyze`
 
-Network analysis workflows for ODME edge tables. Metrics exposed by ODME use
+Network analysis workflows for MENoBiS edge tables. Metrics exposed by MENoBiS use
 Rust-native kernels and do not require NetworkX or rustworkx.
 
 ## Directed strengths
 
 ```bash
-odme analyze strengths edges.csv --output strengths.csv --node-count 100
+menobis analyze strengths edges.csv --output strengths.csv --node-count 100
 ```
 
 The command reads a canonical weighted edge table with columns `source`, `target`, and `weight`, then writes a CSV with:

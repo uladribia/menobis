@@ -1,5 +1,5 @@
 ---
-description: Quick start guide for ODME.
+description: Quick start guide for MENoBiS.
 ---
 
 # Getting started
@@ -19,14 +19,14 @@ uv run maturin develop
 ## Verify
 
 ```bash
-uv run odme --version
+uv run menobis --version
 uv run pytest
 cargo test --workspace
 ```
 
 ## Supported input formats
 
-ODME accepts networks with non-negative integer weights. Zero-weight edges are
+MENoBiS accepts networks with non-negative integer weights. Zero-weight edges are
 ignored. The in-memory representation is an `EdgeTable` with numpy arrays.
 
 | Format | Extensions |
@@ -43,9 +43,9 @@ ignored. The in-memory representation is an `EdgeTable` with numpy arrays.
 
 ```python
 import numpy as np
-from odme.data.io import read_edges
-from odme.analysis import directed_strengths
-from odme.models import fit_strength_poisson, sample_strength_poisson
+from menobis.data.io import read_edges
+from menobis.analysis import directed_strengths
+from menobis.models import fit_strength_poisson, sample_strength_poisson
 
 edges = read_edges("network.csv")
 s = directed_strengths(edges)
@@ -56,7 +56,7 @@ sample = sample_strength_poisson(fit.x, fit.y, seed=42)
 ## CLI
 
 ```bash
-odme analyze strengths network.csv --json
-odme fit strength-poisson network.csv --output fit.csv
-odme generate strength-poisson network.csv --seed 42 --output sample.csv
+menobis analyze strengths network.csv --json
+menobis fit strength-poisson network.csv --output fit.csv
+menobis generate strength-poisson network.csv --seed 42 --output sample.csv
 ```

@@ -1,9 +1,9 @@
-"""Compare archived thesis strength fitters with modern ODME solvers.
+"""Compare archived thesis strength fitters with modern MENoBiS solvers.
 
 The benchmark extracts the removed Python fitter from git history, converts it
 with Python 3.12's ``lib2to3`` in a temporary directory, and runs the archived
 ``fitter_s.balance_xy`` solver on the same realistic PA-geographic constraints
-used by modern ODME. It reports constraint recovery, expectation differences,
+used by modern MENoBiS. It reports constraint recovery, expectation differences,
 time, and peak RSS for ME/Poisson and B/Binomial fixed-strength fits.
 """
 
@@ -24,7 +24,7 @@ from typing import Any, Literal
 
 import numpy as np
 
-from odme.utilities.synthetic import (
+from menobis.utilities.synthetic import (
     derive_synthetic_constraints,
     generate_pa_geographic_network,
 )
@@ -78,10 +78,10 @@ def main() -> None:
     if invalid:
         raise SystemExit(f"unsupported families: {invalid}")
 
-    with tempfile.TemporaryDirectory(prefix="odme-legacy-fit-") as tmp_name:
+    with tempfile.TemporaryDirectory(prefix="menobis-legacy-fit-") as tmp_name:
         workdir = Path(tmp_name)
         if args.keep_workdir:
-            workdir = Path(tempfile.mkdtemp(prefix="odme-legacy-fit-keep-"))
+            workdir = Path(tempfile.mkdtemp(prefix="menobis-legacy-fit-keep-"))
         try:
             legacy_pkg = prepare_legacy_fitter(workdir, args.legacy_ref)
             results: list[FitComparisonResult] = []
@@ -233,9 +233,9 @@ def _modern_script(
     )
     expectation = f"{layers} * q / (1.0 + q)" if family == "b" else "q"
     import_line = (
-        "from odme.models import fit_strength_binomial"
+        "from menobis.models import fit_strength_binomial"
         if family == "b"
-        else "from odme.models import fit_strength_poisson"
+        else "from menobis.models import fit_strength_poisson"
     )
     return textwrap.dedent(
         f"""

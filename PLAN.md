@@ -1,60 +1,6 @@
-# ODME modernization plan
+# MENoBiS modernization plan
 
 Scientific reference: <https://hdl.handle.net/10803/400560>.
-
-## Completed
-
-- [x] Rust + Python scaffold with PyO3/maturin
-- [x] Edge-list data model, I/O, analysis
-- [x] ME/W fitting for main constraint types; B strength and strength-cost fitting
-- [x] Generation and filtering providers for ME/B/W
-- [x] Partial known-weight fitting scaffold; full Rust/family conformance pending
-- [x] Unified `coord_distance`, bisection gamma, O(K) sparse IPF
-- [x] Removed Clarabel/cvxrust — all W uses Newton solver
-- [x] MkDocs documentation site
-- [x] E2E pipeline tests
-- [x] B feasibility validation (`max_s <= M*(N-1)`)
-- [x] W Newton solver rewrite (bisection + adaptive damping)
-- [x] Degree-events boundary fix (clip to `n-2`)
-- [x] W diagnostics bug fix (probability → log-space conversion)
-- [x] Canonical PA geographic generator (`odme.synthetic`)
-- [x] Benchmark CLI reorganized: generate → fit → sample → null-filter
-- [x] Self-loop variant for PA generator and benchmark CLI
-- [x] Saturation peeling for B strength and all degree-events families (P6)
-- [x] B strength-edges and strength-degree use family-specific Rust kernels (P5)
-- [x] Re-checked W/Wnb large-N PA and Pareto workflows at N=500; P1 not reproducible with current Newton solver
-- [x] Re-checked B strength-cost at N=500; P2 not reproducible on current benchmark pipeline
-- [x] Re-checked partial W/Wnb coordinate cost tests; P3 not reproducible after W solver rewrite
-- [x] Mixed strength-degree degree-saturation handling for ME/W/Wnb
-- [x] `uv run ty check`
-- [x] Archived/removed legacy thesis-era folders after coverage audit
-
-## Open problems (by priority)
-
-### P1 — (RESOLVED) B fixed-strength solver was slower than legacy
-
-Fixed by switching to O(N) multiplier-delta convergence check with periodic
-O(N²) residual verification. B strength N=1000: 1.17s → 0.033s.
-
-### P2 — W/WNB strength-cost fits remain the slowest N=1000 cases
-
-Log-space L-BFGS with strict feasible line search and coordinate-Newton fallback
-reduced W strength-cost from ~565 s to ~228 s and WNB strength-cost from ~159 s
-to ~71 s. These remain the slowest cases; further work should reduce gamma
-search iterations or add stronger warm starts.
-
-### Informational: legacy solver failures on realistic N=1000 PA fixture
-
-The archived fitter matches modern ODME for ME strength, B strength, W strength,
-ME strength-cost, and fixed degree where legacy converges. Archived
-strength-edges timed out or failed, and archived strength-degree failed, on the
-same feasible N=1000 PA fixture that modern ODME solves.
-
-### Informational: P4 — W single-sample errors are stochastic, not bugs
-
-W/Wnb geometric variance = q/(1−q)² diverges as q→1. Single-sample strength
-errors of 100–5000 are expected. Ensemble z-scores confirm correct mean
-recovery. The benchmark pipeline uses ensemble checks (5 samples).
 
 ## Infrastructure status
 
@@ -63,7 +9,7 @@ recovery. The benchmark pipeline uses ensemble checks (5 samples).
 ```bash
 uv run python -m benchmarks all --nodes 100,500
 uv run python -m benchmarks all --nodes 100 --self-loops
-uv run odme-bench fit --nodes 500 --families me,w
+uv run python -m benchmarks fit --nodes 500 --families me,w
 ```
 
 Pipeline: PA geographic generate → fit → ensemble sample-check → null-filter FPR.
@@ -86,11 +32,34 @@ mkdocs build --strict
 |---|---|
 | ME/W/Wnb strength-degree | Degree-saturated nodes use fixed high occupation multipliers while strength multipliers remain active |
 | ME/W/Wnb strength-edges | Rejects target_edges ≥ capacity (use strength-only) |
-| B strength-edges / strength-degree | Uses B-specific Rust zero-inflated binomial kernels; benchmarked at N=500 |
-| W/Wnb strength at large N | Re-checked at N=500 on PA and Pareto-like inputs; current Newton solver converges |
+
+### Rename status
+
+Final rename decision executed: MENoBiS stands for **Max Entropy NOn
+Binary Suite** for null modeling.
 
 ## Next steps (priority order)
 
-1. Final rename decision: ODME → MENoBiS
-2. Publish MkDocs site
-3. Write tutorials and notebooks with real-world examples
+1. Address v2 readiness blockers documented in `docs/development/v2-readiness-audit.md`: degree-events parameters, partial coordinate Rust migration, unified Python router, and wrapper reuse.
+2. Run an extensive benchmark, provide an estimate on how long it would take to do a N=1000,5000,10000,20000 separating by case (ME, B , W).
+3. Write tutorials and notebooks with real-world examples + HOWTO on two+one cases: (1) filter a network with a null model (2) assess if some network statistic is relevant under a nullmodel (3) just fit and generate null model instances to do whatever the user needs. Use the PA synth model as realistic example. Do a complete audit of the docs to minimize overlap, maximize clarity and alignment, and refer to the thesis when needed. The docs should read cleary in the README using a mermaid diagram as follows (the notebook should follow these ideas).
+    1. Choose a case based on your data:
+        - Aggregated binary networks: Binomial. E.g. airlines connecting airports.
+        - Integer weights are distinguishable events: ME case. E.g. trips.
+        - Integer wegihts are undistinguishable events: W/NB case. E.g. total euros in milions of trade networks, global or per commodity (different layers).
+    2. Select if you want to support self loops or not.
+    3. Choose a constraint you want to check against. The constraint must be expressed as a linear combination of occupatin numbers or binary occupation events.
+        - Is it supported by the package? (fixed strength, fixed strength plus cost, fixed total events and degrees, fixed total binary edges and strengths, fixed degrees and strengthsl)? Use appropriate fitter.
+        - Is it not?
+            -- Check the thesis, it might be solved there analytically or computationally. If so, implement it as a new fitter.
+    4. Choose an ensemble:
+        - Microcanonical is only supported for ifxed strengths and ME with self loops.
+        - Canonical is only supported for ME (all cases).
+        - Grandcanonical covers the rest of cases.
+    Now your case is set: family, constraint, self-loop, ensemble.
+    5. Choose use-case:
+        1. Filter network: use the filter CLI, after having fitted the model.
+        2. Generate networks: use the sampling CLI, after having fitted the model.
+        3. Assess statistical relevance of high order network features: Use the sampling CLI to generate null models and ensemble the expectations. You might need to impemnet the magnitude you are interested in on the analysis package (or connect with existing packages like networkx or rustworkx).
+4. Publish MkDocs site with updated docs.
+

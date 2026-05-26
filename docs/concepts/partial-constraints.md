@@ -51,16 +51,20 @@ computation, and sparse rate-table assembly belong in Rust.
 | `fit_partial_strength_edges_poisson` | ME strength-edges |
 | `fit_partial_strength_degree_poisson` | ME strength-degree |
 | `fit_partial_strength_cost_poisson` | ME strength-cost |
-| `fit_partial_strength_cost_*_coordinates` | ME/B/W coordinate strength-cost |
+| `fit_partial_strength_cost_*_coordinates` | ME/B/W coordinate strength-cost; `coordinate_metric="euclidean"` only |
 
-The Python coordinate helpers for B/W currently do more work in Python than the
-AGENTS policy allows. See
-[Ontology conformance audit](../development/ontology-conformance-audit.md).
+Coordinate metric names are explicit so future releases can add Manhattan or
+geodesic distances without changing function shape. Passing any metric except
+`"euclidean"` raises `ValueError` today.
+
+The coordinate helpers now route ME/B/W excess computation, fitting, and sparse
+rate-table assembly through Rust. Rust still uses dense internal masks in some
+partial paths; see [Ontology conformance audit](../development/ontology-conformance-audit.md).
 
 ## Cutoff-based splitting
 
 ```python
-from odme.models.partial import fit_from_network_cutoff
+from menobis.models.partial import fit_from_network_cutoff
 
 result = fit_from_network_cutoff(
     edges,
@@ -79,7 +83,7 @@ are fitted on free pairs.
 custom Poisson sampler for a sparse independent sample:
 
 ```python
-from odme.models import sample_custom_poisson
+from menobis.models import sample_custom_poisson
 
 rates = result.as_probability_table()
 sample = sample_custom_poisson(rates, total_events=T, seed=42)

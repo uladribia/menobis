@@ -1,4 +1,4 @@
-"""Canonical ODME benchmark CLI using PA geographic synthetic networks."""
+"""Canonical MENoBiS benchmark CLI using PA geographic synthetic networks."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from benchmarks.pipeline import (
 )
 from benchmarks.types import BenchmarkOptions, BenchmarkRow
 
-app = typer.Typer(help="ODME benchmark suite.", no_args_is_help=True)
+app = typer.Typer(help="MENoBiS benchmark suite.", no_args_is_help=True)
 
 Stage = Literal["all", "generate", "fit", "sample", "filter"]
 

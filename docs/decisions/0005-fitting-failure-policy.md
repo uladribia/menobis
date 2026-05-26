@@ -8,7 +8,7 @@ raise only through an explicit policy, not through one-off custom behavior.
 
 ## Context
 
-ODME has several fitting families: ME, W, B, and partial constraints. Some use
+MENoBiS has several fitting families: ME, W, B, and partial constraints. Some use
 IPF, some use scalar root finding, and W strength-family fits use Newton or
 coordinate/root solves. Each solver can fail differently, but users need one
 mental model.

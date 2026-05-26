@@ -1,12 +1,12 @@
 ---
-description: Rust API reference for ODME core abstractions.
+description: Rust API reference for MENoBiS core abstractions.
 ---
 
 # Rust API
 
 ## TL;DR
 
-`odme-core` owns numerical kernels, fitting loops, pair providers, generation,
+`menobis-core` owns numerical kernels, fitting loops, pair providers, generation,
 and filtering. Python should reach these through PyO3 wrappers only.
 
 ## Modules
@@ -63,7 +63,7 @@ solver is conforming.
 - Partial paths must compute excess constraints and call the corresponding full
   solver on the free support.
 - Heavy graph/statistical loops stay in Rust.
-- External graph libraries remain downstream adapters unless ODME adopts a
+- External graph libraries remain downstream adapters unless MENoBiS adopts a
   metric as supported core functionality.
 
 See [Network Metrics](network-metrics.md) for optional graph-library extension

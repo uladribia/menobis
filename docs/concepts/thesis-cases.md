@@ -1,12 +1,12 @@
 ---
-description: Taxonomy of ODME model cases, ensembles, and public names.
+description: Taxonomy of MENoBiS model cases, ensembles, and public names.
 ---
 
 # Thesis cases and taxonomy
 
 ## TL;DR
 
-Public ODME names should make the thesis ontology explicit:
+Public MENoBiS names should make the thesis ontology explicit:
 `{operation}_{constraint}_{distribution}`. The mathematical source of truth is
 [Model ontology](model-ontology.md); this page maps that ontology to API and CLI
 names.
@@ -63,9 +63,9 @@ strength samplers are `sample_strength_multinomial` and
 
 | CLI group | Implemented model names |
 |---|---|
-| `odme fit` | `strength-poisson`, `strength-geometric`, `strength-negative-binomial`, `degree-bernoulli`, `strength-cost-poisson`, `strength-edges-poisson`, `strength-degree-poisson` |
-| `odme generate` | ME Poisson strength, cost, edges, degree, custom, multinomial variants |
-| `odme filter` | ME Poisson strength, cost, edges, degree, custom |
+| `menobis fit` | `strength-poisson`, `strength-geometric`, `strength-negative-binomial`, `degree-bernoulli`, `strength-cost-poisson`, `strength-edges-poisson`, `strength-degree-poisson` |
+| `menobis generate` | ME Poisson strength, cost, edges, degree, custom, multinomial variants |
+| `menobis filter` | ME Poisson strength, cost, edges, degree, custom |
 
 The Python API exposes more B/W functions than the CLI. A unified Python router
 for `{ensemble, family, constraint}` dispatch is still planned; direct typed

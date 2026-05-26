@@ -27,4 +27,4 @@ This represents the limiting zero-inflated equations where occupation tends to o
 
 ## Verification
 
-`tests/test_odme_strength_degree_saturation.py` covers ME, W, and Wnb saturated degree cases.
+`tests/test_menobis_strength_degree_saturation.py` covers ME, W, and Wnb saturated degree cases.

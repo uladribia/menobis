@@ -1,5 +1,5 @@
 ---
-description: ODME testing strategy and commands.
+description: MENoBiS testing strategy and commands.
 ---
 
 # Testing
@@ -34,7 +34,7 @@ uv run mkdocs build --strict
 
 ## Canonical synthetic fixture
 
-End-to-end tests and benchmarks must use `odme.utilities.synthetic.generate_pa_geographic_network` unless they are pure math/API smoke tests. The fixture is deliberately not an ODME null model; it supplies realistic constraints for fit/sample/filter workflows.
+End-to-end tests and benchmarks must use `menobis.utilities.synthetic.generate_pa_geographic_network` unless they are pure math/API smoke tests. The fixture is deliberately not an MENoBiS null model; it supplies realistic constraints for fit/sample/filter workflows.
 
 ## Invariants
 
@@ -57,7 +57,7 @@ is intentionally outside current benchmark scope.
 
 ## Benchmark coverage test
 
-`tests/test_odme_benchmark_cases.py` ensures the fitting benchmark covers full
+`tests/test_menobis_benchmark_cases.py` ensures the fitting benchmark covers full
 and partial ME/B/W combinations for the five constraint families.
 
 ## Warnings policy

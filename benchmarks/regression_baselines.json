@@ -1,6 +1,6 @@
 {
   "description": "Performance regression baselines for pytest benchmark tests.",
-  "note": "Generate with: uv run pytest tests/test_odme_benchmark.py --benchmark-save",
+  "note": "Generate with: uv run pytest tests/test_menobis_benchmark.py --benchmark-save",
   "thresholds": {
     "analysis_10k": {"max_seconds": 2.0, "description": "directed_strengths + compute_all_stats at N=10000"},
     "fitting_strength_10k": {"max_seconds": 0.5, "description": "fit_fixed_strength_me at N=10000"},
