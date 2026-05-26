@@ -476,128 +476,7 @@ fn solve_me_sd_factor_k(target: f64, others_q: &[f64], others_v: &[f64]) -> f64 
     0.5 * (low + high)
 }
 
-/// Masked monotone coordinate solver for ME strength-degree.
-///
-/// Same approach as the non-masked version but skips pairs where mask[i*n+j] is true.
-#[must_use]
-pub fn balance_masked_strength_degree_poisson(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    degree_out: &[f64],
-    degree_in: &[f64],
-    mask: &[bool],
-    tolerance: f64,
-    max_iterations: usize,
-) -> StrengthDegreeFitResult {
-    let n = strength_out.len();
-    let total = strength_out.iter().sum::<f64>().max(1.0);
-    let scale = total.sqrt();
-    let mut x: Vec<f64> = strength_out
-        .iter()
-        .map(|&s| (s / scale).max(1e-12))
-        .collect();
-    let mut y: Vec<f64> = strength_in
-        .iter()
-        .map(|&s| (s / scale).max(1e-12))
-        .collect();
-    let k_total = degree_out.iter().sum::<f64>().max(1.0);
-    let k_scale = (k_total / n.max(1) as f64).sqrt().max(0.1);
-    let mut z: Vec<f64> = degree_out
-        .iter()
-        .map(|&k| (k / k_total * k_scale).max(1e-12))
-        .collect();
-    let mut w: Vec<f64> = degree_in
-        .iter()
-        .map(|&k| (k / k_total * k_scale).max(1e-12))
-        .collect();
-    let mut others_q = vec![0.0_f64; n];
-    let mut others_v = vec![0.0_f64; n];
-
-    for iter in 0..max_iterations {
-        let old_x = x.clone();
-        let old_y = y.clone();
-        let old_z = z.clone();
-        let old_w = w.clone();
-
-        for j in 0..n {
-            for i in 0..n {
-                if !mask[i * n + j] {
-                    others_q[i] = x[i];
-                    others_v[i] = z[i] * w[j];
-                } else {
-                    others_q[i] = 0.0;
-                    others_v[i] = 0.0;
-                }
-            }
-            y[j] = solve_me_sd_factor_s(strength_in[j], &others_q, &others_v);
-        }
-        for i in 0..n {
-            for j in 0..n {
-                if !mask[i * n + j] {
-                    others_q[j] = y[j];
-                    others_v[j] = z[i] * w[j];
-                } else {
-                    others_q[j] = 0.0;
-                    others_v[j] = 0.0;
-                }
-            }
-            x[i] = solve_me_sd_factor_s(strength_out[i], &others_q, &others_v);
-        }
-        for j in 0..n {
-            for i in 0..n {
-                if !mask[i * n + j] {
-                    others_q[i] = x[i] * y[j];
-                    others_v[i] = z[i];
-                } else {
-                    others_q[i] = 0.0;
-                    others_v[i] = 0.0;
-                }
-            }
-            w[j] = solve_me_sd_factor_k(degree_in[j], &others_q, &others_v);
-        }
-        for i in 0..n {
-            for j in 0..n {
-                if !mask[i * n + j] {
-                    others_q[j] = x[i] * y[j];
-                    others_v[j] = w[j];
-                } else {
-                    others_q[j] = 0.0;
-                    others_v[j] = 0.0;
-                }
-            }
-            z[i] = solve_me_sd_factor_k(degree_out[i], &others_q, &others_v);
-        }
-
-        let delta = x
-            .iter()
-            .zip(old_x.iter())
-            .chain(y.iter().zip(old_y.iter()))
-            .chain(z.iter().zip(old_z.iter()))
-            .chain(w.iter().zip(old_w.iter()))
-            .map(|(&a, &b)| (a - b).abs())
-            .fold(0.0_f64, f64::max);
-        if delta < tolerance {
-            return StrengthDegreeFitResult {
-                x,
-                y,
-                z,
-                w,
-                converged: true,
-                iterations: iter + 1,
-            };
-        }
-    }
-    StrengthDegreeFitResult {
-        x,
-        y,
-        z,
-        w,
-        converged: false,
-        iterations: max_iterations,
-    }
-}
-
-/// Sparse-mask version of [`balance_masked_strength_degree_poisson`].
+/// Sparse-mask monotone coordinate solver for ME strength-degree.
 ///
 /// Uses `PairMask` to avoid O(N²) dense allocation. Inner loops still iterate
 /// all N candidates per node (nonlinear solver), but memory is O(N+K).
@@ -797,76 +676,6 @@ pub fn balance_weighted_factors(
     FitResult {
         x: a,
         y: b,
-        converged: false,
-        iterations: max_iterations,
-    }
-}
-
-/// IPF balancing for fixed-strength ME with a pair mask.
-///
-/// Pairs where `mask[i * n + j]` is true are skipped in summations.
-/// This supports partial-constraint fitting where some p_ij are known.
-#[must_use]
-pub fn balance_masked_strength_poisson(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    mask: &[bool],
-    tolerance: f64,
-    max_iterations: usize,
-) -> FitResult {
-    let n = strength_out.len();
-    let total: f64 = strength_out.iter().sum();
-    let sqrt_t = total.sqrt().max(1.0);
-    let mut x: Vec<f64> = strength_out
-        .iter()
-        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
-        .collect();
-    let mut y: Vec<f64> = strength_in
-        .iter()
-        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
-        .collect();
-
-    for iter in 0..max_iterations {
-        let old_x = x.clone();
-        let old_y = y.clone();
-
-        for j in 0..n {
-            if strength_in[j] <= 0.0 {
-                continue;
-            }
-            let denom: f64 = (0..n).filter(|&i| !mask[i * n + j]).map(|i| x[i]).sum();
-            y[j] = if denom > 0.0 {
-                strength_in[j] / denom
-            } else {
-                0.0
-            };
-        }
-        for i in 0..n {
-            if strength_out[i] <= 0.0 {
-                continue;
-            }
-            let denom: f64 = (0..n).filter(|&j| !mask[i * n + j]).map(|j| y[j]).sum();
-            x[i] = if denom > 0.0 {
-                strength_out[i] / denom
-            } else {
-                0.0
-            };
-        }
-
-        let delta = max_pair_delta(&x, &old_x, &y, &old_y);
-        if delta < tolerance {
-            return FitResult {
-                x,
-                y,
-                converged: true,
-                iterations: iter + 1,
-            };
-        }
-    }
-
-    FitResult {
-        x,
-        y,
         converged: false,
         iterations: max_iterations,
     }
@@ -1583,48 +1392,49 @@ pub fn fit_strength_cost_poisson_coordinates(
 #[cfg(test)]
 mod tests {
     use super::{
-        balance_masked_strength_poisson, balance_sparse_masked_strength_poisson,
-        fit_strength_cost_poisson, CostFitOptions,
+        balance_sparse_masked_strength_poisson, fit_strength_cost_poisson, CostFitOptions,
     };
     use crate::fitting::mask::PairMask;
-    use crate::fitting::support::self_loop_mask;
 
     #[test]
-    fn sparse_masked_strength_matches_dense() {
+    #[allow(clippy::needless_range_loop)]
+    fn sparse_masked_strength_recovers_constraints() {
         let s_out = vec![10.0, 20.0, 30.0, 15.0, 25.0];
         let s_in = vec![18.0, 12.0, 22.0, 28.0, 20.0];
         let known_src = vec![0u64, 2, 3];
         let known_tgt = vec![1u64, 4, 0];
-
-        // Dense mask
         let n = 5;
-        let mut dense_mask = self_loop_mask(n, false);
-        for (&s, &t) in known_src.iter().zip(known_tgt.iter()) {
-            dense_mask[(s as usize) * n + (t as usize)] = true;
-        }
 
-        // Sparse mask
-        let sparse_mask = PairMask::new(n, false, &known_src, &known_tgt);
+        let mask = PairMask::new(n, false, &known_src, &known_tgt);
+        let result = balance_sparse_masked_strength_poisson(&s_out, &s_in, &mask, 1e-12, 50000);
 
-        let dense_result =
-            balance_masked_strength_poisson(&s_out, &s_in, &dense_mask, 1e-12, 50000);
-        let sparse_result =
-            balance_sparse_masked_strength_poisson(&s_out, &s_in, &sparse_mask, 1e-12, 50000);
-
-        assert_eq!(dense_result.converged, sparse_result.converged);
-        assert_eq!(dense_result.iterations, sparse_result.iterations);
+        assert!(result.converged);
+        // Verify the solver converges and produces positive multipliers
         for i in 0..n {
+            assert!(result.x[i] >= 0.0);
+            assert!(result.y[i] >= 0.0);
+        }
+        // Verify constraint recovery (row sums over free pairs)
+        for i in 0..n {
+            let row_sum: f64 = (0..n)
+                .filter(|&j| !mask.is_masked(i, j))
+                .map(|j| result.x[i] * result.y[j])
+                .sum();
             assert!(
-                (dense_result.x[i] - sparse_result.x[i]).abs() < 1e-10,
-                "x[{i}] mismatch: dense={}, sparse={}",
-                dense_result.x[i],
-                sparse_result.x[i]
+                (row_sum - s_out[i]).abs() < 1e-6,
+                "s_out[{i}]: expected {}, got {row_sum}",
+                s_out[i]
             );
+        }
+        for j in 0..n {
+            let col_sum: f64 = (0..n)
+                .filter(|&i| !mask.is_masked(i, j))
+                .map(|i| result.x[i] * result.y[j])
+                .sum();
             assert!(
-                (dense_result.y[i] - sparse_result.y[i]).abs() < 1e-10,
-                "y[{i}] mismatch: dense={}, sparse={}",
-                dense_result.y[i],
-                sparse_result.y[i]
+                (col_sum - s_in[j]).abs() < 1e-6,
+                "s_in[{j}]: expected {}, got {col_sum}",
+                s_in[j]
             );
         }
     }
@@ -1674,31 +1484,40 @@ mod tests {
 #[cfg(test)]
 mod unification_tests {
     use super::*;
-    use crate::fitting::mask::PairMask;
 
     #[test]
-    fn sparse_masked_equals_balance_strength_poisson() {
+    #[allow(clippy::needless_range_loop)]
+    fn balance_strength_poisson_recovers_constraints() {
+        // Verify that balance_strength_poisson (now delegating to sparse)
+        // correctly recovers the input strength sequences.
         let s_out = vec![10.0, 20.0, 30.0, 15.0, 25.0];
         let s_in = vec![18.0, 12.0, 22.0, 28.0, 20.0];
-        let mask = PairMask::from_self_loops(5, false);
+        let n = 5;
 
-        let dense = balance_strength_poisson(&s_out, &s_in, 1e-12, 50000);
-        let sparse = balance_sparse_masked_strength_poisson(&s_out, &s_in, &mask, 1e-12, 50000);
+        let result = balance_strength_poisson(&s_out, &s_in, 1e-12, 50000);
+        assert!(result.converged);
 
-        assert!(dense.converged);
-        assert!(sparse.converged);
-        for i in 0..5 {
+        // Row sums (no self-loops): sum_{j!=i} x[i]*y[j] == s_out[i]
+        for i in 0..n {
+            let row_sum: f64 = (0..n)
+                .filter(|&j| j != i)
+                .map(|j| result.x[i] * result.y[j])
+                .sum();
             assert!(
-                (dense.x[i] - sparse.x[i]).abs() < 1e-8,
-                "x[{i}]: dense={}, sparse={}",
-                dense.x[i],
-                sparse.x[i]
+                (row_sum - s_out[i]).abs() < 1e-6,
+                "s_out[{i}]: expected {}, got {row_sum}",
+                s_out[i]
             );
+        }
+        for j in 0..n {
+            let col_sum: f64 = (0..n)
+                .filter(|&i| i != j)
+                .map(|i| result.x[i] * result.y[j])
+                .sum();
             assert!(
-                (dense.y[i] - sparse.y[i]).abs() < 1e-8,
-                "y[{i}]: dense={}, sparse={}",
-                dense.y[i],
-                sparse.y[i]
+                (col_sum - s_in[j]).abs() < 1e-6,
+                "s_in[{j}]: expected {}, got {col_sum}",
+                s_in[j]
             );
         }
     }
