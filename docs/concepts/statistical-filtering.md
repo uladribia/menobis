@@ -1,12 +1,12 @@
 ---
-description: Statistical filtering against ODME null models.
+description: Statistical filtering against MENoBiS null models.
 ---
 
 # Statistical filtering
 
 ## TL;DR
 
-Filtering compares observed edge weights against an independent ODME null model.
+Filtering compares observed edge weights against an independent MENoBiS null model.
 The default test is two-sided with split alpha. Rust streams provider-backed
 pair distributions into generic observed and absent filter sinks.
 
@@ -66,7 +66,7 @@ For Poisson models, $P(t_{ij}>0)=1-e^{-\lambda_{ij}}$.
 ## Python API
 
 ```python
-from odme.filtering import (
+from menobis.filtering import (
     filter_strength_poisson,
     filter_strength_cost_poisson,
     filter_strength_degree_poisson,
@@ -90,12 +90,12 @@ result = filter_strength_poisson(
 ## CLI
 
 ```bash
-odme filter strength-poisson edges.csv --output-prefix filtered/
-odme filter strength-edges-poisson edges.csv --target-edges 500 --output-prefix filtered/
-odme filter strength-cost-poisson edges.csv --costs costs.csv --target-cost 1.5 --output-prefix filtered/
-odme filter strength-degree-poisson edges.csv --output-prefix filtered/
-odme filter degree-events-poisson edges.csv --output-prefix filtered/
-odme filter custom-poisson edges.csv --rates rates.csv --output-prefix filtered/
+menobis filter strength-poisson edges.csv --output-prefix filtered/
+menobis filter strength-edges-poisson edges.csv --target-edges 500 --output-prefix filtered/
+menobis filter strength-cost-poisson edges.csv --costs costs.csv --target-cost 1.5 --output-prefix filtered/
+menobis filter strength-degree-poisson edges.csv --output-prefix filtered/
+menobis filter degree-events-poisson edges.csv --output-prefix filtered/
+menobis filter custom-poisson edges.csv --rates rates.csv --output-prefix filtered/
 ```
 
 The custom Poisson file must contain `source,target,rate`, where `rate` is the

@@ -2,13 +2,13 @@
 
 ## TL;DR
 
-Independent ODME models expose pair distributions through providers. Generation
+Independent MENoBiS models expose pair distributions through providers. Generation
 and filtering consume the same provider interface and do not build dense rate
 matrices.
 
 ## Context
 
-ODME null models differ in how they compute pair parameters, but generation and
+MENoBiS null models differ in how they compute pair parameters, but generation and
 filtering need the same pair-level information:
 
 - expected weight;

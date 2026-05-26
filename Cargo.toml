@@ -1,7 +1,7 @@
 [workspace]
 members = [
-  "crates/odme-core",
-  "crates/odme-python",
+  "crates/menobis-core",
+  "crates/menobis-python",
 ]
 resolver = "2"
 
@@ -11,7 +11,7 @@ license = "GPL-3.0-or-later"
 rust-version = "1.80"
 
 [workspace.dependencies]
-odme-core = { path = "crates/odme-core" }
+menobis-core = { path = "crates/menobis-core" }
 pyo3 = { version = "0.23", features = ["extension-module"] }
 thiserror = "2"
 rand = "0.9"

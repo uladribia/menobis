@@ -6,7 +6,7 @@ description: Complexity, memory model, and practical scaling limits.
 
 ## TL;DR
 
-ODME avoids dense matrices for generation and filtering where possible. Fitting
+MENoBiS avoids dense matrices for generation and filtering where possible. Fitting
 some constraints is inherently all-pairs and scales as O(N²) times solver
 iterations.
 

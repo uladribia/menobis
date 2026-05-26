@@ -6,14 +6,14 @@ Accepted.
 
 ## Context
 
-ODME needs fast numerical and graph kernels while remaining convenient for research workflows.
+MENoBiS needs fast numerical and graph kernels while remaining convenient for research workflows.
 
 ## Decision
 
-ODME will expose public Rust and Python endpoints.
+MENoBiS will only expose the minimum number of public Python endpoints.
 
 - Rust crates contain performance-sensitive kernels and typed model logic.
-- Python exposes ergonomic APIs, Polars data handling, Typer CLIs, logging, and documentation workflows.
+- Python exposes ergonomic APIs, Typer CLIs, logging, and documentation workflows.
 - PyO3 and Maturin connect the two layers.
 
 ## Consequences

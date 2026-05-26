@@ -2,7 +2,7 @@
 
 Each case runs in a fresh Python process under GNU ``time -v`` so the reported
 peak RSS is per fit case instead of one shared benchmark process. The generated
-input is the canonical PA-geographic network used by the ODME benchmark suite.
+input is the canonical PA-geographic network used by the MENoBiS benchmark suite.
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ def main() -> None:
     families = parse_csv(args.families)
     constraints = parse_csv(args.constraints)
     results: list[FitMemoryResult] = []
-    with tempfile.TemporaryDirectory(prefix="odme-fit-memory-") as tmp_name:
+    with tempfile.TemporaryDirectory(prefix="menobis-fit-memory-") as tmp_name:
         workdir = Path(tmp_name)
         for node_count in node_counts:
             for family in families:
@@ -183,7 +183,7 @@ def case_script(
 
         sys.path.insert(0, {str(repo_root)!r})
         from benchmarks.dispatch import REGISTRY, build_fit_kwargs
-        from odme.utilities.synthetic import derive_synthetic_constraints, generate_pa_geographic_network
+        from menobis.utilities.synthetic import derive_synthetic_constraints, generate_pa_geographic_network
 
         output = Path({str(output)!r})
         family = {family!r}

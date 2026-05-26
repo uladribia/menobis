@@ -1,15 +1,15 @@
 ---
-description: ODME — Origin-Destination Multi-Edge network models.
+description: MENoBiS — Max Entropy NOn Binary Suite for null modeling.
 ---
 
-# ODME
+# MENoBiS
 
-ODME is a modern Rust + Python library for multi-edge network
-models. It implements the statistical mechanics framework from the
-[thesis](https://hdl.handle.net/10803/400560) with fast Rust kernels and
-ergonomic Python workflows.
+MENoBiS (**Max Entropy NOn Binary Suite**) is a modern Rust + Python
+suite for null modeling of non-binary networks. It implements the statistical
+mechanics framework from the [thesis](https://hdl.handle.net/10803/400560)
+with fast Rust kernels and ergonomic Python workflows.
 
-## What ODME does
+## What MENoBiS does
 
 | Capability | Description |
 |------------|-------------|
@@ -24,13 +24,13 @@ ergonomic Python workflows.
 ```bash
 uv pip install -e .
 uv run maturin develop
-uv run odme --version
+uv run menobis --version
 ```
 
 ```python
-from odme.data.io import read_edges
-from odme.analysis import directed_strengths
-from odme.models import fit_strength_poisson, sample_strength_poisson
+from menobis.data.io import read_edges
+from menobis.analysis import directed_strengths
+from menobis.models import fit_strength_poisson, sample_strength_poisson
 
 edges = read_edges("network.csv")
 s = directed_strengths(edges)
@@ -44,7 +44,7 @@ See [Getting Started](getting-started.md) for installation and workflow details.
 
 | Section | Contents |
 |---------|----------|
-| [Concepts](concepts/multi-edge-networks.md) | Scientific background and model equations |
+| [Concepts](concepts/non-binary-networks.md) | Scientific background and model equations |
 | [CLI](cli/analyze.md) | Command-line interface reference |
 | [API](api/python.md) | Python and Rust API reference |
 | [Decisions](decisions/0001-rust-python-architecture.md) | Architectural decision records |

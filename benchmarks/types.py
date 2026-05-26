@@ -1,11 +1,11 @@
-"""Shared types for the canonical ODME benchmark pipeline."""
+"""Shared types for the canonical MENoBiS benchmark pipeline."""
 
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from odme.utilities.synthetic import SyntheticConstraints, SyntheticNetwork
+from menobis.utilities.synthetic import SyntheticConstraints, SyntheticNetwork
 
 
 @dataclass(frozen=True)

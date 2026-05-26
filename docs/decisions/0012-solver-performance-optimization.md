@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-Three performance fixes make modern ODME solvers faster than legacy on every
+Three performance fixes make modern MENoBiS solvers faster than legacy on every
 comparable N=1000 case while preserving robustness.
 
 ## Changes

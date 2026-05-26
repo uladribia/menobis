@@ -1,12 +1,12 @@
 ---
-description: Source-of-truth model ontology for ODME families, ensembles, and constraints.
+description: Source-of-truth model ontology for MENoBiS families, ensembles, and constraints.
 ---
 
 # Model ontology
 
 ## TL;DR
 
-ODME has three independent choices: **ensemble**, **weight family**, and
+MENoBiS has three independent choices: **ensemble**, **weight family**, and
 **constraint layer**. `AGENTS.md` is the coding source of truth; this page is the
 public, non-duplicated map used by the rest of the docs.
 

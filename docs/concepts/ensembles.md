@@ -6,10 +6,13 @@ description: Ensemble equivalence validation for fixed-strength ME models.
 
 ## TL;DR
 
-ODME validates three fixed-strength samplers: grand-canonical Poisson,
+MENoBiS validates three fixed-strength samplers: grand-canonical Poisson,
 canonical multinomial, and exact-strength stub matching. Their marginal means
 match $\mathbb{E}[t_{ij}] = s_i^{out}s_j^{in}/T$; fluctuations differ and shrink
 relative to $T$ as total events grow.
+
+It does the validation in this constraint with **self-loops** as this is the only 
+case for which we know how to sample exactly networks on the three ensembles.
 
 ## Three samplers
 
@@ -80,7 +83,7 @@ relative outgoing strength $p_s=s^{out}/T$:
 ## Running the validation
 
 ```bash
-uv run pytest tests/test_odme_ensemble_equivalence.py -q
+uv run pytest tests/test_menobis_ensemble_equivalence.py -q
 ```
 
 The test updates figures in `docs/figures/`.

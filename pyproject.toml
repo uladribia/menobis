@@ -1,7 +1,7 @@
 [project]
-name = "ODME"
+name = "MENoBiS"
 version = "0.1.0"
-description = "Origin-Destination Multi-Edge network models in Rust and Python"
+description = "Max Entropy NOn Binary Suite for null modeling in Rust and Python"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
 license = "GPL-3.0-or-later"
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-odme = "odme.cli.main:app"
+menobis = "menobis.cli.main:app"
 
 [dependency-groups]
 dev = [
@@ -41,9 +41,9 @@ requires = ["maturin>=1.8,<2"]
 build-backend = "maturin"
 
 [tool.maturin]
-manifest-path = "crates/odme-python/Cargo.toml"
+manifest-path = "crates/menobis-python/Cargo.toml"
 python-source = "src"
-module-name = "odme._odme"
+module-name = "menobis._menobis"
 features = ["pyo3/extension-module"]
 
 [tool.ruff]
@@ -83,7 +83,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["ANN001", "ANN201", "ANN202", "D103"]
+"tests/**/*.py" = ["ANN001", "ANN201", "ANN202", "D102", "D103"]
 "benchmarks/**/*.py" = ["ANN001", "ANN201", "ANN202", "D103", "E501"]
 
 [tool.ruff.lint.pydocstyle]
@@ -96,7 +96,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 
 [tool.ty.src]
-include = ["src/odme", "tests"]
+include = ["src/menobis", "tests"]
 
 [tool.uv]
 required-version = ">=0.8.0,<1.0"

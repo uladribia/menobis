@@ -2,13 +2,13 @@
 
 ## TL;DR
 
-ODME generation streams candidate pair distributions and parallelizes large
+MENoBiS generation streams candidate pair distributions and parallelizes large
 supports with deterministic Rayon chunks. Dense $N^2$ probability matrices are
-only for explicit export/debug paths.
+to be avoided at all costs.
 
 ## Context
 
-Maximum-entropy ODME models define a distribution per candidate pair. Sampling
+Maximum-entropy MENoBiS models define a distribution per candidate pair. Sampling
 only needs one pair distribution at a time, so materializing all rates wastes
 memory and blocks large networks. After streaming was introduced, all-pairs
 work became easy to split across CPU cores.
@@ -55,18 +55,6 @@ avoids shared RNG locks and makes results independent of thread scheduling.
 Parallel and serial paths may produce different samples for the same seed, but
 each path is reproducible for fixed code, thresholds, and Rayon configuration.
 
-## Positive Poisson boundary
-
-For positive-edge weights, the positive-edge Poisson mean satisfies:
-
-$$
-\mathbb{E}[W \mid W>0] = \lambda / (1-e^{-\lambda}) \ge 1.
-$$
-
-ODME therefore treats `mean < 1 - eps` as infeasible internally, treats
-`mean \approx 1` as deterministic weight `1`, and solves normally for
-`mean > 1`. Tiny rates use direct inverse-CDF sampling instead of rejection to
-avoid near-infinite loops.
 
 ## Consequences
 
@@ -76,8 +64,4 @@ avoid near-infinite loops.
 - Large generators use all Rayon worker threads by default.
 - Future generators and filters should implement a provider, not a dense matrix builder.
 
-## Validation
 
-Tests cover `N = 1000` streaming generation, the positive-edge Poisson boundary,
-and fixed-total multinomial preservation. Benchmarks cover all generation cases
-through `N = 30000` with five repeats; see `docs/development/benchmarking.md`.

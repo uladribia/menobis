@@ -1,12 +1,12 @@
 ---
-description: Generate sampled ODME networks from fitted constraints.
+description: Generate sampled MENoBiS networks from fitted constraints.
 ---
 
-# `odme generate`
+# `menobis generate`
 
 ## TL;DR
 
-Use `odme generate` to fit constraints from inputs and emit one
+Use `menobis generate` to fit constraints from inputs and emit one
 seeded synthetic edge table. Data goes to stdout unless `--output` is set.
 
 ## Commands
@@ -25,13 +25,13 @@ seeded synthetic edge table. Data goes to stdout unless `--output` is set.
 ## Examples
 
 ```bash
-odme generate strength-poisson edges.csv --seed 42 -o sample.csv
-odme generate strength-multinomial edges.csv --total-events 1000 --json
-odme generate custom-poisson probabilities.csv --total-events 1000 --ensemble poisson
-odme generate strength-cost-poisson edges.csv --costs costs.csv --seed 7
-odme generate strength-edges-poisson edges.csv --target-edges 500
-odme generate strength-degree-poisson edges.csv --seed 99
-odme generate degree-events-poisson edges.csv --total-events 5000
+menobis generate strength-poisson edges.csv --seed 42 -o sample.csv
+menobis generate strength-multinomial edges.csv --total-events 1000 --json
+menobis generate custom-poisson probabilities.csv --total-events 1000 --ensemble poisson
+menobis generate strength-cost-poisson edges.csv --costs costs.csv --seed 7
+menobis generate strength-edges-poisson edges.csv --target-edges 500
+menobis generate strength-degree-poisson edges.csv --seed 99
+menobis generate degree-events-poisson edges.csv --total-events 5000
 ```
 
 ## Options

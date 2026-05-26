@@ -1,6 +1,6 @@
 .PHONY: all clean develop lint format test test-python test-rust docs
 
-PROJECT_PKG ?= odme
+PROJECT_PKG ?= menobis
 UV_EXCLUDE_NEWER ?= $(shell date -u -d '7 days ago' '+%Y-%m-%dT%H:%M:%SZ')
 UV := UV_EXCLUDE_NEWER=$(UV_EXCLUDE_NEWER) uv
 

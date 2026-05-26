@@ -1,5 +1,5 @@
 ---
-description: Python API reference for ODME.
+description: Python API reference for MENoBiS.
 ---
 
 # Python API
@@ -8,18 +8,23 @@ description: Python API reference for ODME.
 
 | Type | Module | Description |
 |------|--------|-------------|
-| `EdgeTable` | `odme.data.frames` | Sparse edge table with `source`, `target`, `weight` numpy arrays |
-| `ProbabilityTable` | `odme.data.frames` | Sparse table with `source`, `target`, `probability` arrays |
-| `FitResult` | `odme.models.fitting` | Fitted strength/degree multipliers `x`, `y`, with `family`, optional `layers`, and diagnostics |
-| `StrengthCostFit` | `odme.models.fitting` | Fitted strength-cost model with `x`, `y`, `gamma`, `family`, optional `layers`, and diagnostics |
-| `StrengthEdgesFit` | `odme.models.fitting` | Fitted strength-edges model with `x`, `y`, `lam`, `family`, optional `layers`, and diagnostics |
-| `StrengthDegreeFit` | `odme.models.fitting` | Fitted strength-degree model with `x`, `y`, `z`, `w` |
-| `OptimizationDiagnostics` | `odme.models.fitting` | Shared convergence/status/objective/residual diagnostics |
-| `ConicDiagnostics` | `odme.models.fitting` | W solver metrics; historically conic-named and nested under `diagnostics.conic` |
-| `FilterResult` | `odme.filtering` | Filtering output with upper, lower, compatible, absent tables |
-| `FilteredEdges` | `odme.filtering` | Edge subset with p-values, expected weights, occupation |
-| `SyntheticNetwork` | `odme.utilities.synthetic` | Canonical PA geographic network for tests/benchmarks |
-| `SyntheticConstraints` | `odme.utilities.synthetic` | Constraints derived from a synthetic network |
+| `ModelFamily` | `menobis.models` | Thesis family selector: `ME`, `B`, or `W`; use `layers` for B/W multiplicity |
+| `Ensemble` | `menobis.models` | `GRAND_CANONICAL`, ME-only `CANONICAL`, or ME fixed-strength `MICROCANONICAL` |
+| `Constraint` | `menobis.models` | Constraint selector such as `STRENGTH` or `STRENGTH_COST` |
+| `Verb` | `menobis.routing` | Unified workflow verb: `FIT`, `SAMPLE`, or `FILTER` |
+| `EdgeTable` | `menobis.data.frames` | Sparse edge table with `source`, `target`, `weight` numpy arrays |
+| `ProbabilityTable` | `menobis.data.frames` | Sparse table with `source`, `target`, `probability` arrays |
+| `StrengthFit` | `menobis.models.fitting` | Fitted fixed-strength multipliers `x`, `y`, with `family`, optional `layers`, and diagnostics |
+| `DegreeFit` | `menobis.models.fitting` | Fitted Bernoulli fixed-degree multipliers `x`, `y` and diagnostics |
+| `StrengthCostFit` | `menobis.models.fitting` | Fitted strength-cost model with `x`, `y`, `gamma`, `family`, optional `layers`, and diagnostics |
+| `StrengthEdgesFit` | `menobis.models.fitting` | Fitted strength-edges model with `x`, `y`, `lam`, `family`, optional `layers`, and diagnostics |
+| `StrengthDegreeFit` | `menobis.models.fitting` | Fitted strength-degree model with `x`, `y`, `z`, `w` |
+| `OptimizationDiagnostics` | `menobis.models.fitting` | Shared convergence/status/objective/residual diagnostics; fit dataclasses expose common read-only diagnostic properties |
+| `ConicDiagnostics` | `menobis.models.fitting` | W solver metrics; historically conic-named and nested under `diagnostics.conic` |
+| `FilterResult` | `menobis.filtering` | Filtering output with upper, lower, compatible, absent tables |
+| `FilteredEdges` | `menobis.filtering` | Edge subset with p-values, expected weights, occupation |
+| `SyntheticNetwork` | `menobis.utilities.synthetic` | Canonical PA geographic network for tests/benchmarks |
+| `SyntheticConstraints` | `menobis.utilities.synthetic` | Constraints derived from a synthetic network |
 
 ## I/O
 
@@ -43,6 +48,31 @@ description: Python API reference for ODME.
 | `ensemble_scalar_average(generate=..., compute=..., repetitions=...)` | Mean/std of scalar statistics across samples |
 
 See [Network Metrics](network-metrics.md) for optional NetworkX/rustworkx user-side recipes.
+
+## Unified routing
+
+| Function | Import | Description |
+|----------|--------|-------------|
+| `route_model` | `menobis.routing` | Advanced verb router for fit/sample/filter workflows |
+| `fit_model` | `menobis.models` | Thin fitting wrapper over `route_model(Verb.FIT, ...)` |
+| `sample_model` | `menobis.models` | Thin sampling wrapper over `route_model(Verb.SAMPLE, ...)` |
+| `filter_model` | `menobis.filtering` | Thin filtering wrapper over `route_model(Verb.FILTER, ...)` |
+
+Example:
+
+```python
+from menobis.models import Constraint, ModelFamily, fit_model
+from menobis.filtering import filter_model
+
+fit = fit_model(
+    family=ModelFamily.W,
+    constraint=Constraint.STRENGTH,
+    strength_out=s_out,
+    strength_in=s_in,
+    layers=1,
+)
+result = filter_model(edges, family=ModelFamily.ME, constraint=Constraint.STRENGTH)
+```
 
 ## Fitting
 
@@ -74,8 +104,7 @@ call ME kernels and must not be used for scientific results until fixed. See the
 |----------|-------|----------|
 | `sample_strength_poisson` | fixed-strength Poisson | grand-canonical |
 | `sample_strength_multinomial` | fixed-strength multinomial | canonical |
-| `sample_strength_poisson_multinomial` | Poisson-total multinomial | mixed |
-| `sample_strength_stub_matching` | stub-matching | stub_matching |
+| `sample_strength_stub_matching` | stub-matching | microcanonical |
 | `sample_strength_edges_poisson` | strength-edges zero-inflated | grand-canonical |
 | `sample_strength_edges_geometric` | W strength-edges zero-inflated | grand-canonical |
 | `sample_strength_edges_negative_binomial` | W strength-edges zero-inflated | grand-canonical |
@@ -83,7 +112,7 @@ call ME kernels and must not be used for scientific results until fixed. See the
 | `sample_strength_cost_poisson` | strength-cost Poisson | grand-canonical |
 | `sample_strength_cost_geometric` | W strength-cost geometric | grand-canonical |
 | `sample_strength_cost_negative_binomial` | W strength-cost negative binomial | grand-canonical |
-| `sample_degree_events_poisson` | degree-events zero-inflated | grand-canonical |
+| `sample_degree_events_poisson` | degree-events zero-inflated; consumes `DegreeEventsFit.q` | grand-canonical |
 | `sample_custom_poisson` | custom sparse Poisson | grand-canonical |
 | `sample_custom_multinomial` | custom sparse multinomial | canonical |
 
@@ -95,7 +124,7 @@ call ME kernels and must not be used for scientific results until fixed. See the
 | `filter_strength_cost_poisson` | Poisson with costs, pre-fitted |
 | `filter_strength_edges_poisson` | zero-inflated, pre-fitted |
 | `filter_strength_degree_poisson` | zero-inflated, pre-fitted |
-| `filter_degree_events_poisson` | zero-inflated; should migrate from manual rate parameters to `DegreeEventsFit` |
+| `filter_degree_events_poisson` | zero-inflated; consumes `DegreeEventsFit.q` |
 | `filter_custom_poisson` | Poisson, user/partial rates |
 
 ## Partial fitting
@@ -106,5 +135,8 @@ call ME kernels and must not be used for scientific results until fixed. See the
 | `fit_partial_strength_cost_binomial_coordinates` | Binomial partial known weights | strengths + Euclidean cost |
 | `fit_partial_strength_cost_geometric_coordinates` | Geometric W partial known weights | strengths + Euclidean cost |
 | `fit_partial_strength_cost_negative_binomial_coordinates` | Negative-binomial W partial known weights | strengths + Euclidean cost |
+
+Coordinate partial helpers accept `coordinate_metric="euclidean"`. Other strings
+raise `ValueError` until additional distance metrics are implemented.
 
 See [Filtering API](filtering.md) for detailed parameter tables and examples.

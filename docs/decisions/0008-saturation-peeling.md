@@ -4,10 +4,6 @@ description: Automatically peel saturated constraints for boundary convergence.
 
 # 0008 Saturation peeling
 
-## Status
-
-Accepted and implemented (B strength + all degree-events families).
-
 ## Context
 
 IPF solvers for degree-constrained and B(M) strength models diverge when a
@@ -40,19 +36,36 @@ sampling produces near-deterministic behavior (Option B).
 | `balance_degree_bernoulli` | node degree = capacity | ME, B, W, Wnb degree-events |
 | `balance_strength_binomial` | node strength = M × capacity | B strength-only |
 
-## Not applied: strength-degree coupled models
+# Strength-degree saturation handling
 
-Degree saturation in the coupled strength-degree case (ME, W, Wnb) requires
-the strength x/y multiplier channel to remain active for per-pair weight
-fitting even when occupation is forced to 1. This would need a mixed-constraint
-solver where:
+TL;DR: ME/W/Wnb strength-degree solvers now keep degree-saturated occupation multipliers fixed at a large value while continuing to fit strength multipliers.
 
-- Saturated-degree nodes have **strength-only** constraints (positive-conditional formula)
-- Free nodes have **both** strength and degree constraints
+## Context
 
-This is architecturally different from simple peeling and remains a future
-improvement. **Users encountering degree = capacity in strength-degree models
-should clip degrees to `capacity - 1` or use the degree-events formulation.**
+In coupled strength-degree models, a node with degree equal to its candidate-pair capacity must occupy every admissible pair. The binary channel saturates, but the weight channel still has to fit node strengths.
+
+## Decision
+
+For ME, geometric W, and negative-binomial W strength-degree fitting:
+
+| Saturated constraint | Solver behavior |
+|---|---|
+| `k_out[i] = capacity` | Fix `z_i` to a large multiplier |
+| `k_in[j] = capacity` | Fix `w_j` to a large multiplier |
+| Strength sequence | Continue updating `x_i` and `y_j` |
+| Non-saturated degrees | Continue coordinate updates |
+
+This represents the limiting zero-inflated equations where occupation tends to one while positive-support weights remain family-specific.
+
+## Consequences
+
+- Boundary feasible cases no longer fail solely because a degree reaches capacity.
+- The fitted multipliers can be very large for saturated nodes.
+- The implementation preserves separate ME/W/Wnb expectation formulas.
+
+## Verification
+
+`tests/test_menobis_strength_degree_saturation.py` covers ME, W, and Wnb saturated degree cases.
 
 ## Sampling consequences (Option B)
 

@@ -1,8 +1,8 @@
 ---
-description: Convert between supported ODME edge-list formats.
+description: Convert between supported MENoBiS edge-list formats.
 ---
 
-# `odme convert`
+# `menobis convert`
 
 ## TL;DR
 
@@ -11,9 +11,9 @@ Convert edge tables between CSV, TSV, Parquet, and Arrow IPC formats.
 ## Usage
 
 ```bash
-odme convert edges.csv -o edges.parquet
-odme convert edges.parquet -o edges.tsv
-odme convert edges.arrow -o edges.csv
+menobis convert edges.csv -o edges.parquet
+menobis convert edges.parquet -o edges.tsv
+menobis convert edges.arrow -o edges.csv
 ```
 
 ## Options

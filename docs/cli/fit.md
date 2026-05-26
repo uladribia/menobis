@@ -1,12 +1,12 @@
 ---
-description: Fit ODME model parameters from edge tables.
+description: Fit MENoBiS model parameters from edge tables.
 ---
 
-# `odme fit`
+# `menobis fit`
 
 ## TL;DR
 
-Use `odme fit` to solve Lagrange multipliers from an observed edge table.
+Use `menobis fit` to solve Lagrange multipliers from an observed edge table.
 
 ## Commands
 
@@ -23,14 +23,14 @@ Use `odme fit` to solve Lagrange multipliers from an observed edge table.
 ## Examples
 
 ```bash
-odme fit strength-poisson edges.csv --json
-odme fit strength-poisson edges.csv --output fit.csv
-odme fit strength-geometric edges.csv --json
-odme fit strength-negative-binomial edges.csv --layers 3 --output fit.csv
-odme fit strength-cost-poisson edges.csv --costs costs.csv --target-cost 120.0
-odme fit strength-edges-poisson edges.csv --target-edges 500
-odme fit strength-degree-poisson edges.csv --output fit.csv
-odme fit degree-bernoulli edges.csv --json
+menobis fit strength-poisson edges.csv --json
+menobis fit strength-poisson edges.csv --output fit.csv
+menobis fit strength-geometric edges.csv --json
+menobis fit strength-negative-binomial edges.csv --layers 3 --output fit.csv
+menobis fit strength-cost-poisson edges.csv --costs costs.csv --target-cost 120.0
+menobis fit strength-edges-poisson edges.csv --target-edges 500
+menobis fit strength-degree-poisson edges.csv --output fit.csv
+menobis fit degree-bernoulli edges.csv --json
 ```
 
 ## Options

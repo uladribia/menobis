@@ -26,8 +26,8 @@ from benchmarks.types import (
     FitArtifact,
     GeneratedCase,
 )
-from odme.data.frames import EdgeTable
-from odme.utilities.synthetic import (
+from menobis.data.frames import EdgeTable
+from menobis.utilities.synthetic import (
     SyntheticNetwork,
     derive_synthetic_constraints,
     generate_pa_geographic_network,

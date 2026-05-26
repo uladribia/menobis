@@ -1,1 +1,1 @@
-"""Benchmark package for ODME/MENoBiS."""
+"""Benchmark package for MENoBiS."""

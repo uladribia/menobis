@@ -1,4 +1,4 @@
-"""Compare every legacy-supported fitter case with modern ODME where possible.
+"""Compare every legacy-supported fitter case with modern MENoBiS where possible.
 
 Run with SciPy available because archived W and nonlinear fitters import SciPy:
 
@@ -26,7 +26,7 @@ from typing import Any
 
 import numpy as np
 
-from odme.utilities.synthetic import (
+from menobis.utilities.synthetic import (
     derive_synthetic_constraints,
     generate_pa_geographic_network,
 )
@@ -93,10 +93,10 @@ def main() -> None:
     if unknown:
         raise SystemExit(f"unknown legacy cases: {unknown}")
 
-    with tempfile.TemporaryDirectory(prefix="odme-legacy-supported-") as tmp_name:
+    with tempfile.TemporaryDirectory(prefix="menobis-legacy-supported-") as tmp_name:
         workdir = Path(tmp_name)
         if args.keep_workdir:
-            workdir = Path(tempfile.mkdtemp(prefix="odme-legacy-supported-keep-"))
+            workdir = Path(tempfile.mkdtemp(prefix="menobis-legacy-supported-keep-"))
         try:
             legacy_pkg = prepare_legacy_package(workdir, args.legacy_ref)
             results: list[LegacyCaseResult] = []
@@ -276,7 +276,7 @@ def _modern_script(case: str, data_dir: Path, output: Path, max_iterations: int)
         from pathlib import Path
         import numpy as np
 
-        from odme.models import (
+        from menobis.models import (
             fit_degree_bernoulli,
             fit_strength_binomial,
             fit_strength_cost_poisson_coordinates,

@@ -1,5 +1,5 @@
-site_name: ODME
-site_description: Origin-Destination Multi-Edge network models
+site_name: MENoBiS
+site_description: Max Entropy NOn Binary Suite for null modeling
 repo_url: ''
 edit_uri: ''
 
@@ -18,7 +18,7 @@ nav:
   - Thesis Context: thesis-context.md
   - Getting Started: getting-started.md
   - Concepts:
-      - Multi-edge Networks: concepts/multi-edge-networks.md
+      - Non-binary Networks: concepts/non-binary-networks.md
       - Maximum Entropy Models: concepts/maximum-entropy-models.md
       - Thesis Cases: concepts/thesis-cases.md
       - Spatial Costs: concepts/spatial-costs.md
@@ -42,6 +42,8 @@ nav:
       - Benchmarking: development/benchmarking.md
       - Benchmark Results: development/benchmark-results.md
       - Scalability: development/scalability.md
+      - v2 Readiness Audit: development/v2-readiness-audit.md
+      - Ontology Conformance Audit: development/ontology-conformance-audit.md
       - Contributing and Extending: development/contributing-and-extending.md
       - Release Process: development/release-process.md
   - Decisions:
@@ -50,13 +52,17 @@ nav:
       - Provider Pipeline: decisions/0003-provider-pipeline.md
       - W Conic Solver Boundary: decisions/0004-w-conic-solver-boundary.md
       - Fitting Failure Policy: decisions/0005-fitting-failure-policy.md
-      - API Consistency Audit: decisions/0006-api-consistency-audit.md
       - PA Geographic Benchmark Fixture: decisions/0007-pa-geographic-benchmark-fixture.md
       - Saturation Peeling: decisions/0008-saturation-peeling.md
       - External Graph Libraries: decisions/0009-external-graph-libraries.md
       - Python Domain Layout: decisions/0010-python-domain-layout.md
       - Archive Legacy Thesis Folders: decisions/0011-archive-legacy-thesis-folders.md
       - Solver Performance Optimization: decisions/0012-solver-performance-optimization.md
+      - Project Rename to MENoBiS: decisions/0013-project-rename.md
+      - Sparse Pair Mask: decisions/0014-sparse-pair-mask.md
+      - Unified Routing API: decisions/0015-unified-routing-api.md
+      - Unified Verb Router: decisions/0016-unified-verb-router.md
+      - PyO3 Binding Split: decisions/0017-pyo3-binding-split.md
 
 plugins:
   - search

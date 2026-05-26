@@ -1,4 +1,4 @@
-"""Entrypoint for the canonical ODME benchmark CLI."""
+"""Entrypoint for the canonical MENoBiS benchmark CLI."""
 
 from benchmarks.cli import app
 

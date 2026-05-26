@@ -1,6 +1,6 @@
 """Unified dispatch registry for benchmark fit/sample/filter operations.
 
-Maps (family, constraint) pairs to the appropriate odme functions, eliminating
+Maps (family, constraint) pairs to the appropriate menobis functions, eliminating
 the repeated if/elif dispatch trees that previously lived in fit.py, sample.py,
 and filter.py.
 """
@@ -13,8 +13,8 @@ from typing import Any
 
 import numpy as np
 
-from odme.data.frames import EdgeTable, ProbabilityTable
-from odme.filtering import (
+from menobis.data.frames import EdgeTable, ProbabilityTable
+from menobis.filtering import (
     FilterResult,
     _solve_ztp_rate,
     filter_custom_poisson,
@@ -36,7 +36,7 @@ from odme.filtering import (
     filter_strength_geometric,
     filter_strength_negative_binomial,
 )
-from odme.models import (
+from menobis.models import (
     fit_degree_events_binomial,
     fit_degree_events_geometric,
     fit_degree_events_negative_binomial,
@@ -78,7 +78,7 @@ from odme.models import (
     sample_strength_negative_binomial,
     sample_strength_poisson,
 )
-from odme.utilities.synthetic import SyntheticConstraints, SyntheticNetwork
+from menobis.utilities.synthetic import SyntheticConstraints, SyntheticNetwork
 
 FAMILIES = ("me", "b", "w", "wnb")
 CONSTRAINTS = (
