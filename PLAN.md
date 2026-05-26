@@ -40,9 +40,22 @@ Binary Suite** for null modeling.
 
 ## Next steps (priority order)
 
-1. Address v2 readiness blockers documented in `docs/development/v2-readiness-audit.md`: degree-events parameters, partial coordinate Rust migration, unified Python router, and wrapper reuse.
-2. Run an extensive benchmark, provide an estimate on how long it would take to do a N=1000,5000,10000,20000 separating by case (ME, B , W).
-3. Write tutorials and notebooks with real-world examples + HOWTO on two+one cases: (1) filter a network with a null model (2) assess if some network statistic is relevant under a nullmodel (3) just fit and generate null model instances to do whatever the user needs. Use the PA synth model as realistic example. Do a complete audit of the docs to minimize overlap, maximize clarity and alignment, and refer to the thesis when needed. The docs should read cleary in the README using a mermaid diagram as follows (the notebook should follow these ideas).
+1. **Solver architecture unification** — Unify partial and full solver paths so
+   that a full solve is simply a partial solve with an empty known-pair set.
+   Factor constraints by linearity class:
+   - (a) Linear on occupation numbers: strengths, strengths+cost, custom t_ij.
+   - (b) Linear on binary occupation only: edges + total events.
+   - (c) Linear on both: degrees+strengths, strengths+edges.
+   Poisson/multinomial sampling is valid for any (a)-class constraint — code
+   should reflect this.
+2. **Dense Rust mask replacement** — Replace `Vec<bool>` of `N*N` in
+   `crates/menobis-core/src/fitting/partial.rs` with sparse free-pair providers.
+3. **PyO3 binding cleanup** — Split `crates/menobis-python/src/lib.rs` by domain
+   and add macro/registry helpers to reduce repetition.
+4. **Sparse matrix/cost handling cleanup** — Consolidate cost and probability
+   providers across fitting, generation, and filtering.
+5. Run an extensive benchmark, provide an estimate on how long it would take to do a N=1000,5000,10000,20000 separating by case (ME, B , W).
+6. Write tutorials and notebooks with real-world examples + HOWTO on two+one cases: (1) filter a network with a null model (2) assess if some network statistic is relevant under a nullmodel (3) just fit and generate null model instances to do whatever the user needs. Use the PA synth model as realistic example. Do a complete audit of the docs to minimize overlap, maximize clarity and alignment, and refer to the thesis when needed. The docs should read cleary in the README using a mermaid diagram as follows (the notebook should follow these ideas).
     1. Choose a case based on your data:
         - Aggregated binary networks: Binomial. E.g. airlines connecting airports.
         - Integer weights are distinguishable events: ME case. E.g. trips.
