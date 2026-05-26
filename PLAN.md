@@ -2,18 +2,8 @@
 
 Scientific reference: <https://hdl.handle.net/10803/400560>.
 
-## Completed
 
-| Step | Branch | Summary |
-|---|---|---|
-| Solver architecture unification | `refactor/sparse-mask` | Non-partial functions delegate to sparse-masked partials with null known-pair set |
-| Dense mask replacement | `refactor/sparse-mask` | `PairMask` struct O(N+K); all dense masked functions removed from public API |
-| Unified Python routing API | `refactor/pyo3-minimal-api` | `fit_model`, `sample_model`, `filter_model` with dispatch tables; `FitResult` base class; uniform filter signatures |
-| Unified verb router | `refactor/unified-verb-router` | `route_model(Verb, ...)` above model/filter domains; `ModelFamily` ontology (`ME`, `B`, `W`) with `layers`; removed `models.routing` cycle |
-
-## Infrastructure status
-
-### Benchmark CLI
+## Benchmark CLI
 
 ```bash
 uv run python -m benchmarks all --nodes 100,500
@@ -23,38 +13,17 @@ uv run python -m benchmarks fit --nodes 500 --families me,w
 
 Pipeline: PA geographic generate → fit → ensemble sample-check → null-filter FPR.
 
-### Checks
+## Completed in current branch
 
-```bash
-uv run ruff format --check .
-uv run ruff check .
-uv run pytest
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo fmt --all -- --check
-mkdocs build --strict
-```
-
-### Known solver limitations (documented)
-
-| Model | Limitation |
-|---|---|
-| ME/W/Wnb strength-degree | Degree-saturated nodes use fixed high occupation multipliers while strength multipliers remain active |
-| ME/W/Wnb strength-edges | Rejects target_edges ≥ capacity (use strength-only) |
-
+| Step | Branch | Summary |
+|---|---|---|
+| PyO3 binding split | `refactor/pyo3-binding-split` | `_menobis` bindings split into fitting, generation, filter, and stats modules |
 
 ## Next steps (priority order)
 
-1. ~~Solver architecture unification~~ ✅ Done (`refactor/sparse-mask`)
-2. ~~Dense Rust mask replacement~~ ✅ Done (`refactor/sparse-mask`)
-3. ~~Unified Python routing API~~ ✅ Done (`refactor/pyo3-minimal-api`)
-4. ~~Unified verb router and `ModelFamily` ontology~~ ✅ Done (`refactor/unified-verb-router`)
-5. **PyO3 binding split** — Split `crates/menobis-python/src/lib.rs` (3500 lines)
-   into domain modules (fitting.rs, generation.rs, filter.rs, stats.rs).
-   Add macro helpers to reduce #[pyfunction] boilerplate.
 6. **Sparse matrix/cost handling cleanup** — Consolidate cost and probability
    providers across fitting, generation, and filtering.
-7. Run an extensive benchmark, provide an estimate on how long it would take to do a N=1000,5000,10000,20000 separating by case (ME, B , W).
+7. **Benchmark cleaning** — Run an extensive benchmark, provide an estimate on how long it would take to do a N=1000,5000,10000,20000 separating by case (ME, B , W). Fix the benchmark folder (it is a mess). Just keep a single e2e benchmark script based on geographical PA with a clean implementation and reporting sufficient to generate figures and update docs afterwards. Get rid of the rest of scripts.
 8. Write tutorials and notebooks with real-world examples + HOWTO on two+one cases: (1) filter a network with a null model (2) assess if some network statistic is relevant under a nullmodel (3) just fit and generate null model instances to do whatever the user needs. Use the PA synth model as realistic example. Do a complete audit of the docs to minimize overlap, maximize clarity and alignment, and refer to the thesis when needed. The docs should read cleary in the README using a mermaid diagram as follows (the notebook should follow these ideas).
     1. Choose a case based on your data:
         - Aggregated binary networks: Binomial. E.g. airlines connecting airports.
