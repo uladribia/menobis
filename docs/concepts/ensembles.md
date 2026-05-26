@@ -11,6 +11,9 @@ canonical multinomial, and exact-strength stub matching. Their marginal means
 match $\mathbb{E}[t_{ij}] = s_i^{out}s_j^{in}/T$; fluctuations differ and shrink
 relative to $T$ as total events grow.
 
+It does the validation in this constraint with **self-loops** as this is the only 
+case for which we know how to sample exactly networks on the three ensembles.
+
 ## Three samplers
 
 | Sampler family | Function | Exactly fixed | Fluctuates |

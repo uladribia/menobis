@@ -52,7 +52,6 @@ nav:
       - Provider Pipeline: decisions/0003-provider-pipeline.md
       - W Conic Solver Boundary: decisions/0004-w-conic-solver-boundary.md
       - Fitting Failure Policy: decisions/0005-fitting-failure-policy.md
-      - API Consistency Audit: decisions/0006-api-consistency-audit.md
       - PA Geographic Benchmark Fixture: decisions/0007-pa-geographic-benchmark-fixture.md
       - Saturation Peeling: decisions/0008-saturation-peeling.md
       - External Graph Libraries: decisions/0009-external-graph-libraries.md
@@ -60,6 +59,7 @@ nav:
       - Archive Legacy Thesis Folders: decisions/0011-archive-legacy-thesis-folders.md
       - Solver Performance Optimization: decisions/0012-solver-performance-optimization.md
       - Project Rename to MENoBiS: decisions/0013-project-rename.md
+      - Sparse Pair Mask: decisions/0014-sparse-pair-mask.md
 
 plugins:
   - search
