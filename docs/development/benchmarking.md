@@ -10,7 +10,7 @@ Use the canonical PA geographic generator for every benchmark. It intentionally
 creates networks outside the MENoBiS null family, then fits MENoBiS nulls to the
 derived constraints.
 
-## Canonical network
+## Testcase network
 
 `generate_pa_geographic_network` creates directed weighted networks by:
 

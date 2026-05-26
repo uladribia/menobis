@@ -33,10 +33,6 @@ mkdocs build --strict
 | ME/W/Wnb strength-degree | Degree-saturated nodes use fixed high occupation multipliers while strength multipliers remain active |
 | ME/W/Wnb strength-edges | Rejects target_edges ≥ capacity (use strength-only) |
 
-### Rename status
-
-Final rename decision executed: MENoBiS stands for **Max Entropy NOn
-Binary Suite** for null modeling.
 
 ## Next steps (priority order)
 

@@ -1,6 +1,7 @@
 //! Multi-edge (ME/Poisson-family) fitting routines.
 
 use super::b::binary_probability;
+use super::mask::PairMask;
 use super::support::{max_abs_delta, max_pair_delta};
 use super::{FitResult, StrengthCostFitResult, StrengthDegreeFitResult, StrengthEdgesFitResult};
 
@@ -733,10 +734,80 @@ pub fn balance_masked_strength_poisson(
     }
 }
 
-/// Iterative proportional fitting for ME fixed-strength without self-loops.
+/// IPF balancing for fixed-strength ME with a sparse pair mask.
 ///
-/// Solves: s_out_i = sum_{j != i} x_i * y_j  and  s_in_j = sum_{i != j} x_i * y_j
+/// Equivalent to [`balance_masked_strength_poisson`] but uses O(N+K) memory
+/// instead of O(N²) for the mask, and O(K_i) per-row/column instead of O(N)
+/// for sum corrections.
 #[must_use]
+pub fn balance_sparse_masked_strength_poisson(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    mask: &PairMask,
+    tolerance: f64,
+    max_iterations: usize,
+) -> FitResult {
+    let n = strength_out.len();
+    let total: f64 = strength_out.iter().sum();
+    let sqrt_t = total.sqrt().max(1.0);
+    let mut x: Vec<f64> = strength_out
+        .iter()
+        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .collect();
+    let mut y: Vec<f64> = strength_in
+        .iter()
+        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .collect();
+
+    for iter in 0..max_iterations {
+        let old_x = x.clone();
+        let old_y = y.clone();
+
+        let sum_x: f64 = x.iter().sum();
+        for j in 0..n {
+            if strength_in[j] <= 0.0 {
+                continue;
+            }
+            let denom = mask.free_col_sum(j, &x, sum_x);
+            y[j] = if denom > 0.0 {
+                strength_in[j] / denom
+            } else {
+                0.0
+            };
+        }
+
+        let sum_y: f64 = y.iter().sum();
+        for i in 0..n {
+            if strength_out[i] <= 0.0 {
+                continue;
+            }
+            let denom = mask.free_row_sum(i, &y, sum_y);
+            x[i] = if denom > 0.0 {
+                strength_out[i] / denom
+            } else {
+                0.0
+            };
+        }
+
+        let delta = max_pair_delta(&x, &old_x, &y, &old_y);
+        if delta < tolerance {
+            return FitResult {
+                x,
+                y,
+                converged: true,
+                iterations: iter + 1,
+            };
+        }
+    }
+
+    FitResult {
+        x,
+        y,
+        converged: false,
+        iterations: max_iterations,
+    }
+}
+
 pub fn balance_strength_poisson(
     s_out: &[f64],
     s_in: &[f64],
@@ -1423,7 +1494,52 @@ pub fn fit_strength_cost_poisson_coordinates(
 
 #[cfg(test)]
 mod tests {
-    use super::{fit_strength_cost_poisson, CostFitOptions};
+    use super::{
+        balance_masked_strength_poisson, balance_sparse_masked_strength_poisson,
+        fit_strength_cost_poisson, CostFitOptions,
+    };
+    use crate::fitting::mask::PairMask;
+    use crate::fitting::support::self_loop_mask;
+
+    #[test]
+    fn sparse_masked_strength_matches_dense() {
+        let s_out = vec![10.0, 20.0, 30.0, 15.0, 25.0];
+        let s_in = vec![18.0, 12.0, 22.0, 28.0, 20.0];
+        let known_src = vec![0u64, 2, 3];
+        let known_tgt = vec![1u64, 4, 0];
+
+        // Dense mask
+        let n = 5;
+        let mut dense_mask = self_loop_mask(n, false);
+        for (&s, &t) in known_src.iter().zip(known_tgt.iter()) {
+            dense_mask[(s as usize) * n + (t as usize)] = true;
+        }
+
+        // Sparse mask
+        let sparse_mask = PairMask::new(n, false, &known_src, &known_tgt);
+
+        let dense_result =
+            balance_masked_strength_poisson(&s_out, &s_in, &dense_mask, 1e-12, 50000);
+        let sparse_result =
+            balance_sparse_masked_strength_poisson(&s_out, &s_in, &sparse_mask, 1e-12, 50000);
+
+        assert_eq!(dense_result.converged, sparse_result.converged);
+        assert_eq!(dense_result.iterations, sparse_result.iterations);
+        for i in 0..n {
+            assert!(
+                (dense_result.x[i] - sparse_result.x[i]).abs() < 1e-10,
+                "x[{i}] mismatch: dense={}, sparse={}",
+                dense_result.x[i],
+                sparse_result.x[i]
+            );
+            assert!(
+                (dense_result.y[i] - sparse_result.y[i]).abs() < 1e-10,
+                "y[{i}] mismatch: dense={}, sparse={}",
+                dense_result.y[i],
+                sparse_result.y[i]
+            );
+        }
+    }
 
     #[test]
     fn recovers_strengths_for_uniform_cost() {

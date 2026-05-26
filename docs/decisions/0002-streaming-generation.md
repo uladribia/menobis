@@ -4,7 +4,7 @@
 
 MENoBiS generation streams candidate pair distributions and parallelizes large
 supports with deterministic Rayon chunks. Dense $N^2$ probability matrices are
-only for explicit export/debug paths.
+to be avoided at all costs.
 
 ## Context
 

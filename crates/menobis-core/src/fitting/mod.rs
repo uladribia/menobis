@@ -1,6 +1,7 @@
 //! Lagrange multiplier fitting for MENoBiS null models.
 
 pub mod b;
+pub mod mask;
 pub mod me;
 pub mod partial;
 pub mod strength_cost;
@@ -17,9 +18,10 @@ pub use b::{
 };
 pub use me::{
     balance_masked_strength_degree_poisson, balance_masked_strength_poisson,
-    balance_strength_degree_poisson, balance_strength_edges_poisson, balance_strength_poisson,
-    balance_weighted_factors, fit_strength_cost_poisson, fit_strength_cost_poisson_coordinates,
-    fit_strength_poisson, CostFitOptions,
+    balance_sparse_masked_strength_poisson, balance_strength_degree_poisson,
+    balance_strength_edges_poisson, balance_strength_poisson, balance_weighted_factors,
+    fit_strength_cost_poisson, fit_strength_cost_poisson_coordinates, fit_strength_poisson,
+    CostFitOptions,
 };
 pub use partial::{
     fit_partial_degree, fit_partial_strength, fit_partial_strength_cost,

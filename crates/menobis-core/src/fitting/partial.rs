@@ -4,10 +4,11 @@
 //! a sparse rate table. All mask building, excess computation, balancing, IPF,
 //! and result assembly happens in Rust.
 
+use super::mask::PairMask;
 use super::support::{max_pair_delta, self_loop_mask};
 use super::{
     balance_masked_degree_bernoulli, balance_masked_strength_degree_poisson,
-    balance_masked_strength_poisson, balance_strength_edges_poisson,
+    balance_sparse_masked_strength_poisson, balance_strength_edges_poisson,
     fit_strength_cost_binomial_coordinates, fit_strength_cost_w_lbfgs, CostFitOptions, FitResult,
     PartialFitResult, StrengthCostFitResult,
 };
@@ -437,11 +438,59 @@ fn assemble_result(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Public full-pipeline functions
-// ---------------------------------------------------------------------------
+/// Assemble the sparse rate table using `PairMask` (no dense N² allocation).
+#[allow(clippy::too_many_arguments)]
+fn assemble_result_sparse(
+    n: usize,
+    known_src: &[u64],
+    known_tgt: &[u64],
+    known_rate: &[f64],
+    mask: &PairMask,
+    free_rate_fn: impl Fn(usize, usize) -> f64,
+    converged: bool,
+    iterations: usize,
+) -> PartialFitResult {
+    let mut sources = Vec::new();
+    let mut targets = Vec::new();
+    let mut rates = Vec::new();
+    // Known pairs
+    for ((&s, &t), &r) in known_src
+        .iter()
+        .zip(known_tgt.iter())
+        .zip(known_rate.iter())
+    {
+        if r > 0.0 {
+            sources.push(s);
+            targets.push(t);
+            rates.push(r);
+        }
+    }
+    // Free pairs: iterate all (i,j) and skip masked
+    for i in 0..n {
+        for j in 0..n {
+            if mask.is_masked(i, j) {
+                continue;
+            }
+            let rate = free_rate_fn(i, j);
+            if rate > 0.0 {
+                sources.push(i as u64);
+                targets.push(j as u64);
+                rates.push(rate);
+            }
+        }
+    }
+    PartialFitResult {
+        sources,
+        targets,
+        rates,
+        converged,
+        iterations,
+    }
+}
 
-/// Full partial strength-Poisson fit: excess → masked IPF → rate table.
+/// Full partial strength-Poisson fit: excess → sparse masked IPF → rate table.
+///
+/// Uses `PairMask` for O(N+K) memory instead of O(N²).
 #[must_use]
 #[allow(clippy::too_many_arguments)]
 pub fn fit_partial_strength(
@@ -457,13 +506,13 @@ pub fn fit_partial_strength(
     let n = infer_n(strength_out.len(), known_src, known_tgt);
     let s_out = pad_to_n(strength_out, n);
     let s_in = pad_to_n(strength_in, n);
-    let mask = build_mask(n, known_src, known_tgt, self_loops);
+    let mask = PairMask::new(n, self_loops, known_src, known_tgt);
 
     let (mut excess_out, mut excess_in) =
         match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
             Some(v) => v,
             None => {
-                return assemble_result(
+                return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
@@ -477,7 +526,7 @@ pub fn fit_partial_strength(
         };
 
     if excess_out.iter().sum::<f64>() <= 0.0 {
-        return assemble_result(
+        return assemble_result_sparse(
             n,
             known_src,
             known_tgt,
@@ -490,11 +539,16 @@ pub fn fit_partial_strength(
     }
 
     balance_excess(&mut excess_out, &mut excess_in);
-    let fit =
-        balance_masked_strength_poisson(&excess_out, &excess_in, &mask, tolerance, max_iterations);
+    let fit = balance_sparse_masked_strength_poisson(
+        &excess_out,
+        &excess_in,
+        &mask,
+        tolerance,
+        max_iterations,
+    );
     let x = fit.x;
     let y = fit.y;
-    assemble_result(
+    assemble_result_sparse(
         n,
         known_src,
         known_tgt,
