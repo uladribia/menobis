@@ -49,12 +49,13 @@ use menobis_core::filter::{
     filter_strength_negative_binomial as core_filter_strength_negative_binomial,
     filter_strength_poisson as core_filter_strength_poisson,
 };
+use menobis_core::fitting::mask::PairMask;
 use menobis_core::fitting::{
-    balance_degree_bernoulli, balance_masked_degree_bernoulli, balance_masked_strength_binomial,
-    balance_masked_strength_degree_poisson, balance_masked_strength_poisson,
-    balance_strength_binomial, balance_strength_degree_poisson, balance_strength_edges_poisson,
-    balance_strength_poisson, balance_weighted_factors,
-    fit_degree_events_geometric as core_fit_degree_events_geometric,
+    balance_degree_bernoulli, balance_sparse_masked_degree_bernoulli,
+    balance_sparse_masked_strength_binomial, balance_sparse_masked_strength_degree_poisson,
+    balance_sparse_masked_strength_poisson, balance_strength_binomial,
+    balance_strength_degree_poisson, balance_strength_edges_poisson, balance_strength_poisson,
+    balance_weighted_factors, fit_degree_events_geometric as core_fit_degree_events_geometric,
     fit_degree_events_negative_binomial as core_fit_degree_events_negative_binomial,
     fit_strength_cost_geometric as core_fit_strength_cost_geometric,
     fit_strength_cost_negative_binomial as core_fit_strength_cost_negative_binomial,
@@ -311,10 +312,11 @@ fn fit_masked_strength_poisson(
     if mask.len() != n * n {
         return Err(PyValueError::new_err("mask must have length n*n"));
     }
-    let result = balance_masked_strength_poisson(
+    let pair_mask = PairMask::from_dense(n, &mask);
+    let result = balance_sparse_masked_strength_poisson(
         &strength_out,
         &strength_in,
-        &mask,
+        &pair_mask,
         tolerance,
         max_iterations,
     );
@@ -333,8 +335,14 @@ fn fit_masked_degree_bernoulli(
     if n != degree_in.len() || mask.len() != n * n {
         return Err(PyValueError::new_err("array length mismatch"));
     }
-    let r =
-        balance_masked_degree_bernoulli(&degree_out, &degree_in, &mask, tolerance, max_iterations);
+    let pair_mask = PairMask::from_dense(n, &mask);
+    let r = balance_sparse_masked_degree_bernoulli(
+        &degree_out,
+        &degree_in,
+        &pair_mask,
+        tolerance,
+        max_iterations,
+    );
     Ok((r.x, r.y, r.converged, r.iterations))
 }
 
@@ -356,12 +364,13 @@ fn fit_masked_strength_degree_poisson(
     {
         return Err(PyValueError::new_err("array length mismatch"));
     }
-    let r = balance_masked_strength_degree_poisson(
+    let pair_mask = PairMask::from_dense(n, &mask);
+    let r = balance_sparse_masked_strength_degree_poisson(
         &strength_out,
         &strength_in,
         &degree_out,
         &degree_in,
-        &mask,
+        &pair_mask,
         tolerance,
         max_iterations,
     );
@@ -1678,10 +1687,12 @@ fn fit_masked_strength_binomial(
     tolerance: f64,
     max_iterations: usize,
 ) -> (Vec<f64>, Vec<f64>, bool, usize) {
-    let result = balance_masked_strength_binomial(
+    let n = strength_out.len();
+    let pair_mask = PairMask::from_dense(n, &mask);
+    let result = balance_sparse_masked_strength_binomial(
         &strength_out,
         &strength_in,
-        &mask,
+        &pair_mask,
         layers,
         tolerance,
         max_iterations,

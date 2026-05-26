@@ -82,3 +82,17 @@ Start with:
 The modern MENoBiS implementation lives under `src/`, `crates/`, `tests/`, and
 `docs/`. Thesis-era C/Python folders were removed from the active tree; git
 history remains the archive.
+
+
+
+
+MENoBiS package DOCS: technical and license information
+========================================================================
+
+ Copyright 2014-2026 Oleguer Sagarra. All rights reserved. Code under License GPLv3.
+______________________________________________________________________________________
+
+This folder contains technical information about the models used and the implementations of algorithms present in MENoBiS.
+
+It also includes the corresponding extended version of the LICENSE document.
+

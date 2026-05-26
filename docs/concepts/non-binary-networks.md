@@ -1,14 +1,16 @@
 ---
-description: Multi-edge networks represent integer-valued weighted directed graphs.
+description: Non-binary networks represent integer-valued weighted directed graphs.
 ---
 
 # Multi-edge networks
 
 ## TL;DR
 
-A multi-edge (ME) network is a directed weighted graph where each edge weight
-$t_{ij}$ is a non-negative integer representing the number of distinguishable
-events (trips, interactions, messages) from node $i$ to node $j$.
+A non-binary (NE) network is a directed weighted graph where each edge weight
+$t_{ij}$ is a non-negative integer representing the number of events (trips, interactions, messages) from node $i$ to node $j$.
+
+The events can be distinguishable (leading to Multi-edge networks ME), can be aggregations of binary events (Binary or B) 
+or indistinguishable events over a single layer or multiple layers (called Weighted network or W).
 
 ## Definitions
 

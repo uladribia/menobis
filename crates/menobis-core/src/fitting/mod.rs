@@ -13,16 +13,15 @@ pub mod w_lbfgs;
 #[cfg(test)]
 use b::binary_probability;
 pub use b::{
-    balance_degree_bernoulli, balance_masked_degree_bernoulli, balance_masked_strength_binomial,
-    balance_sparse_masked_degree_bernoulli, balance_strength_binomial,
+    balance_degree_bernoulli, balance_sparse_masked_degree_bernoulli,
+    balance_sparse_masked_strength_binomial, balance_strength_binomial,
     fit_strength_degree_binomial, fit_strength_edges_binomial,
 };
 pub use me::{
-    balance_masked_strength_degree_poisson, balance_masked_strength_poisson,
-    balance_sparse_masked_strength_poisson, balance_strength_degree_poisson,
-    balance_strength_edges_poisson, balance_strength_poisson, balance_weighted_factors,
-    fit_strength_cost_poisson, fit_strength_cost_poisson_coordinates, fit_strength_poisson,
-    CostFitOptions,
+    balance_sparse_masked_strength_degree_poisson, balance_sparse_masked_strength_poisson,
+    balance_strength_degree_poisson, balance_strength_edges_poisson, balance_strength_poisson,
+    balance_weighted_factors, fit_strength_cost_poisson, fit_strength_cost_poisson_coordinates,
+    fit_strength_poisson, CostFitOptions,
 };
 pub use partial::{
     fit_partial_degree, fit_partial_strength, fit_partial_strength_cost,

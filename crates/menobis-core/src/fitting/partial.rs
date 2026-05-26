@@ -7,7 +7,7 @@
 use super::mask::PairMask;
 use super::support::max_pair_delta;
 use super::{
-    balance_masked_strength_degree_poisson, balance_sparse_masked_degree_bernoulli,
+    balance_sparse_masked_degree_bernoulli, balance_sparse_masked_strength_degree_poisson,
     balance_sparse_masked_strength_poisson, balance_strength_edges_poisson,
     fit_strength_cost_binomial_coordinates, fit_strength_cost_w_lbfgs, CostFitOptions, FitResult,
     PartialFitResult, StrengthCostFitResult,
@@ -631,13 +631,12 @@ pub fn fit_partial_strength_degree(
     balance_excess(&mut excess_s_out, &mut excess_s_in);
     balance_excess(&mut excess_k_out, &mut excess_k_in);
 
-    let dense_mask = mask.to_dense();
-    let fit = balance_masked_strength_degree_poisson(
+    let fit = balance_sparse_masked_strength_degree_poisson(
         &excess_s_out,
         &excess_s_in,
         &excess_k_out,
         &excess_k_in,
-        &dense_mask,
+        &mask,
         tolerance,
         max_iterations,
     );

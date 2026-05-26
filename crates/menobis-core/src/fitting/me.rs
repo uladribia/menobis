@@ -225,6 +225,31 @@ pub fn balance_strength_degree_poisson(
     max_iterations: usize,
 ) -> StrengthDegreeFitResult {
     let n = strength_out.len();
+    let capacity = if self_loops {
+        n as f64
+    } else {
+        n.saturating_sub(1) as f64
+    };
+    let has_saturated = degree_out
+        .iter()
+        .chain(degree_in.iter())
+        .any(|&k| k >= capacity - tolerance.max(1e-9));
+
+    if !has_saturated {
+        // No saturation: delegate directly to sparse masked solver
+        let mask = PairMask::from_self_loops(n, self_loops);
+        return balance_sparse_masked_strength_degree_poisson(
+            strength_out,
+            strength_in,
+            degree_out,
+            degree_in,
+            &mask,
+            tolerance,
+            max_iterations,
+        );
+    }
+
+    // Saturated case: pin z/w for saturated nodes during iteration
     let total = strength_out.iter().sum::<f64>().max(1.0);
     let scale = total.sqrt();
     let mut x: Vec<f64> = strength_out
@@ -237,11 +262,6 @@ pub fn balance_strength_degree_poisson(
         .collect();
     let k_total = degree_out.iter().sum::<f64>().max(1.0);
     let k_scale = (k_total / n.max(1) as f64).sqrt().max(0.1);
-    let capacity = if self_loops {
-        n as f64
-    } else {
-        n.saturating_sub(1) as f64
-    };
     let saturated_out: Vec<bool> = degree_out
         .iter()
         .map(|&k| k >= capacity - tolerance.max(1e-9))
@@ -281,7 +301,6 @@ pub fn balance_strength_degree_poisson(
         let old_z = z.clone();
         let old_w = w.clone();
 
-        // Update y (strength_in)
         for j in 0..n {
             for i in 0..n {
                 if self_loops || i != j {
@@ -294,7 +313,6 @@ pub fn balance_strength_degree_poisson(
             }
             y[j] = solve_me_sd_factor_s(strength_in[j], &others_q, &others_v);
         }
-        // Update x (strength_out)
         for i in 0..n {
             for j in 0..n {
                 if self_loops || i != j {
@@ -307,8 +325,6 @@ pub fn balance_strength_degree_poisson(
             }
             x[i] = solve_me_sd_factor_s(strength_out[i], &others_q, &others_v);
         }
-        // Update w (degree_in). Degree-saturated nodes keep a large multiplier,
-        // forcing occupation pi_ij -> 1 while x/y continue fitting positive weights.
         for j in 0..n {
             if saturated_in[j] {
                 w[j] = 1e30;
@@ -325,7 +341,6 @@ pub fn balance_strength_degree_poisson(
             }
             w[j] = solve_me_sd_factor_k(degree_in[j], &others_q, &others_v);
         }
-        // Update z (degree_out). Degree-saturated nodes keep a large multiplier.
         for i in 0..n {
             if saturated_out[i] {
                 z[i] = 1e30;
@@ -543,6 +558,129 @@ pub fn balance_masked_strength_degree_poisson(
         for i in 0..n {
             for j in 0..n {
                 if !mask[i * n + j] {
+                    others_q[j] = x[i] * y[j];
+                    others_v[j] = w[j];
+                } else {
+                    others_q[j] = 0.0;
+                    others_v[j] = 0.0;
+                }
+            }
+            z[i] = solve_me_sd_factor_k(degree_out[i], &others_q, &others_v);
+        }
+
+        let delta = x
+            .iter()
+            .zip(old_x.iter())
+            .chain(y.iter().zip(old_y.iter()))
+            .chain(z.iter().zip(old_z.iter()))
+            .chain(w.iter().zip(old_w.iter()))
+            .map(|(&a, &b)| (a - b).abs())
+            .fold(0.0_f64, f64::max);
+        if delta < tolerance {
+            return StrengthDegreeFitResult {
+                x,
+                y,
+                z,
+                w,
+                converged: true,
+                iterations: iter + 1,
+            };
+        }
+    }
+    StrengthDegreeFitResult {
+        x,
+        y,
+        z,
+        w,
+        converged: false,
+        iterations: max_iterations,
+    }
+}
+
+/// Sparse-mask version of [`balance_masked_strength_degree_poisson`].
+///
+/// Uses `PairMask` to avoid O(N²) dense allocation. Inner loops still iterate
+/// all N candidates per node (nonlinear solver), but memory is O(N+K).
+#[must_use]
+#[allow(clippy::needless_range_loop)]
+pub fn balance_sparse_masked_strength_degree_poisson(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    degree_out: &[f64],
+    degree_in: &[f64],
+    mask: &PairMask,
+    tolerance: f64,
+    max_iterations: usize,
+) -> StrengthDegreeFitResult {
+    let n = strength_out.len();
+    let total = strength_out.iter().sum::<f64>().max(1.0);
+    let scale = total.sqrt();
+    let mut x: Vec<f64> = strength_out
+        .iter()
+        .map(|&s| (s / scale).max(1e-12))
+        .collect();
+    let mut y: Vec<f64> = strength_in
+        .iter()
+        .map(|&s| (s / scale).max(1e-12))
+        .collect();
+    let k_total = degree_out.iter().sum::<f64>().max(1.0);
+    let k_scale = (k_total / n.max(1) as f64).sqrt().max(0.1);
+    let mut z: Vec<f64> = degree_out
+        .iter()
+        .map(|&k| (k / k_total * k_scale).max(1e-12))
+        .collect();
+    let mut w: Vec<f64> = degree_in
+        .iter()
+        .map(|&k| (k / k_total * k_scale).max(1e-12))
+        .collect();
+    let mut others_q = vec![0.0_f64; n];
+    let mut others_v = vec![0.0_f64; n];
+
+    for iter in 0..max_iterations {
+        let old_x = x.clone();
+        let old_y = y.clone();
+        let old_z = z.clone();
+        let old_w = w.clone();
+
+        for j in 0..n {
+            for i in 0..n {
+                if !mask.is_masked(i, j) {
+                    others_q[i] = x[i];
+                    others_v[i] = z[i] * w[j];
+                } else {
+                    others_q[i] = 0.0;
+                    others_v[i] = 0.0;
+                }
+            }
+            y[j] = solve_me_sd_factor_s(strength_in[j], &others_q, &others_v);
+        }
+        for i in 0..n {
+            for j in 0..n {
+                if !mask.is_masked(i, j) {
+                    others_q[j] = y[j];
+                    others_v[j] = z[i] * w[j];
+                } else {
+                    others_q[j] = 0.0;
+                    others_v[j] = 0.0;
+                }
+            }
+            x[i] = solve_me_sd_factor_s(strength_out[i], &others_q, &others_v);
+        }
+        for j in 0..n {
+            for i in 0..n {
+                if !mask.is_masked(i, j) {
+                    others_q[i] = x[i] * y[j];
+                    others_v[i] = z[i];
+                } else {
+                    others_q[i] = 0.0;
+                    others_v[i] = 0.0;
+                }
+            }
+            w[j] = solve_me_sd_factor_k(degree_in[j], &others_q, &others_v);
+        }
+        for i in 0..n {
+            for j in 0..n {
+                if !mask.is_masked(i, j) {
                     others_q[j] = x[i] * y[j];
                     others_v[j] = w[j];
                 } else {
@@ -808,68 +946,18 @@ pub fn balance_sparse_masked_strength_poisson(
     }
 }
 
+/// Iterative proportional fitting for ME fixed-strength without self-loops.
+///
+/// Delegates to [`balance_sparse_masked_strength_poisson`] with a self-loop-only mask.
+#[must_use]
 pub fn balance_strength_poisson(
     s_out: &[f64],
     s_in: &[f64],
     tolerance: f64,
     max_iterations: usize,
 ) -> FitResult {
-    let n = s_out.len();
-    let total: f64 = s_out.iter().sum();
-    let sqrt_t = total.sqrt();
-
-    let mut x: Vec<f64> = s_out
-        .iter()
-        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
-        .collect();
-    let mut y: Vec<f64> = s_in
-        .iter()
-        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
-        .collect();
-
-    for iter in 0..max_iterations {
-        let sum_x: f64 = x.iter().sum();
-        let mut y_new = vec![0.0; n];
-        for j in 0..n {
-            if s_in[j] == 0.0 {
-                continue;
-            }
-            let denom = sum_x - x[j];
-            y_new[j] = if denom > 0.0 { s_in[j] / denom } else { 0.0 };
-        }
-
-        let sum_y: f64 = y_new.iter().sum();
-        let mut x_new = vec![0.0; n];
-        for i in 0..n {
-            if s_out[i] == 0.0 {
-                continue;
-            }
-            let denom = sum_y - y_new[i];
-            x_new[i] = if denom > 0.0 { s_out[i] / denom } else { 0.0 };
-        }
-
-        let dx = max_abs_delta(&x_new, &x);
-        let dy = max_abs_delta(&y_new, &y);
-
-        x = x_new;
-        y = y_new;
-
-        if dx < tolerance && dy < tolerance {
-            return FitResult {
-                x,
-                y,
-                converged: true,
-                iterations: iter + 1,
-            };
-        }
-    }
-
-    FitResult {
-        x,
-        y,
-        converged: false,
-        iterations: max_iterations,
-    }
+    let mask = PairMask::from_self_loops(s_out.len(), false);
+    balance_sparse_masked_strength_poisson(s_out, s_in, &mask, tolerance, max_iterations)
 }
 
 /// Fit fixed-strength Poisson ME model (both self-loops and no-self-loops).
@@ -1578,6 +1666,39 @@ mod tests {
                 (row_sum - s_out_i).abs() < 0.1,
                 "s_out[{i}]: expected {s_out_i}, got {row_sum}, gamma={}",
                 result.gamma,
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod unification_tests {
+    use super::*;
+    use crate::fitting::mask::PairMask;
+
+    #[test]
+    fn sparse_masked_equals_balance_strength_poisson() {
+        let s_out = vec![10.0, 20.0, 30.0, 15.0, 25.0];
+        let s_in = vec![18.0, 12.0, 22.0, 28.0, 20.0];
+        let mask = PairMask::from_self_loops(5, false);
+
+        let dense = balance_strength_poisson(&s_out, &s_in, 1e-12, 50000);
+        let sparse = balance_sparse_masked_strength_poisson(&s_out, &s_in, &mask, 1e-12, 50000);
+
+        assert!(dense.converged);
+        assert!(sparse.converged);
+        for i in 0..5 {
+            assert!(
+                (dense.x[i] - sparse.x[i]).abs() < 1e-8,
+                "x[{i}]: dense={}, sparse={}",
+                dense.x[i],
+                sparse.x[i]
+            );
+            assert!(
+                (dense.y[i] - sparse.y[i]).abs() < 1e-8,
+                "y[{i}]: dense={}, sparse={}",
+                dense.y[i],
+                sparse.y[i]
             );
         }
     }

@@ -1,9 +1,7 @@
 //! Binary and binomial fitting routines.
 
 use super::mask::PairMask;
-use super::support::{
-    max_pair_delta, peel_b_strength_saturation, peel_degree_saturation, self_loop_mask,
-};
+use super::support::{max_pair_delta, peel_b_strength_saturation, peel_degree_saturation};
 use super::{FitResult, StrengthDegreeFitResult, StrengthEdgesFitResult};
 
 pub fn balance_masked_degree_bernoulli(
@@ -238,6 +236,8 @@ pub fn balance_sparse_masked_degree_bernoulli(
 ///
 /// Automatically peels degree-saturated nodes (k_i = capacity) before solving
 /// the residual sub-problem, guaranteeing convergence at the boundary.
+///
+/// Delegates to [`balance_sparse_masked_degree_bernoulli`] with appropriate mask.
 #[must_use]
 #[allow(clippy::needless_range_loop)]
 pub fn balance_degree_bernoulli(
@@ -250,10 +250,11 @@ pub fn balance_degree_bernoulli(
     let peeling = peel_degree_saturation(degree_out, degree_in, self_loops, 1.0);
     if peeling.has_saturation {
         // Solve the reduced problem on excess degrees with the saturated mask
-        let mut result = balance_masked_degree_bernoulli(
+        let mask = PairMask::from_dense(degree_out.len(), &peeling.mask);
+        let mut result = balance_sparse_masked_degree_bernoulli(
             &peeling.excess_out,
             &peeling.excess_in,
-            &peeling.mask,
+            &mask,
             tolerance,
             max_iterations,
         );
@@ -276,8 +277,8 @@ pub fn balance_degree_bernoulli(
         }
         return result;
     }
-    let mask = self_loop_mask(degree_out.len(), self_loops);
-    balance_masked_degree_bernoulli(degree_out, degree_in, &mask, tolerance, max_iterations)
+    let mask = PairMask::from_self_loops(degree_out.len(), self_loops);
+    balance_sparse_masked_degree_bernoulli(degree_out, degree_in, &mask, tolerance, max_iterations)
 }
 
 pub(crate) fn binary_probability(x: f64, y: f64) -> f64 {
@@ -289,6 +290,8 @@ pub(crate) fn binary_probability(x: f64, y: f64) -> f64 {
 ///
 /// Automatically peels strength-saturated nodes (s_i = M*capacity) before
 /// solving the residual sub-problem, guaranteeing convergence at the boundary.
+///
+/// Delegates to [`balance_sparse_masked_strength_binomial`] with appropriate mask.
 #[must_use]
 #[allow(clippy::needless_range_loop)]
 pub fn balance_strength_binomial(
@@ -301,10 +304,11 @@ pub fn balance_strength_binomial(
 ) -> FitResult {
     let peeling = peel_b_strength_saturation(strength_out, strength_in, layers, self_loops);
     if peeling.has_saturation {
-        let mut result = balance_masked_strength_binomial(
+        let mask = PairMask::from_dense(strength_out.len(), &peeling.mask);
+        let mut result = balance_sparse_masked_strength_binomial(
             &peeling.excess_out,
             &peeling.excess_in,
-            &peeling.mask,
+            &mask,
             layers,
             tolerance,
             max_iterations,
@@ -330,8 +334,8 @@ pub fn balance_strength_binomial(
         }
         return result;
     }
-    let mask = self_loop_mask(strength_out.len(), self_loops);
-    balance_masked_strength_binomial(
+    let mask = PairMask::from_self_loops(strength_out.len(), self_loops);
+    balance_sparse_masked_strength_binomial(
         strength_out,
         strength_in,
         &mask,
@@ -481,9 +485,140 @@ pub fn balance_masked_strength_binomial(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Zero-inflated binomial(M) strength-edges and strength-degree fitting
-// ---------------------------------------------------------------------------
+/// Sparse-mask version of [`balance_masked_strength_binomial`].
+///
+/// Uses `PairMask` to avoid O(N²) dense allocation. Inner loops still iterate
+/// all N candidates per node (nonlinear binomial sums), but memory is O(N+K).
+#[must_use]
+#[allow(clippy::needless_range_loop)]
+pub fn balance_sparse_masked_strength_binomial(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    mask: &PairMask,
+    layers: u32,
+    tolerance: f64,
+    max_iterations: usize,
+) -> FitResult {
+    let n = strength_out.len();
+    let m = f64::from(layers);
+    let total: f64 = strength_out.iter().sum();
+    let sqrt_t = total.sqrt().max(1.0);
+    let mut x: Vec<f64> = strength_out
+        .iter()
+        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .collect();
+    let mut y: Vec<f64> = strength_in
+        .iter()
+        .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
+        .collect();
+    let k_in: Vec<f64> = strength_in.iter().map(|&s| s / m).collect();
+    let k_out: Vec<f64> = strength_out.iter().map(|&s| s / m).collect();
+    let mut prev_err = f64::INFINITY;
+    let mut damping = 1.0_f64;
+    let residual_check_interval = 50;
+
+    for iter in 0..max_iterations {
+        let mut max_delta = 0.0_f64;
+        for j in 0..n {
+            if k_in[j] <= 0.0 {
+                continue;
+            }
+            let mut denom = 0.0;
+            for i in 0..n {
+                if mask.is_masked(i, j) {
+                    continue;
+                }
+                denom += x[i] / (1.0 + x[i] * y[j]);
+            }
+            let new_y = if denom > 0.0 { k_in[j] / denom } else { 0.0 };
+            if damping < 1.0 && y[j] > 0.0 && new_y > 0.0 {
+                let damped = (y[j].ln() * (1.0 - damping) + new_y.ln() * damping).exp();
+                max_delta = max_delta.max((damped - y[j]).abs());
+                y[j] = damped;
+            } else {
+                max_delta = max_delta.max((new_y - y[j]).abs());
+                y[j] = new_y;
+            }
+        }
+        for i in 0..n {
+            if k_out[i] <= 0.0 {
+                continue;
+            }
+            let mut denom = 0.0;
+            for j in 0..n {
+                if mask.is_masked(i, j) {
+                    continue;
+                }
+                denom += y[j] / (1.0 + x[i] * y[j]);
+            }
+            let new_x = if denom > 0.0 { k_out[i] / denom } else { 0.0 };
+            if damping < 1.0 && x[i] > 0.0 && new_x > 0.0 {
+                let damped = (x[i].ln() * (1.0 - damping) + new_x.ln() * damping).exp();
+                max_delta = max_delta.max((damped - x[i]).abs());
+                x[i] = damped;
+            } else {
+                max_delta = max_delta.max((new_x - x[i]).abs());
+                x[i] = new_x;
+            }
+        }
+
+        if max_delta < tolerance * 1e-6 {
+            return FitResult {
+                x,
+                y,
+                converged: true,
+                iterations: iter + 1,
+            };
+        }
+
+        if (iter + 1) % residual_check_interval == 0 || max_delta < tolerance * 0.01 {
+            let mut max_err = 0.0_f64;
+            for i in 0..n {
+                let mut pred = 0.0;
+                for j in 0..n {
+                    if mask.is_masked(i, j) {
+                        continue;
+                    }
+                    pred += m * x[i] * y[j] / (1.0 + x[i] * y[j]);
+                }
+                max_err = max_err.max((pred - strength_out[i]).abs());
+            }
+            for j in 0..n {
+                let mut pred = 0.0;
+                for i in 0..n {
+                    if mask.is_masked(i, j) {
+                        continue;
+                    }
+                    pred += m * x[i] * y[j] / (1.0 + x[i] * y[j]);
+                }
+                max_err = max_err.max((pred - strength_in[j]).abs());
+            }
+            if max_err < tolerance {
+                return FitResult {
+                    x,
+                    y,
+                    converged: true,
+                    iterations: iter + 1,
+                };
+            }
+            if max_err >= prev_err * 0.99 && damping >= 1.0 {
+                damping = 0.5;
+            } else if max_err >= prev_err * 0.999 && damping < 1.0 {
+                damping = (damping * 0.8).max(0.1);
+            } else if max_err < prev_err * 0.95 && damping < 1.0 {
+                damping = (damping * 1.2).min(1.0);
+            }
+            prev_err = max_err;
+        }
+    }
+
+    FitResult {
+        x,
+        y,
+        converged: false,
+        iterations: max_iterations,
+    }
+}
 
 #[inline]
 fn b_g(q: f64, layers: u32) -> f64 {

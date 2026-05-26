@@ -90,6 +90,44 @@ impl PairMask {
         Self::new(n, self_loops, &[], &[])
     }
 
+    /// Create a `PairMask` from a dense `Vec<bool>` (for transition from legacy code).
+    ///
+    /// Pairs where `dense[i * n + j]` is `true` are masked.
+    #[must_use]
+    pub fn from_dense(n: usize, dense: &[bool]) -> Self {
+        let mut pairs = HashSet::new();
+        let mut masked_rows: Vec<Vec<usize>> = vec![Vec::new(); n];
+        let mut masked_cols: Vec<Vec<usize>> = vec![Vec::new(); n];
+        let mut n_masked = 0usize;
+
+        for i in 0..n {
+            for j in 0..n {
+                if dense[i * n + j] {
+                    n_masked += 1;
+                    if i != j {
+                        pairs.insert((i, j));
+                    }
+                    masked_rows[j].push(i);
+                    masked_cols[i].push(j);
+                }
+            }
+        }
+
+        // Detect self_loops policy from diagonal
+        let self_loops = n == 0 || !dense[0];
+
+        let n_free = (n * n).saturating_sub(n_masked);
+
+        Self {
+            n,
+            self_loops,
+            pairs,
+            masked_rows,
+            masked_cols,
+            n_free,
+        }
+    }
+
     /// Check if pair (i, j) is masked (excluded).
     #[inline]
     #[must_use]

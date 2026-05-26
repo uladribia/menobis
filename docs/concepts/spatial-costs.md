@@ -34,7 +34,7 @@ The family-specific expectation is defined in
 | Euclidean coordinates | projected `x`, `y` per node | O(N) provider state | complete spatial cost from coordinates |
 
 Coordinates must be projected planar coordinates. MENoBiS does not transform CRS or
-compute geodesic distances.
+compute geodesic distances (yet).
 
 ## Required implementation shape
 
