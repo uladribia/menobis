@@ -1,5 +1,6 @@
 //! Binary and binomial fitting routines.
 
+use super::mask::PairMask;
 use super::support::{
     max_pair_delta, peel_b_strength_saturation, peel_degree_saturation, self_loop_mask,
 };
@@ -94,6 +95,123 @@ pub fn balance_masked_degree_bernoulli(
         for j in 0..n {
             let pred: f64 = (0..n)
                 .filter(|&i| !mask[i * n + j])
+                .map(|i| binary_probability(x[i], y[j]))
+                .sum();
+            max_err = max_err.max((pred - degree_in[j]).abs());
+        }
+        if delta < tolerance || max_err < tolerance {
+            return FitResult {
+                x,
+                y,
+                converged: true,
+                iterations: iter + 1,
+            };
+        }
+    }
+
+    FitResult {
+        x,
+        y,
+        converged: false,
+        iterations: max_iterations,
+    }
+}
+
+/// Sparse-mask version of [`balance_masked_degree_bernoulli`].
+///
+/// Uses `PairMask` to avoid O(N²) dense allocation. Inner loops still iterate
+/// all N candidates per node (nonlinear Bernoulli sums cannot use precomputed
+/// corrections), but memory usage is O(N+K) instead of O(N²).
+#[must_use]
+pub fn balance_sparse_masked_degree_bernoulli(
+    degree_out: &[f64],
+    degree_in: &[f64],
+    mask: &PairMask,
+    tolerance: f64,
+    max_iterations: usize,
+) -> FitResult {
+    let n = degree_out.len();
+    let k_avg = degree_out.iter().sum::<f64>() / n.max(1) as f64;
+    let n_free = mask.n_free() as f64 / n.max(1) as f64;
+    let c = if k_avg < n_free {
+        (k_avg / (n_free - k_avg).max(0.01)).sqrt()
+    } else {
+        1.0
+    };
+    let mut x: Vec<f64> = degree_out
+        .iter()
+        .map(|&k| {
+            if k > 0.0 && k_avg > 0.0 {
+                k / k_avg * c
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let mut y: Vec<f64> = degree_in
+        .iter()
+        .map(|&k| {
+            if k > 0.0 && k_avg > 0.0 {
+                k / k_avg * c
+            } else {
+                0.0
+            }
+        })
+        .collect();
+
+    for iter in 0..max_iterations {
+        let old_x = x.clone();
+        let old_y = y.clone();
+
+        for j in 0..n {
+            if degree_in[j] <= 0.0 {
+                y[j] = 0.0;
+                continue;
+            }
+            let denom: f64 = (0..n)
+                .filter(|&i| !mask.is_masked(i, j))
+                .map(|i| {
+                    let aux = 1.0 + x[i] * y[j];
+                    x[i] / aux
+                })
+                .sum();
+            y[j] = if denom > 0.0 {
+                degree_in[j] / denom
+            } else {
+                0.0
+            };
+        }
+        for i in 0..n {
+            if degree_out[i] <= 0.0 {
+                x[i] = 0.0;
+                continue;
+            }
+            let denom: f64 = (0..n)
+                .filter(|&j| !mask.is_masked(i, j))
+                .map(|j| {
+                    let aux = 1.0 + x[i] * y[j];
+                    y[j] / aux
+                })
+                .sum();
+            x[i] = if denom > 0.0 {
+                degree_out[i] / denom
+            } else {
+                0.0
+            };
+        }
+
+        let delta = max_pair_delta(&x, &old_x, &y, &old_y);
+        let mut max_err = 0.0_f64;
+        for i in 0..n {
+            let pred: f64 = (0..n)
+                .filter(|&j| !mask.is_masked(i, j))
+                .map(|j| binary_probability(x[i], y[j]))
+                .sum();
+            max_err = max_err.max((pred - degree_out[i]).abs());
+        }
+        for j in 0..n {
+            let pred: f64 = (0..n)
+                .filter(|&i| !mask.is_masked(i, j))
                 .map(|i| binary_probability(x[i], y[j]))
                 .sum();
             max_err = max_err.max((pred - degree_in[j]).abs());
