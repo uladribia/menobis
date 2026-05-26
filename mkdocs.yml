@@ -60,6 +60,7 @@ nav:
       - Solver Performance Optimization: decisions/0012-solver-performance-optimization.md
       - Project Rename to MENoBiS: decisions/0013-project-rename.md
       - Sparse Pair Mask: decisions/0014-sparse-pair-mask.md
+      - Unified Routing API: decisions/0015-unified-routing-api.md
 
 plugins:
   - search
