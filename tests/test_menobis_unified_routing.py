@@ -3,10 +3,10 @@
 import numpy as np
 import pytest
 
-from menobis.models.routing import (
+from menobis.routing import (
     Constraint,
     Ensemble,
-    Family,
+    ModelFamily,
     UnsupportedModelCaseError,
     filter_model,
     fit_model,
@@ -21,7 +21,7 @@ class TestFitModel:
         s_out = np.array([10.0, 20.0, 30.0])
         s_in = np.array([15.0, 25.0, 20.0])
         fit = fit_model(
-            family=Family.ME,
+            family=ModelFamily.ME,
             constraint=Constraint.STRENGTH,
             strength_out=s_out,
             strength_in=s_in,
@@ -32,7 +32,7 @@ class TestFitModel:
         s_out = np.array([3.0, 5.0, 4.0])
         s_in = np.array([4.0, 4.0, 4.0])
         fit = fit_model(
-            family=Family.BINOMIAL,
+            family=ModelFamily.B,
             constraint=Constraint.STRENGTH,
             strength_out=s_out,
             strength_in=s_in,
@@ -44,7 +44,7 @@ class TestFitModel:
         s_out = np.array([10.0, 20.0, 30.0])
         s_in = np.array([15.0, 25.0, 20.0])
         fit = fit_model(
-            family=Family.ME,
+            family=ModelFamily.ME,
             constraint=Constraint.STRENGTH_EDGES,
             strength_out=s_out,
             strength_in=s_in,
@@ -58,7 +58,7 @@ class TestFitModel:
         k_out = np.array([1.5, 2.0, 2.5])
         k_in = np.array([2.0, 2.0, 2.0])
         fit = fit_model(
-            family=Family.ME,
+            family=ModelFamily.ME,
             constraint=Constraint.STRENGTH_DEGREE,
             strength_out=s_out,
             strength_in=s_in,
@@ -72,7 +72,7 @@ class TestFitModel:
         k_out = np.array([2.0, 1.0, 1.0])
         k_in = np.array([1.0, 2.0, 1.0])
         fit = fit_model(
-            family=Family.GEOMETRIC,
+            family=ModelFamily.W,
             constraint=Constraint.DEGREE_EVENTS,
             degree_out=k_out,
             degree_in=k_in,
@@ -84,7 +84,7 @@ class TestFitModel:
         with pytest.raises(UnsupportedModelCaseError):
             fit_model(
                 ensemble=Ensemble.MICROCANONICAL,
-                family=Family.ME,
+                family=ModelFamily.ME,
                 constraint=Constraint.STRENGTH,
                 strength_out=np.array([1.0]),
                 strength_in=np.array([1.0]),
@@ -92,7 +92,7 @@ class TestFitModel:
 
     def test_missing_arrays_raises(self):
         with pytest.raises(ValueError):
-            fit_model(family=Family.ME, constraint=Constraint.STRENGTH)
+            fit_model(family=ModelFamily.ME, constraint=Constraint.STRENGTH)
 
 
 class TestSampleModel:
@@ -102,13 +102,13 @@ class TestSampleModel:
         s_out = np.array([10.0, 20.0, 30.0])
         s_in = np.array([15.0, 25.0, 20.0])
         fit = fit_model(
-            family=Family.ME,
+            family=ModelFamily.ME,
             constraint=Constraint.STRENGTH,
             strength_out=s_out,
             strength_in=s_in,
         )
         edges = sample_model(
-            family=Family.ME,
+            family=ModelFamily.ME,
             constraint=Constraint.STRENGTH,
             fit=fit,
             seed=42,
@@ -120,7 +120,7 @@ class TestSampleModel:
         s_in = np.array([8, 7, 5], dtype=np.uint64)
         edges = sample_model(
             ensemble=Ensemble.MICROCANONICAL,
-            family=Family.ME,
+            family=ModelFamily.ME,
             constraint=Constraint.STRENGTH,
             strength_out=s_out,
             strength_in=s_in,
@@ -132,14 +132,14 @@ class TestSampleModel:
         s_out = np.array([10.0, 20.0, 30.0])
         s_in = np.array([15.0, 25.0, 20.0])
         fit = fit_model(
-            family=Family.ME,
+            family=ModelFamily.ME,
             constraint=Constraint.STRENGTH,
             strength_out=s_out,
             strength_in=s_in,
         )
         edges = sample_model(
             ensemble=Ensemble.CANONICAL,
-            family=Family.ME,
+            family=ModelFamily.ME,
             constraint=Constraint.STRENGTH,
             fit=fit,
             total_events=60,
@@ -159,7 +159,9 @@ class TestFilterModel:
             target=np.array([1, 2, 0]),
             weight=np.array([5, 10, 3]),
         )
-        result = filter_model(edges, family=Family.ME, constraint=Constraint.STRENGTH)
+        result = filter_model(
+            edges, family=ModelFamily.ME, constraint=Constraint.STRENGTH
+        )
         assert result.upper is not None
 
     def test_filter_strength_binomial(self):
@@ -171,7 +173,7 @@ class TestFilterModel:
             weight=np.array([2, 3, 1]),
         )
         result = filter_model(
-            edges, family=Family.BINOMIAL, constraint=Constraint.STRENGTH
+            edges, family=ModelFamily.B, constraint=Constraint.STRENGTH
         )
         assert result.upper is not None
 
@@ -187,6 +189,6 @@ class TestFilterModel:
         with pytest.raises(ValueError):
             filter_model(
                 edges,
-                family=Family.ME,
+                family=ModelFamily.ME,
                 constraint=Constraint.STRENGTH_COST,
             )

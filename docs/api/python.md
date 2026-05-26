@@ -8,6 +8,10 @@ description: Python API reference for MENoBiS.
 
 | Type | Module | Description |
 |------|--------|-------------|
+| `ModelFamily` | `menobis.models` | Thesis family selector: `ME`, `B`, or `W`; use `layers` for B/W multiplicity |
+| `Ensemble` | `menobis.models` | `GRAND_CANONICAL`, ME-only `CANONICAL`, or ME fixed-strength `MICROCANONICAL` |
+| `Constraint` | `menobis.models` | Constraint selector such as `STRENGTH` or `STRENGTH_COST` |
+| `Verb` | `menobis.routing` | Unified workflow verb: `FIT`, `SAMPLE`, or `FILTER` |
 | `EdgeTable` | `menobis.data.frames` | Sparse edge table with `source`, `target`, `weight` numpy arrays |
 | `ProbabilityTable` | `menobis.data.frames` | Sparse table with `source`, `target`, `probability` arrays |
 | `StrengthFit` | `menobis.models.fitting` | Fitted fixed-strength multipliers `x`, `y`, with `family`, optional `layers`, and diagnostics |
@@ -44,6 +48,31 @@ description: Python API reference for MENoBiS.
 | `ensemble_scalar_average(generate=..., compute=..., repetitions=...)` | Mean/std of scalar statistics across samples |
 
 See [Network Metrics](network-metrics.md) for optional NetworkX/rustworkx user-side recipes.
+
+## Unified routing
+
+| Function | Import | Description |
+|----------|--------|-------------|
+| `route_model` | `menobis.routing` | Advanced verb router for fit/sample/filter workflows |
+| `fit_model` | `menobis.models` | Thin fitting wrapper over `route_model(Verb.FIT, ...)` |
+| `sample_model` | `menobis.models` | Thin sampling wrapper over `route_model(Verb.SAMPLE, ...)` |
+| `filter_model` | `menobis.filtering` | Thin filtering wrapper over `route_model(Verb.FILTER, ...)` |
+
+Example:
+
+```python
+from menobis.models import Constraint, ModelFamily, fit_model
+from menobis.filtering import filter_model
+
+fit = fit_model(
+    family=ModelFamily.W,
+    constraint=Constraint.STRENGTH,
+    strength_out=s_out,
+    strength_in=s_in,
+    layers=1,
+)
+result = filter_model(edges, family=ModelFamily.ME, constraint=Constraint.STRENGTH)
+```
 
 ## Fitting
 

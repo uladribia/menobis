@@ -1,7 +1,7 @@
 """Typer commands for MENoBiS statistical filtering."""
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 
 import numpy as np
 import pyarrow.csv as pa_csv
@@ -21,9 +21,15 @@ from menobis.filtering import (
     filter_strength_degree_poisson,
     filter_strength_edges_poisson,
 )
-from menobis.models.routing import (
+from menobis.models.types import (
+    DegreeEventsFit,
+    StrengthCostFit,
+    StrengthDegreeFit,
+    StrengthEdgesFit,
+)
+from menobis.routing import (
     Constraint,
-    Family,
+    ModelFamily,
     filter_model,
     fit_model,
 )
@@ -115,7 +121,7 @@ def fixed_strength(
     """Fit fixed-strength ME, then filter against its Poisson null."""
     result = filter_model(
         read_edges(input_path),
-        family=Family.ME,
+        family=ModelFamily.ME,
         constraint=Constraint.STRENGTH,
         alpha=alpha,
         tail=tail,
@@ -168,13 +174,16 @@ def strength_edges(
     s_in = np.zeros(node_count, dtype=np.float64)
     np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
     np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
-    fit = fit_model(
-        family=Family.ME,
-        constraint=Constraint.STRENGTH_EDGES,
-        strength_out=s_out,
-        strength_in=s_in,
-        target_edges=target_edges,
-        self_loops=self_loops,
+    fit = cast(
+        StrengthEdgesFit,
+        fit_model(
+            family=ModelFamily.ME,
+            constraint=Constraint.STRENGTH_EDGES,
+            strength_out=s_out,
+            strength_in=s_in,
+            target_edges=target_edges,
+            self_loops=self_loops,
+        ),
     )
     result = filter_strength_edges_poisson(
         edges,
@@ -237,16 +246,19 @@ def strength_cost(
     s_in = np.zeros(node_count, dtype=np.float64)
     np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
     np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
-    fit = fit_model(
-        family=Family.ME,
-        constraint=Constraint.STRENGTH_COST,
-        strength_out=s_out,
-        strength_in=s_in,
-        cost_sources=cost_sources,
-        cost_targets=cost_targets,
-        cost_values=cost_values,
-        target_cost=target_cost,
-        self_loops=self_loops,
+    fit = cast(
+        StrengthCostFit,
+        fit_model(
+            family=ModelFamily.ME,
+            constraint=Constraint.STRENGTH_COST,
+            strength_out=s_out,
+            strength_in=s_in,
+            cost_sources=cost_sources,
+            cost_targets=cost_targets,
+            cost_values=cost_values,
+            target_cost=target_cost,
+            self_loops=self_loops,
+        ),
     )
     result = filter_strength_cost_poisson(
         edges,
@@ -308,14 +320,17 @@ def strength_degree(
         d_out[src] += 1
     for tgt in edges.target:
         d_in[tgt] += 1
-    fit = fit_model(
-        family=Family.ME,
-        constraint=Constraint.STRENGTH_DEGREE,
-        strength_out=s_out,
-        strength_in=s_in,
-        degree_out=d_out,
-        degree_in=d_in,
-        self_loops=self_loops,
+    fit = cast(
+        StrengthDegreeFit,
+        fit_model(
+            family=ModelFamily.ME,
+            constraint=Constraint.STRENGTH_DEGREE,
+            strength_out=s_out,
+            strength_in=s_in,
+            degree_out=d_out,
+            degree_in=d_in,
+            self_loops=self_loops,
+        ),
     )
     result = filter_strength_degree_poisson(
         edges,
@@ -370,13 +385,16 @@ def degree_events(
         d_out[src] += 1
     for tgt in edges.target:
         d_in[tgt] += 1
-    fit = fit_model(
-        family=Family.ME,
-        constraint=Constraint.DEGREE_EVENTS,
-        degree_out=d_out,
-        degree_in=d_in,
-        total_events=int(edges.weight.sum()),
-        self_loops=self_loops,
+    fit = cast(
+        DegreeEventsFit,
+        fit_model(
+            family=ModelFamily.ME,
+            constraint=Constraint.DEGREE_EVENTS,
+            degree_out=d_out,
+            degree_in=d_in,
+            total_events=int(edges.weight.sum()),
+            self_loops=self_loops,
+        ),
     )
     result = filter_degree_events_poisson(
         edges,

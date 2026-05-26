@@ -5,7 +5,7 @@ from numpy.typing import NDArray
 
 import menobis._menobis as _menobis
 from menobis.data.frames import EdgeTable, ProbabilityTable
-from menobis.models.fitting import (
+from menobis.models.types import (
     DegreeEventsFit,
     StrengthCostFit,
     StrengthDegreeFit,

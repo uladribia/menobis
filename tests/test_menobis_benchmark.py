@@ -20,7 +20,7 @@ from menobis.models import (
     sample_strength_poisson,
     sample_strength_stub_matching,
 )
-from menobis.models.routing import Constraint, Family, filter_model
+from menobis.routing import Constraint, ModelFamily, filter_model
 from menobis.utilities.synthetic import generate_pa_geographic_network
 
 BASELINES_PATH = (
@@ -99,7 +99,7 @@ def test_filtering_10k(large_edges: EdgeTable) -> None:
     threshold = _load_threshold("filtering_10k")
     start = time.perf_counter()
     filter_model(
-        large_edges, family=Family.ME, constraint=Constraint.STRENGTH, alpha=0.05
+        large_edges, family=ModelFamily.ME, constraint=Constraint.STRENGTH, alpha=0.05
     )
     elapsed = time.perf_counter() - start
     assert elapsed < threshold, f"filtering took {elapsed:.2f}s (limit {threshold}s)"

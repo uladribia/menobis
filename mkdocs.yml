@@ -61,6 +61,7 @@ nav:
       - Project Rename to MENoBiS: decisions/0013-project-rename.md
       - Sparse Pair Mask: decisions/0014-sparse-pair-mask.md
       - Unified Routing API: decisions/0015-unified-routing-api.md
+      - Unified Verb Router: decisions/0016-unified-verb-router.md
 
 plugins:
   - search

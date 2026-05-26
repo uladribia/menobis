@@ -8,7 +8,7 @@ from menobis.filtering import (
     filter_strength_edges_poisson,
 )
 from menobis.models import fit_strength_edges_poisson
-from menobis.models.routing import Constraint, Family, filter_model
+from menobis.routing import Constraint, ModelFamily, filter_model
 
 
 def test_fixed_strength_filter_flags_heavy_edge() -> None:
@@ -20,7 +20,7 @@ def test_fixed_strength_filter_flags_heavy_edge() -> None:
 
     result = filter_model(
         edges,
-        family=Family.ME,
+        family=ModelFamily.ME,
         constraint=Constraint.STRENGTH,
         alpha=0.95,
         tail="upper",
@@ -42,7 +42,7 @@ def test_fixed_strength_absent_edges_are_separate() -> None:
 
     result = filter_model(
         edges,
-        family=Family.ME,
+        family=ModelFamily.ME,
         constraint=Constraint.STRENGTH,
         alpha=0.9,
         detect_absent=True,

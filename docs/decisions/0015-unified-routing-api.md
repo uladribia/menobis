@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded by [0016](0016-unified-verb-router.md).
 
 ## Context
 
@@ -17,12 +17,12 @@ multipliers.
 Three unified entry points with dispatch tables:
 
 ```python
-from menobis.models import fit_model, sample_model, filter_model
-from menobis.models import Family, Constraint, Ensemble
+from menobis.models import Constraint, Ensemble, ModelFamily, fit_model, sample_model
+from menobis.filtering import filter_model
 
-fit = fit_model(family=Family.ME, constraint=Constraint.STRENGTH, ...)
-edges = sample_model(family=Family.ME, constraint=Constraint.STRENGTH, fit=fit, ...)
-result = filter_model(edges, family=Family.ME, constraint=Constraint.STRENGTH)
+fit = fit_model(family=ModelFamily.ME, constraint=Constraint.STRENGTH, ...)
+edges = sample_model(family=ModelFamily.ME, constraint=Constraint.STRENGTH, fit=fit, ...)
+result = filter_model(edges, family=ModelFamily.ME, constraint=Constraint.STRENGTH)
 ```
 
 Design principles:
@@ -40,7 +40,7 @@ Design principles:
 
 ## Consequences
 
-- Users only need to know `Family`, `Constraint`, `Ensemble` enums
+- Users only need to know `ModelFamily`, `Constraint`, `Ensemble` enums
 - Adding a new family or constraint = one entry in each dispatch table
 - Filtering is always: get fit → filter (never auto-fit inside filter)
 - ~370 lines of `_fit_*` helpers removed in favor of dispatch tables

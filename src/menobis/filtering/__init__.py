@@ -25,6 +25,7 @@ from menobis.filtering.models import (
     filter_strength_poisson,
 )
 from menobis.filtering.types import Correction, FilteredEdges, FilterResult, Tail
+from menobis.routing import filter_model
 
 __all__ = [
     "Correction",
@@ -37,6 +38,7 @@ __all__ = [
     "filter_degree_events_geometric",
     "filter_degree_events_negative_binomial",
     "filter_degree_events_poisson",
+    "filter_model",
     "filter_strength_binomial",
     "filter_strength_cost_binomial",
     "filter_strength_cost_geometric",
