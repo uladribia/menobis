@@ -13,13 +13,13 @@ from menobis.filtering import (
     filter_strength_cost_poisson,
     filter_strength_degree_poisson,
     filter_strength_edges_poisson,
-    filter_strength_poisson,
 )
 from menobis.models.fitting import (
     fit_strength_cost_poisson,
     fit_strength_degree_poisson,
     fit_strength_edges_poisson,
 )
+from menobis.models.routing import Constraint, Family, filter_model
 
 
 def _small_edges() -> EdgeTable:
@@ -45,13 +45,17 @@ class TestFixedStrength:
     def test_partitions_edges(self) -> None:
         """Upper + lower + compatible == total edges."""
         edges = _small_edges()
-        result = filter_strength_poisson(edges, alpha=0.05)
+        result = filter_model(
+            edges, family=Family.ME, constraint=Constraint.STRENGTH, alpha=0.05
+        )
         _assert_filter_partitions(result, len(edges))
 
     def test_pvalues_in_range(self) -> None:
         """All p-values are in [0, 1]."""
         edges = _small_edges()
-        result = filter_strength_poisson(edges, alpha=0.05)
+        result = filter_model(
+            edges, family=Family.ME, constraint=Constraint.STRENGTH, alpha=0.05
+        )
         for group in [result.upper, result.lower, result.compatible]:
             assert np.all(group.upper_pvalue >= 0.0)
             assert np.all(group.upper_pvalue <= 1.0)
@@ -61,8 +65,13 @@ class TestFixedStrength:
     def test_absent_detection(self) -> None:
         """Absent detection runs without error."""
         edges = _small_edges()
-        result = filter_strength_poisson(
-            edges, alpha=0.05, detect_absent=True, min_occupation=0.0
+        result = filter_model(
+            edges,
+            family=Family.ME,
+            constraint=Constraint.STRENGTH,
+            alpha=0.05,
+            detect_absent=True,
+            min_occupation=0.0,
         )
         assert len(result.absent_lower.edges) >= 0
 

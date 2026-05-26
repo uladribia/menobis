@@ -6,9 +6,9 @@ from menobis.data.frames import EdgeTable, ProbabilityTable
 from menobis.filtering import (
     filter_custom_poisson,
     filter_strength_edges_poisson,
-    filter_strength_poisson,
 )
 from menobis.models import fit_strength_edges_poisson
+from menobis.models.routing import Constraint, Family, filter_model
 
 
 def test_fixed_strength_filter_flags_heavy_edge() -> None:
@@ -18,7 +18,13 @@ def test_fixed_strength_filter_flags_heavy_edge() -> None:
         weight=np.array([1, 40, 1, 1], dtype=np.uint64),
     )
 
-    result = filter_strength_poisson(edges, alpha=0.95, tail="upper")
+    result = filter_model(
+        edges,
+        family=Family.ME,
+        constraint=Constraint.STRENGTH,
+        alpha=0.95,
+        tail="upper",
+    )
 
     assert len(result.upper.edges.source) >= 1
     assert (0, 1) in set(
@@ -34,8 +40,10 @@ def test_fixed_strength_absent_edges_are_separate() -> None:
         weight=np.array([20, 20], dtype=np.uint64),
     )
 
-    result = filter_strength_poisson(
+    result = filter_model(
         edges,
+        family=Family.ME,
+        constraint=Constraint.STRENGTH,
         alpha=0.9,
         detect_absent=True,
         min_occupation=0.5,

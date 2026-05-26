@@ -20,19 +20,12 @@ from menobis.filtering import (
     filter_strength_cost_poisson,
     filter_strength_degree_poisson,
     filter_strength_edges_poisson,
-    filter_strength_poisson,
 )
-from menobis.models.fitting import (
-    fit_degree_events_poisson,
-)
-from menobis.models.fitting import (
-    fit_strength_cost_poisson as fit_strength_cost,
-)
-from menobis.models.fitting import (
-    fit_strength_degree_poisson as fit_strength_degree,
-)
-from menobis.models.fitting import (
-    fit_strength_edges_poisson as fit_strength_edges,
+from menobis.models.routing import (
+    Constraint,
+    Family,
+    filter_model,
+    fit_model,
 )
 
 app = Typer(no_args_is_help=True)
@@ -120,8 +113,10 @@ def fixed_strength(
     ] = True,
 ) -> None:
     """Fit fixed-strength ME, then filter against its Poisson null."""
-    result = filter_strength_poisson(
+    result = filter_model(
         read_edges(input_path),
+        family=Family.ME,
+        constraint=Constraint.STRENGTH,
         alpha=alpha,
         tail=tail,
         correction=correction,
@@ -173,7 +168,14 @@ def strength_edges(
     s_in = np.zeros(node_count, dtype=np.float64)
     np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
     np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
-    fit = fit_strength_edges(s_out, s_in, target_edges, self_loops=self_loops)
+    fit = fit_model(
+        family=Family.ME,
+        constraint=Constraint.STRENGTH_EDGES,
+        strength_out=s_out,
+        strength_in=s_in,
+        target_edges=target_edges,
+        self_loops=self_loops,
+    )
     result = filter_strength_edges_poisson(
         edges,
         fit,
@@ -235,13 +237,15 @@ def strength_cost(
     s_in = np.zeros(node_count, dtype=np.float64)
     np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
     np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
-    fit = fit_strength_cost(
-        s_out,
-        s_in,
-        cost_sources,
-        cost_targets,
-        cost_values,
-        target_cost,
+    fit = fit_model(
+        family=Family.ME,
+        constraint=Constraint.STRENGTH_COST,
+        strength_out=s_out,
+        strength_in=s_in,
+        cost_sources=cost_sources,
+        cost_targets=cost_targets,
+        cost_values=cost_values,
+        target_cost=target_cost,
         self_loops=self_loops,
     )
     result = filter_strength_cost_poisson(
@@ -304,7 +308,15 @@ def strength_degree(
         d_out[src] += 1
     for tgt in edges.target:
         d_in[tgt] += 1
-    fit = fit_strength_degree(s_out, s_in, d_out, d_in, self_loops=self_loops)
+    fit = fit_model(
+        family=Family.ME,
+        constraint=Constraint.STRENGTH_DEGREE,
+        strength_out=s_out,
+        strength_in=s_in,
+        degree_out=d_out,
+        degree_in=d_in,
+        self_loops=self_loops,
+    )
     result = filter_strength_degree_poisson(
         edges,
         fit,
@@ -358,8 +370,13 @@ def degree_events(
         d_out[src] += 1
     for tgt in edges.target:
         d_in[tgt] += 1
-    fit = fit_degree_events_poisson(
-        d_out, d_in, int(edges.weight.sum()), self_loops=self_loops
+    fit = fit_model(
+        family=Family.ME,
+        constraint=Constraint.DEGREE_EVENTS,
+        degree_out=d_out,
+        degree_in=d_in,
+        total_events=int(edges.weight.sum()),
+        self_loops=self_loops,
     )
     result = filter_degree_events_poisson(
         edges,

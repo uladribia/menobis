@@ -18,12 +18,13 @@ from menobis.models.fitting import (
     StrengthCostFit,
     StrengthDegreeFit,
     StrengthEdgesFit,
-    fit_strength_poisson,
+    StrengthFit,
 )
 
 
 def filter_strength_poisson(
     edges: EdgeTable,
+    fit: "StrengthFit",
     *,
     alpha: float = 0.05,
     tail: Tail = "two-sided",
@@ -35,9 +36,6 @@ def filter_strength_poisson(
     self_loops: bool = True,
 ) -> FilterResult:
     """Filter edges against the independent Poisson fixed-strength ME null."""
-    node_count = _node_count(edges)
-    strengths_out, strengths_in = _strengths(edges, node_count)
-    fit = fit_strength_poisson(strengths_out, strengths_in, self_loops=self_loops)
     upper, lower, expected, occupation = _menobis.filter_strength_poisson(
         fit.x.tolist(),
         fit.y.tolist(),
@@ -327,8 +325,7 @@ def filter_degree_events_poisson(
 
 def filter_strength_geometric(
     edges: EdgeTable,
-    x: NDArray[np.float64],
-    y: NDArray[np.float64],
+    fit: "StrengthFit",
     *,
     alpha: float = 0.05,
     tail: Tail = "two-sided",
@@ -341,8 +338,8 @@ def filter_strength_geometric(
 ) -> FilterResult:
     """Filter edges against a geometric null model."""
     upper, lower, expected, occupation = _menobis.filter_strength_geometric(
-        x.tolist(),
-        y.tolist(),
+        fit.x.tolist(),
+        fit.y.tolist(),
         edges.source.tolist(),
         edges.target.tolist(),
         edges.weight.tolist(),
@@ -350,8 +347,8 @@ def filter_strength_geometric(
     absent = None
     if detect_absent:
         absent = _menobis.absent_strength_geometric(
-            x.tolist(),
-            y.tolist(),
+            fit.x.tolist(),
+            fit.y.tolist(),
             edges.source.tolist(),
             edges.target.tolist(),
             self_loops,
@@ -375,8 +372,7 @@ def filter_strength_geometric(
 
 def filter_strength_binomial(
     edges: EdgeTable,
-    x: NDArray[np.float64],
-    y: NDArray[np.float64],
+    fit: "StrengthFit",
     *,
     layers: int = 1,
     alpha: float = 0.05,
@@ -390,8 +386,8 @@ def filter_strength_binomial(
 ) -> FilterResult:
     """Filter edges against a binomial(M) null model."""
     upper, lower, expected, occupation = _menobis.filter_strength_binomial(
-        x.tolist(),
-        y.tolist(),
+        fit.x.tolist(),
+        fit.y.tolist(),
         layers,
         edges.source.tolist(),
         edges.target.tolist(),
@@ -400,8 +396,8 @@ def filter_strength_binomial(
     absent = None
     if detect_absent:
         absent = _menobis.absent_strength_binomial(
-            x.tolist(),
-            y.tolist(),
+            fit.x.tolist(),
+            fit.y.tolist(),
             layers,
             edges.source.tolist(),
             edges.target.tolist(),
@@ -426,8 +422,7 @@ def filter_strength_binomial(
 
 def filter_strength_negative_binomial(
     edges: EdgeTable,
-    x: NDArray[np.float64],
-    y: NDArray[np.float64],
+    fit: "StrengthFit",
     *,
     layers: int = 1,
     alpha: float = 0.05,
@@ -441,8 +436,8 @@ def filter_strength_negative_binomial(
 ) -> FilterResult:
     """Filter edges against a negative binomial(M) null model."""
     upper, lower, expected, occupation = _menobis.filter_strength_negative_binomial(
-        x.tolist(),
-        y.tolist(),
+        fit.x.tolist(),
+        fit.y.tolist(),
         layers,
         edges.source.tolist(),
         edges.target.tolist(),
@@ -451,8 +446,8 @@ def filter_strength_negative_binomial(
     absent = None
     if detect_absent:
         absent = _menobis.absent_strength_negative_binomial(
-            x.tolist(),
-            y.tolist(),
+            fit.x.tolist(),
+            fit.y.tolist(),
             layers,
             edges.source.tolist(),
             edges.target.tolist(),

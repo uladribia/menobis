@@ -175,7 +175,7 @@ class TestFilterModel:
         )
         assert result.upper is not None
 
-    def test_filter_unsupported_constraint_raises(self):
+    def test_filter_requires_fit_for_cost(self):
         from menobis.data.frames import EdgeTable
 
         edges = EdgeTable(
@@ -183,7 +183,8 @@ class TestFilterModel:
             target=np.array([1, 0]),
             weight=np.array([5, 3]),
         )
-        with pytest.raises(UnsupportedModelCaseError):
+        # STRENGTH_COST needs target_cost for fit_model, so auto-fit fails
+        with pytest.raises(ValueError):
             filter_model(
                 edges,
                 family=Family.ME,

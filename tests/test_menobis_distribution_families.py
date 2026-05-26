@@ -17,6 +17,7 @@ from menobis.models.generation import (
     sample_strength_geometric,
     sample_strength_negative_binomial,
 )
+from menobis.models.types import StrengthFit
 
 
 def _small_edges() -> EdgeTable:
@@ -134,7 +135,10 @@ class TestGeometricFiltering:
         edges = _small_edges()
         x = np.array([0.3, 0.4, 0.2])
         y = np.array([0.25, 0.35, 0.3])
-        result = filter_strength_geometric(edges, x, y, alpha=0.05)
+        fit = StrengthFit(
+            node=np.arange(3, dtype=np.uint64), x=x, y=y, family="geometric"
+        )
+        result = filter_strength_geometric(edges, fit, alpha=0.05)
         _assert_filter_partitions(result, len(edges))
 
 
@@ -146,7 +150,10 @@ class TestBinomialFiltering:
         edges = _small_edges()
         x = np.array([0.5, 0.6, 0.4])
         y = np.array([0.4, 0.5, 0.5])
-        result = filter_strength_binomial(edges, x, y, layers=10, alpha=0.05)
+        fit = StrengthFit(
+            node=np.arange(3, dtype=np.uint64), x=x, y=y, family="binomial", layers=10
+        )
+        result = filter_strength_binomial(edges, fit, alpha=0.05)
         _assert_filter_partitions(result, len(edges))
 
     def test_pvalues_in_range(self) -> None:
@@ -154,7 +161,10 @@ class TestBinomialFiltering:
         edges = _small_edges()
         x = np.array([0.5, 0.6, 0.4])
         y = np.array([0.4, 0.5, 0.5])
-        result = filter_strength_binomial(edges, x, y, layers=10, alpha=0.05)
+        fit = StrengthFit(
+            node=np.arange(3, dtype=np.uint64), x=x, y=y, family="binomial", layers=10
+        )
+        result = filter_strength_binomial(edges, fit, alpha=0.05)
         for group in [result.upper, result.lower, result.compatible]:
             assert np.all(group.upper_pvalue >= 0.0)
             assert np.all(group.upper_pvalue <= 1.0)
@@ -168,5 +178,12 @@ class TestNegativeBinomialFiltering:
         edges = _small_edges()
         x = np.array([0.3, 0.4, 0.2])
         y = np.array([0.25, 0.35, 0.3])
-        result = filter_strength_negative_binomial(edges, x, y, layers=3, alpha=0.05)
+        fit = StrengthFit(
+            node=np.arange(3, dtype=np.uint64),
+            x=x,
+            y=y,
+            family="negative_binomial",
+            layers=3,
+        )
+        result = filter_strength_negative_binomial(edges, fit, alpha=0.05)
         _assert_filter_partitions(result, len(edges))

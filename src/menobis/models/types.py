@@ -36,7 +36,7 @@ class OptimizationDiagnostics:
     conic: ConicDiagnostics | None = None
 
 
-class _OptimizationView:
+class FitResult:
     """Shared read-only convenience properties for fitted result dataclasses."""
 
     diagnostics: OptimizationDiagnostics | None
@@ -125,7 +125,7 @@ class _OptimizationView:
 
 
 @dataclass(frozen=True)
-class StrengthFit(_OptimizationView):
+class StrengthFit(FitResult):
     """Fitted fixed-strength model with node Lagrange multipliers."""
 
     node: NDArray[np.uint64]
@@ -140,7 +140,7 @@ class StrengthFit(_OptimizationView):
 
 
 @dataclass(frozen=True)
-class DegreeFit(_OptimizationView):
+class DegreeFit(FitResult):
     """Fitted fixed-degree Bernoulli model with node multipliers."""
 
     node: NDArray[np.uint64]
@@ -155,7 +155,7 @@ class DegreeFit(_OptimizationView):
 
 
 @dataclass(frozen=True)
-class StrengthCostFit(_OptimizationView):
+class StrengthCostFit(FitResult):
     """Fitted strength-cost model for Poisson, geometric, or binomial families."""
 
     node: NDArray[np.uint64]
@@ -171,7 +171,7 @@ class StrengthCostFit(_OptimizationView):
 
 
 @dataclass(frozen=True)
-class StrengthEdgesFit(_OptimizationView):
+class StrengthEdgesFit(FitResult):
     """Fitted fixed-strength-and-edge-count model."""
 
     node: NDArray[np.uint64]
@@ -187,7 +187,7 @@ class StrengthEdgesFit(_OptimizationView):
 
 
 @dataclass(frozen=True)
-class StrengthDegreeFit(_OptimizationView):
+class StrengthDegreeFit(FitResult):
     """Fitted fixed-strength-degree model."""
 
     node: NDArray[np.uint64]
@@ -204,7 +204,7 @@ class StrengthDegreeFit(_OptimizationView):
 
 
 @dataclass(frozen=True)
-class DegreeEventsFit(_OptimizationView):
+class DegreeEventsFit(FitResult):
     """Fitting result for degree-events models (all families).
 
     The model factorizes into occupation (Bernoulli via x, y) and
@@ -225,7 +225,7 @@ class DegreeEventsFit(_OptimizationView):
 
 
 @dataclass(frozen=True)
-class PartialFitResult(_OptimizationView):
+class PartialFitResult(FitResult):
     """Rate table from partial-constraint fitting with diagnostics."""
 
     source: NDArray[np.uint64]
@@ -251,6 +251,7 @@ __all__ = [
     "ConicDiagnostics",
     "DegreeEventsFit",
     "DegreeFit",
+    "FitResult",
     "OptimizationDiagnostics",
     "PartialFitResult",
     "StrengthCostFit",
