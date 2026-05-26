@@ -59,6 +59,7 @@ from menobis.models.routing import (
     Ensemble,
     Family,
     UnsupportedModelCaseError,
+    filter_model,
     fit_model,
     sample_model,
 )
@@ -88,6 +89,7 @@ __all__ = [
     "StrengthEdgesFit",
     "StrengthFit",
     "UnsupportedModelCaseError",
+    "filter_model",
     "fit_degree_bernoulli",
     "fit_degree_events_binomial",
     "fit_degree_events_geometric",
