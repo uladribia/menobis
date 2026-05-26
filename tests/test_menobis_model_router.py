@@ -94,11 +94,6 @@ def test_microcanonical_rejects_non_strength_constraint() -> None:
 
 
 def test_fit_model_rejects_invalid_enum_value() -> None:
-    """Passing a raw string that is not a valid enum value raises ValueError."""
+    """Constructing a Family from an invalid string raises ValueError."""
     with pytest.raises(ValueError):
-        fit_model(
-            family="invalid_family",  # type: ignore[arg-type]
-            constraint=Constraint.STRENGTH,
-            strength_out=S_OUT,
-            strength_in=S_IN,
-        )
+        Family("invalid_family")
