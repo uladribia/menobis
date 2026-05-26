@@ -18,10 +18,13 @@ S_OUT = np.array([3.0, 2.0], dtype=np.float64)
 S_IN = np.array([2.0, 3.0], dtype=np.float64)
 
 
-def test_fit_model_defaults_to_grandcanonical_strength_me() -> None:
-    """Default ensemble routes ME fixed strengths to grand-canonical Poisson."""
+def test_fit_model_grandcanonical_strength_me() -> None:
+    """Grand-canonical ME fixed strengths routes to Poisson fitter."""
     fit = fit_model(
-        family="me", constraint="strength", strength_out=S_OUT, strength_in=S_IN
+        family=Family.ME,
+        constraint=Constraint.STRENGTH,
+        strength_out=S_OUT,
+        strength_in=S_IN,
     )
     assert isinstance(fit, StrengthFit)
     assert fit.family == "poisson"
@@ -37,9 +40,9 @@ def test_sample_model_canonical_me_strength_uses_multinomial() -> None:
         strength_in=S_IN,
     )
     sample = sample_model(
-        ensemble="canonical",
-        family="me",
-        constraint="strength",
+        ensemble=Ensemble.CANONICAL,
+        family=Family.ME,
+        constraint=Constraint.STRENGTH,
         fit=fit,
         total_events=50,
         seed=7,
@@ -51,31 +54,27 @@ def test_sample_model_canonical_me_strength_uses_multinomial() -> None:
 def test_sample_model_microcanonical_me_strength_uses_stub_matching() -> None:
     """Microcanonical ME fixed-strength sampling preserves strengths exactly."""
     sample = sample_model(
-        ensemble="microcanonical",
-        family="me",
-        constraint="strength",
+        ensemble=Ensemble.MICROCANONICAL,
+        family=Family.ME,
+        constraint=Constraint.STRENGTH,
         strength_out=np.array([2, 1], dtype=np.uint64),
         strength_in=np.array([1, 2], dtype=np.uint64),
         seed=9,
     )
     assert sample.total_events == 3
-    assert np.bincount(sample.source, weights=sample.weight, minlength=2).tolist() == [
-        2,
-        1,
-    ]
-    assert np.bincount(sample.target, weights=sample.weight, minlength=2).tolist() == [
-        1,
-        2,
-    ]
+    s_out = np.bincount(sample.source, weights=sample.weight, minlength=2)
+    s_in = np.bincount(sample.target, weights=sample.weight, minlength=2)
+    assert s_out.tolist() == [2, 1]
+    assert s_in.tolist() == [1, 2]
 
 
 def test_canonical_rejects_non_me_family() -> None:
     """Canonical ensemble is ME-only in MENoBiS."""
     with pytest.raises(UnsupportedModelCaseError, match=r"canonical.*ME"):
         fit_model(
-            ensemble="canonical",
-            family="binomial",
-            constraint="strength",
+            ensemble=Ensemble.CANONICAL,
+            family=Family.BINOMIAL,
+            constraint=Constraint.STRENGTH,
             strength_out=S_OUT,
             strength_in=S_IN,
             layers=3,
@@ -84,11 +83,22 @@ def test_canonical_rejects_non_me_family() -> None:
 
 def test_microcanonical_rejects_non_strength_constraint() -> None:
     """Microcanonical support is only ME fixed strengths."""
-    with pytest.raises(UnsupportedModelCaseError, match=r"microcanonical.*strength"):
+    with pytest.raises(UnsupportedModelCaseError, match=r"microcanonical.*ME"):
         sample_model(
-            ensemble="microcanonical",
-            family="me",
-            constraint="degree_events",
+            ensemble=Ensemble.MICROCANONICAL,
+            family=Family.ME,
+            constraint=Constraint.DEGREE_EVENTS,
             strength_out=np.array([1], dtype=np.uint64),
             strength_in=np.array([1], dtype=np.uint64),
+        )
+
+
+def test_fit_model_rejects_invalid_enum_value() -> None:
+    """Passing a raw string that is not a valid enum value raises ValueError."""
+    with pytest.raises(ValueError):
+        fit_model(
+            family="invalid_family",  # type: ignore[arg-type]
+            constraint=Constraint.STRENGTH,
+            strength_out=S_OUT,
+            strength_in=S_IN,
         )
