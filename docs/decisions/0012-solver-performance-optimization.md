@@ -25,13 +25,16 @@ gamma bisection step. Above that threshold, fall back to on-the-fly computation.
 Result: 1.53s → 0.75s (2× faster). RSS increases by ~8 MB at N=1000 (from 77 to
 85 MB).
 
-### W strength: O(N) primary convergence + periodic residual
+### W/WNB strength-cost: log-space L-BFGS with fallback
 
-**Before**: Full O(N²) residual check every iteration.
-**After**: O(N) multiplier-delta as primary convergence signal; expensive O(N²)
-check every 10 iterations or when multipliers stabilize.
+**Before**: Coordinate Newton checked full residuals frequently and recomputed
+Euclidean distances on every pair visit.
+**After**: A bounded log-space L-BFGS solver runs first at fixed gamma. It uses
+strict feasibility line search (`r_ij >= r_min`) and falls back to coordinate
+Newton if the line search or curvature conditions fail. Moderate-size coordinate
+fits also cache pair distances under the same 256 MB budget.
 
-Result: W strength 7.06s → 2.10s (3× faster).
+Result at N=1000: W strength-cost 565s → 228s; WNB strength-cost 159s → 71s.
 
 ## N=1000 comparison with legacy (where both converge)
 
@@ -39,13 +42,13 @@ Result: W strength 7.06s → 2.10s (3× faster).
 |---|---:|---:|---|
 | ME strength | 0.006 | 0.374 | 62× modern |
 | B strength | 0.111 | 0.636 | 6× modern |
-| W strength | 7.75 | 8.09 | 1× (parity) |
+| W strength | 3.69 | 8.09 | 2× modern |
 | ME strength-cost | 1.79 | 2.60 | 1.5× modern |
 | Degree | 0.096 | 0.478 | 5× modern |
 
 ## Robustness guarantees preserved
 
 - B: adaptive damping still triggers when stalling is detected.
-- W: feasibility projection (`r_ij ≥ r_min`) remains per-step.
+- W: L-BFGS uses strict feasible line search and coordinate-Newton fallback.
 - ME cost: identical IPF algorithm; only memory layout for `f_ij` changes.
 - All 286 existing tests pass without modification.

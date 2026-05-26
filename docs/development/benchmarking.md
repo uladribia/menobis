@@ -91,9 +91,9 @@ N=1000 results are stored in `benchmarks/results/`:
 Legacy-supported N=1000 comparisons show ME strength, W strength, ME
 strength-cost, and degree observables match. Legacy strength-edges timed out or
 failed on the PA fixture, and legacy strength-degree failed; modern ODME solved
-those same cases. Slowest N=1000 modern fits were W strength-cost (~707 s), WNB
-strength-cost (~212 s), WNB strength-edges (~162 s), and W strength-edges
-(~118 s).
+those same cases. After solver optimizations, the slowest N=1000 modern fits are
+W strength-cost (~228 s), W strength-edges (~107 s), WNB strength-edges (~109 s),
+and WNB strength-cost (~71 s).
 
 ## Known skips
 

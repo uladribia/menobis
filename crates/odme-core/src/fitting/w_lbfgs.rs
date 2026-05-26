@@ -21,6 +21,8 @@ enum CostMode<'a> {
     },
     /// Projected Euclidean XY coordinates.
     Coordinates { x: &'a [f64], y: &'a [f64] },
+    /// Cached dense pair distances for moderate N coordinate-cost fits.
+    DenseDistances { distances: Vec<f64>, n: usize },
 }
 
 impl<'a> CostMode<'a> {
@@ -131,6 +133,20 @@ pub fn fit_strength_cost_w_lbfgs(
     let r_min = 1e-4_f64;
     let m = f64::from(layers);
     let n_active = if opts.self_loops { n } else { n - 1 };
+    let coord_mode = if n * n * 8 <= 256 * 1024 * 1024 {
+        let mut distances = vec![0.0_f64; n * n];
+        for i in 0..n {
+            for j in 0..n {
+                distances[i * n + j] = coord_distance(coord_x, coord_y, i, j);
+            }
+        }
+        CostMode::DenseDistances { distances, n }
+    } else {
+        CostMode::Coordinates {
+            x: coord_x,
+            y: coord_y,
+        }
+    };
 
     // Initialize (a, b) per-node from individual strength targets
     let a_init: Vec<f64> = strength_out
@@ -156,9 +172,24 @@ pub fn fit_strength_cost_w_lbfgs(
         })
         .collect();
 
-    // Inner solver: Newton for (a,b) at fixed gamma
+    // Inner solver: L-BFGS in log-space with Newton coordinate-descent fallback.
     let solve_at_gamma =
         |gamma: f64, ai: &[f64], bi: &[f64]| -> (Vec<f64>, Vec<f64>, bool, usize) {
+            let lbfgs = solve_ab_lbfgs_fixed_gamma(
+                strength_out,
+                strength_in,
+                layers,
+                opts,
+                &coord_mode,
+                gamma,
+                ai,
+                bi,
+                r_min,
+            );
+            if lbfgs.2 {
+                return lbfgs;
+            }
+
             let mut a = ai.to_vec();
             let mut b = bi.to_vec();
             let mut damping = 0.5_f64;
@@ -180,7 +211,7 @@ pub fn fit_strength_cost_w_lbfgs(
                         if !opts.self_loops && i == j {
                             continue;
                         }
-                        let d = coord_distance(coord_x, coord_y, i, j);
+                        let d = pair_dist(&coord_mode, i, j);
                         let r = (a[i] + b[j] + gamma * d).max(r_min);
                         pred += w_mean(r, layers);
                         dpred += w_mean_deriv(r, layers);
@@ -190,7 +221,7 @@ pub fn fit_strength_cost_w_lbfgs(
                         let new_b = b[j] + damping * step;
                         let min_c: f64 = (0..n)
                             .filter(|&i| opts.self_loops || i != j)
-                            .map(|i| a[i] + gamma * coord_distance(coord_x, coord_y, i, j))
+                            .map(|i| a[i] + gamma * pair_dist(&coord_mode, i, j))
                             .fold(f64::INFINITY, f64::min);
                         b[j] = new_b.max(r_min - min_c);
                     }
@@ -206,7 +237,7 @@ pub fn fit_strength_cost_w_lbfgs(
                         if !opts.self_loops && i == j {
                             continue;
                         }
-                        let d = coord_distance(coord_x, coord_y, i, j);
+                        let d = pair_dist(&coord_mode, i, j);
                         let r = (a[i] + b[j] + gamma * d).max(r_min);
                         pred += w_mean(r, layers);
                         dpred += w_mean_deriv(r, layers);
@@ -216,7 +247,7 @@ pub fn fit_strength_cost_w_lbfgs(
                         let new_a = a[i] + damping * step;
                         let min_c: f64 = (0..n)
                             .filter(|&j| opts.self_loops || i != j)
-                            .map(|j| b[j] + gamma * coord_distance(coord_x, coord_y, i, j))
+                            .map(|j| b[j] + gamma * pair_dist(&coord_mode, i, j))
                             .fold(f64::INFINITY, f64::min);
                         a[i] = new_a.max(r_min - min_c);
                     }
@@ -229,7 +260,7 @@ pub fn fit_strength_cost_w_lbfgs(
                         if !opts.self_loops && i == j {
                             continue;
                         }
-                        let d = coord_distance(coord_x, coord_y, i, j);
+                        let d = pair_dist(&coord_mode, i, j);
                         let r = (a[i] + b[j] + gamma * d).max(r_min);
                         p += w_mean(r, layers);
                     }
@@ -241,7 +272,7 @@ pub fn fit_strength_cost_w_lbfgs(
                         if !opts.self_loops && i == j {
                             continue;
                         }
-                        let d = coord_distance(coord_x, coord_y, i, j);
+                        let d = pair_dist(&coord_mode, i, j);
                         let r = (a[i] + b[j] + gamma * d).max(r_min);
                         p += w_mean(r, layers);
                     }
@@ -281,7 +312,7 @@ pub fn fit_strength_cost_w_lbfgs(
                 if !opts.self_loops && i == j {
                     continue;
                 }
-                let d = coord_distance(coord_x, coord_y, i, j);
+                let d = pair_dist(&coord_mode, i, j);
                 let r = (a[i] + b[j] + gamma * d).max(r_min);
                 cost += d * w_mean(r, layers);
             }
@@ -391,7 +422,7 @@ pub fn fit_strength_cost_w_lbfgs(
             if !opts.self_loops && i == j {
                 continue;
             }
-            let d = coord_distance(coord_x, coord_y, i, j);
+            let d = pair_dist(&coord_mode, i, j);
             let r = (best_a[i] + best_b[j] + best_gamma * d).max(r_min);
             p += w_mean(r, layers);
         }
@@ -403,7 +434,7 @@ pub fn fit_strength_cost_w_lbfgs(
             if !opts.self_loops && i == j {
                 continue;
             }
-            let d = coord_distance(coord_x, coord_y, i, j);
+            let d = pair_dist(&coord_mode, i, j);
             let r = (best_a[i] + best_b[j] + best_gamma * d).max(r_min);
             p += w_mean(r, layers);
         }
@@ -427,6 +458,7 @@ fn pair_dist(mode: &CostMode<'_>, i: usize, j: usize) -> f64 {
     match mode {
         CostMode::NoCost => 0.0,
         CostMode::Coordinates { x, y } => coord_distance(x, y, i, j),
+        CostMode::DenseDistances { distances, n } => distances[i * *n + j],
         CostMode::Sparse { col_costs, .. } => {
             // Find distance for pair (i,j) from col_costs[j]
             for &(src, d) in &col_costs[j] {
@@ -436,6 +468,227 @@ fn pair_dist(mode: &CostMode<'_>, i: usize, j: usize) -> f64 {
             }
             0.0
         }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::needless_range_loop)]
+fn solve_ab_lbfgs_fixed_gamma(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    layers: u32,
+    opts: &CostFitOptions,
+    cost_mode: &CostMode<'_>,
+    gamma: f64,
+    a_init: &[f64],
+    b_init: &[f64],
+    r_min: f64,
+) -> (Vec<f64>, Vec<f64>, bool, usize) {
+    if matches!(cost_mode, CostMode::Sparse { .. }) {
+        return (a_init.to_vec(), b_init.to_vec(), false, 0);
+    }
+    let n = strength_out.len();
+    let dim = 2 * n;
+    let memory = 7_usize;
+    let max_iter = opts.max_iterations.min(150);
+    let mut z = Vec::with_capacity(dim);
+    z.extend_from_slice(a_init);
+    z.extend_from_slice(b_init);
+    let mut grad = vec![0.0; dim];
+    let mut obj = match w_dual_objective_gradient(
+        &z,
+        &mut grad,
+        strength_out,
+        strength_in,
+        layers,
+        opts,
+        cost_mode,
+        gamma,
+        r_min,
+    ) {
+        Some(value) => value,
+        None => return (a_init.to_vec(), b_init.to_vec(), false, 0),
+    };
+    let mut grad_norm = grad.iter().map(|v| v.abs()).fold(0.0_f64, f64::max);
+    if grad_norm < opts.tolerance {
+        return (z[..n].to_vec(), z[n..].to_vec(), true, 0);
+    }
+
+    let mut s_hist: Vec<Vec<f64>> = Vec::new();
+    let mut y_hist: Vec<Vec<f64>> = Vec::new();
+    let mut rho_hist: Vec<f64> = Vec::new();
+
+    for iter in 0..max_iter {
+        let direction = lbfgs_direction(&grad, &s_hist, &y_hist, &rho_hist);
+        let mut step = 1.0_f64;
+        let directional_deriv: f64 = grad.iter().zip(direction.iter()).map(|(g, p)| g * p).sum();
+        if directional_deriv >= 0.0 || !directional_deriv.is_finite() {
+            break;
+        }
+
+        let mut accepted: Option<(Vec<f64>, Vec<f64>, f64)> = None;
+        for _ in 0..30 {
+            let candidate: Vec<f64> = z
+                .iter()
+                .zip(direction.iter())
+                .map(|(zi, pi)| zi + step * pi)
+                .collect();
+            let mut candidate_grad = vec![0.0; dim];
+            if let Some(candidate_obj) = w_dual_objective_gradient(
+                &candidate,
+                &mut candidate_grad,
+                strength_out,
+                strength_in,
+                layers,
+                opts,
+                cost_mode,
+                gamma,
+                r_min,
+            ) {
+                if candidate_obj <= obj + 1e-4 * step * directional_deriv {
+                    accepted = Some((candidate, candidate_grad, candidate_obj));
+                    break;
+                }
+            }
+            step *= 0.5;
+            if step < 1e-12 {
+                break;
+            }
+        }
+        let Some((mut next_z, next_grad, next_obj)) = accepted else {
+            break;
+        };
+        recenter_ab(&mut next_z, n);
+
+        let s: Vec<f64> = next_z.iter().zip(z.iter()).map(|(a, b)| a - b).collect();
+        let y_vec: Vec<f64> = next_grad
+            .iter()
+            .zip(grad.iter())
+            .map(|(a, b)| a - b)
+            .collect();
+        let sy: f64 = s.iter().zip(y_vec.iter()).map(|(a, b)| a * b).sum();
+        if sy > 1e-12 && sy.is_finite() {
+            if s_hist.len() == memory {
+                s_hist.remove(0);
+                y_hist.remove(0);
+                rho_hist.remove(0);
+            }
+            s_hist.push(s);
+            y_hist.push(y_vec);
+            rho_hist.push(1.0 / sy);
+        }
+        z = next_z;
+        grad = next_grad;
+        obj = next_obj;
+        grad_norm = grad.iter().map(|v| v.abs()).fold(0.0_f64, f64::max);
+        if grad_norm < opts.tolerance {
+            return (z[..n].to_vec(), z[n..].to_vec(), true, iter + 1);
+        }
+    }
+    (z[..n].to_vec(), z[n..].to_vec(), false, max_iter)
+}
+
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::needless_range_loop)]
+fn w_dual_objective_gradient(
+    z: &[f64],
+    grad: &mut [f64],
+    strength_out: &[f64],
+    strength_in: &[f64],
+    layers: u32,
+    opts: &CostFitOptions,
+    cost_mode: &CostMode<'_>,
+    gamma: f64,
+    r_min: f64,
+) -> Option<f64> {
+    let n = strength_out.len();
+    grad.fill(0.0);
+    grad[..n].copy_from_slice(strength_out);
+    grad[n..(n + n)].copy_from_slice(strength_in);
+    let mut obj = 0.0_f64;
+    let m = f64::from(layers);
+    for i in 0..n {
+        obj += strength_out[i] * z[i] + strength_in[i] * z[n + i];
+    }
+    for i in 0..n {
+        for j in 0..n {
+            if !opts.self_loops && i == j {
+                continue;
+            }
+            let r = z[i] + z[n + j] + gamma * pair_dist(cost_mode, i, j);
+            if !r.is_finite() || r <= r_min {
+                return None;
+            }
+            let q = (-r).exp();
+            let one_minus_q = 1.0 - q;
+            if one_minus_q <= 0.0 || !one_minus_q.is_finite() {
+                return None;
+            }
+            obj += -m * one_minus_q.ln();
+            let mean = m * q / one_minus_q;
+            grad[i] -= mean;
+            grad[n + j] -= mean;
+        }
+    }
+    if obj.is_finite() {
+        Some(obj)
+    } else {
+        None
+    }
+}
+
+fn lbfgs_direction(
+    grad: &[f64],
+    s_hist: &[Vec<f64>],
+    y_hist: &[Vec<f64>],
+    rho_hist: &[f64],
+) -> Vec<f64> {
+    let mut q = grad.to_vec();
+    let mut alpha = vec![0.0; s_hist.len()];
+    for idx in (0..s_hist.len()).rev() {
+        alpha[idx] = rho_hist[idx]
+            * s_hist[idx]
+                .iter()
+                .zip(q.iter())
+                .map(|(s, qi)| s * qi)
+                .sum::<f64>();
+        for (qi, yi) in q.iter_mut().zip(y_hist[idx].iter()) {
+            *qi -= alpha[idx] * yi;
+        }
+    }
+    if let (Some(s_last), Some(y_last)) = (s_hist.last(), y_hist.last()) {
+        let sy: f64 = s_last.iter().zip(y_last.iter()).map(|(s, y)| s * y).sum();
+        let yy: f64 = y_last.iter().map(|y| y * y).sum();
+        if yy > 0.0 {
+            let scale = sy / yy;
+            for qi in &mut q {
+                *qi *= scale;
+            }
+        }
+    }
+    for idx in 0..s_hist.len() {
+        let beta = rho_hist[idx]
+            * y_hist[idx]
+                .iter()
+                .zip(q.iter())
+                .map(|(y, qi)| y * qi)
+                .sum::<f64>();
+        for (qi, si) in q.iter_mut().zip(s_hist[idx].iter()) {
+            *qi += si * (alpha[idx] - beta);
+        }
+    }
+    q.into_iter().map(|v| -v).collect()
+}
+
+fn recenter_ab(z: &mut [f64], n: usize) {
+    let mean_a = z[..n].iter().sum::<f64>() / n as f64;
+    let mean_b = z[n..].iter().sum::<f64>() / n as f64;
+    let shift = 0.5 * (mean_b - mean_a);
+    for zi in &mut z[..n] {
+        *zi += shift;
+    }
+    for zi in &mut z[n..] {
+        *zi -= shift;
     }
 }
 
@@ -489,6 +742,37 @@ fn fit_w_newton_inner(
         .collect();
     let mut gamma = init_gamma;
     let r_min = 1e-4_f64; // feasibility margin (much smaller than before)
+
+    // Fast path for fixed-strength W/WNB: log-space L-BFGS with strict
+    // feasibility line search. If it does not converge, fall back to the
+    // robust coordinate Newton path below.
+    if matches!(cost_mode, CostMode::NoCost) {
+        let (lbfgs_a, lbfgs_b, ok, iters) = solve_ab_lbfgs_fixed_gamma(
+            strength_out,
+            strength_in,
+            layers,
+            opts,
+            cost_mode,
+            gamma,
+            &a,
+            &b,
+            r_min,
+        );
+        if ok {
+            let x: Vec<f64> = lbfgs_a.iter().map(|&ai| (-ai).exp()).collect();
+            let y: Vec<f64> = lbfgs_b.iter().map(|&bj| (-bj).exp()).collect();
+            return StrengthCostFitResult {
+                x,
+                y,
+                gamma,
+                converged: true,
+                iterations: iters,
+            };
+        }
+        a = lbfgs_a;
+        b = lbfgs_b;
+    }
+
     let mut damping = 0.5_f64; // start conservative
     let mut prev_max_err = f64::INFINITY;
     let mut stall_count = 0_usize;

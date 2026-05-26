@@ -135,11 +135,11 @@
     "constraint": "strength",
     "layers": null,
     "status": "ok",
-    "process_seconds": 2.4175192559996503,
-    "peak_rss_kb": 77320,
-    "inner_fit_seconds": 2.099768899999617,
+    "process_seconds": 3.8812472599965986,
+    "peak_rss_kb": 77636,
+    "inner_fit_seconds": 3.6930481320014223,
     "converged": true,
-    "iterations": 27,
+    "iterations": 8,
     "message": ""
   },
   {
@@ -148,11 +148,11 @@
     "constraint": "strength-cost",
     "layers": null,
     "status": "ok",
-    "process_seconds": 565.0143615979978,
-    "peak_rss_kb": 85440,
-    "inner_fit_seconds": 564.6466230730002,
+    "process_seconds": 227.8286437709976,
+    "peak_rss_kb": 91796,
+    "inner_fit_seconds": 227.62787805800326,
     "converged": true,
-    "iterations": 2594,
+    "iterations": 2725,
     "message": ""
   },
   {
@@ -200,11 +200,11 @@
     "constraint": "strength",
     "layers": 3,
     "status": "ok",
-    "process_seconds": 2.396888121998927,
-    "peak_rss_kb": 77536,
-    "inner_fit_seconds": 2.0984809340006905,
+    "process_seconds": 2.187877604003006,
+    "peak_rss_kb": 77492,
+    "inner_fit_seconds": 1.9809104040032253,
     "converged": true,
-    "iterations": 30,
+    "iterations": 107,
     "message": ""
   },
   {
@@ -213,11 +213,11 @@
     "constraint": "strength-cost",
     "layers": 3,
     "status": "ok",
-    "process_seconds": 159.51061194700014,
-    "peak_rss_kb": 85320,
-    "inner_fit_seconds": 159.1527729440022,
+    "process_seconds": 71.10711631199956,
+    "peak_rss_kb": 91512,
+    "inner_fit_seconds": 70.90136276099656,
     "converged": true,
-    "iterations": 734,
+    "iterations": 809,
     "message": ""
   },
   {

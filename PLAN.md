@@ -36,12 +36,12 @@ Scientific reference: <https://hdl.handle.net/10803/400560>.
 Fixed by switching to O(N) multiplier-delta convergence check with periodic
 O(N²) residual verification. B strength N=1000: 1.17s → 0.033s.
 
-### P2 — W/WNB strength-cost fits remain slow at N=1000
+### P2 — W/WNB strength-cost fits remain the slowest N=1000 cases
 
-`uv run python -m benchmarks.fit_memory_matrix --nodes 1000` shows W
-strength-cost still takes ~565 s. The coordinate-descent Newton solver
-converges slowly (2594 iterations). Future work: implement log-space
-L-BFGS-B with bisection fallback for superlinear convergence.
+Log-space L-BFGS with strict feasible line search and coordinate-Newton fallback
+reduced W strength-cost from ~565 s to ~228 s and WNB strength-cost from ~159 s
+to ~71 s. These remain the slowest cases; further work should reduce gamma
+search iterations or add stronger warm starts.
 
 ### Informational: legacy solver failures on realistic N=1000 PA fixture
 
