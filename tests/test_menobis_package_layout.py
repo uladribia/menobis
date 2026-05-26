@@ -39,3 +39,14 @@ def test_utilities_package_exists() -> None:
     # No shims at root
     assert not (SRC_MENOBIS / "synthetic.py").exists()
     assert not (SRC_MENOBIS / "logging.py").exists()
+
+
+def test_unified_router_is_not_inside_models_domain() -> None:
+    """Verb routing belongs above model/filter domains to avoid cycles."""
+    routing = SRC_MENOBIS / "routing.py"
+    assert routing.exists()
+    assert not (SRC_MENOBIS / "models" / "routing.py").exists()
+
+    for path in (SRC_MENOBIS / "models").glob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        assert "menobis.filtering" not in source, path

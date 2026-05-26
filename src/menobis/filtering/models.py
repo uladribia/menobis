@@ -13,7 +13,7 @@ from menobis.filtering.classify import (
     _lower_alpha,
 )
 from menobis.filtering.types import Correction, FilteredEdges, FilterResult, Tail
-from menobis.models.fitting import (
+from menobis.models.types import (
     DegreeEventsFit,
     StrengthCostFit,
     StrengthDegreeFit,

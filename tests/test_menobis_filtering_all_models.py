@@ -19,7 +19,7 @@ from menobis.models.fitting import (
     fit_strength_degree_poisson,
     fit_strength_edges_poisson,
 )
-from menobis.models.routing import Constraint, Family, filter_model
+from menobis.routing import Constraint, ModelFamily, filter_model
 
 
 def _small_edges() -> EdgeTable:
@@ -46,7 +46,7 @@ class TestFixedStrength:
         """Upper + lower + compatible == total edges."""
         edges = _small_edges()
         result = filter_model(
-            edges, family=Family.ME, constraint=Constraint.STRENGTH, alpha=0.05
+            edges, family=ModelFamily.ME, constraint=Constraint.STRENGTH, alpha=0.05
         )
         _assert_filter_partitions(result, len(edges))
 
@@ -54,7 +54,7 @@ class TestFixedStrength:
         """All p-values are in [0, 1]."""
         edges = _small_edges()
         result = filter_model(
-            edges, family=Family.ME, constraint=Constraint.STRENGTH, alpha=0.05
+            edges, family=ModelFamily.ME, constraint=Constraint.STRENGTH, alpha=0.05
         )
         for group in [result.upper, result.lower, result.compatible]:
             assert np.all(group.upper_pvalue >= 0.0)
@@ -67,7 +67,7 @@ class TestFixedStrength:
         edges = _small_edges()
         result = filter_model(
             edges,
-            family=Family.ME,
+            family=ModelFamily.ME,
             constraint=Constraint.STRENGTH,
             alpha=0.05,
             detect_absent=True,

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import cast
+
 import numpy as np
 import pytest
 
@@ -101,7 +104,7 @@ def test_partial_coordinate_wrappers_do_not_allocate_dense_python_mask(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """B/W coordinate partial assembly must not allocate Python N x N masks."""
-    original_zeros = np.zeros
+    original_zeros = cast(Callable[..., object], np.zeros)
 
     def guarded_zeros(shape: object, *args: object, **kwargs: object) -> object:
         if isinstance(shape, tuple) and len(shape) == 2 and shape[0] == shape[1]:
