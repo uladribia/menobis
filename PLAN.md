@@ -13,12 +13,6 @@ uv run python -m benchmarks fit --nodes 500 --families me,w
 
 Pipeline: PA geographic generate → fit → ensemble sample-check → null-filter FPR.
 
-## Completed in current branch
-
-| Step | Branch | Summary |
-|---|---|---|
-| PyO3 binding split | `refactor/pyo3-binding-split` | `_menobis` bindings split into fitting, generation, filter, and stats modules |
-
 ## Next steps (priority order)
 
 6. **Sparse matrix/cost handling cleanup** — Consolidate cost and probability
