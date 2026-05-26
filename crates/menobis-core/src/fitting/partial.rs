@@ -5,7 +5,7 @@
 //! and result assembly happens in Rust.
 
 use super::mask::PairMask;
-use super::support::{max_pair_delta, self_loop_mask};
+use super::support::max_pair_delta;
 use super::{
     balance_masked_degree_bernoulli, balance_masked_strength_degree_poisson,
     balance_sparse_masked_strength_poisson, balance_strength_edges_poisson,
@@ -16,17 +16,6 @@ use super::{
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-fn build_mask(n: usize, known_src: &[u64], known_tgt: &[u64], self_loops: bool) -> Vec<bool> {
-    let mut mask = self_loop_mask(n, self_loops);
-    for (&s, &t) in known_src.iter().zip(known_tgt.iter()) {
-        let idx = (s as usize) * n + (t as usize);
-        if idx < mask.len() {
-            mask[idx] = true;
-        }
-    }
-    mask
-}
 
 fn compute_excess(
     out_seq: &[f64],
@@ -97,7 +86,7 @@ fn balance_masked_strength_cost_poisson_fixed_gamma(
     cost_sources: &[usize],
     cost_targets: &[usize],
     cost_values: &[f64],
-    mask: &[bool],
+    mask: &PairMask,
     gamma: f64,
     tolerance: f64,
     max_iterations: usize,
@@ -130,7 +119,7 @@ fn balance_masked_strength_cost_poisson_fixed_gamma(
     let mut col_src: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
     let mut row_tgt: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
     for (idx, (&src, &tgt)) in cost_sources.iter().zip(cost_targets.iter()).enumerate() {
-        if src < n && tgt < n && !mask[src * n + tgt] {
+        if src < n && tgt < n && !mask.is_masked(src, tgt) {
             let f_ij = (-gamma * cost_values[idx]).clamp(-700.0, 700.0).exp();
             col_src[tgt].push((src, f_ij));
             row_tgt[src].push((tgt, f_ij));
@@ -138,7 +127,7 @@ fn balance_masked_strength_cost_poisson_fixed_gamma(
     }
     // Also add free pairs with no cost entry (f_ij = 1.0) using correction trick
     let k = cost_sources.len();
-    let n_pairs: usize = (0..n * n).filter(|&idx| !mask[idx]).count();
+    let n_pairs = mask.n_free();
     let complete = k >= n_pairs;
 
     for iter in 0..max_iterations {
@@ -179,8 +168,7 @@ fn balance_masked_strength_cost_poisson_fixed_gamma(
                     continue;
                 }
                 // base: sum of x[i] for free pairs in column j
-                let masked_out: f64 = (0..n).filter(|&i| mask[i * n + j]).map(|i| x[i]).sum();
-                let mut denom = sum_x - masked_out;
+                let mut denom = mask.free_col_sum(j, &x, sum_x);
                 for &(src, f_ij) in &col_src[j] {
                     denom += x[src] * (f_ij - 1.0);
                 }
@@ -196,8 +184,7 @@ fn balance_masked_strength_cost_poisson_fixed_gamma(
                     x[i] = 0.0;
                     continue;
                 }
-                let masked_out: f64 = (0..n).filter(|&j| mask[i * n + j]).map(|j| y[j]).sum();
-                let mut denom = sum_y - masked_out;
+                let mut denom = mask.free_row_sum(i, &y, sum_y);
                 for &(tgt, f_ij) in &row_tgt[i] {
                     denom += y[tgt] * (f_ij - 1.0);
                 }
@@ -232,13 +219,13 @@ fn expected_masked_cost(
     cost_sources: &[usize],
     cost_targets: &[usize],
     cost_values: &[f64],
-    mask: &[bool],
+    mask: &PairMask,
     gamma: f64,
 ) -> f64 {
     let n = x.len();
     let mut total = 0.0;
     for (idx, (&source, &target)) in cost_sources.iter().zip(cost_targets.iter()).enumerate() {
-        if source < n && target < n && !mask[source * n + target] {
+        if source < n && target < n && !mask.is_masked(source, target) {
             let cost = cost_values[idx];
             let exponent = (-gamma * cost).clamp(-700.0, 700.0);
             total += x[source] * y[target] * cost * exponent.exp();
@@ -255,7 +242,7 @@ fn fit_masked_strength_cost_poisson(
     cost_targets: &[usize],
     cost_values: &[f64],
     target_cost: f64,
-    mask: &[bool],
+    mask: &PairMask,
     tolerance: f64,
     max_iterations: usize,
 ) -> StrengthCostFitResult {
@@ -386,55 +373,6 @@ fn fit_masked_strength_cost_poisson(
         gamma: best_gamma,
         converged: best_delta <= tolerance,
         iterations: max_iterations,
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn assemble_result(
-    n: usize,
-    known_src: &[u64],
-    known_tgt: &[u64],
-    known_rate: &[f64],
-    mask: &[bool],
-    free_rate_fn: impl Fn(usize, usize) -> f64,
-    converged: bool,
-    iterations: usize,
-) -> PartialFitResult {
-    let mut sources = Vec::new();
-    let mut targets = Vec::new();
-    let mut rates = Vec::new();
-    // Known pairs
-    for ((&s, &t), &r) in known_src
-        .iter()
-        .zip(known_tgt.iter())
-        .zip(known_rate.iter())
-    {
-        if r > 0.0 {
-            sources.push(s);
-            targets.push(t);
-            rates.push(r);
-        }
-    }
-    // Free pairs
-    for i in 0..n {
-        for j in 0..n {
-            if mask[i * n + j] {
-                continue;
-            }
-            let rate = free_rate_fn(i, j);
-            if rate > 0.0 {
-                sources.push(i as u64);
-                targets.push(j as u64);
-                rates.push(rate);
-            }
-        }
-    }
-    PartialFitResult {
-        sources,
-        targets,
-        rates,
-        converged,
-        iterations,
     }
 }
 
@@ -575,13 +513,13 @@ pub fn fit_partial_degree(
     let k_out = pad_to_n(degree_out, n);
     let k_in = pad_to_n(degree_in, n);
     let known_binary: Vec<f64> = vec![1.0; known_src.len()];
-    let mask = build_mask(n, known_src, known_tgt, self_loops);
+    let mask = PairMask::new(n, self_loops, known_src, known_tgt);
 
     let (mut excess_out, mut excess_in) =
         match compute_excess(&k_out, &k_in, known_src, known_tgt, &known_binary) {
             Some(v) => v,
             None => {
-                return assemble_result(
+                return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
@@ -595,12 +533,18 @@ pub fn fit_partial_degree(
         };
 
     balance_excess(&mut excess_out, &mut excess_in);
-    let fit =
-        balance_masked_degree_bernoulli(&excess_out, &excess_in, &mask, tolerance, max_iterations);
+    let dense_mask = mask.to_dense();
+    let fit = balance_masked_degree_bernoulli(
+        &excess_out,
+        &excess_in,
+        &dense_mask,
+        tolerance,
+        max_iterations,
+    );
     let x = fit.x;
     let y = fit.y;
     let known_rate_ones: Vec<f64> = vec![1.0; known_src.len()];
-    assemble_result(
+    assemble_result_sparse(
         n,
         known_src,
         known_tgt,
@@ -635,13 +579,13 @@ pub fn fit_partial_strength_degree(
     let s_in = pad_to_n(strength_in, n);
     let k_out = pad_to_n(degree_out, n);
     let k_in = pad_to_n(degree_in, n);
-    let mask = build_mask(n, known_src, known_tgt, self_loops);
+    let mask = PairMask::new(n, self_loops, known_src, known_tgt);
 
     let (mut excess_s_out, mut excess_s_in) =
         match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
             Some(v) => v,
             None => {
-                return assemble_result(
+                return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
@@ -659,7 +603,7 @@ pub fn fit_partial_strength_degree(
         match compute_excess(&k_out, &k_in, known_src, known_tgt, &known_binary) {
             Some(v) => v,
             None => {
-                return assemble_result(
+                return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
@@ -673,7 +617,7 @@ pub fn fit_partial_strength_degree(
         };
 
     if excess_s_out.iter().sum::<f64>() <= 0.0 {
-        return assemble_result(
+        return assemble_result_sparse(
             n,
             known_src,
             known_tgt,
@@ -688,12 +632,13 @@ pub fn fit_partial_strength_degree(
     balance_excess(&mut excess_s_out, &mut excess_s_in);
     balance_excess(&mut excess_k_out, &mut excess_k_in);
 
+    let dense_mask = mask.to_dense();
     let fit = balance_masked_strength_degree_poisson(
         &excess_s_out,
         &excess_s_in,
         &excess_k_out,
         &excess_k_in,
-        &mask,
+        &dense_mask,
         tolerance,
         max_iterations,
     );
@@ -701,7 +646,7 @@ pub fn fit_partial_strength_degree(
     let y = fit.y;
     let z = fit.z;
     let w = fit.w;
-    assemble_result(
+    assemble_result_sparse(
         n,
         known_src,
         known_tgt,
@@ -740,14 +685,14 @@ pub fn fit_partial_strength_edges(
     let n = infer_n(strength_out.len(), known_src, known_tgt);
     let s_out = pad_to_n(strength_out, n);
     let s_in = pad_to_n(strength_in, n);
-    let mask = build_mask(n, known_src, known_tgt, self_loops);
+    let mask = PairMask::new(n, self_loops, known_src, known_tgt);
     let excess_edges = (target_edges - known_src.len() as f64).max(0.0);
 
     let (mut excess_out, mut excess_in) =
         match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
             Some(v) => v,
             None => {
-                return assemble_result(
+                return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
@@ -761,7 +706,7 @@ pub fn fit_partial_strength_edges(
         };
 
     if excess_out.iter().sum::<f64>() <= 0.0 || excess_edges <= 0.0 {
-        return assemble_result(
+        return assemble_result_sparse(
             n,
             known_src,
             known_tgt,
@@ -785,7 +730,7 @@ pub fn fit_partial_strength_edges(
     let x = fit.x;
     let y = fit.y;
     let lam = fit.lam;
-    assemble_result(
+    assemble_result_sparse(
         n,
         known_src,
         known_tgt,
@@ -814,7 +759,7 @@ fn balance_masked_coordinate_strength_cost_fixed_gamma(
     strength_in: &[f64],
     coord_x: &[f64],
     coord_y: &[f64],
-    mask: &[bool],
+    mask: &PairMask,
     gamma: f64,
     tolerance: f64,
     max_iterations: usize,
@@ -852,7 +797,7 @@ fn balance_masked_coordinate_strength_cost_fixed_gamma(
                 continue;
             }
             let denom: f64 = (0..n)
-                .filter(|&i| !mask[i * n + j])
+                .filter(|&i| !mask.is_masked(i, j))
                 .map(|i| {
                     let d = coord_distance(coord_x, coord_y, i, j);
                     x[i] * (-gamma * d).clamp(-700.0, 700.0).exp()
@@ -870,7 +815,7 @@ fn balance_masked_coordinate_strength_cost_fixed_gamma(
                 continue;
             }
             let denom: f64 = (0..n)
-                .filter(|&j| !mask[i * n + j])
+                .filter(|&j| !mask.is_masked(i, j))
                 .map(|j| {
                     let d = coord_distance(coord_x, coord_y, i, j);
                     y[j] * (-gamma * d).clamp(-700.0, 700.0).exp()
@@ -904,14 +849,15 @@ fn expected_masked_coordinate_cost(
     y: &[f64],
     coord_x: &[f64],
     coord_y: &[f64],
-    mask: &[bool],
+    mask: &PairMask,
     gamma: f64,
 ) -> f64 {
     let n = x.len();
     let mut total = 0.0;
+    #[allow(clippy::needless_range_loop)]
     for i in 0..n {
         for j in 0..n {
-            if mask[i * n + j] {
+            if mask.is_masked(i, j) {
                 continue;
             }
             let d = coord_distance(coord_x, coord_y, i, j);
@@ -928,7 +874,7 @@ fn fit_masked_strength_cost_poisson_coordinates(
     coord_x: &[f64],
     coord_y: &[f64],
     target_cost: f64,
-    mask: &[bool],
+    mask: &PairMask,
     tolerance: f64,
     max_iterations: usize,
 ) -> StrengthCostFitResult {
@@ -1064,7 +1010,7 @@ pub fn fit_partial_strength_cost(
     let n = infer_n(strength_out.len(), known_src, known_tgt);
     let s_out = pad_to_n(strength_out, n);
     let s_in = pad_to_n(strength_in, n);
-    let mask = build_mask(n, known_src, known_tgt, self_loops);
+    let mask = PairMask::new(n, self_loops, known_src, known_tgt);
 
     // Build cost map
     let mut cost_map = std::collections::HashMap::new();
@@ -1094,7 +1040,7 @@ pub fn fit_partial_strength_cost(
         match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
             Some(v) => v,
             None => {
-                return assemble_result(
+                return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
@@ -1108,7 +1054,7 @@ pub fn fit_partial_strength_cost(
         };
 
     if excess_out.iter().sum::<f64>() <= 0.0 {
-        return assemble_result(
+        return assemble_result_sparse(
             n,
             known_src,
             known_tgt,
@@ -1131,7 +1077,7 @@ pub fn fit_partial_strength_cost(
         .zip(cost_targets.iter())
         .zip(cost_values.iter())
     {
-        if cs < n && ct < n && !mask[cs * n + ct] {
+        if cs < n && ct < n && !mask.is_masked(cs, ct) {
             free_src.push(cs);
             free_tgt.push(ct);
             free_val.push(cv);
@@ -1152,7 +1098,7 @@ pub fn fit_partial_strength_cost(
     let x = fit.x;
     let y = fit.y;
     let gamma = fit.gamma;
-    assemble_result(
+    assemble_result_sparse(
         n,
         known_src,
         known_tgt,
@@ -1184,7 +1130,7 @@ fn fit_partial_strength_cost_coordinates_with(
     let n = infer_n(strength_out.len(), known_src, known_tgt);
     let s_out = pad_to_n(strength_out, n);
     let s_in = pad_to_n(strength_in, n);
-    let mask = build_mask(n, known_src, known_tgt, self_loops);
+    let mask = PairMask::new(n, self_loops, known_src, known_tgt);
     let known_cost: f64 = known_src
         .iter()
         .zip(known_tgt.iter())
@@ -1196,7 +1142,7 @@ fn fit_partial_strength_cost_coordinates_with(
         match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
             Some(v) => v,
             None => {
-                return assemble_result(
+                return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
@@ -1209,7 +1155,7 @@ fn fit_partial_strength_cost_coordinates_with(
             }
         };
     if excess_out.iter().sum::<f64>() <= 0.0 {
-        return assemble_result(
+        return assemble_result_sparse(
             n,
             known_src,
             known_tgt,
@@ -1222,7 +1168,7 @@ fn fit_partial_strength_cost_coordinates_with(
     }
     balance_excess(&mut excess_out, &mut excess_in);
     let fit = fit_free(&excess_out, &excess_in, excess_cost);
-    assemble_result(
+    assemble_result_sparse(
         n,
         known_src,
         known_tgt,
@@ -1250,12 +1196,8 @@ pub fn fit_partial_strength_cost_coordinates(
     tolerance: f64,
     max_iterations: usize,
 ) -> PartialFitResult {
-    let mask = build_mask(
-        infer_n(strength_out.len(), known_src, known_tgt),
-        known_src,
-        known_tgt,
-        self_loops,
-    );
+    let n = infer_n(strength_out.len(), known_src, known_tgt);
+    let mask = PairMask::new(n, self_loops, known_src, known_tgt);
     fit_partial_strength_cost_coordinates_with(
         strength_out,
         strength_in,

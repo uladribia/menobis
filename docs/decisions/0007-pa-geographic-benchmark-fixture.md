@@ -4,16 +4,6 @@ description: Use PA geographic networks as canonical benchmark fixtures.
 
 # 0007 PA geographic benchmark fixture
 
-## Status
-
-Accepted.
-
-## Context
-
-Earlier benchmarks used arbitrary Pareto sequences or gravity Poisson samples.
-Those inputs did not consistently control density, total events, degrees,
-strengths, and spatial structure at the same time.
-
 ## Decision
 
 All end-to-end tests and benchmarks use a canonical synthetic fixture:
@@ -39,6 +29,5 @@ positive behavior.
 |---|---|
 | realistic heterogeneous constraints | not a closed-form MENoBiS data generator |
 | exact density and total events | support generation is benchmark-only |
-| spatial costs are always available | large complete cost triples remain O(N²) |
+| spatial costs are always available | computed on the fly to avoid dense matrices |
 
-B strength-edges and B strength-degree remain skipped until P5 is fixed.

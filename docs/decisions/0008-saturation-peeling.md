@@ -4,10 +4,6 @@ description: Automatically peel saturated constraints for boundary convergence.
 
 # 0008 Saturation peeling
 
-## Status
-
-Accepted and implemented (B strength + all degree-events families).
-
 ## Context
 
 IPF solvers for degree-constrained and B(M) strength models diverge when a

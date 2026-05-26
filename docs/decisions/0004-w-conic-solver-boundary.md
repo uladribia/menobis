@@ -3,8 +3,7 @@
 ## TL;DR
 
 W fitting must remain family-specific because its kernel has the
-$q_{ij}<1$ boundary and mean $M q/(1-q)$. Earlier docs described a Clarabel
-conic implementation; the current code uses Newton/coordinate-style solvers but
+$q_{ij}<1$ boundary and mean $M q/(1-q)$. The current code uses Newton/coordinate-style solvers but
 the separation decision still stands.
 
 ## Context
@@ -40,7 +39,7 @@ public ontology.
 
 ## Consequences
 
-- B and W cannot call ME solvers and relabel outputs.
+- Each case needs it specific solver, B and ME cases can favour balancing methods.
 - Solver diagnostics should be comparable across families even if internal
   methods differ.
 - Benchmarks must report residuals, convergence, wall time, and memory before
