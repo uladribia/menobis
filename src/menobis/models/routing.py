@@ -144,69 +144,147 @@ def fit_model(
             msg = f"invalid ensemble: {ensemble!r}"
             raise UnsupportedModelCaseError(msg)
 
+    # Dispatch table: (constraint, family) -> fit function
+    _fit_dispatch = {
+        (Constraint.STRENGTH, Family.ME): fit_strength_poisson,
+        (Constraint.STRENGTH, Family.BINOMIAL): fit_strength_binomial,
+        (Constraint.STRENGTH, Family.GEOMETRIC): fit_strength_geometric,
+        (Constraint.STRENGTH, Family.NEGATIVE_BINOMIAL): fit_strength_negative_binomial,
+        (Constraint.STRENGTH_EDGES, Family.ME): fit_strength_edges_poisson,
+        (Constraint.STRENGTH_EDGES, Family.BINOMIAL): fit_strength_edges_binomial,
+        (Constraint.STRENGTH_EDGES, Family.GEOMETRIC): fit_strength_edges_geometric,
+        (
+            Constraint.STRENGTH_EDGES,
+            Family.NEGATIVE_BINOMIAL,
+        ): fit_strength_edges_negative_binomial,
+        (Constraint.STRENGTH_DEGREE, Family.ME): fit_strength_degree_poisson,
+        (Constraint.STRENGTH_DEGREE, Family.BINOMIAL): fit_strength_degree_binomial,
+        (Constraint.STRENGTH_DEGREE, Family.GEOMETRIC): fit_strength_degree_geometric,
+        (
+            Constraint.STRENGTH_DEGREE,
+            Family.NEGATIVE_BINOMIAL,
+        ): fit_strength_degree_negative_binomial,
+        (Constraint.STRENGTH_COST, Family.ME): fit_strength_cost_poisson,
+        (Constraint.STRENGTH_COST, Family.BINOMIAL): fit_strength_cost_binomial,
+        (Constraint.STRENGTH_COST, Family.GEOMETRIC): fit_strength_cost_geometric,
+        (
+            Constraint.STRENGTH_COST,
+            Family.NEGATIVE_BINOMIAL,
+        ): fit_strength_cost_negative_binomial,
+        (Constraint.DEGREE_EVENTS, Family.ME): fit_degree_events_poisson,
+        (Constraint.DEGREE_EVENTS, Family.BINOMIAL): fit_degree_events_binomial,
+        (Constraint.DEGREE_EVENTS, Family.GEOMETRIC): fit_degree_events_geometric,
+        (
+            Constraint.DEGREE_EVENTS,
+            Family.NEGATIVE_BINOMIAL,
+        ): fit_degree_events_negative_binomial,
+    }
+
+    key = (constraint, family)
+    if key not in _fit_dispatch:
+        msg = f"unsupported (constraint, family): ({constraint!r}, {family!r})"
+        raise UnsupportedModelCaseError(msg)
+
+    # Build args per constraint
+    common: dict[str, Any] = {
+        "self_loops": self_loops,
+        "tolerance": tolerance,
+        "max_iterations": max_iterations,
+    }
+    if family in (Family.BINOMIAL, Family.NEGATIVE_BINOMIAL):
+        common["layers"] = layers
+
     match constraint:
         case Constraint.STRENGTH:
-            return _fit_strength(
-                family,
-                strength_out,
-                strength_in,
-                layers,
-                self_loops,
-                tolerance,
-                max_iterations,
+            if strength_out is None or strength_in is None:
+                msg = "strength requires strength_out, strength_in"
+                raise ValueError(msg)
+            return _fit_dispatch[key](
+                np.asarray(strength_out, dtype=np.float64),
+                np.asarray(strength_in, dtype=np.float64),
+                **common,
             )
         case Constraint.STRENGTH_EDGES:
-            return _fit_strength_edges(
-                family,
-                strength_out,
-                strength_in,
+            if strength_out is None or strength_in is None:
+                msg = "strength_edges requires strength_out, strength_in"
+                raise ValueError(msg)
+            if target_edges is None:
+                msg = "strength_edges requires target_edges"
+                raise ValueError(msg)
+            return _fit_dispatch[key](
+                np.asarray(strength_out, dtype=np.float64),
+                np.asarray(strength_in, dtype=np.float64),
                 target_edges,
-                layers,
-                self_loops,
-                tolerance,
-                max_iterations,
+                **common,
             )
         case Constraint.STRENGTH_DEGREE:
-            return _fit_strength_degree(
-                family,
-                strength_out,
-                strength_in,
-                degree_out,
-                degree_in,
-                layers,
-                self_loops,
-                tolerance,
-                max_iterations,
+            if strength_out is None or strength_in is None:
+                msg = "strength_degree requires strength sequences"
+                raise ValueError(msg)
+            if degree_out is None or degree_in is None:
+                msg = "strength_degree requires degree sequences"
+                raise ValueError(msg)
+            return _fit_dispatch[key](
+                np.asarray(strength_out, dtype=np.float64),
+                np.asarray(strength_in, dtype=np.float64),
+                np.asarray(degree_out, dtype=np.float64),
+                np.asarray(degree_in, dtype=np.float64),
+                **common,
             )
         case Constraint.STRENGTH_COST:
-            return _fit_strength_cost(
-                family,
-                strength_out,
-                strength_in,
+            if strength_out is None or strength_in is None:
+                msg = "strength_cost requires strength sequences"
+                raise ValueError(msg)
+            if target_cost is None:
+                msg = "strength_cost requires target_cost"
+                raise ValueError(msg)
+            s_out = np.asarray(strength_out, dtype=np.float64)
+            s_in = np.asarray(strength_in, dtype=np.float64)
+            if coord_x is not None and coord_y is not None:
+                # Use coordinate variant
+                coord_dispatch = {
+                    Family.ME: fit_strength_cost_poisson_coordinates,
+                    Family.BINOMIAL: fit_strength_cost_binomial_coordinates,
+                    Family.GEOMETRIC: fit_strength_cost_geometric_coordinates,
+                    Family.NEGATIVE_BINOMIAL: (
+                        fit_strength_cost_negative_binomial_coordinates
+                    ),
+                }
+                return coord_dispatch[family](
+                    s_out,
+                    s_in,
+                    coord_x,
+                    coord_y,
+                    target_cost,
+                    **common,
+                )
+            if cost_sources is None:
+                msg = "strength_cost needs cost triples or coordinates"
+                raise ValueError(msg)
+            return _fit_dispatch[key](
+                s_out,
+                s_in,
                 cost_sources,
                 cost_targets,
                 cost_values,
-                coord_x,
-                coord_y,
                 target_cost,
-                layers,
-                self_loops,
-                tolerance,
-                max_iterations,
+                **common,
             )
         case Constraint.DEGREE_EVENTS:
             if ensemble != Ensemble.GRAND_CANONICAL:
                 msg = "degree_events requires ensemble=GRAND_CANONICAL"
                 raise UnsupportedModelCaseError(msg)
-            return _fit_degree_events(
-                family,
-                degree_out,
-                degree_in,
+            if degree_out is None or degree_in is None:
+                msg = "degree_events requires degree_out, degree_in"
+                raise ValueError(msg)
+            if total_events is None:
+                msg = "degree_events requires total_events"
+                raise ValueError(msg)
+            return _fit_dispatch[key](
+                np.asarray(degree_out, dtype=np.float64),
+                np.asarray(degree_in, dtype=np.float64),
                 total_events,
-                layers,
-                self_loops,
-                tolerance,
-                max_iterations,
+                **common,
             )
         case _:
             msg = f"invalid constraint: {constraint!r}"
@@ -247,377 +325,6 @@ def sample_model(
 
 # ---------------------------------------------------------------------------
 # Private dispatch (immutable match logic)
-# ---------------------------------------------------------------------------
-
-
-def _fit_strength(
-    family: Family,
-    strength_out: NDArray[Any] | None,
-    strength_in: NDArray[Any] | None,
-    layers: int,
-    self_loops: bool,
-    tolerance: float,
-    max_iterations: int,
-) -> StrengthFit:
-    if strength_out is None or strength_in is None:
-        msg = "strength constraint requires strength_out and strength_in"
-        raise ValueError(msg)
-    s_out = np.asarray(strength_out, dtype=np.float64)
-    s_in = np.asarray(strength_in, dtype=np.float64)
-    match family:
-        case Family.ME:
-            return fit_strength_poisson(
-                s_out,
-                s_in,
-                self_loops=self_loops,
-                tolerance=tolerance,
-                max_iterations=max_iterations,
-            )
-        case Family.BINOMIAL:
-            return fit_strength_binomial(
-                s_out,
-                s_in,
-                layers=layers,
-                self_loops=self_loops,
-                tolerance=tolerance,
-                max_iterations=max_iterations,
-            )
-        case Family.GEOMETRIC:
-            return fit_strength_geometric(
-                s_out,
-                s_in,
-                self_loops=self_loops,
-                tolerance=tolerance,
-                max_iterations=max_iterations,
-            )
-        case Family.NEGATIVE_BINOMIAL:
-            return fit_strength_negative_binomial(
-                s_out,
-                s_in,
-                layers=layers,
-                self_loops=self_loops,
-                tolerance=tolerance,
-                max_iterations=max_iterations,
-            )
-
-
-def _fit_strength_edges(
-    family: Family,
-    s_out: NDArray[Any] | None,
-    s_in: NDArray[Any] | None,
-    target_edges: float | None,
-    layers: int,
-    self_loops: bool,
-    tol: float,
-    max_iter: int,
-) -> StrengthEdgesFit:
-    if s_out is None or s_in is None:
-        msg = "strength_edges requires strength_out, strength_in"
-        raise ValueError(msg)
-    if target_edges is None:
-        msg = "strength_edges requires target_edges"
-        raise ValueError(msg)
-    s_out = np.asarray(s_out, dtype=np.float64)
-    s_in = np.asarray(s_in, dtype=np.float64)
-    match family:
-        case Family.ME:
-            return fit_strength_edges_poisson(
-                s_out,
-                s_in,
-                target_edges,
-                self_loops=self_loops,
-                tolerance=tol,
-                max_iterations=max_iter,
-            )
-        case Family.BINOMIAL:
-            return fit_strength_edges_binomial(
-                s_out,
-                s_in,
-                target_edges,
-                layers=layers,
-                self_loops=self_loops,
-                tolerance=tol,
-                max_iterations=max_iter,
-            )
-        case Family.GEOMETRIC:
-            return fit_strength_edges_geometric(
-                s_out,
-                s_in,
-                target_edges,
-                self_loops=self_loops,
-                tolerance=tol,
-                max_iterations=max_iter,
-            )
-        case Family.NEGATIVE_BINOMIAL:
-            return fit_strength_edges_negative_binomial(
-                s_out,
-                s_in,
-                target_edges,
-                layers=layers,
-                self_loops=self_loops,
-                tolerance=tol,
-                max_iterations=max_iter,
-            )
-
-
-def _fit_strength_degree(
-    family: Family,
-    s_out: NDArray[Any] | None,
-    s_in: NDArray[Any] | None,
-    k_out: NDArray[Any] | None,
-    k_in: NDArray[Any] | None,
-    layers: int,
-    self_loops: bool,
-    tol: float,
-    max_iter: int,
-) -> StrengthDegreeFit:
-    if s_out is None or s_in is None:
-        msg = "strength_degree requires strength_out, strength_in"
-        raise ValueError(msg)
-    if k_out is None or k_in is None:
-        msg = "strength_degree requires degree_out, degree_in"
-        raise ValueError(msg)
-    s_out = np.asarray(s_out, dtype=np.float64)
-    s_in = np.asarray(s_in, dtype=np.float64)
-    k_out = np.asarray(k_out, dtype=np.float64)
-    k_in = np.asarray(k_in, dtype=np.float64)
-    match family:
-        case Family.ME:
-            return fit_strength_degree_poisson(
-                s_out,
-                s_in,
-                k_out,
-                k_in,
-                self_loops=self_loops,
-                tolerance=tol,
-                max_iterations=max_iter,
-            )
-        case Family.BINOMIAL:
-            return fit_strength_degree_binomial(
-                s_out,
-                s_in,
-                k_out,
-                k_in,
-                layers=layers,
-                self_loops=self_loops,
-                tolerance=tol,
-                max_iterations=max_iter,
-            )
-        case Family.GEOMETRIC:
-            return fit_strength_degree_geometric(
-                s_out,
-                s_in,
-                k_out,
-                k_in,
-                self_loops=self_loops,
-                tolerance=tol,
-                max_iterations=max_iter,
-            )
-        case Family.NEGATIVE_BINOMIAL:
-            return fit_strength_degree_negative_binomial(
-                s_out,
-                s_in,
-                k_out,
-                k_in,
-                layers=layers,
-                self_loops=self_loops,
-                tolerance=tol,
-                max_iterations=max_iter,
-            )
-
-
-def _fit_strength_cost(
-    family: Family,
-    s_out: NDArray[Any] | None,
-    s_in: NDArray[Any] | None,
-    cost_src: NDArray[Any] | None,
-    cost_tgt: NDArray[Any] | None,
-    cost_val: NDArray[Any] | None,
-    coord_x: NDArray[Any] | None,
-    coord_y: NDArray[Any] | None,
-    target_cost: float | None,
-    layers: int,
-    self_loops: bool,
-    tol: float,
-    max_iter: int,
-) -> StrengthCostFit:
-    if s_out is None or s_in is None:
-        msg = "strength_cost requires strength_out, strength_in"
-        raise ValueError(msg)
-    if target_cost is None:
-        msg = "strength_cost requires target_cost"
-        raise ValueError(msg)
-    s_out = np.asarray(s_out, dtype=np.float64)
-    s_in = np.asarray(s_in, dtype=np.float64)
-    has_coords = coord_x is not None and coord_y is not None
-    match family:
-        case Family.ME:
-            if has_coords:
-                return fit_strength_cost_poisson_coordinates(
-                    s_out,
-                    s_in,
-                    coord_x,
-                    coord_y,
-                    target_cost,
-                    self_loops=self_loops,
-                    tolerance=tol,
-                    max_iterations=max_iter,
-                )
-            if cost_src is None:
-                msg = "ME strength_cost needs cost triples or coords"
-                raise ValueError(msg)
-            return fit_strength_cost_poisson(
-                s_out,
-                s_in,
-                cost_src,
-                cost_tgt,
-                cost_val,
-                target_cost,
-                self_loops=self_loops,
-                tolerance=tol,
-                max_iterations=max_iter,
-            )
-        case Family.BINOMIAL:
-            if has_coords:
-                return fit_strength_cost_binomial_coordinates(
-                    s_out,
-                    s_in,
-                    coord_x,
-                    coord_y,
-                    target_cost,
-                    layers=layers,
-                    self_loops=self_loops,
-                    tolerance=tol,
-                    max_iterations=max_iter,
-                )
-            if cost_src is None:
-                msg = "B strength_cost needs cost triples or coords"
-                raise ValueError(msg)
-            return fit_strength_cost_binomial(
-                s_out,
-                s_in,
-                cost_src,
-                cost_tgt,
-                cost_val,
-                target_cost,
-                layers=layers,
-                self_loops=self_loops,
-                tolerance=tol,
-                max_iterations=max_iter,
-            )
-        case Family.GEOMETRIC:
-            if has_coords:
-                return fit_strength_cost_geometric_coordinates(
-                    s_out,
-                    s_in,
-                    coord_x,
-                    coord_y,
-                    target_cost,
-                    self_loops=self_loops,
-                    tolerance=tol,
-                    max_iterations=max_iter,
-                )
-            if cost_src is None:
-                msg = "W(1) strength_cost needs cost triples or coords"
-                raise ValueError(msg)
-            return fit_strength_cost_geometric(
-                s_out,
-                s_in,
-                cost_src,
-                cost_tgt,
-                cost_val,
-                target_cost,
-                self_loops=self_loops,
-                tolerance=tol,
-                max_iterations=max_iter,
-            )
-        case Family.NEGATIVE_BINOMIAL:
-            if has_coords:
-                return fit_strength_cost_negative_binomial_coordinates(
-                    s_out,
-                    s_in,
-                    coord_x,
-                    coord_y,
-                    target_cost,
-                    layers=layers,
-                    self_loops=self_loops,
-                    tolerance=tol,
-                    max_iterations=max_iter,
-                )
-            if cost_src is None:
-                msg = "W(M) strength_cost needs cost triples or coords"
-                raise ValueError(msg)
-            return fit_strength_cost_negative_binomial(
-                s_out,
-                s_in,
-                cost_src,
-                cost_tgt,
-                cost_val,
-                target_cost,
-                layers=layers,
-                self_loops=self_loops,
-                tolerance=tol,
-                max_iterations=max_iter,
-            )
-
-
-def _fit_degree_events(
-    family: Family,
-    degree_out: NDArray[Any] | None,
-    degree_in: NDArray[Any] | None,
-    total_events: int | None,
-    layers: int,
-    self_loops: bool,
-    tolerance: float,
-    max_iterations: int,
-) -> DegreeEventsFit:
-    if degree_out is None or degree_in is None:
-        msg = "degree_events constraint requires degree_out and degree_in"
-        raise ValueError(msg)
-    if total_events is None:
-        msg = "degree_events constraint requires total_events"
-        raise ValueError(msg)
-    k_out = np.asarray(degree_out, dtype=np.float64)
-    k_in = np.asarray(degree_in, dtype=np.float64)
-    match family:
-        case Family.ME:
-            return fit_degree_events_poisson(
-                k_out,
-                k_in,
-                total_events,
-                self_loops=self_loops,
-                tolerance=tolerance,
-                max_iterations=max_iterations,
-            )
-        case Family.BINOMIAL:
-            return fit_degree_events_binomial(
-                k_out,
-                k_in,
-                total_events,
-                layers=layers,
-                self_loops=self_loops,
-                tolerance=tolerance,
-                max_iterations=max_iterations,
-            )
-        case Family.GEOMETRIC:
-            return fit_degree_events_geometric(
-                k_out,
-                k_in,
-                total_events,
-                self_loops=self_loops,
-                tolerance=tolerance,
-                max_iterations=max_iterations,
-            )
-        case Family.NEGATIVE_BINOMIAL:
-            return fit_degree_events_negative_binomial(
-                k_out,
-                k_in,
-                total_events,
-                layers=layers,
-                self_loops=self_loops,
-                tolerance=tolerance,
-                max_iterations=max_iterations,
-            )
 
 
 def _sample_microcanonical(
