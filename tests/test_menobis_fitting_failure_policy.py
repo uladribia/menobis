@@ -38,10 +38,10 @@ def test_strength_edges_capacity_failure_is_shared_across_families() -> None:
     "fit_func",
     [fit_strength_cost_poisson, fit_strength_cost_geometric],
 )
-def test_strength_cost_rejects_bad_cost_entries_across_families(
+def test_strength_cost_rejects_bad_coordinates_across_families(
     fit_func: Callable[..., object],
 ) -> None:
-    """Strength-cost fits share sparse-cost validation."""
+    """Strength-cost fits share coordinate validation."""
     s_out = np.array([1.0, 1.0])
     s_in = np.array([1.0, 1.0])
 
@@ -49,19 +49,17 @@ def test_strength_cost_rejects_bad_cost_entries_across_families(
         fit_func(
             s_out,
             s_in,
-            np.array([0, 1], dtype=np.uint64),
-            np.array([0], dtype=np.uint64),
-            np.array([1.0, 1.0]),
+            np.array([0.0, 1.0]),
+            np.array([0.0]),
             target_cost=1.0,
         )
 
-    with pytest.raises(ValueError, match="finite and non-negative"):
+    with pytest.raises(ValueError, match="finite"):
         fit_func(
             s_out,
             s_in,
-            np.array([0], dtype=np.uint64),
-            np.array([0], dtype=np.uint64),
-            np.array([np.nan]),
+            np.array([0.0, np.nan]),
+            np.array([0.0, 1.0]),
             target_cost=1.0,
         )
 

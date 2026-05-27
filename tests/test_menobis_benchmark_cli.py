@@ -1,4 +1,4 @@
-"""Tests for the canonical benchmark CLI."""
+"""Tests for the modern benchmark CLI."""
 
 from __future__ import annotations
 
@@ -13,26 +13,35 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from benchmarks.cli import app
 
 
-def test_benchmark_cli_generates_pa_geographic_network(tmp_path) -> None:
-    """Generate stage writes canonical network artifacts and JSON rows."""
+def test_benchmark_cli_runs_modern_e2e_smoke(tmp_path: Path) -> None:
+    """The benchmark CLI runs PA-geographic fit/sample/filter rows."""
+    output = tmp_path / "summary.json"
     result = CliRunner().invoke(
         app,
         [
-            "generate",
+            "all",
             "--nodes",
-            "20",
+            "12",
             "--families",
             "me",
             "--constraints",
             "strength",
+            "--filter-samples",
+            "1",
             "--output",
-            str(tmp_path),
+            str(output),
             "--json",
         ],
     )
 
     assert result.exit_code == 0, result.stdout
     rows = json.loads(result.stdout)
-    assert rows[0]["case"] == "pa-geographic"
-    assert "edges=" in rows[0]["message"]
-    assert (tmp_path / "networks" / "n20.npz").exists()
+    assert output.exists()
+    assert {row["stage"] for row in rows} == {
+        "generate",
+        "fit",
+        "sample-check",
+        "filter-fpr",
+    }
+    assert rows[0]["constraint"] == "pa-geographic"
+    assert rows[0]["sampled_edges"] > 0

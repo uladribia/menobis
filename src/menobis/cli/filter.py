@@ -202,8 +202,9 @@ def strength_edges(
 @app.command("strength-cost-poisson")
 def strength_cost(
     input_path: Path,
-    costs_path: Annotated[
-        Path, Option("--costs", help="CSV with source,target,cost columns.")
+    coordinates_path: Annotated[
+        Path,
+        Option("--coordinates", help="Projected coordinates CSV with x,y columns."),
     ],
     target_cost: Annotated[
         float, Option("--target-cost", help="Target average cost for fitting.")
@@ -237,10 +238,9 @@ def strength_cost(
 ) -> None:
     """Fit strength-cost ME, then filter against its Poisson null."""
     edges = read_edges(input_path)
-    cost_table = pa_csv.read_csv(costs_path)
-    cost_sources = cost_table.column("source").to_numpy().astype(np.uint64)
-    cost_targets = cost_table.column("target").to_numpy().astype(np.uint64)
-    cost_values = cost_table.column("cost").to_numpy().astype(np.float64)
+    coordinate_table = pa_csv.read_csv(coordinates_path)
+    coord_x = coordinate_table.column("x").to_numpy().astype(np.float64)
+    coord_y = coordinate_table.column("y").to_numpy().astype(np.float64)
     node_count = int(max(edges.source.max(), edges.target.max())) + 1
     s_out = np.zeros(node_count, dtype=np.float64)
     s_in = np.zeros(node_count, dtype=np.float64)
@@ -253,9 +253,8 @@ def strength_cost(
             constraint=Constraint.STRENGTH_COST,
             strength_out=s_out,
             strength_in=s_in,
-            cost_sources=cost_sources,
-            cost_targets=cost_targets,
-            cost_values=cost_values,
+            coord_x=coord_x,
+            coord_y=coord_y,
             target_cost=target_cost,
             self_loops=self_loops,
         ),
@@ -263,9 +262,8 @@ def strength_cost(
     result = filter_strength_cost_poisson(
         edges,
         fit,
-        cost_sources,
-        cost_targets,
-        cost_values,
+        coord_x,
+        coord_y,
         alpha=alpha,
         tail=tail,
         correction=correction,

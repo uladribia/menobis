@@ -84,49 +84,6 @@ pub(crate) fn fit_masked_strength_degree_poisson(
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
-pub(crate) fn fit_strength_cost_poisson(
-    strength_out: Vec<f64>,
-    strength_in: Vec<f64>,
-    cost_sources: Vec<usize>,
-    cost_targets: Vec<usize>,
-    cost_values: Vec<f64>,
-    target_cost: f64,
-    self_loops: bool,
-    tolerance: f64,
-    max_iterations: usize,
-) -> PyResult<FitStrengthCost> {
-    if strength_out.len() != strength_in.len() {
-        return Err(PyValueError::new_err(
-            "strength arrays must have same length",
-        ));
-    }
-    if cost_sources.len() != cost_targets.len() || cost_sources.len() != cost_values.len() {
-        return Err(PyValueError::new_err("cost arrays must have same length"));
-    }
-    let result = core_fit_strength_cost(
-        &strength_out,
-        &strength_in,
-        &cost_sources,
-        &cost_targets,
-        &cost_values,
-        target_cost,
-        &CostFitOptions {
-            self_loops,
-            tolerance,
-            max_iterations,
-        },
-    );
-    Ok((
-        result.x,
-        result.y,
-        result.gamma,
-        result.converged,
-        result.iterations,
-    ))
-}
-
-#[allow(clippy::too_many_arguments)]
-#[pyfunction]
 pub(crate) fn fit_strength_cost_poisson_coordinates(
     strength_out: Vec<f64>,
     strength_in: Vec<f64>,
@@ -151,48 +108,6 @@ pub(crate) fn fit_strength_cost_poisson_coordinates(
         &coord_x,
         &coord_y,
         target_cost,
-        &CostFitOptions {
-            self_loops,
-            tolerance,
-            max_iterations,
-        },
-    );
-    Ok((
-        result.x,
-        result.y,
-        result.gamma,
-        result.converged,
-        result.iterations,
-    ))
-}
-
-#[allow(clippy::too_many_arguments)]
-#[pyfunction]
-pub(crate) fn fit_strength_cost_binomial(
-    strength_out: Vec<f64>,
-    strength_in: Vec<f64>,
-    cost_sources: Vec<usize>,
-    cost_targets: Vec<usize>,
-    cost_values: Vec<f64>,
-    target_cost: f64,
-    layers: u32,
-    self_loops: bool,
-    tolerance: f64,
-    max_iterations: usize,
-) -> PyResult<FitStrengthCost> {
-    if strength_out.len() != strength_in.len() {
-        return Err(PyValueError::new_err(
-            "strength_out and strength_in must have same length",
-        ));
-    }
-    let result = core_fit_strength_cost_binomial(
-        &strength_out,
-        &strength_in,
-        &cost_sources,
-        &cost_targets,
-        &cost_values,
-        target_cost,
-        layers,
         &CostFitOptions {
             self_loops,
             tolerance,
@@ -575,37 +490,6 @@ pub(crate) fn w_strength_fit_tuple(
     )
 }
 
-pub(crate) fn w_strength_cost_fit_tuple(
-    result: menobis_core::fitting::WStrengthCostFitResult,
-) -> WStrengthCostFit {
-    let status = format!("{:?}", result.status).to_lowercase();
-    let metrics = result.metrics;
-    (
-        result.x,
-        result.y,
-        result.gamma,
-        result.layers,
-        status,
-        result.objective,
-        result.iterations,
-        (
-            result.min_margin,
-            result.max_q,
-            result.max_strength_residual,
-            result.total_strength_residual,
-            result.cost_residual,
-        ),
-        (
-            metrics.variables,
-            metrics.auxiliary_variables,
-            metrics.exponential_cones,
-            metrics.power_cones,
-            metrics.linear_constraints,
-            metrics.sparse_nonzeros,
-        ),
-    )
-}
-
 pub(crate) fn w_strength_edges_fit_tuple(
     result: menobis_core::fitting::WStrengthEdgesFitResult,
 ) -> WStrengthEdgesFit {
@@ -724,91 +608,6 @@ pub(crate) fn fit_strength_negative_binomial(
         },
     );
     Ok(w_strength_fit_tuple(result))
-}
-
-#[pyfunction]
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn fit_strength_cost_geometric(
-    s_out: Vec<f64>,
-    s_in: Vec<f64>,
-    cost_sources: Vec<u64>,
-    cost_targets: Vec<u64>,
-    cost_values: Vec<f64>,
-    target_cost: f64,
-    self_loops: bool,
-    tolerance: f64,
-    max_iterations: usize,
-) -> PyResult<WStrengthCostFit> {
-    if s_out.len() != s_in.len() {
-        return Err(PyValueError::new_err(
-            "s_out and s_in must have the same length",
-        ));
-    }
-    if cost_sources.len() != cost_targets.len() || cost_sources.len() != cost_values.len() {
-        return Err(PyValueError::new_err(
-            "cost_sources, cost_targets, and cost_values must have the same length",
-        ));
-    }
-    let result = core_fit_strength_cost_geometric(
-        &s_out,
-        &s_in,
-        &cost_sources,
-        &cost_targets,
-        &cost_values,
-        target_cost,
-        WConicFitOptions {
-            self_loops,
-            tolerance,
-            max_iterations,
-        },
-    );
-    Ok(w_strength_cost_fit_tuple(result))
-}
-
-#[pyfunction]
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn fit_strength_cost_negative_binomial(
-    s_out: Vec<f64>,
-    s_in: Vec<f64>,
-    cost_sources: Vec<u64>,
-    cost_targets: Vec<u64>,
-    cost_values: Vec<f64>,
-    target_cost: f64,
-    layers: u32,
-    self_loops: bool,
-    tolerance: f64,
-    max_iterations: usize,
-) -> PyResult<WStrengthCostFit> {
-    if s_out.len() != s_in.len() {
-        return Err(PyValueError::new_err(
-            "s_out and s_in must have the same length",
-        ));
-    }
-    if cost_sources.len() != cost_targets.len() || cost_sources.len() != cost_values.len() {
-        return Err(PyValueError::new_err(
-            "cost_sources, cost_targets, and cost_values must have the same length",
-        ));
-    }
-    if layers <= 1 {
-        return Err(PyValueError::new_err(
-            "negative binomial W fitting requires layers > 1; use geometric for M = 1",
-        ));
-    }
-    let result = core_fit_strength_cost_negative_binomial(
-        &s_out,
-        &s_in,
-        &cost_sources,
-        &cost_targets,
-        &cost_values,
-        target_cost,
-        layers,
-        WConicFitOptions {
-            self_loops,
-            tolerance,
-            max_iterations,
-        },
-    );
-    Ok(w_strength_cost_fit_tuple(result))
 }
 
 #[pyfunction]
@@ -1154,39 +953,6 @@ pub(crate) fn fit_partial_strength_edges_poisson_full(
         &known_tgt,
         &known_rate,
         target_edges,
-        self_loops,
-        tolerance,
-        max_iterations,
-    );
-    (r.sources, r.targets, r.rates, r.converged, r.iterations)
-}
-
-#[pyfunction]
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn fit_partial_strength_cost_poisson_full(
-    strength_out: Vec<f64>,
-    strength_in: Vec<f64>,
-    known_src: Vec<u64>,
-    known_tgt: Vec<u64>,
-    known_rate: Vec<f64>,
-    cost_sources: Vec<usize>,
-    cost_targets: Vec<usize>,
-    cost_values: Vec<f64>,
-    target_cost: f64,
-    self_loops: bool,
-    tolerance: f64,
-    max_iterations: usize,
-) -> PartialResult {
-    let r = core_fit_partial_strength_cost(
-        &strength_out,
-        &strength_in,
-        &known_src,
-        &known_tgt,
-        &known_rate,
-        &cost_sources,
-        &cost_targets,
-        &cost_values,
-        target_cost,
         self_loops,
         tolerance,
         max_iterations,

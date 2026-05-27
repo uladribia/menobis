@@ -6,6 +6,28 @@ use crate::distribution::{
     WeightFamily,
 };
 use std::collections::HashMap;
+/// Provider of pair-level cost values.
+///
+/// Returning `None` excludes a pair from cost-constrained support. Built-in
+/// MENoBiS workflows use [`EuclideanCostProvider`] to avoid materialized
+/// pair-cost tables.
+pub trait PairCostProvider: Sync {
+    fn cost(&self, source: usize, target: usize) -> Option<f64>;
+}
+
+/// On-the-fly Euclidean pair costs from projected XY coordinates.
+pub struct EuclideanCostProvider<'a> {
+    pub x: &'a [f64],
+    pub y: &'a [f64],
+}
+
+impl PairCostProvider for EuclideanCostProvider<'_> {
+    fn cost(&self, source: usize, target: usize) -> Option<f64> {
+        let dx = self.x[source] - self.x[target];
+        let dy = self.y[source] - self.y[target];
+        Some((dx * dx + dy * dy).sqrt())
+    }
+}
 
 pub const PARALLEL_PAIR_THRESHOLD: usize = 1_000_000;
 pub const ROW_CHUNK_SIZE: usize = 128;
@@ -87,16 +109,16 @@ impl PairDistributionProvider for FixedStrengthProvider<'_> {
     }
 }
 
-pub struct StrengthCostProvider<'a> {
+pub struct StrengthCostProvider<'a, C: PairCostProvider + ?Sized> {
     pub x: &'a [f64],
     pub y: &'a [f64],
     pub gamma: f64,
-    pub costs: &'a HashMap<(usize, usize), f64>,
+    pub costs: &'a C,
     pub family: WeightFamily,
     pub self_loops: bool,
 }
 
-impl PairDistributionProvider for StrengthCostProvider<'_> {
+impl<C: PairCostProvider + ?Sized> PairDistributionProvider for StrengthCostProvider<'_, C> {
     fn support(&self) -> CandidateSupport<'_> {
         CandidateSupport::AllPairs {
             node_count: self.x.len(),
@@ -108,9 +130,8 @@ impl PairDistributionProvider for StrengthCostProvider<'_> {
         if !self.self_loops && source == target {
             return None;
         }
-        let xy = self.x[source]
-            * self.y[target]
-            * (-self.gamma * self.costs.get(&(source, target)).copied().unwrap_or(0.0)).exp();
+        let cost = self.costs.cost(source, target)?;
+        let xy = self.x[source] * self.y[target] * (-self.gamma * cost).exp();
         (xy > 0.0).then(|| self.family.distribution(xy))
     }
 }
@@ -394,5 +415,21 @@ impl PairDistributionProvider for StrengthDegreeProvider<'_> {
                 })
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn euclidean_cost_provider_computes_pair_distance_on_demand() {
+        let costs = EuclideanCostProvider {
+            x: &[0.0, 3.0],
+            y: &[0.0, 4.0],
+        };
+
+        assert_eq!(costs.cost(0, 1), Some(5.0));
+        assert_eq!(costs.cost(1, 0), Some(5.0));
     }
 }

@@ -2,7 +2,7 @@
 
 use super::b::binary_probability;
 use super::mask::PairMask;
-use super::support::{max_abs_delta, max_pair_delta};
+use super::support::{coord_distance, max_abs_delta, max_pair_delta};
 use super::{FitResult, StrengthCostFitResult, StrengthDegreeFitResult, StrengthEdgesFitResult};
 
 /// Fit exact grand-canonical ME fixed-strength-and-edge-count zero-inflated constraints.
@@ -809,181 +809,12 @@ pub fn fit_strength_poisson(
 // ME strength-cost fitting
 // ---------------------------------------------------------------------------
 
-/// Sparse cost matrix for strength-cost models.
-pub struct CostMatrix<'a> {
-    pub sources: &'a [usize],
-    pub targets: &'a [usize],
-    pub values: &'a [f64],
-}
-
-/// Balance x,y for a fixed gamma via IPF, with optional warm start.
-/// IPF balancing for ME strength-cost with sparse cost entries.
-///
-/// Computes f_ij = exp(-gamma * d_ij) on the fly from cost entries.
-/// No dense N*N matrix is allocated. Uses sum_x/sum_y fast path
-/// with sparse corrections for cost entries that differ from f=1.
-#[allow(clippy::too_many_arguments)]
-fn balance_xy_cost_sparse(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    costs: &CostMatrix<'_>,
-    n: usize,
-    gamma: f64,
-    self_loops: bool,
-    tolerance: f64,
-    max_iterations: usize,
-    x_init: Option<&[f64]>,
-    y_init: Option<&[f64]>,
-) -> FitResult {
-    let total: f64 = strength_out.iter().sum();
-    let sqrt_t = total.sqrt().max(1.0);
-    let mut x: Vec<f64> = match x_init {
-        Some(xi) => xi.to_vec(),
-        None => strength_out
-            .iter()
-            .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
-            .collect(),
-    };
-    let mut y: Vec<f64> = match y_init {
-        Some(yi) => yi.to_vec(),
-        None => strength_in
-            .iter()
-            .map(|&s| if s > 0.0 { s / sqrt_t } else { 0.0 })
-            .collect(),
-    };
-
-    // Build per-column and per-row f_ij lookup (O(K) memory, not O(N^2))
-    let mut col_src: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
-    let mut row_tgt: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
-    for (idx, (&src, &tgt)) in costs.sources.iter().zip(costs.targets.iter()).enumerate() {
-        if !self_loops && src == tgt {
-            continue;
-        }
-        if src < n && tgt < n {
-            let f_ij = (-gamma * costs.values[idx]).exp();
-            col_src[tgt].push((src, f_ij));
-            row_tgt[src].push((tgt, f_ij));
-        }
-    }
-    // Track which pairs have explicit costs for the sparse correction path
-    let k = costs.sources.len();
-    let n_pairs = if self_loops { n * n } else { n * (n - 1) };
-    let complete = k >= n_pairs;
-
-    for iter in 0..max_iterations {
-        let old_x = x.clone();
-        let old_y = y.clone();
-
-        if complete {
-            // All pairs covered: sum over explicit entries only
-            for j in 0..n {
-                if strength_in[j] <= 0.0 {
-                    y[j] = 0.0;
-                    continue;
-                }
-                let denom: f64 = col_src[j].iter().map(|&(i, f)| x[i] * f).sum();
-                y[j] = if denom > 0.0 {
-                    strength_in[j] / denom
-                } else {
-                    0.0
-                };
-            }
-            for i in 0..n {
-                if strength_out[i] <= 0.0 {
-                    x[i] = 0.0;
-                    continue;
-                }
-                let denom: f64 = row_tgt[i].iter().map(|&(j, f)| y[j] * f).sum();
-                x[i] = if denom > 0.0 {
-                    strength_out[i] / denom
-                } else {
-                    0.0
-                };
-            }
-        } else {
-            // Sparse: base = sum (f=1 for missing pairs) + corrections from entries
-            let sum_x: f64 = x.iter().sum();
-            for j in 0..n {
-                if strength_in[j] <= 0.0 {
-                    y[j] = 0.0;
-                    continue;
-                }
-                let mut denom = if self_loops { sum_x } else { sum_x - x[j] };
-                for &(src, f_ij) in &col_src[j] {
-                    denom += x[src] * (f_ij - 1.0);
-                }
-                y[j] = if denom > 0.0 {
-                    strength_in[j] / denom
-                } else {
-                    0.0
-                };
-            }
-            let sum_y: f64 = y.iter().sum();
-            for i in 0..n {
-                if strength_out[i] <= 0.0 {
-                    x[i] = 0.0;
-                    continue;
-                }
-                let mut denom = if self_loops { sum_y } else { sum_y - y[i] };
-                for &(tgt, f_ij) in &row_tgt[i] {
-                    denom += y[tgt] * (f_ij - 1.0);
-                }
-                x[i] = if denom > 0.0 {
-                    strength_out[i] / denom
-                } else {
-                    0.0
-                };
-            }
-        }
-
-        if max_pair_delta(&x, &old_x, &y, &old_y) < tolerance {
-            return FitResult {
-                x,
-                y,
-                converged: true,
-                iterations: iter + 1,
-            };
-        }
-    }
-
-    FitResult {
-        x,
-        y,
-        converged: false,
-        iterations: max_iterations,
-    }
-}
-
-/// Compute expected total cost given x, y, gamma and cost entries.
-fn expected_cost(
-    x: &[f64],
-    y: &[f64],
-    costs: &CostMatrix<'_>,
-    gamma: f64,
-    n: usize,
-    self_loops: bool,
-) -> f64 {
-    let mut total = 0.0;
-    for (idx, (&src, &tgt)) in costs.sources.iter().zip(costs.targets.iter()).enumerate() {
-        if !self_loops && src == tgt {
-            continue;
-        }
-        if src < n && tgt < n {
-            let d = costs.values[idx];
-            total += x[src] * y[tgt] * d * (-gamma * d).exp();
-        }
-    }
-    total
-}
-
 /// Strength-cost solver options.
 pub struct CostFitOptions {
     pub self_loops: bool,
     pub tolerance: f64,
     pub max_iterations: usize,
 }
-
-use super::support::coord_distance;
 
 #[allow(clippy::too_many_arguments)]
 fn balance_xy_cost_coordinates(
@@ -1121,148 +952,6 @@ fn expected_cost_coordinates(
     total
 }
 
-/// Fit the strength-cost model using adaptive search on gamma.
-///
-/// Inner loop: IPF balancing of x, y for fixed gamma.
-/// Outer loop: adaptive step on gamma to match target cost,
-/// following the thesis algorithm with warm-started x, y.
-#[must_use]
-pub fn fit_strength_cost_poisson(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    cost_sources: &[usize],
-    cost_targets: &[usize],
-    cost_values: &[f64],
-    target_cost: f64,
-    opts: &CostFitOptions,
-) -> StrengthCostFitResult {
-    let costs = CostMatrix {
-        sources: cost_sources,
-        targets: cost_targets,
-        values: cost_values,
-    };
-    let n = strength_out.len();
-    let self_loops = opts.self_loops;
-    let tolerance = opts.tolerance;
-    let max_iterations = opts.max_iterations;
-
-    let solve_at = |gamma: f64, x_init: Option<&[f64]>, y_init: Option<&[f64]>| {
-        let fit = balance_xy_cost_sparse(
-            strength_out,
-            strength_in,
-            &costs,
-            n,
-            gamma,
-            self_loops,
-            tolerance,
-            max_iterations,
-            x_init,
-            y_init,
-        );
-        let delta = expected_cost(&fit.x, &fit.y, &costs, gamma, n, self_loops) - target_cost;
-        (fit, delta)
-    };
-
-    // At gamma=0, cost is maximized for ME.
-    let (fit_zero, delta_zero) = solve_at(0.0, None, None);
-    if delta_zero.abs() <= tolerance {
-        return StrengthCostFitResult {
-            x: fit_zero.x,
-            y: fit_zero.y,
-            gamma: 0.0,
-            converged: true,
-            iterations: 1,
-        };
-    }
-    // Bracket: increasing gamma decreases cost.
-    let mut low = 0.0_f64;
-    let mut high = 0.0_f64;
-    let low_fit = fit_zero.clone();
-    let mut high_fit = fit_zero.clone();
-    let low_delta = delta_zero;
-    let mut high_delta = delta_zero;
-    let mut step = 1.0_f64;
-    if delta_zero > 0.0 {
-        for _ in 0..64 {
-            high = step;
-            let (fit, delta) = solve_at(high, Some(&high_fit.x), Some(&high_fit.y));
-            high_fit = fit;
-            high_delta = delta;
-            if high_delta <= 0.0 {
-                break;
-            }
-            step *= 2.0;
-        }
-    } else {
-        return StrengthCostFitResult {
-            x: fit_zero.x,
-            y: fit_zero.y,
-            gamma: 0.0,
-            converged: delta_zero.abs() <= tolerance,
-            iterations: 1,
-        };
-    }
-    if !(low_delta >= 0.0 && high_delta <= 0.0) {
-        let (bf, bg) = if low_delta.abs() < high_delta.abs() {
-            (low_fit, low)
-        } else {
-            (high_fit, high)
-        };
-        return StrengthCostFitResult {
-            x: bf.x,
-            y: bf.y,
-            gamma: bg,
-            converged: false,
-            iterations: max_iterations,
-        };
-    }
-    // Bisection
-    let mut best_fit = if low_delta.abs() < high_delta.abs() {
-        low_fit
-    } else {
-        high_fit
-    };
-    let mut best_gamma = if low_delta.abs() < high_delta.abs() {
-        low
-    } else {
-        high
-    };
-    let mut best_delta = low_delta.abs().min(high_delta.abs());
-    for iter in 0..max_iterations {
-        let mid = 0.5 * (low + high);
-        let (fit, delta) = solve_at(mid, Some(&best_fit.x), Some(&best_fit.y));
-        if delta.abs() < best_delta {
-            best_delta = delta.abs();
-            best_gamma = mid;
-            best_fit = fit.clone();
-        }
-        if delta.abs() <= tolerance {
-            return StrengthCostFitResult {
-                x: fit.x,
-                y: fit.y,
-                gamma: mid,
-                converged: true,
-                iterations: iter + 1,
-            };
-        }
-        if delta > 0.0 {
-            low = mid;
-        } else {
-            high = mid;
-        }
-        if (high - low) < 1e-15 {
-            break;
-        }
-    }
-    StrengthCostFitResult {
-        x: best_fit.x,
-        y: best_fit.y,
-        gamma: best_gamma,
-        converged: best_delta <= tolerance,
-        iterations: max_iterations,
-    }
-}
-
 /// Fit strength-cost using on-the-fly Euclidean distances from projected XY coordinates.
 #[must_use]
 pub fn fit_strength_cost_poisson_coordinates(
@@ -1391,9 +1080,7 @@ pub fn fit_strength_cost_poisson_coordinates(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        balance_sparse_masked_strength_poisson, fit_strength_cost_poisson, CostFitOptions,
-    };
+    use super::balance_sparse_masked_strength_poisson;
     use crate::fitting::mask::PairMask;
 
     #[test]
@@ -1435,47 +1122,6 @@ mod tests {
                 (col_sum - s_in[j]).abs() < 1e-6,
                 "s_in[{j}]: expected {}, got {col_sum}",
                 s_in[j]
-            );
-        }
-    }
-
-    #[test]
-    fn recovers_strengths_for_uniform_cost() {
-        let s_out = vec![10.0, 20.0, 30.0];
-        let s_in = vec![15.0, 25.0, 20.0];
-        let mut sources = Vec::new();
-        let mut targets = Vec::new();
-        let mut cost_vals = Vec::new();
-        for i in 0..3 {
-            for j in 0..3 {
-                sources.push(i);
-                targets.push(j);
-                cost_vals.push(1.0);
-            }
-        }
-        let total_cost: f64 = 60.0 * 0.8;
-        let result = fit_strength_cost_poisson(
-            &s_out,
-            &s_in,
-            &sources,
-            &targets,
-            &cost_vals,
-            total_cost,
-            &CostFitOptions {
-                self_loops: true,
-                tolerance: 1e-6,
-                max_iterations: 5000,
-            },
-        );
-        let n = 3;
-        for (i, &s_out_i) in s_out.iter().enumerate() {
-            let row_sum: f64 = (0..n)
-                .map(|j| result.x[i] * result.y[j] * (-result.gamma * cost_vals[i * n + j]).exp())
-                .sum();
-            assert!(
-                (row_sum - s_out_i).abs() < 0.1,
-                "s_out[{i}]: expected {s_out_i}, got {row_sum}, gamma={}",
-                result.gamma,
             );
         }
     }

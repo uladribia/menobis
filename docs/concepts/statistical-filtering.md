@@ -92,7 +92,7 @@ result = filter_strength_poisson(
 ```bash
 menobis filter strength-poisson edges.csv --output-prefix filtered/
 menobis filter strength-edges-poisson edges.csv --target-edges 500 --output-prefix filtered/
-menobis filter strength-cost-poisson edges.csv --costs costs.csv --target-cost 1.5 --output-prefix filtered/
+menobis filter strength-cost-poisson edges.csv --coordinates xy.csv --target-cost 1.5 --output-prefix filtered/
 menobis filter strength-degree-poisson edges.csv --output-prefix filtered/
 menobis filter degree-events-poisson edges.csv --output-prefix filtered/
 menobis filter custom-poisson edges.csv --rates rates.csv --output-prefix filtered/

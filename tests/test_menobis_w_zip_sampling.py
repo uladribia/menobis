@@ -183,20 +183,18 @@ class TestStrengthCostGeometric:
     def test_produces_edges(self) -> None:
         """Sampler returns a valid EdgeTable."""
         fit = _strength_cost_fit()
-        c_src = np.array([0, 1], dtype=np.int64)
-        c_tgt = np.array([1, 0], dtype=np.int64)
-        c_val = np.array([1.0, 2.0])
-        sample = sample_strength_cost_geometric(fit, c_src, c_tgt, c_val, seed=42)
+        coord_x = np.array([0.0, 1.0])
+        coord_y = np.array([0.0, 0.0])
+        sample = sample_strength_cost_geometric(fit, coord_x, coord_y, seed=42)
         assert sample.num_edges >= 0
 
     def test_seeded_reproducibility(self) -> None:
         """Same seed gives same result."""
         fit = _strength_cost_fit()
-        c_src = np.array([0, 1], dtype=np.int64)
-        c_tgt = np.array([1, 0], dtype=np.int64)
-        c_val = np.array([1.0, 2.0])
-        a = sample_strength_cost_geometric(fit, c_src, c_tgt, c_val, seed=99)
-        b = sample_strength_cost_geometric(fit, c_src, c_tgt, c_val, seed=99)
+        coord_x = np.array([0.0, 1.0])
+        coord_y = np.array([0.0, 0.0])
+        a = sample_strength_cost_geometric(fit, coord_x, coord_y, seed=99)
+        b = sample_strength_cost_geometric(fit, coord_x, coord_y, seed=99)
         np.testing.assert_array_equal(a.weight, b.weight)
 
 
@@ -206,24 +204,22 @@ class TestStrengthCostNegativeBinomial:
     def test_produces_edges(self) -> None:
         """Sampler returns a valid EdgeTable."""
         fit = _strength_cost_fit()
-        c_src = np.array([0, 1], dtype=np.int64)
-        c_tgt = np.array([1, 0], dtype=np.int64)
-        c_val = np.array([1.0, 2.0])
+        coord_x = np.array([0.0, 1.0])
+        coord_y = np.array([0.0, 0.0])
         sample = sample_strength_cost_negative_binomial(
-            fit, c_src, c_tgt, c_val, layers=3, seed=42
+            fit, coord_x, coord_y, layers=3, seed=42
         )
         assert sample.num_edges >= 0
 
     def test_seeded_reproducibility(self) -> None:
         """Same seed gives same result."""
         fit = _strength_cost_fit()
-        c_src = np.array([0, 1], dtype=np.int64)
-        c_tgt = np.array([1, 0], dtype=np.int64)
-        c_val = np.array([1.0, 2.0])
+        coord_x = np.array([0.0, 1.0])
+        coord_y = np.array([0.0, 0.0])
         a = sample_strength_cost_negative_binomial(
-            fit, c_src, c_tgt, c_val, layers=3, seed=99
+            fit, coord_x, coord_y, layers=3, seed=99
         )
         b = sample_strength_cost_negative_binomial(
-            fit, c_src, c_tgt, c_val, layers=3, seed=99
+            fit, coord_x, coord_y, layers=3, seed=99
         )
         np.testing.assert_array_equal(a.weight, b.weight)

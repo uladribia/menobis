@@ -39,23 +39,20 @@ def _as_int_list(values: NDArray[np.integer]) -> list[int]:
 
 def sample_strength_cost_poisson(
     fit: StrengthCostFit,
-    cost_sources: NDArray[np.integer],
-    cost_targets: NDArray[np.integer],
-    cost_values: NDArray[np.floating],
+    coord_x: NDArray[np.floating],
+    coord_y: NDArray[np.floating],
     *,
     seed: int = 0,
 ) -> EdgeTable:
-    """Sample from the strength-cost ME model: E[t_ij] = x_i y_j exp(-gamma d_ij)."""
-    c_src = np.asarray(cost_sources, dtype=np.int64)
-    c_tgt = np.asarray(cost_targets, dtype=np.int64)
-    c_val = np.asarray(cost_values, dtype=np.float64)
-    sources, targets, weights = _menobis.sample_strength_cost_poisson(
+    """Sample from the strength-cost ME model using Euclidean coordinate costs."""
+    x_coord = np.asarray(coord_x, dtype=np.float64)
+    y_coord = np.asarray(coord_y, dtype=np.float64)
+    sources, targets, weights = _menobis.sample_strength_cost_poisson_coordinates(
         fit.x.tolist(),
         fit.y.tolist(),
         fit.gamma,
-        c_src.tolist(),
-        c_tgt.tolist(),
-        c_val.tolist(),
+        x_coord.tolist(),
+        y_coord.tolist(),
         fit.self_loops,
         seed,
     )
@@ -241,21 +238,19 @@ def sample_strength_negative_binomial(
 
 def sample_strength_cost_binomial(
     fit: "StrengthCostFit",
-    cost_sources: NDArray[np.uint64],
-    cost_targets: NDArray[np.uint64],
-    cost_values: NDArray[np.float64],
+    coord_x: NDArray[np.floating],
+    coord_y: NDArray[np.floating],
     *,
     layers: int = 1,
     seed: int = 0,
 ) -> EdgeTable:
-    """Sample strength-cost binomial: Bin(M, p) with cost-modulated rates."""
-    sources, targets, weights = _menobis.sample_strength_cost_binomial(
+    """Sample strength-cost binomial using Euclidean coordinate costs."""
+    sources, targets, weights = _menobis.sample_strength_cost_binomial_coordinates(
         fit.x.tolist(),
         fit.y.tolist(),
         fit.gamma,
-        cost_sources.tolist(),
-        cost_targets.tolist(),
-        cost_values.tolist(),
+        np.asarray(coord_x, dtype=np.float64).tolist(),
+        np.asarray(coord_y, dtype=np.float64).tolist(),
         layers,
         fit.self_loops,
         seed,
@@ -265,23 +260,18 @@ def sample_strength_cost_binomial(
 
 def sample_strength_cost_geometric(
     fit: "StrengthCostFit",
-    cost_sources: NDArray[np.integer],
-    cost_targets: NDArray[np.integer],
-    cost_values: NDArray[np.floating],
+    coord_x: NDArray[np.floating],
+    coord_y: NDArray[np.floating],
     *,
     seed: int = 0,
 ) -> EdgeTable:
-    """Sample strength-cost geometric: Geometric with cost-modulated rates."""
-    c_src = np.asarray(cost_sources, dtype=np.int64)
-    c_tgt = np.asarray(cost_targets, dtype=np.int64)
-    c_val = np.asarray(cost_values, dtype=np.float64)
-    sources, targets, weights = _menobis.sample_strength_cost_geometric(
+    """Sample strength-cost geometric using Euclidean coordinate costs."""
+    sources, targets, weights = _menobis.sample_strength_cost_geometric_coordinates(
         fit.x.tolist(),
         fit.y.tolist(),
         fit.gamma,
-        c_src.tolist(),
-        c_tgt.tolist(),
-        c_val.tolist(),
+        np.asarray(coord_x, dtype=np.float64).tolist(),
+        np.asarray(coord_y, dtype=np.float64).tolist(),
         fit.self_loops,
         seed,
     )
@@ -290,27 +280,24 @@ def sample_strength_cost_geometric(
 
 def sample_strength_cost_negative_binomial(
     fit: "StrengthCostFit",
-    cost_sources: NDArray[np.integer],
-    cost_targets: NDArray[np.integer],
-    cost_values: NDArray[np.floating],
+    coord_x: NDArray[np.floating],
+    coord_y: NDArray[np.floating],
     *,
     layers: int = 1,
     seed: int = 0,
 ) -> EdgeTable:
-    """Sample strength-cost negative binomial with cost-modulated rates."""
-    c_src = np.asarray(cost_sources, dtype=np.int64)
-    c_tgt = np.asarray(cost_targets, dtype=np.int64)
-    c_val = np.asarray(cost_values, dtype=np.float64)
-    sources, targets, weights = _menobis.sample_strength_cost_negative_binomial(
-        fit.x.tolist(),
-        fit.y.tolist(),
-        fit.gamma,
-        c_src.tolist(),
-        c_tgt.tolist(),
-        c_val.tolist(),
-        layers,
-        fit.self_loops,
-        seed,
+    """Sample strength-cost negative binomial using Euclidean coordinate costs."""
+    sources, targets, weights = (
+        _menobis.sample_strength_cost_negative_binomial_coordinates(
+            fit.x.tolist(),
+            fit.y.tolist(),
+            fit.gamma,
+            np.asarray(coord_x, dtype=np.float64).tolist(),
+            np.asarray(coord_y, dtype=np.float64).tolist(),
+            layers,
+            fit.self_loops,
+            seed,
+        )
     )
     return _edge_table_from_lists(sources, targets, weights)
 

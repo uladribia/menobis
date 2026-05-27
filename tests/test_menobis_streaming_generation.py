@@ -49,9 +49,8 @@ def test_strength_cost_generation_scales_to_1000_nodes() -> None:
 
     sample = sample_strength_cost_poisson(
         fit,
-        np.array([], dtype=np.uint64),
-        np.array([], dtype=np.uint64),
-        np.array([], dtype=np.float64),
+        np.linspace(0.0, 1.0, n, dtype=np.float64),
+        np.zeros(n, dtype=np.float64),
         seed=123,
     )
 

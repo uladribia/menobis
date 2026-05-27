@@ -271,59 +271,6 @@ def fit_partial_strength_edges_poisson(
     )
 
 
-def fit_partial_strength_cost_poisson(
-    strength_out: NDArray[np.floating],
-    strength_in: NDArray[np.floating],
-    known_source: NDArray[np.integer],
-    known_target: NDArray[np.integer],
-    known_rate: NDArray[np.floating],
-    cost_sources: NDArray[np.integer],
-    cost_targets: NDArray[np.integer],
-    cost_values: NDArray[np.floating],
-    target_cost: float,
-    *,
-    self_loops: bool = True,
-    tolerance: float = 1e-6,
-    max_iterations: int = 5000,
-) -> PartialFitResult:
-    """Fit fixed-strength + fixed-cost ME with some p_ij pairs known."""
-    s_out = np.asarray(strength_out, dtype=np.float64)
-    s_in = np.asarray(strength_in, dtype=np.float64)
-    k_src = np.asarray(known_source, dtype=np.uint64)
-    k_tgt = np.asarray(known_target, dtype=np.uint64)
-    k_rate = np.asarray(known_rate, dtype=np.float64)
-    c_src = np.asarray(cost_sources, dtype=np.int64)
-    c_tgt = np.asarray(cost_targets, dtype=np.int64)
-    c_val = np.asarray(cost_values, dtype=np.float64)
-
-    sources, targets, rates, converged, iters = (
-        _menobis.fit_partial_strength_cost_poisson_full(
-            s_out.tolist(),
-            s_in.tolist(),
-            k_src.tolist(),
-            k_tgt.tolist(),
-            k_rate.tolist(),
-            c_src.tolist(),
-            c_tgt.tolist(),
-            c_val.tolist(),
-            target_cost,
-            self_loops,
-            tolerance,
-            max_iterations,
-        )
-    )
-    return _to_partial_result(
-        "fit_partial_strength_cost_poisson",
-        sources,
-        targets,
-        rates,
-        converged,
-        iters,
-        constraint="strength_cost",
-        self_loops=self_loops,
-    )
-
-
 def fit_partial_strength_cost_poisson_coordinates(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
@@ -572,9 +519,8 @@ def fit_from_network_cutoff(
     model: str = "strength",
     *,
     self_loops: bool = True,
-    cost_sources: NDArray[np.integer] | None = None,
-    cost_targets: NDArray[np.integer] | None = None,
-    cost_values: NDArray[np.floating] | None = None,
+    x: NDArray[np.floating] | None = None,
+    y: NDArray[np.floating] | None = None,
     target_cost: float | None = None,
     tolerance: float = 1e-8,
     max_iterations: int = 10000,
@@ -635,33 +581,31 @@ def fit_from_network_cutoff(
             max_iterations=max_iterations,
         )
     if model == "strength-cost":
-        if cost_sources is None or cost_targets is None or cost_values is None:
-            msg = "strength-cost requires cost_sources, cost_targets, cost_values"
+        if x is None or y is None:
+            msg = "strength-cost requires projected coordinate arrays x and y"
             raise ValueError(msg)
+        coord_x = np.asarray(x, dtype=np.float64)
+        coord_y = np.asarray(y, dtype=np.float64)
         if target_cost is None:
-            cost_map: dict[tuple[int, int], float] = {}
-            for cs, ct, cv in zip(
-                np.asarray(cost_sources),
-                np.asarray(cost_targets),
-                np.asarray(cost_values),
-                strict=True,
-            ):
-                cost_map[(int(cs), int(ct))] = float(cv)
-            target_cost = sum(
-                float(w) * cost_map.get((int(sv), int(tv)), 0.0)
-                for sv, tv, w in zip(
-                    edges.source, edges.target, edges.weight, strict=True
+            target_cost = float(
+                np.sum(
+                    edges.weight.astype(np.float64)
+                    * np.hypot(
+                        coord_x[edges.source.astype(np.int64)]
+                        - coord_x[edges.target.astype(np.int64)],
+                        coord_y[edges.source.astype(np.int64)]
+                        - coord_y[edges.target.astype(np.int64)],
+                    )
                 )
             )
-        return fit_partial_strength_cost_poisson(
+        return fit_partial_strength_cost_poisson_coordinates(
             s.out.astype(np.float64),
             s.incoming.astype(np.float64),
             known_source,
             known_target,
             known_rate,
-            cost_sources,
-            cost_targets,
-            cost_values,
+            coord_x,
+            coord_y,
             target_cost,
             self_loops=self_loops,
             tolerance=tolerance,
@@ -682,7 +626,6 @@ __all__ = [
     "fit_partial_strength_cost_binomial_coordinates",
     "fit_partial_strength_cost_geometric_coordinates",
     "fit_partial_strength_cost_negative_binomial_coordinates",
-    "fit_partial_strength_cost_poisson",
     "fit_partial_strength_cost_poisson_coordinates",
     "fit_partial_strength_degree_poisson",
     "fit_partial_strength_edges_poisson",

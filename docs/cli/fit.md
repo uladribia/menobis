@@ -27,7 +27,7 @@ menobis fit strength-poisson edges.csv --json
 menobis fit strength-poisson edges.csv --output fit.csv
 menobis fit strength-geometric edges.csv --json
 menobis fit strength-negative-binomial edges.csv --layers 3 --output fit.csv
-menobis fit strength-cost-poisson edges.csv --costs costs.csv --target-cost 120.0
+menobis fit strength-cost-poisson edges.csv --coordinates xy.csv --target-cost 120.0
 menobis fit strength-edges-poisson edges.csv --target-edges 500
 menobis fit strength-degree-poisson edges.csv --output fit.csv
 menobis fit degree-bernoulli edges.csv --json
@@ -46,4 +46,4 @@ menobis fit degree-bernoulli edges.csv --json
 | `--tolerance` | Solver tolerance |
 | `--max-iterations` | Solver iteration cap |
 | `--target-cost` | Target $C$ (strength-cost) |
-| `--costs` | Cost CSV path (strength-cost) |
+| `--coordinates` | Projected XY coordinate CSV path (strength-cost) |
