@@ -37,7 +37,38 @@ Pipeline: PA geographic generate → fit → ensemble sample-check → null-filt
         2. Generate networks: use the sampling CLI, after having fitted the model.
         3. Assess statistical relevance of high order network features: Use the sampling CLI to generate null models and ensemble the expectations. You might need to impemnet the magnitude you are interested in on the analysis package (or connect with existing packages like networkx or rustworkx).
 9. Publish MkDocs site with updated docs.
-10. **Draft TODO.md** — Consolidate all detected issues into a single prioritized
+10. **Investigate strength-edges and strength-degree solver performance** —
+    The benchmark CLI now supports all constraint types (`strength`, `strength-cost`,
+    `strength-edges`, `strength-degree`) for all families (ME, B, W). However initial
+    runs reveal severe performance/convergence issues that must be diagnosed:
+
+    **Strength-edges (total binary edges constraint):**
+    - ME: Very slow even at N=100 with `self_loops=False` (~1.8s for N=100).
+      At N=1000 it does not complete in reasonable time. The zero-inflated
+      Poisson coupled solver (IPF + lambda search) needs profiling.
+    - B: Known slow at N≥300 (~30s). Zero-inflated binomial IPF needs acceleration.
+    - W: Status unknown — needs benchmarking.
+
+    **Strength-degree (full degree sequence constraint):**
+    - ME: Does not complete at N=50 within 60s with `self_loops=True`.
+      The coupled zero-inflated Poisson strength-degree solver appears to have
+      convergence issues or extremely slow per-iteration cost.
+    - B: Known non-convergent at N≥300.
+    - W: Status unknown — needs benchmarking.
+
+    **Action items:**
+    1. Profile the ME strength-edges solver at N=100 to identify the bottleneck
+       (is it iteration count, per-iteration cost, or lambda line search?).
+    2. Profile the ME strength-degree solver at N=50 — same questions.
+    3. Check if the Rust implementation uses dense N×N operations where sparse
+       would suffice (the mask is only diagonal exclusion for no-self-loops).
+    4. Consider adaptive damping, Anderson acceleration, or SQUAREM for the
+       coupled IPF loops.
+    5. Benchmark W strength-edges and W strength-degree to complete the picture.
+    6. Document acceptable N ranges per family×constraint in `docs/decisions/`.
+    7. Add timeout guards to the benchmark CLI to avoid hanging.
+
+11. **Draft TODO.md** — Consolidate all detected issues into a single prioritized
     TODO list for future improvements. Erase the audit docs and merge their
     content into the TODO. Known issues to include:
     - W strength-cost `self_loops=False` very slow at N≥500 (~500s). Newton

@@ -23,6 +23,12 @@ from menobis.filtering import (
     filter_strength_cost_binomial,
     filter_strength_cost_geometric,
     filter_strength_cost_poisson,
+    filter_strength_degree_binomial,
+    filter_strength_degree_geometric,
+    filter_strength_degree_poisson,
+    filter_strength_edges_binomial,
+    filter_strength_edges_geometric,
+    filter_strength_edges_poisson,
     filter_strength_geometric,
     filter_strength_poisson,
 )
@@ -31,12 +37,24 @@ from menobis.models import (
     fit_strength_cost_binomial,
     fit_strength_cost_geometric,
     fit_strength_cost_poisson,
+    fit_strength_degree_binomial,
+    fit_strength_degree_geometric,
+    fit_strength_degree_poisson,
+    fit_strength_edges_binomial,
+    fit_strength_edges_geometric,
+    fit_strength_edges_poisson,
     fit_strength_geometric,
     fit_strength_poisson,
     sample_strength_binomial,
     sample_strength_cost_binomial,
     sample_strength_cost_geometric,
     sample_strength_cost_poisson,
+    sample_strength_degree_binomial,
+    sample_strength_degree_geometric,
+    sample_strength_degree_poisson,
+    sample_strength_edges_binomial,
+    sample_strength_edges_geometric,
+    sample_strength_edges_poisson,
     sample_strength_geometric,
     sample_strength_poisson,
 )
@@ -50,7 +68,7 @@ app = typer.Typer(help="Modern MENoBiS PA-geographic E2E benchmarks.")
 Family = Literal["me", "b", "w"]
 Constraint = Literal["strength", "strength-cost"]
 FAMILIES: tuple[str, ...] = ("me", "b", "w")
-CONSTRAINTS: tuple[str, ...] = ("strength", "strength-cost")
+CONSTRAINTS: tuple[str, ...] = ("strength", "strength-cost", "strength-edges", "strength-degree")
 
 
 @dataclass(frozen=True)
@@ -78,8 +96,8 @@ def all_command(
     ] = "me,b,w",
     constraints: Annotated[
         str,
-        typer.Option("--constraints", help="Comma-separated constraints: strength,strength-cost."),
-    ] = "strength,strength-cost",
+        typer.Option("--constraints", help="Comma-separated constraints: strength,strength-cost,strength-edges,strength-degree."),
+    ] = "strength,strength-cost,strength-edges,strength-degree",
     seed: Annotated[int, typer.Option("--seed", help="Base random seed.")] = 10_000,
     average_degree: Annotated[
         float, typer.Option("--average-degree", help="Mean synthetic support out-degree.")
@@ -229,6 +247,10 @@ def _fit_case(family: str, constraint: str, network, constraints_data) -> tuple[
             fit = _fit_strength(family, constraints_data, network.self_loops)
         elif constraint == "strength-cost":
             fit = _fit_strength_cost(family, network, constraints_data)
+        elif constraint == "strength-edges":
+            fit = _fit_strength_edges(family, constraints_data, network.self_loops)
+        elif constraint == "strength-degree":
+            fit = _fit_strength_degree(family, constraints_data, network.self_loops)
         else:
             raise ValueError(f"unknown constraint: {constraint}")
     except Exception as exc:  # pragma: no cover - benchmark diagnostics
@@ -293,6 +315,57 @@ def _fit_strength_cost(family: str, network, constraints_data) -> object:
     )
 
 
+def _fit_strength_edges(family: str, constraints_data, self_loops: bool) -> object:
+    if family == "me":
+        return fit_strength_edges_poisson(
+            constraints_data.strength_out,
+            constraints_data.strength_in,
+            constraints_data.total_edges,
+            self_loops=self_loops,
+        )
+    if family == "b":
+        return fit_strength_edges_binomial(
+            constraints_data.strength_out,
+            constraints_data.strength_in,
+            constraints_data.total_edges,
+            layers=constraints_data.binomial_layers,
+            self_loops=self_loops,
+        )
+    return fit_strength_edges_geometric(
+        constraints_data.strength_out,
+        constraints_data.strength_in,
+        constraints_data.total_edges,
+        self_loops=self_loops,
+    )
+
+
+def _fit_strength_degree(family: str, constraints_data, self_loops: bool) -> object:
+    if family == "me":
+        return fit_strength_degree_poisson(
+            constraints_data.strength_out,
+            constraints_data.strength_in,
+            constraints_data.degree_out,
+            constraints_data.degree_in,
+            self_loops=self_loops,
+        )
+    if family == "b":
+        return fit_strength_degree_binomial(
+            constraints_data.strength_out,
+            constraints_data.strength_in,
+            constraints_data.degree_out,
+            constraints_data.degree_in,
+            layers=constraints_data.binomial_layers,
+            self_loops=self_loops,
+        )
+    return fit_strength_degree_geometric(
+        constraints_data.strength_out,
+        constraints_data.strength_in,
+        constraints_data.degree_out,
+        constraints_data.degree_in,
+        self_loops=self_loops,
+    )
+
+
 def _sample_case(family: str, constraint: str, fit: object, network, constraints_data, seed: int) -> tuple[EdgeTable | None, BenchmarkRow]:
     start = time.perf_counter()
     sample = None
@@ -334,13 +407,26 @@ def _sample(family: str, constraint: str, fit: object, network, constraints_data
                 fit.x, fit.y, layers=constraints_data.binomial_layers, self_loops=fit.self_loops, seed=seed
             )
         return sample_strength_geometric(fit.x, fit.y, self_loops=fit.self_loops, seed=seed)
+    if constraint == "strength-cost":
+        if family == "me":
+            return sample_strength_cost_poisson(fit, network.x, network.y, seed=seed)
+        if family == "b":
+            return sample_strength_cost_binomial(
+                fit, network.x, network.y, layers=constraints_data.binomial_layers, seed=seed
+            )
+        return sample_strength_cost_geometric(fit, network.x, network.y, seed=seed)
+    if constraint == "strength-edges":
+        if family == "me":
+            return sample_strength_edges_poisson(fit, seed=seed)
+        if family == "b":
+            return sample_strength_edges_binomial(fit, layers=constraints_data.binomial_layers, seed=seed)
+        return sample_strength_edges_geometric(fit, seed=seed)
+    # strength-degree
     if family == "me":
-        return sample_strength_cost_poisson(fit, network.x, network.y, seed=seed)
+        return sample_strength_degree_poisson(fit, seed=seed)
     if family == "b":
-        return sample_strength_cost_binomial(
-            fit, network.x, network.y, layers=constraints_data.binomial_layers, seed=seed
-        )
-    return sample_strength_cost_geometric(fit, network.x, network.y, seed=seed)
+        return sample_strength_degree_binomial(fit, layers=constraints_data.binomial_layers, seed=seed)
+    return sample_strength_degree_geometric(fit, seed=seed)
 
 
 def _filter_fpr_case(
@@ -392,13 +478,30 @@ def _filter(family: str, constraint: str, sample: EdgeTable, fit: object, networ
                 sample, fit, layers=constraints_data.binomial_layers, alpha=alpha, tail="upper"
             )
         return filter_strength_geometric(sample, fit, alpha=alpha, tail="upper")
+    if constraint == "strength-cost":
+        if family == "me":
+            return filter_strength_cost_poisson(sample, fit, network.x, network.y, alpha=alpha, tail="upper")
+        if family == "b":
+            return filter_strength_cost_binomial(
+                sample, fit, network.x, network.y, layers=constraints_data.binomial_layers, alpha=alpha, tail="upper"
+            )
+        return filter_strength_cost_geometric(sample, fit, network.x, network.y, alpha=alpha, tail="upper")
+    if constraint == "strength-edges":
+        if family == "me":
+            return filter_strength_edges_poisson(sample, fit, alpha=alpha, tail="upper")
+        if family == "b":
+            return filter_strength_edges_binomial(
+                sample, fit, layers=constraints_data.binomial_layers, alpha=alpha, tail="upper"
+            )
+        return filter_strength_edges_geometric(sample, fit, alpha=alpha, tail="upper")
+    # strength-degree
     if family == "me":
-        return filter_strength_cost_poisson(sample, fit, network.x, network.y, alpha=alpha, tail="upper")
+        return filter_strength_degree_poisson(sample, fit, alpha=alpha, tail="upper")
     if family == "b":
-        return filter_strength_cost_binomial(
-            sample, fit, network.x, network.y, layers=constraints_data.binomial_layers, alpha=alpha, tail="upper"
+        return filter_strength_degree_binomial(
+            sample, fit, layers=constraints_data.binomial_layers, alpha=alpha, tail="upper"
         )
-    return filter_strength_cost_geometric(sample, fit, network.x, network.y, alpha=alpha, tail="upper")
+    return filter_strength_degree_geometric(sample, fit, alpha=alpha, tail="upper")
 
 
 def _parse_ints(value: str) -> list[int]:
