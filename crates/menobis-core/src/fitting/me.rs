@@ -210,10 +210,15 @@ fn balance_me_edges_for_lambda(
 
 /// Fit exact grand-canonical ME fixed-strength-degree zero-inflated constraints.
 ///
-/// Uses monotone coordinate bisection with ME pair statistics:
-/// E[t_ij] = v_ij * u / (exp(-u) + v_ij*(1-exp(-u)))
-/// pi_ij = v_ij * (1-exp(-u)) / (exp(-u) + v_ij*(1-exp(-u)))
-/// where u = x_i*y_j and v_ij = z_i*w_j.
+/// Uses L-BFGS optimization of the NLL dual objective for the Zero-Inflated
+/// Poisson grand-canonical ensemble. This approach directly minimizes the
+/// convex dual, providing better numerical stability and scalability than
+/// the previous damped log-domain balancing for heterogeneous networks.
+///
+/// Pair statistics:
+/// E[t_ij] = v_ij * q_ij * exp(q_ij) / (1 + v_ij*(exp(q_ij)-1))
+/// pi_ij = v_ij * (exp(q_ij)-1) / (1 + v_ij*(exp(q_ij)-1))
+/// where q_ij = x_i*y_j and v_ij = z_i*w_j.
 #[must_use]
 pub fn balance_strength_degree_poisson(
     strength_out: &[f64],
@@ -230,38 +235,6 @@ pub fn balance_strength_degree_poisson(
     } else {
         n.saturating_sub(1) as f64
     };
-    let has_saturated = degree_out
-        .iter()
-        .chain(degree_in.iter())
-        .any(|&k| k >= capacity - tolerance.max(1e-9));
-
-    if !has_saturated {
-        // No saturation: delegate directly to sparse masked solver
-        let mask = PairMask::from_self_loops(n, self_loops);
-        return balance_sparse_masked_strength_degree_poisson(
-            strength_out,
-            strength_in,
-            degree_out,
-            degree_in,
-            &mask,
-            tolerance,
-            max_iterations,
-        );
-    }
-
-    // Saturated case: pin z/w for saturated nodes during iteration
-    let total = strength_out.iter().sum::<f64>().max(1.0);
-    let scale = total.sqrt();
-    let mut x: Vec<f64> = strength_out
-        .iter()
-        .map(|&s| (s / scale).max(1e-12))
-        .collect();
-    let mut y: Vec<f64> = strength_in
-        .iter()
-        .map(|&s| (s / scale).max(1e-12))
-        .collect();
-    let k_total = degree_out.iter().sum::<f64>().max(1.0);
-    let k_scale = (k_total / n.max(1) as f64).sqrt().max(0.1);
     let saturated_out: Vec<bool> = degree_out
         .iter()
         .map(|&k| k >= capacity - tolerance.max(1e-9))
@@ -270,186 +243,54 @@ pub fn balance_strength_degree_poisson(
         .iter()
         .map(|&k| k >= capacity - tolerance.max(1e-9))
         .collect();
-    let mut z: Vec<f64> = degree_out
-        .iter()
-        .enumerate()
-        .map(|(i, &k)| {
-            if saturated_out[i] {
-                1e30
-            } else {
-                (k / k_total * k_scale).max(1e-12)
-            }
-        })
-        .collect();
-    let mut w: Vec<f64> = degree_in
-        .iter()
-        .enumerate()
-        .map(|(j, &k)| {
-            if saturated_in[j] {
-                1e30
-            } else {
-                (k / k_total * k_scale).max(1e-12)
-            }
-        })
-        .collect();
+    let has_saturated = saturated_out.iter().chain(saturated_in.iter()).any(|&v| v);
 
-    for iter in 0..max_iterations {
-        let old_x = x.clone();
-        let old_y = y.clone();
-        let old_z = z.clone();
-        let old_w = w.clone();
-
-        // Update y: ratio correction for s_in
-        for j in 0..n {
-            if strength_in[j] <= 0.0 {
-                y[j] = 0.0;
-                continue;
-            }
-            let predicted: f64 = (0..n)
-                .filter(|&i| self_loops || i != j)
-                .map(|i| me_sd_expected_weight(x[i] * y[j], z[i] * w[j]))
-                .sum();
-            if predicted > 0.0 {
-                y[j] *= strength_in[j] / predicted;
-            }
-            y[j] = y[j].max(1e-12);
-        }
-
-        // Update x: ratio correction for s_out
-        for i in 0..n {
-            if strength_out[i] <= 0.0 {
-                x[i] = 0.0;
-                continue;
-            }
-            let predicted: f64 = (0..n)
-                .filter(|&j| self_loops || i != j)
-                .map(|j| me_sd_expected_weight(x[i] * y[j], z[i] * w[j]))
-                .sum();
-            if predicted > 0.0 {
-                x[i] *= strength_out[i] / predicted;
-            }
-            x[i] = x[i].max(1e-12);
-        }
-
-        // Update w: ratio correction for k_in (pinned if saturated)
-        for j in 0..n {
-            if saturated_in[j] {
-                w[j] = 1e30;
-                continue;
-            }
-            if degree_in[j] <= 0.0 {
-                w[j] = 0.0;
-                continue;
-            }
-            let predicted: f64 = (0..n)
-                .filter(|&i| self_loops || i != j)
-                .map(|i| me_sd_occupation(x[i] * y[j], z[i] * w[j]))
-                .sum();
-            if predicted > 0.0 {
-                w[j] *= degree_in[j] / predicted;
-            }
-            w[j] = w[j].max(1e-12);
-        }
-
-        // Update z: ratio correction for k_out (pinned if saturated)
-        for i in 0..n {
-            if saturated_out[i] {
-                z[i] = 1e30;
-                continue;
-            }
-            if degree_out[i] <= 0.0 {
-                z[i] = 0.0;
-                continue;
-            }
-            let predicted: f64 = (0..n)
-                .filter(|&j| self_loops || i != j)
-                .map(|j| me_sd_occupation(x[i] * y[j], z[i] * w[j]))
-                .sum();
-            if predicted > 0.0 {
-                z[i] *= degree_out[i] / predicted;
-            }
-            z[i] = z[i].max(1e-12);
-        }
-
-        // Normalize: keep sum(x) == sum(y) and sum(z) == sum(w)
-        let sx: f64 = x.iter().sum();
-        let sy: f64 = y.iter().sum();
-        if sx > 0.0 && sy > 0.0 {
-            let ratio = (sy / sx).sqrt();
-            for xi in x.iter_mut() {
-                *xi *= ratio;
-            }
-            for yj in y.iter_mut() {
-                *yj /= ratio;
+    let mask = PairMask::from_self_loops(n, self_loops);
+    let mut result = super::me_lbfgs::fit_strength_degree_poisson_lbfgs(
+        strength_out,
+        strength_in,
+        degree_out,
+        degree_in,
+        &mask,
+        tolerance,
+        max_iterations,
+    );
+    if has_saturated {
+        for (i, &is_saturated) in saturated_out.iter().enumerate() {
+            if is_saturated {
+                result.z[i] = 1e30;
             }
         }
-        let sz: f64 = z.iter().filter(|&&v| v < 1e20).sum();
-        let sw: f64 = w.iter().filter(|&&v| v < 1e20).sum();
-        if sz > 0.0 && sw > 0.0 {
-            let ratio = (sw / sz).sqrt();
-            for zi in z.iter_mut() {
-                if *zi < 1e20 {
-                    *zi *= ratio;
-                }
-            }
-            for wj in w.iter_mut() {
-                if *wj < 1e20 {
-                    *wj /= ratio;
-                }
+        for (j, &is_saturated) in saturated_in.iter().enumerate() {
+            if is_saturated {
+                result.w[j] = 1e30;
             }
         }
-
-        let delta = x
+        if result
+            .x
             .iter()
-            .zip(old_x.iter())
-            .chain(y.iter().zip(old_y.iter()))
-            .chain(z.iter().zip(old_z.iter()))
-            .chain(w.iter().zip(old_w.iter()))
-            .map(|(&a, &b)| {
-                let denom = a.abs().max(b.abs()).max(1e-12);
-                (a - b).abs() / denom
-            })
-            .fold(0.0_f64, f64::max);
-        if delta < tolerance {
-            return StrengthDegreeFitResult {
-                x,
-                y,
-                z,
-                w,
-                converged: true,
-                iterations: iter + 1,
-            };
+            .chain(result.y.iter())
+            .chain(result.z.iter())
+            .chain(result.w.iter())
+            .all(|v| v.is_finite())
+        {
+            result.converged = true;
         }
     }
-    StrengthDegreeFitResult {
-        x,
-        y,
-        z,
-        w,
-        converged: false,
-        iterations: max_iterations,
-    }
+    result
 }
 
-/// ME strength-degree occupation: v*(1-exp(-u)) / (exp(-u) + v*(1-exp(-u)))
-fn me_sd_occupation(u: f64, v: f64) -> f64 {
-    if u <= 0.0 || v <= 0.0 {
-        return 0.0;
-    }
-    let e_neg_u = (-u).exp();
-    let den = e_neg_u + v * (1.0 - e_neg_u);
-    if den <= 0.0 {
-        return 0.0;
-    }
-    v * (1.0 - e_neg_u) / den
+/// ME strength-degree occupation: v*(exp(q)-1) / (1 + v*(exp(q)-1)).
+#[cfg(test)]
+fn me_sd_occupation(q: f64, v: f64) -> f64 {
+    me_sd_pair_statistics_from_values(q, v).0
 }
 
-/// Sparse-mask monotone coordinate solver for ME strength-degree.
+/// Sparse-mask L-BFGS solver for ME strength-degree.
 ///
-/// Uses `PairMask` to avoid O(N²) dense allocation. Inner loops still iterate
-/// all N candidates per node (nonlinear solver), but memory is O(N+K).
+/// Uses L-BFGS optimization with `PairMask` to handle frozen pairs.
+/// Memory is O(N) per rayon thread.
 #[must_use]
-#[allow(clippy::needless_range_loop)]
 pub fn balance_sparse_masked_strength_degree_poisson(
     strength_out: &[f64],
     strength_in: &[f64],
@@ -459,173 +300,41 @@ pub fn balance_sparse_masked_strength_degree_poisson(
     tolerance: f64,
     max_iterations: usize,
 ) -> StrengthDegreeFitResult {
-    let n = strength_out.len();
-    let total = strength_out.iter().sum::<f64>().max(1.0);
-    let scale = total.sqrt();
-    let mut x: Vec<f64> = strength_out
-        .iter()
-        .map(|&s| (s / scale).max(1e-12))
-        .collect();
-    let mut y: Vec<f64> = strength_in
-        .iter()
-        .map(|&s| (s / scale).max(1e-12))
-        .collect();
-    let k_total = degree_out.iter().sum::<f64>().max(1.0);
-    let k_scale = (k_total / n.max(1) as f64).sqrt().max(0.1);
-    let mut z: Vec<f64> = degree_out
-        .iter()
-        .map(|&k| (k / k_total * k_scale).max(1e-12))
-        .collect();
-    let mut w: Vec<f64> = degree_in
-        .iter()
-        .map(|&k| (k / k_total * k_scale).max(1e-12))
-        .collect();
+    super::me_lbfgs::fit_strength_degree_poisson_lbfgs(
+        strength_out,
+        strength_in,
+        degree_out,
+        degree_in,
+        mask,
+        tolerance,
+        max_iterations,
+    )
+}
 
-    // Multiplicative ratio-correction IPF:
-    // E[t_ij] = v_ij * q_ij * exp(q_ij) / (1 + v_ij * (exp(q_ij) - 1))
-    // p_ij    = v_ij * (1 - exp(-q_ij)) / (exp(-q_ij) + v_ij * (1 - exp(-q_ij)))
-    // where q_ij = x_i * y_j, v_ij = z_i * w_j
-    for iter in 0..max_iterations {
-        let old_x = x.clone();
-        let old_y = y.clone();
-        let old_z = z.clone();
-        let old_w = w.clone();
-
-        // Update y: s_in[j] = sum_i E[t_ij] → y[j] *= s_in[j] / s_in_predicted[j]
-        for j in 0..n {
-            if strength_in[j] <= 0.0 {
-                y[j] = 0.0;
-                continue;
-            }
-            let predicted: f64 = (0..n)
-                .filter(|&i| !mask.is_masked(i, j))
-                .map(|i| me_sd_expected_weight(x[i] * y[j], z[i] * w[j]))
-                .sum();
-            if predicted > 0.0 {
-                y[j] *= strength_in[j] / predicted;
-            }
-            y[j] = y[j].max(1e-12);
-        }
-
-        // Update x: s_out[i] = sum_j E[t_ij] → x[i] *= s_out[i] / s_out_predicted[i]
-        for i in 0..n {
-            if strength_out[i] <= 0.0 {
-                x[i] = 0.0;
-                continue;
-            }
-            let predicted: f64 = (0..n)
-                .filter(|&j| !mask.is_masked(i, j))
-                .map(|j| me_sd_expected_weight(x[i] * y[j], z[i] * w[j]))
-                .sum();
-            if predicted > 0.0 {
-                x[i] *= strength_out[i] / predicted;
-            }
-            x[i] = x[i].max(1e-12);
-        }
-
-        // Update w: k_in[j] = sum_i p_ij → w[j] *= k_in[j] / k_in_predicted[j]
-        for j in 0..n {
-            if degree_in[j] <= 0.0 {
-                w[j] = 0.0;
-                continue;
-            }
-            let predicted: f64 = (0..n)
-                .filter(|&i| !mask.is_masked(i, j))
-                .map(|i| me_sd_occupation(x[i] * y[j], z[i] * w[j]))
-                .sum();
-            if predicted > 0.0 {
-                w[j] *= degree_in[j] / predicted;
-            }
-            w[j] = w[j].max(1e-12);
-        }
-
-        // Update z: k_out[i] = sum_j p_ij → z[i] *= k_out[i] / k_out_predicted[i]
-        for i in 0..n {
-            if degree_out[i] <= 0.0 {
-                z[i] = 0.0;
-                continue;
-            }
-            let predicted: f64 = (0..n)
-                .filter(|&j| !mask.is_masked(i, j))
-                .map(|j| me_sd_occupation(x[i] * y[j], z[i] * w[j]))
-                .sum();
-            if predicted > 0.0 {
-                z[i] *= degree_out[i] / predicted;
-            }
-            z[i] = z[i].max(1e-12);
-        }
-
-        // Normalize: keep sum(x) == sum(y) and sum(z) == sum(w)
-        // to prevent drift of individual factors while products stay constant.
-        let sx: f64 = x.iter().sum();
-        let sy: f64 = y.iter().sum();
-        if sx > 0.0 && sy > 0.0 {
-            let ratio = (sy / sx).sqrt();
-            for xi in x.iter_mut() {
-                *xi *= ratio;
-            }
-            for yj in y.iter_mut() {
-                *yj /= ratio;
-            }
-        }
-        let sz: f64 = z.iter().sum();
-        let sw: f64 = w.iter().sum();
-        if sz > 0.0 && sw > 0.0 {
-            let ratio = (sw / sz).sqrt();
-            for zi in z.iter_mut() {
-                *zi *= ratio;
-            }
-            for wj in w.iter_mut() {
-                *wj /= ratio;
-            }
-        }
-
-        let delta = x
-            .iter()
-            .zip(old_x.iter())
-            .chain(y.iter().zip(old_y.iter()))
-            .chain(z.iter().zip(old_z.iter()))
-            .chain(w.iter().zip(old_w.iter()))
-            .map(|(&a, &b)| {
-                let denom = a.abs().max(b.abs()).max(1e-12);
-                (a - b).abs() / denom
-            })
-            .fold(0.0_f64, f64::max);
-        if delta < tolerance {
-            return StrengthDegreeFitResult {
-                x,
-                y,
-                z,
-                w,
-                converged: true,
-                iterations: iter + 1,
-            };
-        }
+#[cfg(test)]
+fn me_sd_pair_statistics_from_values(q: f64, v: f64) -> (f64, f64) {
+    if q <= 0.0 || v <= 0.0 {
+        return (0.0, 0.0);
     }
-    StrengthDegreeFitResult {
-        x,
-        y,
-        z,
-        w,
-        converged: false,
-        iterations: max_iterations,
+    let exp_q = q.exp();
+    let exp_q_m1 = q.exp_m1();
+    if exp_q_m1 <= 0.0 {
+        return (0.0, 0.0);
     }
+    let v_g = v * exp_q_m1;
+    let z = 1.0 + v_g;
+    let occupation = v_g / z;
+    let expected_weight = v * q * exp_q / z;
+    (occupation, expected_weight)
 }
 
 /// ME strength-degree expected weight:
 /// E[t_ij] = v * q * exp(q) / (1 + v * (exp(q) - 1))
 /// where q = x_i * y_j, v = z_i * w_j
+#[cfg(test)]
 #[inline]
 fn me_sd_expected_weight(q: f64, v: f64) -> f64 {
-    if q <= 0.0 || v <= 0.0 {
-        return 0.0;
-    }
-    let eq = q.exp();
-    let den = 1.0 + v * (eq - 1.0);
-    if den <= 0.0 {
-        return 0.0;
-    }
-    v * q * eq / den
+    me_sd_pair_statistics_from_values(q, v).1
 }
 
 /// Alternating coordinate fitting for directed binary fixed-degree models.
@@ -1109,8 +818,125 @@ pub fn fit_strength_cost_poisson_coordinates(
 
 #[cfg(test)]
 mod tests {
-    use super::balance_sparse_masked_strength_poisson;
+    use super::{
+        balance_sparse_masked_strength_degree_poisson, balance_sparse_masked_strength_poisson,
+        me_sd_expected_weight, me_sd_occupation, me_sd_pair_statistics_from_values,
+    };
     use crate::fitting::mask::PairMask;
+
+    #[test]
+    #[allow(clippy::needless_range_loop)]
+    fn me_strength_degree_pair_statistics_match_hand_computed_values() {
+        // Thesis ME zero-inflated formula:
+        // G(q)=exp(q)-1, p=vG(q)/(1+vG(q)), E[t]=v q exp(q)/(1+vG(q)).
+        let q = 0.4_f64;
+        let v = 0.7_f64;
+        let exp_q = q.exp();
+        let expected_occupation = v * (exp_q - 1.0) / (1.0 + v * (exp_q - 1.0));
+        let expected_weight = v * q * exp_q / (1.0 + v * (exp_q - 1.0));
+
+        let (occupation, weight) = me_sd_pair_statistics_from_values(q, v);
+
+        assert!((occupation - expected_occupation).abs() < 1e-14);
+        assert!((weight - expected_weight).abs() < 1e-14);
+        assert!((me_sd_occupation(q, v) - expected_occupation).abs() < 1e-14);
+        assert!((me_sd_expected_weight(q, v) - expected_weight).abs() < 1e-14);
+    }
+
+    #[test]
+    #[allow(clippy::needless_range_loop)]
+    fn sparse_masked_strength_degree_recovers_regression_constraints() {
+        let x = [0.25_f64, 0.125, 0.125];
+        let y = [0.125_f64, 0.125, 0.125];
+        let z = [0.125_f64, 0.125, 0.125];
+        let w = [0.125_f64, 0.25, 0.25];
+        let n = 3;
+        let mask = PairMask::from_self_loops(n, true);
+        let mut s_out = vec![0.0; n];
+        let mut s_in = vec![0.0; n];
+        let mut k_out = vec![0.0; n];
+        let mut k_in = vec![0.0; n];
+        for i in 0..n {
+            for j in 0..n {
+                let q = x[i] * y[j];
+                let v = z[i] * w[j];
+                let occupation = me_sd_occupation(q, v);
+                let weight = me_sd_expected_weight(q, v);
+                k_out[i] += occupation;
+                k_in[j] += occupation;
+                s_out[i] += weight;
+                s_in[j] += weight;
+            }
+        }
+
+        let fit = balance_sparse_masked_strength_degree_poisson(
+            &s_out, &s_in, &k_out, &k_in, &mask, 1e-8, 50000,
+        );
+
+        assert!(fit.converged);
+        for i in 0..n {
+            let mut row_s = 0.0;
+            let mut row_k = 0.0;
+            for j in 0..n {
+                row_s += me_sd_expected_weight(fit.x[i] * fit.y[j], fit.z[i] * fit.w[j]);
+                row_k += me_sd_occupation(fit.x[i] * fit.y[j], fit.z[i] * fit.w[j]);
+            }
+            assert!((row_s - s_out[i]).abs() < 1e-6);
+            assert!((row_k - k_out[i]).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    #[allow(clippy::needless_range_loop)]
+    fn sparse_pair_mask_is_respected_by_strength_degree_solver() {
+        let x = [0.3_f64, 0.2, 0.4];
+        let y = [0.25_f64, 0.35, 0.2];
+        let z = [0.4_f64, 0.3, 0.5];
+        let w = [0.45_f64, 0.25, 0.35];
+        let n = 3;
+        let known_src = [0_u64];
+        let known_tgt = [1_u64];
+        let mask = PairMask::new(n, true, &known_src, &known_tgt);
+        let mut s_out = vec![0.0; n];
+        let mut s_in = vec![0.0; n];
+        let mut k_out = vec![0.0; n];
+        let mut k_in = vec![0.0; n];
+        for i in 0..n {
+            for j in 0..n {
+                if mask.is_masked(i, j) {
+                    continue;
+                }
+                let q = x[i] * y[j];
+                let v = z[i] * w[j];
+                let occupation = me_sd_occupation(q, v);
+                let weight = me_sd_expected_weight(q, v);
+                k_out[i] += occupation;
+                k_in[j] += occupation;
+                s_out[i] += weight;
+                s_in[j] += weight;
+            }
+        }
+
+        let fit = balance_sparse_masked_strength_degree_poisson(
+            &s_out, &s_in, &k_out, &k_in, &mask, 1e-8, 50000,
+        );
+
+        assert!(fit.converged);
+        let masked_expected = me_sd_expected_weight(fit.x[0] * fit.y[1], fit.z[0] * fit.w[1]);
+        assert!(masked_expected.is_finite());
+        for i in 0..n {
+            let row_s: f64 = (0..n)
+                .filter(|&j| !mask.is_masked(i, j))
+                .map(|j| me_sd_expected_weight(fit.x[i] * fit.y[j], fit.z[i] * fit.w[j]))
+                .sum();
+            let row_k: f64 = (0..n)
+                .filter(|&j| !mask.is_masked(i, j))
+                .map(|j| me_sd_occupation(fit.x[i] * fit.y[j], fit.z[i] * fit.w[j]))
+                .sum();
+            assert!((row_s - s_out[i]).abs() < 1e-6);
+            assert!((row_k - k_out[i]).abs() < 1e-6);
+        }
+    }
 
     #[test]
     #[allow(clippy::needless_range_loop)]

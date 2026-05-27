@@ -167,12 +167,6 @@ def sample_custom_multinomial(
     total_events: int,
     seed: int,
 ) -> tuple[list[int], list[int], list[int]]: ...
-def sample_strength_poisson_multinomial(
-    x: list[float],
-    y: list[float],
-    self_loops: bool,
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
 def sample_strength_edges_poisson(
     x: list[float],
     y: list[float],

@@ -58,20 +58,6 @@ pub(crate) fn sample_custom_multinomial(
 }
 
 #[pyfunction]
-pub(crate) fn sample_strength_poisson_multinomial(
-    x: Vec<f64>,
-    y: Vec<f64>,
-    self_loops: bool,
-    seed: u64,
-) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
-    if x.len() != y.len() {
-        return Err(PyValueError::new_err("x and y must have same length"));
-    }
-    let sample = core_sample_strength_poisson_multinomial(&x, &y, self_loops, seed);
-    Ok((sample.sources, sample.targets, sample.weights))
-}
-
-#[pyfunction]
 pub(crate) fn sample_strength_edges_poisson(
     x: Vec<f64>,
     y: Vec<f64>,

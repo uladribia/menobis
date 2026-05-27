@@ -10,7 +10,7 @@ use crate::pairs::{
 use rand::rngs::StdRng;
 use rand::Rng;
 use rand::SeedableRng;
-use rand_distr::{Binomial, Distribution, Poisson};
+use rand_distr::{Binomial, Distribution};
 use rayon::prelude::*;
 
 /// Sparse edge output from a generation run.
@@ -572,33 +572,6 @@ pub fn sample_strength_degree_poisson(
     )
 }
 
-/// Poisson-total multinomial sampling with node-factorized probabilities.
-#[must_use]
-pub fn sample_strength_poisson_multinomial(
-    x: &[f64],
-    y: &[f64],
-    self_loops: bool,
-    seed: u64,
-) -> SampledEdges {
-    let mut total_rate = 0.0;
-    for (i, &xi) in x.iter().enumerate() {
-        for (j, &yj) in y.iter().enumerate() {
-            if !self_loops && i == j {
-                continue;
-            }
-            total_rate += xi * yj;
-        }
-    }
-    if total_rate <= 0.0 {
-        return SampledEdges::default();
-    }
-    let mut rng = StdRng::seed_from_u64(seed);
-    let total_events = match Poisson::new(total_rate) {
-        Ok(dist) => dist.sample(&mut rng) as u64,
-        Err(_) => 0,
-    };
-    sample_strength_multinomial(x, y, total_events, self_loops, seed.wrapping_add(1))
-}
 
 /// Sample exact ME fixed-strength-and-edge-count zero-inflated model.
 #[must_use]
