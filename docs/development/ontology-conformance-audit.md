@@ -6,32 +6,39 @@ description: Code audit against the MENoBiS model ontology.
 
 ## TL;DR
 
-MENoBiS now has separate ME, B, and W fitting paths for the main fixed-strength,
-strength-cost, strength-edges, and strength-degree families. Remaining ontology
-gaps are unified routing and dense Rust masks in partial solvers.
+MENoBiS conforms to the thesis model ontology. ME, B, and W have separate
+fitting/sampling/filtering paths sharing common infrastructure. Cost handling
+uses projected coordinates only. Remaining gaps are solver performance at
+scale for W no-self-loop cases.
 
 ## Conforming building blocks
 
 | Area | Why it aligns |
 |---|---|
-| `crates/menobis-core/src/distribution.rs` | Implements zero-truncated Poisson, Binomial, Geometric, and Negative-Binomial expectations. |
-| `crates/menobis-core/src/pairs.rs` | Strength-edges and strength-degree providers use the required $G_F(q)$ partition factors for ME/B/W. |
-| Provider-backed generation/filtering | Reuses one Rust stream for sampling, p-values, and absent-edge scans. |
-| B fixed-strength/cost/edge/degree | Use B-specific expected-weight and zero-inflated kernels rather than ME relabeling. |
-| W fixed-strength/cost/edge/degree | Have separate W entry points and diagnostics. |
+| `crates/menobis-core/src/distribution.rs` | Implements Poisson, Binomial(M), Geometric, NegBin(M), and all zero-inflated variants with correct $G_F(q)$ partition factors. |
+| `crates/menobis-core/src/pairs.rs` | `PairCostProvider` trait with `EuclideanCostProvider`; strength-edges/degree providers use thesis $G_F(q)$ formulas. |
+| Provider-backed generation/filtering | One Rust stream for sampling, p-values, and absent-edge scans. |
+| Conditional filtering p-values | `P(X≥w|X>0)` for observed edges eliminates selection bias. |
+| B/W family-specific kernels | Each family has its own solver; no ME-relabeling. |
+| Unified Python routing | `fit_model(ensemble, family, constraint)` with `UnsupportedModelCaseError`. |
+| Coordinate-only costs | `EuclideanCostProvider` generates $d_{ij}$ on demand; no dense matrices. |
+| Partial fitting | Uses sparse `PairMask` O(N+K), calls masked balance on excess sequences. |
 
-## Non-conforming code and fixes
+## Resolved non-conformances
 
-| Area | Non-conformance | Fix |
+| Area | Resolution |
+|---|---|
+| Cost providers ad hoc | Replaced with `PairCostProvider` trait + `EuclideanCostProvider`. |
+| Sparse cost triples in public API | Removed; coordinate-only. |
+| Dense pair masks `Vec<bool>` N² | Replaced with sparse `HashSet`-backed `PairMask`. |
+| No unified routing | Fixed: enum-based router for fit/sample/filter. |
+| Filter FPR N-dependent | Fixed: conditional p-values. |
+
+## Remaining limitations
+
+| Area | Status | Impact |
 |---|---|---|
-| Python public API | **Fixed.** Unified router `fit_model(...)` / `sample_model(...)` implemented with `Ensemble`, `Family`, `Constraint` enums and `UnsupportedModelCaseError`. |
-| `crates/menobis-core/src/fitting/partial.rs` | Partial paths still use dense pair masks (`Vec<bool>` of `N*N`) and some ME paths duplicate masked inner solver logic. | Add reusable sparse free-pair providers and make full solvers support them. |
-| Cost handling across fitting modules | Cost providers are ad hoc; sparse and coordinate paths are not one abstraction. | Introduce `CostProvider` and `FamilyKernel` traits/factories shared by ME/B/W. |
-| W no-self-loop fitting | AGENTS records non-convergence at realistic `N >= 50`. | Add adaptive damping/feasibility projection or an accelerated convex solver; test generated gravity-like networks. |
-| B no-self-loop strength fitting | AGENTS records slow convergence at `N >= 200`. | Benchmark IPF residual path; add acceleration or better saturation projection. |
-
-## Red/green repair order
-
-1. Add the unified Python router with unsupported-case errors.
-2. Replace dense Rust partial masks with reusable sparse free-pair providers.
-3. Fix W no-self-loop convergence and B no-self-loop performance regressions.
+| W strength-cost `self_loops=False` at N≥500 | ~500s fitting time | Usable but slow; needs Newton damping improvement. |
+| B `self_loops=False` at N≥200 | Potentially slow IPF | Needs targeted benchmark; may need acceleration. |
+| Constraint-level code factoring | Not implemented | Internal quality; doesn't affect correctness. |
+| Partial ≠ full with empty known set | Separate entry points | Same math, different functions; cosmetic. |
