@@ -15,9 +15,8 @@ Pipeline: PA geographic generate → fit → ensemble sample-check → null-filt
 
 ## Next steps (priority order)
 
-6. **Sparse matrix/cost handling cleanup** — Consolidate cost and probability
-   providers across fitting, generation, and filtering.
-7. **Benchmark cleaning** — Run an extensive benchmark, provide an estimate on how long it would take to do a N=1000,5000,10000,20000 separating by case (ME, B , W). Fix the benchmark folder (it is a mess). Just keep a single e2e benchmark script based on geographical PA with a clean implementation and reporting sufficient to generate figures and update docs afterwards. Get rid of the rest of scripts.
+6. ~~**Sparse matrix/cost handling cleanup**~~ — Done.
+7. ~~**Benchmark cleaning**~~ — Done. Single modern E2E script.
 8. Write tutorials and notebooks with real-world examples + HOWTO on two+one cases: (1) filter a network with a null model (2) assess if some network statistic is relevant under a nullmodel (3) just fit and generate null model instances to do whatever the user needs. Use the PA synth model as realistic example. Do a complete audit of the docs to minimize overlap, maximize clarity and alignment, and refer to the thesis when needed. The docs should read cleary in the README using a mermaid diagram as follows (the notebook should follow these ideas).
     1. Choose a case based on your data:
         - Aggregated binary networks: Binomial. E.g. airlines connecting airports.
@@ -38,4 +37,19 @@ Pipeline: PA geographic generate → fit → ensemble sample-check → null-filt
         2. Generate networks: use the sampling CLI, after having fitted the model.
         3. Assess statistical relevance of high order network features: Use the sampling CLI to generate null models and ensemble the expectations. You might need to impemnet the magnitude you are interested in on the analysis package (or connect with existing packages like networkx or rustworkx).
 9. Publish MkDocs site with updated docs.
+10. **Draft TODO.md** — Consolidate all detected issues into a single prioritized
+    TODO list for future improvements. Erase the audit docs and merge their
+    content into the TODO. Known issues to include:
+    - W strength-cost `self_loops=False` very slow at N≥500 (~500s). Newton
+      solver needs adaptive damping or better feasibility projection.
+    - B strength-edges slow at N≥300 (~30s). IPF convergence for zero-inflated
+      binomial coupled constraints needs acceleration.
+    - B strength-degree does not converge at N≥300 (any self-loop setting).
+      The coupled zero-inflated binomial strength-degree solver needs
+      investigation — possibly requires a different algorithm.
+    - Python wrappers repetitive (~3300 lines). Could use factory pattern.
+    - Text I/O not streaming for Matrix Market/Pajek (2 occurrences).
+    - Constraint-level code factoring (architectural wish).
+    - Partial/full solver unification (cosmetic).
+    - Release packaging: publish metadata, CI artifacts.
 
