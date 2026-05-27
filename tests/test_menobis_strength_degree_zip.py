@@ -47,6 +47,48 @@ def test_zip_fit_recovers_expected_strengths_and_degrees(values: list[float]) ->
     np.testing.assert_allclose(expected_fit.sum(axis=0), s_in, atol=1e-6)
 
 
+def test_zip_fit_regression_stays_finite_on_heterogeneous_small_rates() -> None:
+    """Regression: a valid small-rate target must not overflow to NaN."""
+    arr = np.array(
+        [
+            0.25,
+            0.125,
+            0.125,
+            0.125,
+            0.125,
+            0.125,
+            0.125,
+            0.125,
+            0.125,
+            0.125,
+            0.25,
+            0.25,
+        ],
+        dtype=np.float64,
+    ).reshape(4, 3)
+    true_x, true_y, true_z, true_w = arr
+    p, expected = _expectations(true_x, true_y, true_z, true_w)
+
+    fit = fit_strength_degree_poisson(
+        expected.sum(axis=1), expected.sum(axis=0), p.sum(axis=1), p.sum(axis=0)
+    )
+    p_fit, expected_fit = _expectations(fit.x, fit.y, fit.z, fit.w)
+
+    assert fit.converged
+    assert np.all(np.isfinite(fit.x))
+    assert np.all(np.isfinite(fit.y))
+    assert np.all(np.isfinite(fit.z))
+    assert np.all(np.isfinite(fit.w))
+    np.testing.assert_allclose(p_fit.sum(axis=1), p.sum(axis=1), atol=1e-6)
+    np.testing.assert_allclose(p_fit.sum(axis=0), p.sum(axis=0), atol=1e-6)
+    np.testing.assert_allclose(
+        expected_fit.sum(axis=1), expected.sum(axis=1), atol=1e-6
+    )
+    np.testing.assert_allclose(
+        expected_fit.sum(axis=0), expected.sum(axis=0), atol=1e-6
+    )
+
+
 def test_zip_sample_is_reproducible_and_weighted_positive() -> None:
     """Samples are seeded and have positive integer weights on present edges."""
     x = np.array([0.3, 0.4, 0.5], dtype=np.float64)

@@ -17,3 +17,7 @@ thiserror.workspace = true
 rand.workspace = true
 rand_distr.workspace = true
 rayon.workspace = true
+
+[[bench]]
+name = "me_strength_degree"
+harness = false

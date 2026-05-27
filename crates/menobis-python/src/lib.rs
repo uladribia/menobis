@@ -106,7 +106,6 @@ use menobis_core::generation::{
     sample_strength_multinomial as core_sample_strength_multinomial,
     sample_strength_negative_binomial as core_sample_strength_negative_binomial,
     sample_strength_poisson as core_sample_strength_poisson,
-    sample_strength_poisson_multinomial as core_sample_strength_poisson_multinomial,
     sample_strength_stub_matching as core_sample_strength_stub_matching,
 };
 use menobis_core::graph::{
@@ -238,7 +237,6 @@ fn _menobis(module: &Bound<'_, PyModule>) -> PyResult<()> {
     add_pyfunction!(module, generation::sample_strength_stub_matching)?;
     add_pyfunction!(module, generation::sample_custom_poisson)?;
     add_pyfunction!(module, generation::sample_custom_multinomial)?;
-    add_pyfunction!(module, generation::sample_strength_poisson_multinomial)?;
     add_pyfunction!(module, generation::sample_strength_edges_poisson)?;
     add_pyfunction!(module, generation::sample_strength_cost_poisson_coordinates)?;
     add_pyfunction!(module, generation::sample_strength_poisson)?;

@@ -63,9 +63,13 @@ This represents the limiting zero-inflated equations where occupation tends to o
 - The fitted multipliers can be very large for saturated nodes.
 - The implementation preserves separate ME/W/Wnb expectation formulas.
 
+## ME stabilization
+
+The ME strength-degree free-pair solver uses damped log-domain balancing. It accumulates expected strengths and degrees in four `O(N)` vectors and evaluates the zero-inflated Poisson equations with stable `log(expm1(q))`, logistic, and positive-Poisson mean formulas. Boundary degree targets are locally regularized by a small epsilon before iteration; saturated full-fit outputs are still reported with large occupation multipliers for downstream sampling.
+
 ## Verification
 
-`tests/test_menobis_strength_degree_saturation.py` covers ME, W, and Wnb saturated degree cases.
+`tests/test_menobis_strength_degree_saturation.py` covers ME, W, and Wnb saturated degree cases. `tests/test_menobis_strength_degree_zip.py` includes a small-rate ME regression that previously overflowed to NaN.
 
 ## Sampling consequences (Option B)
 

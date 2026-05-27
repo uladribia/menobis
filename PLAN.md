@@ -15,8 +15,7 @@ Pipeline: PA geographic generate → fit → ensemble sample-check → null-filt
 
 ## Next steps (priority order)
 
-6. ~~**Sparse matrix/cost handling cleanup**~~ — Done.
-7. ~~**Benchmark cleaning**~~ — Done. Single modern E2E script.
+7. Ensure benchmark includes known pairs 5%-20% + masked partial fits are exposed in python via fit_model / sample_model / filter_model also. Also, benchmarks should be unique, either in python or rust, clarify what is happening there!
 8. Write tutorials and notebooks with real-world examples + HOWTO on two+one cases: (1) filter a network with a null model (2) assess if some network statistic is relevant under a nullmodel (3) just fit and generate null model instances to do whatever the user needs. Use the PA synth model as realistic example. Do a complete audit of the docs to minimize overlap, maximize clarity and alignment, and refer to the thesis when needed. The docs should read cleary in the README using a mermaid diagram as follows (the notebook should follow these ideas).
     1. Choose a case based on your data:
         - Aggregated binary networks: Binomial. E.g. airlines connecting airports.
