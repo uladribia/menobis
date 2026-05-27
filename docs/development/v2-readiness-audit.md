@@ -50,4 +50,4 @@ description: v2.0 readiness audit for MENoBiS.
 |---|---|
 | W strength-cost `self_loops=False` slow at N≥500 | Confirmed: ~500s at N=500. Newton needs adaptive damping. |
 | W strength `self_loops=False` | Converges (22 iters at N=50) — issue resolved or overstated. |
-| B `self_loops=False` slow at N≥200 | Needs benchmarking; IPF acceleration may help. |
+| B `self_loops=False` at N≥200 | Resolved: converges in 22 iters at N=300. |

@@ -39,6 +39,6 @@ scale for W no-self-loop cases.
 | Area | Status | Impact |
 |---|---|---|
 | W strength-cost `self_loops=False` at N≥500 | ~500s fitting time | Usable but slow; needs Newton damping improvement. |
-| B `self_loops=False` at N≥200 | Potentially slow IPF | Needs targeted benchmark; may need acceleration. |
+| B `self_loops=False` at N≥200 | Resolved: 4ms at N=300 | No longer reproducible. |
 | Constraint-level code factoring | Not implemented | Internal quality; doesn't affect correctness. |
 | Partial ≠ full with empty known set | Separate entry points | Same math, different functions; cosmetic. |
