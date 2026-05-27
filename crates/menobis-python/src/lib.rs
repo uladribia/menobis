@@ -11,10 +11,10 @@ use menobis_core::filter::{
     absent_degree_events_negative_binomial as core_absent_degree_events_negative_binomial,
     absent_degree_events_poisson as core_absent_degree_events_poisson,
     absent_strength_binomial as core_absent_strength_binomial,
-    absent_strength_cost_binomial as core_absent_strength_cost_binomial,
-    absent_strength_cost_geometric as core_absent_strength_cost_geometric,
-    absent_strength_cost_negative_binomial as core_absent_strength_cost_negative_binomial,
-    absent_strength_cost_poisson as core_absent_strength_cost_poisson,
+    absent_strength_cost_binomial_coordinates as core_absent_strength_cost_binomial,
+    absent_strength_cost_geometric_coordinates as core_absent_strength_cost_geometric,
+    absent_strength_cost_negative_binomial_coordinates as core_absent_strength_cost_negative_binomial,
+    absent_strength_cost_poisson_coordinates as core_absent_strength_cost_poisson,
     absent_strength_degree_binomial as core_absent_strength_degree_binomial,
     absent_strength_degree_geometric as core_absent_strength_degree_geometric,
     absent_strength_degree_negative_binomial as core_absent_strength_degree_negative_binomial,
@@ -33,10 +33,10 @@ use menobis_core::filter::{
     filter_degree_events_negative_binomial as core_filter_degree_events_negative_binomial,
     filter_degree_events_poisson as core_filter_degree_events_poisson,
     filter_strength_binomial as core_filter_strength_binomial,
-    filter_strength_cost_binomial as core_filter_strength_cost_binomial,
-    filter_strength_cost_geometric as core_filter_strength_cost_geometric,
-    filter_strength_cost_negative_binomial as core_filter_strength_cost_negative_binomial,
-    filter_strength_cost_poisson as core_filter_strength_cost_poisson,
+    filter_strength_cost_binomial_coordinates as core_filter_strength_cost_binomial,
+    filter_strength_cost_geometric_coordinates as core_filter_strength_cost_geometric,
+    filter_strength_cost_negative_binomial_coordinates as core_filter_strength_cost_negative_binomial,
+    filter_strength_cost_poisson_coordinates as core_filter_strength_cost_poisson,
     filter_strength_degree_binomial as core_filter_strength_degree_binomial,
     filter_strength_degree_geometric as core_filter_strength_degree_geometric,
     filter_strength_degree_negative_binomial as core_filter_strength_degree_negative_binomial,
@@ -57,8 +57,6 @@ use menobis_core::fitting::{
     balance_strength_degree_poisson, balance_strength_edges_poisson, balance_strength_poisson,
     balance_weighted_factors, fit_degree_events_geometric as core_fit_degree_events_geometric,
     fit_degree_events_negative_binomial as core_fit_degree_events_negative_binomial,
-    fit_strength_cost_geometric as core_fit_strength_cost_geometric,
-    fit_strength_cost_negative_binomial as core_fit_strength_cost_negative_binomial,
     fit_strength_degree_binomial as core_fit_strength_degree_binomial,
     fit_strength_degree_geometric as core_fit_strength_degree_geometric,
     fit_strength_degree_negative_binomial as core_fit_strength_degree_negative_binomial,
@@ -72,7 +70,6 @@ use menobis_core::fitting::{
 use menobis_core::fitting::{
     fit_partial_degree as core_fit_partial_degree,
     fit_partial_strength as core_fit_partial_strength,
-    fit_partial_strength_cost as core_fit_partial_strength_cost,
     fit_partial_strength_cost_binomial_coordinates as core_fit_partial_strength_cost_binomial_coordinates,
     fit_partial_strength_cost_coordinates as core_fit_partial_strength_cost_coordinates,
     fit_partial_strength_cost_w_coordinates as core_fit_partial_strength_cost_w_coordinates,
@@ -80,9 +77,7 @@ use menobis_core::fitting::{
     fit_partial_strength_edges as core_fit_partial_strength_edges,
 };
 use menobis_core::fitting::{
-    fit_strength_cost_binomial as core_fit_strength_cost_binomial,
     fit_strength_cost_binomial_coordinates as core_fit_strength_cost_binomial_coordinates,
-    fit_strength_cost_poisson as core_fit_strength_cost,
     fit_strength_cost_poisson_coordinates as core_fit_strength_cost_coordinates,
     fit_strength_cost_w_lbfgs as core_fit_strength_cost_w_coordinates,
     fit_strength_cost_w_lbfgs as core_fit_strength_cost_w_lbfgs, CostFitOptions,
@@ -95,10 +90,10 @@ use menobis_core::generation::{
     sample_degree_events_negative_binomial as core_sample_degree_events_negative_binomial,
     sample_degree_events_poisson as core_sample_degree_events_poisson,
     sample_strength_binomial as core_sample_strength_binomial,
-    sample_strength_cost_binomial as core_sample_strength_cost_binomial,
-    sample_strength_cost_geometric as core_sample_strength_cost_geometric,
-    sample_strength_cost_negative_binomial as core_sample_strength_cost_negative_binomial,
-    sample_strength_cost_poisson as core_sample_strength_cost_poisson,
+    sample_strength_cost_binomial_coordinates as core_sample_strength_cost_binomial_coordinates,
+    sample_strength_cost_geometric_coordinates as core_sample_strength_cost_geometric_coordinates,
+    sample_strength_cost_negative_binomial_coordinates as core_sample_strength_cost_negative_binomial_coordinates,
+    sample_strength_cost_poisson_coordinates as core_sample_strength_cost_poisson_coordinates,
     sample_strength_degree_binomial as core_sample_strength_degree_binomial,
     sample_strength_degree_geometric as core_sample_strength_degree_geometric,
     sample_strength_degree_negative_binomial as core_sample_strength_degree_negative_binomial,
@@ -112,7 +107,7 @@ use menobis_core::generation::{
     sample_strength_negative_binomial as core_sample_strength_negative_binomial,
     sample_strength_poisson as core_sample_strength_poisson,
     sample_strength_poisson_multinomial as core_sample_strength_poisson_multinomial,
-    sample_strength_stub_matching as core_sample_strength_stub_matching, SparseCostEntries,
+    sample_strength_stub_matching as core_sample_strength_stub_matching,
 };
 use menobis_core::graph::{
     directed_degrees as core_directed_degrees, directed_strengths as core_directed_strengths,
@@ -141,17 +136,6 @@ type WStrengthFit = (
     f64,
     f64,
     f64,
-    (usize, usize, usize, usize, usize, usize),
-);
-type WStrengthCostFit = (
-    Vec<f64>,
-    Vec<f64>,
-    f64,
-    u32,
-    String,
-    f64,
-    usize,
-    (f64, f64, f64, f64, f64),
     (usize, usize, usize, usize, usize, usize),
 );
 type WStrengthEdgesFit = (
@@ -233,10 +217,8 @@ fn _menobis(module: &Bound<'_, PyModule>) -> PyResult<()> {
     add_pyfunction!(module, fitting::fit_masked_degree_bernoulli)?;
     add_pyfunction!(module, fitting::fit_masked_strength_degree_poisson)?;
     add_pyfunction!(module, fitting::fit_masked_strength_poisson)?;
-    add_pyfunction!(module, fitting::fit_strength_cost_poisson)?;
     add_pyfunction!(module, fitting::fit_strength_cost_poisson_coordinates)?;
     add_pyfunction!(module, fitting::fit_strength_cost_binomial_coordinates)?;
-    add_pyfunction!(module, fitting::fit_strength_cost_binomial)?;
     add_pyfunction!(module, fitting::fit_strength_cost_w_coordinates)?;
     add_pyfunction!(module, fitting::fit_strength_cost_w_lbfgs)?;
     add_pyfunction!(module, fitting::fit_degree_bernoulli)?;
@@ -248,8 +230,6 @@ fn _menobis(module: &Bound<'_, PyModule>) -> PyResult<()> {
     add_pyfunction!(module, fitting::fit_strength_poisson)?;
     add_pyfunction!(module, fitting::fit_strength_geometric)?;
     add_pyfunction!(module, fitting::fit_strength_negative_binomial)?;
-    add_pyfunction!(module, fitting::fit_strength_cost_geometric)?;
-    add_pyfunction!(module, fitting::fit_strength_cost_negative_binomial)?;
     add_pyfunction!(module, fitting::fit_strength_edges_geometric)?;
     add_pyfunction!(module, fitting::fit_strength_edges_negative_binomial)?;
     add_pyfunction!(module, fitting::fit_strength_degree_geometric)?;
@@ -260,16 +240,25 @@ fn _menobis(module: &Bound<'_, PyModule>) -> PyResult<()> {
     add_pyfunction!(module, generation::sample_custom_multinomial)?;
     add_pyfunction!(module, generation::sample_strength_poisson_multinomial)?;
     add_pyfunction!(module, generation::sample_strength_edges_poisson)?;
-    add_pyfunction!(module, generation::sample_strength_cost_poisson)?;
+    add_pyfunction!(module, generation::sample_strength_cost_poisson_coordinates)?;
     add_pyfunction!(module, generation::sample_strength_poisson)?;
     add_pyfunction!(module, generation::sample_degree_events_poisson)?;
     add_pyfunction!(module, generation::sample_strength_degree_poisson)?;
     add_pyfunction!(module, generation::sample_strength_multinomial)?;
     add_pyfunction!(module, generation::sample_strength_geometric)?;
     add_pyfunction!(module, generation::sample_strength_binomial)?;
-    add_pyfunction!(module, generation::sample_strength_cost_binomial)?;
-    add_pyfunction!(module, generation::sample_strength_cost_geometric)?;
-    add_pyfunction!(module, generation::sample_strength_cost_negative_binomial)?;
+    add_pyfunction!(
+        module,
+        generation::sample_strength_cost_binomial_coordinates
+    )?;
+    add_pyfunction!(
+        module,
+        generation::sample_strength_cost_geometric_coordinates
+    )?;
+    add_pyfunction!(
+        module,
+        generation::sample_strength_cost_negative_binomial_coordinates
+    )?;
     add_pyfunction!(module, generation::sample_strength_edges_binomial)?;
     add_pyfunction!(module, generation::sample_strength_edges_geometric)?;
     add_pyfunction!(module, generation::sample_strength_edges_negative_binomial)?;
@@ -288,7 +277,6 @@ fn _menobis(module: &Bound<'_, PyModule>) -> PyResult<()> {
     add_pyfunction!(module, fitting::fit_partial_degree_poisson_full)?;
     add_pyfunction!(module, fitting::fit_partial_strength_degree_poisson_full)?;
     add_pyfunction!(module, fitting::fit_partial_strength_edges_poisson_full)?;
-    add_pyfunction!(module, fitting::fit_partial_strength_cost_poisson_full)?;
     add_pyfunction!(
         module,
         fitting::fit_partial_strength_cost_poisson_coordinates_full

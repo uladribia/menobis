@@ -9,46 +9,13 @@ use super::w::w_mean;
 use super::{CostFitOptions, StrengthCostFitResult};
 
 /// How pair costs are provided to the W Newton solver.
-#[allow(dead_code)]
 enum CostMode<'a> {
     /// No cost constraint (gamma fixed at 0).
     NoCost,
-    /// Sparse cost entries.
-    Sparse {
-        col_costs: Vec<Vec<(usize, f64)>>,
-        #[allow(dead_code)]
-        row_costs: Vec<Vec<(usize, f64)>>,
-    },
     /// Projected Euclidean XY coordinates.
     Coordinates { x: &'a [f64], y: &'a [f64] },
     /// Cached dense pair distances for moderate N coordinate-cost fits.
     DenseDistances { distances: Vec<f64>, n: usize },
-}
-
-impl<'a> CostMode<'a> {
-    fn build_sparse(
-        n: usize,
-        sources: &'a [usize],
-        targets: &'a [usize],
-        values: &'a [f64],
-        self_loops: bool,
-    ) -> Self {
-        let mut col_costs: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
-        let mut row_costs: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
-        for (idx, (&src, &tgt)) in sources.iter().zip(targets.iter()).enumerate() {
-            if !self_loops && src == tgt {
-                continue;
-            }
-            if src < n && tgt < n {
-                col_costs[tgt].push((src, values[idx]));
-                row_costs[src].push((tgt, values[idx]));
-            }
-        }
-        CostMode::Sparse {
-            col_costs,
-            row_costs,
-        }
-    }
 }
 
 /// Derivative of w_mean(r, M) w.r.t. r.
@@ -78,34 +45,6 @@ pub fn fit_strength_w_newton(
         layers,
         opts,
         &CostMode::NoCost,
-        n,
-        0.0,
-    )
-}
-
-/// Fit W(M) strength-cost with sparse cost entries using Newton coordinate-descent.
-#[must_use]
-#[allow(clippy::too_many_arguments)]
-pub fn fit_strength_cost_w_sparse_newton(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    cost_sources: &[usize],
-    cost_targets: &[usize],
-    cost_values: &[f64],
-    target_cost: f64,
-    layers: u32,
-    opts: &CostFitOptions,
-) -> StrengthCostFitResult {
-    let n = strength_out.len();
-    let mode = CostMode::build_sparse(n, cost_sources, cost_targets, cost_values, opts.self_loops);
-    // No ME bootstrap for sparse (would need sparse ME solver)
-    fit_w_newton_inner(
-        strength_out,
-        strength_in,
-        target_cost,
-        layers,
-        opts,
-        &mode,
         n,
         0.0,
     )
@@ -459,15 +398,6 @@ fn pair_dist(mode: &CostMode<'_>, i: usize, j: usize) -> f64 {
         CostMode::NoCost => 0.0,
         CostMode::Coordinates { x, y } => coord_distance(x, y, i, j),
         CostMode::DenseDistances { distances, n } => distances[i * *n + j],
-        CostMode::Sparse { col_costs, .. } => {
-            // Find distance for pair (i,j) from col_costs[j]
-            for &(src, d) in &col_costs[j] {
-                if src == i {
-                    return d;
-                }
-            }
-            0.0
-        }
     }
 }
 
@@ -484,9 +414,6 @@ fn solve_ab_lbfgs_fixed_gamma(
     b_init: &[f64],
     r_min: f64,
 ) -> (Vec<f64>, Vec<f64>, bool, usize) {
-    if matches!(cost_mode, CostMode::Sparse { .. }) {
-        return (a_init.to_vec(), b_init.to_vec(), false, 0);
-    }
     let n = strength_out.len();
     let dim = 2 * n;
     let memory = 7_usize;
@@ -1066,50 +993,5 @@ mod tests {
                 "s_out[{i}]: expected {expected}, got {pred}"
             );
         }
-    }
-
-    #[test]
-    fn w_newton_sparse_cost_matches_coordinate() {
-        let s_out = vec![10.0, 20.0, 30.0];
-        let s_in = vec![15.0, 25.0, 20.0];
-        let cx = vec![0.0, 3.0, 0.0];
-        let cy = vec![0.0, 0.0, 4.0];
-        let n = 3;
-        let target_cost = 80.0;
-        let opts = CostFitOptions {
-            self_loops: true,
-            tolerance: 1e-2,
-            max_iterations: 5000,
-        };
-        // Build sparse costs from coordinates
-        let mut sources = Vec::new();
-        let mut targets = Vec::new();
-        let mut values = Vec::new();
-        for i in 0..n {
-            for j in 0..n {
-                sources.push(i);
-                targets.push(j);
-                values.push(coord_distance(&cx, &cy, i, j));
-            }
-        }
-        let sparse = fit_strength_cost_w_sparse_newton(
-            &s_out,
-            &s_in,
-            &sources,
-            &targets,
-            &values,
-            target_cost,
-            1,
-            &opts,
-        );
-        let coord = fit_strength_cost_w_lbfgs(&s_out, &s_in, &cx, &cy, target_cost, 1, &opts);
-        assert!(sparse.converged, "sparse W Newton did not converge");
-        assert!(coord.converged, "coord W Newton did not converge");
-        assert!(
-            (sparse.gamma - coord.gamma).abs() < 0.1,
-            "sparse={} coord={}",
-            sparse.gamma,
-            coord.gamma
-        );
     }
 }

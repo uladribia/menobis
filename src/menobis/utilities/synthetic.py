@@ -56,25 +56,6 @@ class SyntheticNetwork:
         )
         return degree_part * distance_part
 
-    def complete_cost_triples(
-        self,
-    ) -> tuple[NDArray[np.uint64], NDArray[np.uint64], NDArray[np.float64]]:
-        """Return complete Euclidean cost triples for model APIs."""
-        node_count = len(self.x)
-        source, target = np.meshgrid(
-            np.arange(node_count, dtype=np.uint64),
-            np.arange(node_count, dtype=np.uint64),
-            indexing="ij",
-        )
-        mask = np.ones((node_count, node_count), dtype=bool)
-        if not self.self_loops:
-            np.fill_diagonal(mask, False)
-        distance = np.hypot(
-            self.x[source.astype(np.int64)] - self.x[target.astype(np.int64)],
-            self.y[source.astype(np.int64)] - self.y[target.astype(np.int64)],
-        )
-        return source[mask], target[mask], distance[mask].astype(np.float64)
-
 
 @dataclass(frozen=True)
 class SyntheticConstraints:

@@ -38,9 +38,8 @@ S_OUT = np.array([2.0, 2.0])
 S_IN = np.array([2.0, 2.0])
 K_OUT = np.array([1.0, 1.0])
 K_IN = np.array([1.0, 1.0])
-C_SRC = np.array([0, 1], dtype=np.uint64)
-C_TGT = np.array([1, 0], dtype=np.uint64)
-C_VAL = np.array([1.0, 1.0])
+COORD_X = np.array([0.0, 1.0], dtype=np.float64)
+COORD_Y = np.array([0.0, 0.0], dtype=np.float64)
 
 
 @pytest.mark.parametrize(
@@ -77,22 +76,22 @@ def test_degree_bernoulli_returns_degree_fit() -> None:
     "func,expected_family",
     [
         (
-            lambda: fit_strength_cost_poisson(S_OUT, S_IN, C_SRC, C_TGT, C_VAL, 1.0),
+            lambda: fit_strength_cost_poisson(S_OUT, S_IN, COORD_X, COORD_Y, 1.0),
             "poisson",
         ),
         (
-            lambda: fit_strength_cost_geometric(S_OUT, S_IN, C_SRC, C_TGT, C_VAL, 1.0),
+            lambda: fit_strength_cost_geometric(S_OUT, S_IN, COORD_X, COORD_Y, 1.0),
             "geometric",
         ),
         (
             lambda: fit_strength_cost_negative_binomial(
-                S_OUT, S_IN, C_SRC, C_TGT, C_VAL, 1.0, layers=3
+                S_OUT, S_IN, COORD_X, COORD_Y, 1.0, layers=3
             ),
             "negative_binomial",
         ),
         (
             lambda: fit_strength_cost_binomial(
-                S_OUT, S_IN, C_SRC, C_TGT, C_VAL, 1.0, layers=3
+                S_OUT, S_IN, COORD_X, COORD_Y, 1.0, layers=3
             ),
             "binomial",
         ),

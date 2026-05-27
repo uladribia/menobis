@@ -31,7 +31,7 @@ description: v2.0 readiness audit for MENoBiS.
 | V2-5 | Python wrappers for fitting/filtering/generation are large and repetitive. | Introduce wrapper factories or registries shared by public APIs and CLI. |
 | V2-6 | Text formats for Matrix Market/Pajek use `read_text().splitlines()`. | Switch to streaming line iteration for large inputs. |
 | V2-7 | `crates/menobis-python/src/lib.rs` is a large manual PyO3 surface. | Split bindings by domain and add a binding registry macro/helper. |
-| V2-8 | Sparse matrix handling needs cleanup. | Consolidate sparse cost/probability providers and ensure consistent edge-list handling. |
+| V2-8 | Coordinate cost handling needs cleanup. | Keep cost-constrained APIs coordinate-based and ensure consistent edge-list handling. |
 | V2-9 | Constraint-level abstraction is missing. | Factor code by constraint linearity: (a) linear on occupation numbers (strengths, strengths+cost, custom t_ij), (b) linear on binary occupation only (edges+total events), (c) linear on both (degrees+strengths, strengths+edges). Poisson/multinomial sampling is valid for any constraint linear on occupation numbers — code should reflect this. |
 | V2-10 | Partial and normal solver logic are separate code paths. | Unify partial and full solvers: a full solve is just a partial solve with an empty known-pair set. |
 

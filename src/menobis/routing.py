@@ -70,9 +70,6 @@ def fit_model(
     total_events: int | None = None,
     target_edges: float | None = None,
     target_cost: float | None = None,
-    cost_sources: NDArray[Any] | None = None,
-    cost_targets: NDArray[Any] | None = None,
-    cost_values: NDArray[Any] | None = None,
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
     layers: int = 1,
@@ -95,9 +92,6 @@ def fit_model(
             total_events=total_events,
             target_edges=target_edges,
             target_cost=target_cost,
-            cost_sources=cost_sources,
-            cost_targets=cost_targets,
-            cost_values=cost_values,
             coord_x=coord_x,
             coord_y=coord_y,
             layers=layers,
@@ -153,6 +147,8 @@ def filter_model(
     min_occupation: float = 0.5,
     min_expected: float = 0.0,
     max_absent: int | None = None,
+    coord_x: NDArray[Any] | None = None,
+    coord_y: NDArray[Any] | None = None,
 ) -> FilterResult:
     """Filter edges against a null model selected by family and constraint."""
     return cast(
@@ -172,6 +168,8 @@ def filter_model(
             min_occupation=min_occupation,
             min_expected=min_expected,
             max_absent=max_absent,
+            coord_x=coord_x,
+            coord_y=coord_y,
         ),
     )
 
@@ -211,9 +209,6 @@ def _fit_model(
     total_events: int | None = None,
     target_edges: float | None = None,
     target_cost: float | None = None,
-    cost_sources: NDArray[Any] | None = None,
-    cost_targets: NDArray[Any] | None = None,
-    cost_values: NDArray[Any] | None = None,
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
     layers: int = 1,
@@ -338,32 +333,20 @@ def _fit_model(
                 raise ValueError(msg)
             s_out = np.asarray(strength_out, dtype=np.float64)
             s_in = np.asarray(strength_in, dtype=np.float64)
-            if coord_x is not None and coord_y is not None:
-                coord_dispatch: dict[str, Callable[..., FitResult]] = {
-                    "poisson": fitting.fit_strength_cost_poisson_coordinates,
-                    "binomial": fitting.fit_strength_cost_binomial_coordinates,
-                    "geometric": fitting.fit_strength_cost_geometric_coordinates,
-                    "negative_binomial": (
-                        fitting.fit_strength_cost_negative_binomial_coordinates
-                    ),
-                }
-                return coord_dispatch[variant](
-                    s_out,
-                    s_in,
-                    coord_x,
-                    coord_y,
-                    target_cost,
-                    **common,
-                )
-            if cost_sources is None or cost_targets is None or cost_values is None:
-                msg = "strength_cost needs cost triples or coordinates"
+            if coord_x is None or coord_y is None:
+                msg = "strength_cost requires projected coord_x and coord_y"
                 raise ValueError(msg)
-            return dispatch[key](
+            coord_dispatch: dict[str, Callable[..., FitResult]] = {
+                "poisson": fitting.fit_strength_cost_poisson,
+                "binomial": fitting.fit_strength_cost_binomial,
+                "geometric": fitting.fit_strength_cost_geometric,
+                "negative_binomial": fitting.fit_strength_cost_negative_binomial,
+            }
+            return coord_dispatch[variant](
                 s_out,
                 s_in,
-                cost_sources,
-                cost_targets,
-                cost_values,
+                coord_x,
+                coord_y,
                 target_cost,
                 **common,
             )
@@ -538,6 +521,8 @@ def _filter_model(
     min_occupation: float = 0.5,
     min_expected: float = 0.0,
     max_absent: int | None = None,
+    coord_x: NDArray[Any] | None = None,
+    coord_y: NDArray[Any] | None = None,
 ) -> FilterResult:
     from menobis.filtering import models as filtering
 
@@ -627,6 +612,13 @@ def _filter_model(
             "negative_binomial",
         ): filtering.filter_degree_events_negative_binomial,
     }
+    if constraint == Constraint.STRENGTH_COST:
+        if coord_x is None or coord_y is None:
+            msg = "strength_cost filtering requires projected coord_x and coord_y"
+            raise ValueError(msg)
+        kwargs["coord_x"] = coord_x
+        kwargs["coord_y"] = coord_y
+
     key = (constraint, variant)
     if key not in dispatch:
         msg = f"unsupported (constraint, family): ({constraint!r}, {family!r})"

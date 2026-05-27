@@ -95,8 +95,8 @@ pub fn w_positive_mean(q: f64, layers: u32) -> f64 {
 }
 
 use super::{
-    WConicFitOptions, WFitStatus, WProblemMetrics, WStrengthCostFitResult,
-    WStrengthDegreeFitResult, WStrengthEdgesFitResult, WStrengthFitResult, WStrengthResiduals,
+    WConicFitOptions, WFitStatus, WProblemMetrics, WStrengthDegreeFitResult,
+    WStrengthEdgesFitResult, WStrengthFitResult, WStrengthResiduals,
 };
 
 /// Compute independent W fixed-strength residuals from inverse/log multipliers.
@@ -1108,106 +1108,6 @@ fn fit_strength_degree_w(
 }
 
 // ---------------------------------------------------------------------------
-// W strength-cost fitting
-// ---------------------------------------------------------------------------
-
-fn cost_map(
-    cost_sources: &[u64],
-    cost_targets: &[u64],
-    cost_values: &[f64],
-) -> std::collections::HashMap<(usize, usize), f64> {
-    cost_sources
-        .iter()
-        .zip(cost_targets.iter())
-        .zip(cost_values.iter())
-        .map(|((&i, &j), &d)| ((i as usize, j as usize), d))
-        .collect()
-}
-
-#[allow(clippy::too_many_arguments)]
-#[must_use]
-pub fn fit_strength_cost_geometric(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    cost_sources: &[u64],
-    cost_targets: &[u64],
-    cost_values: &[f64],
-    target_cost: f64,
-    opts: WConicFitOptions,
-) -> WStrengthCostFitResult {
-    let sources_usize: Vec<usize> = cost_sources.iter().map(|&s| s as usize).collect();
-    let targets_usize: Vec<usize> = cost_targets.iter().map(|&t| t as usize).collect();
-    let cost_opts = super::CostFitOptions {
-        self_loops: opts.self_loops,
-        tolerance: opts.tolerance,
-        max_iterations: opts.max_iterations,
-    };
-    let result = super::w_lbfgs::fit_strength_cost_w_sparse_newton(
-        strength_out,
-        strength_in,
-        &sources_usize,
-        &targets_usize,
-        cost_values,
-        target_cost,
-        1,
-        &cost_opts,
-    );
-    newton_to_w_strength_cost_result(
-        result,
-        1,
-        strength_out,
-        strength_in,
-        cost_sources,
-        cost_targets,
-        cost_values,
-        target_cost,
-        opts,
-    )
-}
-
-#[must_use]
-#[allow(clippy::too_many_arguments)]
-pub fn fit_strength_cost_negative_binomial(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    cost_sources: &[u64],
-    cost_targets: &[u64],
-    cost_values: &[f64],
-    target_cost: f64,
-    layers: u32,
-    opts: WConicFitOptions,
-) -> WStrengthCostFitResult {
-    let sources_usize: Vec<usize> = cost_sources.iter().map(|&s| s as usize).collect();
-    let targets_usize: Vec<usize> = cost_targets.iter().map(|&t| t as usize).collect();
-    let cost_opts = super::CostFitOptions {
-        self_loops: opts.self_loops,
-        tolerance: opts.tolerance,
-        max_iterations: opts.max_iterations,
-    };
-    let result = super::w_lbfgs::fit_strength_cost_w_sparse_newton(
-        strength_out,
-        strength_in,
-        &sources_usize,
-        &targets_usize,
-        cost_values,
-        target_cost,
-        layers,
-        &cost_opts,
-    );
-    newton_to_w_strength_cost_result(
-        result,
-        layers,
-        strength_out,
-        strength_in,
-        cost_sources,
-        cost_targets,
-        cost_values,
-        target_cost,
-        opts,
-    )
-}
-
-// ---------------------------------------------------------------------------
 // Newton result converters
 // ---------------------------------------------------------------------------
 
@@ -1254,70 +1154,6 @@ fn newton_to_w_strength_result(
             exponential_cones: 0,
             power_cones: 0,
             linear_constraints: 2 * n,
-            sparse_nonzeros: 0,
-        },
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn newton_to_w_strength_cost_result(
-    result: super::StrengthCostFitResult,
-    layers: u32,
-    strength_out: &[f64],
-    strength_in: &[f64],
-    cost_sources: &[u64],
-    cost_targets: &[u64],
-    cost_values: &[f64],
-    target_cost: f64,
-    opts: WConicFitOptions,
-) -> WStrengthCostFitResult {
-    let n = strength_out.len();
-    let status = if result.converged {
-        WFitStatus::Solved
-    } else {
-        WFitStatus::Inaccurate
-    };
-    let a: Vec<f64> = result
-        .x
-        .iter()
-        .map(|&xi| if xi > 0.0 { -xi.ln() } else { 50.0 })
-        .collect();
-    let b: Vec<f64> = result
-        .y
-        .iter()
-        .map(|&yj| if yj > 0.0 { -yj.ln() } else { 50.0 })
-        .collect();
-    let costs = cost_map(cost_sources, cost_targets, cost_values);
-    let (residuals, cost_residual) = strength_cost_residuals(
-        &a,
-        &b,
-        result.gamma,
-        &costs,
-        layers,
-        strength_out,
-        strength_in,
-        target_cost,
-        opts.self_loops,
-    );
-    WStrengthCostFitResult {
-        x: result.x,
-        y: result.y,
-        gamma: result.gamma,
-        layers,
-        status,
-        objective: 0.0,
-        iterations: result.iterations,
-        min_margin: residuals.min_margin,
-        max_q: residuals.max_q,
-        max_strength_residual: residuals.max_abs,
-        total_strength_residual: residuals.total_abs,
-        cost_residual,
-        metrics: WProblemMetrics {
-            variables: 2 * n + 1,
-            auxiliary_variables: 0,
-            exponential_cones: 0,
-            power_cones: 0,
-            linear_constraints: 2 * n + 1,
             sparse_nonzeros: 0,
         },
     }

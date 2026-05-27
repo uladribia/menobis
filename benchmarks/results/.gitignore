@@ -1,6 +1,2 @@
 *
 !.gitignore
-!*.csv
-!*.json
-!*.png
-!*.metadata.json

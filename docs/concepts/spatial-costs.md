@@ -7,9 +7,8 @@ description: Strength-cost constraints and family-orthogonal cost providers.
 ## TL;DR
 
 The strength-cost constraint adds a cost multiplier `gamma` and a pair factor
-$f_{ij}=\exp(-\gamma d_{ij})$. Cost providers are orthogonal to ME, B, and W:
-the same no-cost, sparse-triple, or coordinate provider should feed every
-family kernel.
+$f_{ij}=\exp(-\gamma d_{ij})$. MENoBiS public APIs currently support this
+constraint only through projected coordinates and Euclidean distance.
 
 ## Constraint
 
@@ -27,14 +26,15 @@ The family-specific expectation is defined in
 
 ## Cost providers
 
-| Provider | Input | Memory target | Use when |
+| Provider | Input | Memory target | Status |
 |---|---|---:|---|
 | No cost | none | O(1) | strength-only kernels |
-| Sparse triples | `cost_sources`, `cost_targets`, `cost_values` | O(K) | arbitrary or incomplete costs |
-| Euclidean coordinates | projected `x`, `y` per node | O(N) provider state | complete spatial cost from coordinates |
+| Euclidean coordinates | projected `x`, `y` per node | O(N) provider state | public API |
+| Dense matrix | `N x N` entries | O(N²) | rejected |
 
 Coordinates must be projected planar coordinates. MENoBiS does not transform CRS or
-compute geodesic distances (yet).
+compute geodesic distances. If another distance is needed, implement a Rust
+`PairCostProvider` that computes one pair cost at a time.
 
 ## Required implementation shape
 
@@ -42,7 +42,7 @@ compute geodesic distances (yet).
 CostProvider + FamilyKernel + ConstraintLayer -> Rust solver/provider
 ```
 
-The provider computes `f_ij` on demand. The family kernel then maps
+The provider computes `d_ij` and `f_ij` on demand. The family kernel then maps
 `q_ij = x_i y_j f_ij` to an expected weight. This avoids per-family cost wrappers
 and dense `N x N` matrices.
 
@@ -50,14 +50,14 @@ and dense `N x N` matrices.
 
 ```python
 from menobis.models import (
-    fit_strength_cost_poisson_coordinates,
-    fit_strength_cost_binomial_coordinates,
-    fit_strength_cost_geometric_coordinates,
+    fit_strength_cost_poisson,
+    fit_strength_cost_binomial,
+    fit_strength_cost_geometric,
 )
 
-me = fit_strength_cost_poisson_coordinates(s_out, s_in, x, y, target_cost)
-b = fit_strength_cost_binomial_coordinates(s_out, s_in, x, y, target_cost, layers=3)
-w = fit_strength_cost_geometric_coordinates(s_out, s_in, x, y, target_cost)
+me = fit_strength_cost_poisson(s_out, s_in, x, y, target_cost)
+b = fit_strength_cost_binomial(s_out, s_in, x, y, target_cost, layers=3)
+w = fit_strength_cost_geometric(s_out, s_in, x, y, target_cost)
 ```
 
 ## Partial strength-cost

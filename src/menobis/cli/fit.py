@@ -296,8 +296,9 @@ def strength_edges_me(
 @app.command("strength-cost-poisson")
 def strength_cost_me(
     input_path: Path,
-    cost_path: Annotated[
-        Path, Option("--costs", help="Cost matrix CSV with source,target,cost columns.")
+    coordinates_path: Annotated[
+        Path,
+        Option("--coordinates", help="Projected coordinates CSV with x,y columns."),
     ],
     target_cost: Annotated[
         float | None,
@@ -321,16 +322,18 @@ def strength_cost_me(
     s = directed_strengths(edges)
     import pyarrow.csv as pa_csv
 
-    cost_table = pa_csv.read_csv(cost_path)
-    c_src = cost_table.column("source").to_numpy()
-    c_tgt = cost_table.column("target").to_numpy()
-    c_val = cost_table.column("cost").to_numpy().astype(np.float64)
+    coordinate_table = pa_csv.read_csv(coordinates_path)
+    coord_x = coordinate_table.column("x").to_numpy().astype(np.float64)
+    coord_y = coordinate_table.column("y").to_numpy().astype(np.float64)
     if target_cost is None:
-        cost_map: dict[tuple[int, int], float] = {}
-        for cs, ct, cv in zip(c_src, c_tgt, c_val, strict=True):
-            cost_map[(int(cs), int(ct))] = float(cv)
         target_cost = sum(
-            float(w) * cost_map.get((int(s_val), int(t_val)), 0.0)
+            float(w)
+            * float(
+                np.hypot(
+                    coord_x[int(s_val)] - coord_x[int(t_val)],
+                    coord_y[int(s_val)] - coord_y[int(t_val)],
+                )
+            )
             for s_val, t_val, w in zip(
                 edges.source, edges.target, edges.weight, strict=True
             )
@@ -338,9 +341,8 @@ def strength_cost_me(
     result = fit_strength_cost_poisson(
         s.out.astype(np.float64),
         s.incoming.astype(np.float64),
-        c_src,
-        c_tgt,
-        c_val,
+        coord_x,
+        coord_y,
         target_cost,
         self_loops=self_loops,
     )

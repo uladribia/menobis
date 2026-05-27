@@ -2,10 +2,10 @@
 
 use crate::distribution::{PairDistribution, WeightFamily};
 use crate::pairs::{
-    row_ranges, CandidateSupport, DegreeEventsProvider, FixedStrengthProvider,
-    PairDistributionProvider, SparsePoissonRateMapProvider, SparsePoissonRateProvider,
-    StrengthCostProvider, StrengthDegreeProvider, StrengthEdgesProvider, PARALLEL_PAIR_THRESHOLD,
-    SPARSE_CHUNK_SIZE,
+    row_ranges, CandidateSupport, DegreeEventsProvider, EuclideanCostProvider,
+    FixedStrengthProvider, PairDistributionProvider, SparsePoissonRateMapProvider,
+    SparsePoissonRateProvider, StrengthCostProvider, StrengthDegreeProvider, StrengthEdgesProvider,
+    PARALLEL_PAIR_THRESHOLD, SPARSE_CHUNK_SIZE,
 };
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -71,12 +71,20 @@ where
         .zip(weights.par_iter())
         .map(|((&source, &target), &weight)| {
             let dist = provider(source as usize, target as usize);
-            (
-                dist.upper_pvalue(weight),
-                dist.lower_pvalue(weight),
-                dist.expected(),
-                dist.occupation_probability(),
-            )
+            let occ = dist.occupation_probability();
+            let raw_upper = dist.upper_pvalue(weight);
+            let raw_lower = dist.lower_pvalue(weight);
+            let upper = if occ > 0.0 {
+                (raw_upper / occ).min(1.0)
+            } else {
+                1.0
+            };
+            let lower = if occ > 0.0 {
+                ((raw_lower - (1.0 - occ)) / occ).clamp(0.0, 1.0)
+            } else {
+                1.0
+            };
+            (upper, lower, dist.expected(), occ)
         })
         .collect();
 
@@ -426,18 +434,20 @@ pub fn absent_strength_edges_poisson(
 
 #[allow(clippy::too_many_arguments)]
 #[must_use]
-pub fn filter_strength_cost_poisson(
+pub fn filter_strength_cost_poisson_coordinates(
     x: &[f64],
     y: &[f64],
     gamma: f64,
-    cost_sources: &[usize],
-    cost_targets: &[usize],
-    cost_values: &[f64],
+    coord_x: &[f64],
+    coord_y: &[f64],
     sources: &[u64],
     targets: &[u64],
     weights: &[u64],
 ) -> ObservedFilterResult {
-    let costs = build_cost_map(cost_sources, cost_targets, cost_values);
+    let costs = EuclideanCostProvider {
+        x: coord_x,
+        y: coord_y,
+    };
     filter_observed_provider(
         sources,
         targets,
@@ -455,13 +465,12 @@ pub fn filter_strength_cost_poisson(
 
 #[allow(clippy::too_many_arguments)]
 #[must_use]
-pub fn absent_strength_cost_poisson(
+pub fn absent_strength_cost_poisson_coordinates(
     x: &[f64],
     y: &[f64],
     gamma: f64,
-    cost_sources: &[usize],
-    cost_targets: &[usize],
-    cost_values: &[f64],
+    coord_x: &[f64],
+    coord_y: &[f64],
     observed_sources: &[u64],
     observed_targets: &[u64],
     self_loops: bool,
@@ -470,7 +479,10 @@ pub fn absent_strength_cost_poisson(
     min_expected: f64,
     max_absent: Option<usize>,
 ) -> AbsentFilterResult {
-    let costs = build_cost_map(cost_sources, cost_targets, cost_values);
+    let costs = EuclideanCostProvider {
+        x: coord_x,
+        y: coord_y,
+    };
     detect_absent_provider(
         &StrengthCostProvider {
             family: WeightFamily::Poisson,
@@ -490,7 +502,6 @@ pub fn absent_strength_cost_poisson(
         },
     )
 }
-
 #[must_use]
 pub fn filter_strength_degree_poisson(
     x: &[f64],
@@ -776,26 +787,27 @@ pub fn absent_strength_negative_binomial(
 // --- Binomial constraint variants ---
 
 #[allow(clippy::too_many_arguments)]
-#[must_use]
-pub fn filter_strength_cost_binomial(
+fn filter_strength_cost_coordinates_family(
     x: &[f64],
     y: &[f64],
     gamma: f64,
-    cost_sources: &[usize],
-    cost_targets: &[usize],
-    cost_values: &[f64],
-    layers: u32,
+    coord_x: &[f64],
+    coord_y: &[f64],
+    family: WeightFamily,
     sources: &[u64],
     targets: &[u64],
     weights: &[u64],
 ) -> ObservedFilterResult {
-    let costs = build_cost_map(cost_sources, cost_targets, cost_values);
+    let costs = EuclideanCostProvider {
+        x: coord_x,
+        y: coord_y,
+    };
     filter_observed_provider(
         sources,
         targets,
         weights,
         &StrengthCostProvider {
-            family: WeightFamily::Binomial(layers),
+            family,
             x,
             y,
             gamma,
@@ -806,15 +818,13 @@ pub fn filter_strength_cost_binomial(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[must_use]
-pub fn absent_strength_cost_binomial(
+fn absent_strength_cost_coordinates_family(
     x: &[f64],
     y: &[f64],
     gamma: f64,
-    cost_sources: &[usize],
-    cost_targets: &[usize],
-    cost_values: &[f64],
-    layers: u32,
+    coord_x: &[f64],
+    coord_y: &[f64],
+    family: WeightFamily,
     observed_sources: &[u64],
     observed_targets: &[u64],
     self_loops: bool,
@@ -823,10 +833,13 @@ pub fn absent_strength_cost_binomial(
     min_expected: f64,
     max_absent: Option<usize>,
 ) -> AbsentFilterResult {
-    let costs = build_cost_map(cost_sources, cost_targets, cost_values);
+    let costs = EuclideanCostProvider {
+        x: coord_x,
+        y: coord_y,
+    };
     detect_absent_provider(
         &StrengthCostProvider {
-            family: WeightFamily::Binomial(layers),
+            family,
             x,
             y,
             gamma,
@@ -846,110 +859,38 @@ pub fn absent_strength_cost_binomial(
 
 #[allow(clippy::too_many_arguments)]
 #[must_use]
-pub fn filter_strength_cost_geometric(
+pub fn filter_strength_cost_binomial_coordinates(
     x: &[f64],
     y: &[f64],
     gamma: f64,
-    cost_sources: &[usize],
-    cost_targets: &[usize],
-    cost_values: &[f64],
-    sources: &[u64],
-    targets: &[u64],
-    weights: &[u64],
-) -> ObservedFilterResult {
-    let costs = build_cost_map(cost_sources, cost_targets, cost_values);
-    filter_observed_provider(
-        sources,
-        targets,
-        weights,
-        &StrengthCostProvider {
-            family: WeightFamily::Geometric,
-            x,
-            y,
-            gamma,
-            costs: &costs,
-            self_loops: true,
-        },
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-#[must_use]
-pub fn absent_strength_cost_geometric(
-    x: &[f64],
-    y: &[f64],
-    gamma: f64,
-    cost_sources: &[usize],
-    cost_targets: &[usize],
-    cost_values: &[f64],
-    observed_sources: &[u64],
-    observed_targets: &[u64],
-    self_loops: bool,
-    alpha_lower: f64,
-    min_occupation: f64,
-    min_expected: f64,
-    max_absent: Option<usize>,
-) -> AbsentFilterResult {
-    let costs = build_cost_map(cost_sources, cost_targets, cost_values);
-    detect_absent_provider(
-        &StrengthCostProvider {
-            family: WeightFamily::Geometric,
-            x,
-            y,
-            gamma,
-            costs: &costs,
-            self_loops,
-        },
-        observed_sources,
-        observed_targets,
-        AbsentFilterOptions {
-            alpha_lower,
-            min_occupation,
-            min_expected,
-            max_absent,
-        },
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-#[must_use]
-pub fn filter_strength_cost_negative_binomial(
-    x: &[f64],
-    y: &[f64],
-    gamma: f64,
-    cost_sources: &[usize],
-    cost_targets: &[usize],
-    cost_values: &[f64],
+    coord_x: &[f64],
+    coord_y: &[f64],
     layers: u32,
     sources: &[u64],
     targets: &[u64],
     weights: &[u64],
 ) -> ObservedFilterResult {
-    let costs = build_cost_map(cost_sources, cost_targets, cost_values);
-    filter_observed_provider(
+    filter_strength_cost_coordinates_family(
+        x,
+        y,
+        gamma,
+        coord_x,
+        coord_y,
+        WeightFamily::Binomial(layers),
         sources,
         targets,
         weights,
-        &StrengthCostProvider {
-            family: WeightFamily::NegativeBinomial(layers),
-            x,
-            y,
-            gamma,
-            costs: &costs,
-            self_loops: true,
-        },
     )
 }
 
 #[allow(clippy::too_many_arguments)]
 #[must_use]
-pub fn absent_strength_cost_negative_binomial(
+pub fn absent_strength_cost_binomial_coordinates(
     x: &[f64],
     y: &[f64],
     gamma: f64,
-    cost_sources: &[usize],
-    cost_targets: &[usize],
-    cost_values: &[f64],
+    coord_x: &[f64],
+    coord_y: &[f64],
     layers: u32,
     observed_sources: &[u64],
     observed_targets: &[u64],
@@ -959,24 +900,137 @@ pub fn absent_strength_cost_negative_binomial(
     min_expected: f64,
     max_absent: Option<usize>,
 ) -> AbsentFilterResult {
-    let costs = build_cost_map(cost_sources, cost_targets, cost_values);
-    detect_absent_provider(
-        &StrengthCostProvider {
-            family: WeightFamily::NegativeBinomial(layers),
-            x,
-            y,
-            gamma,
-            costs: &costs,
-            self_loops,
-        },
+    absent_strength_cost_coordinates_family(
+        x,
+        y,
+        gamma,
+        coord_x,
+        coord_y,
+        WeightFamily::Binomial(layers),
         observed_sources,
         observed_targets,
-        AbsentFilterOptions {
-            alpha_lower,
-            min_occupation,
-            min_expected,
-            max_absent,
-        },
+        self_loops,
+        alpha_lower,
+        min_occupation,
+        min_expected,
+        max_absent,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn filter_strength_cost_geometric_coordinates(
+    x: &[f64],
+    y: &[f64],
+    gamma: f64,
+    coord_x: &[f64],
+    coord_y: &[f64],
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    filter_strength_cost_coordinates_family(
+        x,
+        y,
+        gamma,
+        coord_x,
+        coord_y,
+        WeightFamily::Geometric,
+        sources,
+        targets,
+        weights,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_strength_cost_geometric_coordinates(
+    x: &[f64],
+    y: &[f64],
+    gamma: f64,
+    coord_x: &[f64],
+    coord_y: &[f64],
+    observed_sources: &[u64],
+    observed_targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    absent_strength_cost_coordinates_family(
+        x,
+        y,
+        gamma,
+        coord_x,
+        coord_y,
+        WeightFamily::Geometric,
+        observed_sources,
+        observed_targets,
+        self_loops,
+        alpha_lower,
+        min_occupation,
+        min_expected,
+        max_absent,
+    )
+}
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn filter_strength_cost_negative_binomial_coordinates(
+    x: &[f64],
+    y: &[f64],
+    gamma: f64,
+    coord_x: &[f64],
+    coord_y: &[f64],
+    layers: u32,
+    sources: &[u64],
+    targets: &[u64],
+    weights: &[u64],
+) -> ObservedFilterResult {
+    filter_strength_cost_coordinates_family(
+        x,
+        y,
+        gamma,
+        coord_x,
+        coord_y,
+        WeightFamily::NegativeBinomial(layers),
+        sources,
+        targets,
+        weights,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_strength_cost_negative_binomial_coordinates(
+    x: &[f64],
+    y: &[f64],
+    gamma: f64,
+    coord_x: &[f64],
+    coord_y: &[f64],
+    layers: u32,
+    observed_sources: &[u64],
+    observed_targets: &[u64],
+    self_loops: bool,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    absent_strength_cost_coordinates_family(
+        x,
+        y,
+        gamma,
+        coord_x,
+        coord_y,
+        WeightFamily::NegativeBinomial(layers),
+        observed_sources,
+        observed_targets,
+        self_loops,
+        alpha_lower,
+        min_occupation,
+        min_expected,
+        max_absent,
     )
 }
 
@@ -1512,19 +1566,6 @@ pub fn absent_degree_events_negative_binomial(
             max_absent,
         },
     )
-}
-
-fn build_cost_map(
-    cost_sources: &[usize],
-    cost_targets: &[usize],
-    cost_values: &[f64],
-) -> HashMap<(usize, usize), f64> {
-    cost_sources
-        .iter()
-        .zip(cost_targets.iter())
-        .zip(cost_values.iter())
-        .map(|((&s, &t), &v)| ((s, t), v))
-        .collect()
 }
 
 fn merge_absent(chunks: Vec<AbsentFilterResult>) -> AbsentFilterResult {

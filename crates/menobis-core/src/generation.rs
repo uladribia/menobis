@@ -2,16 +2,16 @@
 
 use crate::distribution::{PairDistribution, WeightFamily};
 use crate::pairs::{
-    chunk_seed, row_ranges, CandidateSupport, DegreeEventsProvider, FixedStrengthProvider,
-    NormalizedSparsePoissonProvider, PairDistributionProvider, StrengthCostProvider,
-    StrengthDegreeProvider, StrengthEdgesProvider, PARALLEL_PAIR_THRESHOLD, SPARSE_CHUNK_SIZE,
+    chunk_seed, row_ranges, CandidateSupport, DegreeEventsProvider, EuclideanCostProvider,
+    FixedStrengthProvider, NormalizedSparsePoissonProvider, PairDistributionProvider,
+    StrengthCostProvider, StrengthDegreeProvider, StrengthEdgesProvider, PARALLEL_PAIR_THRESHOLD,
+    SPARSE_CHUNK_SIZE,
 };
 use rand::rngs::StdRng;
 use rand::Rng;
 use rand::SeedableRng;
 use rand_distr::{Binomial, Distribution, Poisson};
 use rayon::prelude::*;
-use std::collections::HashMap;
 
 /// Sparse edge output from a generation run.
 #[derive(Clone, Debug, Default)]
@@ -28,26 +28,11 @@ struct PairDraw {
     distribution: PairDistribution,
 }
 
-/// Sparse cost entries for strength-cost generation.
-pub struct SparseCostEntries<'a> {
-    pub sources: &'a [usize],
-    pub targets: &'a [usize],
-    pub values: &'a [f64],
-}
-
 /// Internal ontology for provider-backed independent-pair samplers.
 enum SamplingModel<'a> {
     FixedStrength {
         x: &'a [f64],
         y: &'a [f64],
-        family: WeightFamily,
-        self_loops: bool,
-    },
-    StrengthCost {
-        x: &'a [f64],
-        y: &'a [f64],
-        gamma: f64,
-        costs: &'a HashMap<(usize, usize), f64>,
         family: WeightFamily,
         self_loops: bool,
     },
@@ -126,24 +111,6 @@ fn sample_model(model: SamplingModel<'_>, seed: u64) -> SampledEdges {
             },
             seed,
         ),
-        SamplingModel::StrengthCost {
-            x,
-            y,
-            gamma,
-            costs,
-            family,
-            self_loops,
-        } => sample_provider(
-            &StrengthCostProvider {
-                x,
-                y,
-                gamma,
-                costs,
-                family,
-                self_loops,
-            },
-            seed,
-        ),
         SamplingModel::DegreeEvents {
             x,
             y,
@@ -195,16 +162,6 @@ fn sample_model(model: SamplingModel<'_>, seed: u64) -> SampledEdges {
             seed,
         ),
     }
-}
-
-fn cost_map(costs: &SparseCostEntries<'_>) -> HashMap<(usize, usize), f64> {
-    costs
-        .sources
-        .iter()
-        .zip(costs.targets.iter())
-        .zip(costs.values.iter())
-        .map(|((&source, &target), &cost)| ((source, target), cost))
-        .collect()
 }
 
 fn sample_provider<P>(provider: &P, seed: u64) -> SampledEdges
@@ -520,31 +477,57 @@ pub fn sample_strength_negative_binomial(
 
 /// Sample from independent Poisson(x_i * y_j * exp(-gamma d_ij)).
 ///
-/// Cost entries are read sparsely. Missing pairs have d_ij = 0, matching the
-/// fitting API's current semantics, and rates are generated on the fly.
+/// Costs are generated on demand as Euclidean distances from projected XY
+/// coordinates. MENoBiS does not accept user-supplied dense cost matrices.
 #[must_use]
-pub fn sample_strength_cost_poisson(
+pub fn sample_strength_cost_poisson_coordinates(
     x: &[f64],
     y: &[f64],
     gamma: f64,
-    costs: &SparseCostEntries<'_>,
+    coord_x: &[f64],
+    coord_y: &[f64],
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
-    let cost_map = cost_map(costs);
-    sample_model(
-        SamplingModel::StrengthCost {
+    sample_strength_cost_coordinates(
+        x,
+        y,
+        gamma,
+        coord_x,
+        coord_y,
+        WeightFamily::Poisson,
+        self_loops,
+        seed,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn sample_strength_cost_coordinates(
+    x: &[f64],
+    y: &[f64],
+    gamma: f64,
+    coord_x: &[f64],
+    coord_y: &[f64],
+    family: WeightFamily,
+    self_loops: bool,
+    seed: u64,
+) -> SampledEdges {
+    let costs = EuclideanCostProvider {
+        x: coord_x,
+        y: coord_y,
+    };
+    sample_provider(
+        &StrengthCostProvider {
             x,
             y,
             gamma,
-            costs: &cost_map,
-            family: WeightFamily::Poisson,
+            costs: &costs,
+            family,
             self_loops,
         },
         seed,
     )
 }
-
 /// Sample degree-events ME: Bernoulli occupation + positive Poisson(q).
 #[must_use]
 pub fn sample_degree_events_poisson(
@@ -638,80 +621,76 @@ pub fn sample_strength_edges_poisson(
     )
 }
 
-/// Sample strength-cost binomial model: Bin(M, p) where p = xy/(1+xy) and xy = x_i y_j exp(-gamma d_ij).
+/// Sample strength-cost binomial from Euclidean coordinate costs.
 #[must_use]
-pub fn sample_strength_cost_binomial(
+#[allow(clippy::too_many_arguments)]
+pub fn sample_strength_cost_binomial_coordinates(
     x: &[f64],
     y: &[f64],
     gamma: f64,
-    costs: &SparseCostEntries<'_>,
+    coord_x: &[f64],
+    coord_y: &[f64],
     layers: u32,
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
-    let cost_map = cost_map(costs);
-    sample_model(
-        SamplingModel::StrengthCost {
-            x,
-            y,
-            gamma,
-            costs: &cost_map,
-            family: WeightFamily::Binomial(layers),
-            self_loops,
-        },
+    sample_strength_cost_coordinates(
+        x,
+        y,
+        gamma,
+        coord_x,
+        coord_y,
+        WeightFamily::Binomial(layers),
+        self_loops,
         seed,
     )
 }
-
-/// Sample strength-cost geometric: Geometric with cost-modulated rates.
+/// Sample strength-cost geometric from Euclidean coordinate costs.
 #[must_use]
-pub fn sample_strength_cost_geometric(
+pub fn sample_strength_cost_geometric_coordinates(
     x: &[f64],
     y: &[f64],
     gamma: f64,
-    costs: &SparseCostEntries<'_>,
+    coord_x: &[f64],
+    coord_y: &[f64],
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
-    let cost_map = cost_map(costs);
-    sample_model(
-        SamplingModel::StrengthCost {
-            x,
-            y,
-            gamma,
-            costs: &cost_map,
-            family: WeightFamily::Geometric,
-            self_loops,
-        },
+    sample_strength_cost_coordinates(
+        x,
+        y,
+        gamma,
+        coord_x,
+        coord_y,
+        WeightFamily::Geometric,
+        self_loops,
         seed,
     )
 }
-
-/// Sample strength-cost negative binomial: negative binomial(M) with cost-modulated rates.
+/// Sample strength-cost negative binomial from Euclidean coordinate costs.
 #[must_use]
-pub fn sample_strength_cost_negative_binomial(
+#[allow(clippy::too_many_arguments)]
+pub fn sample_strength_cost_negative_binomial_coordinates(
     x: &[f64],
     y: &[f64],
     gamma: f64,
-    costs: &SparseCostEntries<'_>,
+    coord_x: &[f64],
+    coord_y: &[f64],
     layers: u32,
     self_loops: bool,
     seed: u64,
 ) -> SampledEdges {
-    let cost_map = cost_map(costs);
-    sample_model(
-        SamplingModel::StrengthCost {
-            x,
-            y,
-            gamma,
-            costs: &cost_map,
-            family: WeightFamily::NegativeBinomial(layers),
-            self_loops,
-        },
+    sample_strength_cost_coordinates(
+        x,
+        y,
+        gamma,
+        coord_x,
+        coord_y,
+        WeightFamily::NegativeBinomial(layers),
+        self_loops,
         seed,
     )
 }
-
 /// Sample strength-edges binomial zero-inflated: Bernoulli occupation + positive binomial(M, p).
 #[must_use]
 pub fn sample_strength_edges_binomial(
@@ -1130,8 +1109,8 @@ fn multinomial_sample(rates: &[f64], total: u64, rng: &mut StdRng) -> Vec<u64> {
 #[cfg(test)]
 mod tests {
     use super::{
-        sample_strength_cost_poisson, sample_strength_degree_poisson, sample_strength_multinomial,
-        sample_strength_poisson, sample_strength_stub_matching,
+        sample_strength_degree_poisson, sample_strength_multinomial, sample_strength_poisson,
+        sample_strength_stub_matching,
     };
 
     #[test]
@@ -1207,20 +1186,5 @@ mod tests {
         let y = vec![0.5; 100];
         let edges = super::sample_degree_events_poisson(&x, &y, 0.0, true, 42);
         assert!(edges.weights.iter().all(|&w| w >= 1));
-    }
-
-    #[test]
-    fn strength_cost_sampler_streams_large_factorized_model() {
-        let n = 1000;
-        let x = vec![0.0005; n];
-        let y = vec![0.0005; n];
-        let costs = super::SparseCostEntries {
-            sources: &[],
-            targets: &[],
-            values: &[],
-        };
-        let edges = sample_strength_cost_poisson(&x, &y, 0.1, &costs, true, 7);
-        assert_eq!(edges.sources.len(), edges.targets.len());
-        assert_eq!(edges.sources.len(), edges.weights.len());
     }
 }

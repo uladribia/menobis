@@ -20,16 +20,14 @@ pub use b::{
 pub use me::{
     balance_sparse_masked_strength_degree_poisson, balance_sparse_masked_strength_poisson,
     balance_strength_degree_poisson, balance_strength_edges_poisson, balance_strength_poisson,
-    balance_weighted_factors, fit_strength_cost_poisson, fit_strength_cost_poisson_coordinates,
-    fit_strength_poisson, CostFitOptions,
+    balance_weighted_factors, fit_strength_cost_poisson_coordinates, fit_strength_poisson,
+    CostFitOptions,
 };
 pub use partial::{
-    fit_partial_degree, fit_partial_strength, fit_partial_strength_cost,
-    fit_partial_strength_cost_binomial_coordinates, fit_partial_strength_cost_coordinates,
-    fit_partial_strength_cost_w_coordinates, fit_partial_strength_degree,
-    fit_partial_strength_edges,
+    fit_partial_degree, fit_partial_strength, fit_partial_strength_cost_binomial_coordinates,
+    fit_partial_strength_cost_coordinates, fit_partial_strength_cost_w_coordinates,
+    fit_partial_strength_degree, fit_partial_strength_edges,
 };
-pub use strength_cost::fit_strength_cost_binomial;
 pub use strength_cost::fit_strength_cost_binomial_coordinates;
 pub use types::{
     FitResult, PartialFitResult, StrengthCostFitResult, StrengthDegreeFitResult,
@@ -37,12 +35,11 @@ pub use types::{
     WStrengthDegreeFitResult, WStrengthEdgesFitResult, WStrengthFitResult, WStrengthResiduals,
 };
 pub use w::{
-    fit_degree_events_geometric, fit_degree_events_negative_binomial, fit_strength_cost_geometric,
-    fit_strength_cost_negative_binomial, fit_strength_degree_geometric,
-    fit_strength_degree_negative_binomial, fit_strength_edges_geometric,
-    fit_strength_edges_negative_binomial, fit_strength_geometric, fit_strength_negative_binomial,
-    independent_strength_residuals, strength_cost_residuals, strength_edges_residuals,
-    DegreeEventsFitResult,
+    fit_degree_events_geometric, fit_degree_events_negative_binomial,
+    fit_strength_degree_geometric, fit_strength_degree_negative_binomial,
+    fit_strength_edges_geometric, fit_strength_edges_negative_binomial, fit_strength_geometric,
+    fit_strength_negative_binomial, independent_strength_residuals, strength_cost_residuals,
+    strength_edges_residuals, DegreeEventsFitResult,
 };
 pub use w_lbfgs::fit_strength_cost_w_lbfgs;
 

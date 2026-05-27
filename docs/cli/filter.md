@@ -14,7 +14,7 @@ lower-significant, or compatible with an independent MENoBiS null model.
 | Command | Null model | Input |
 |---------|------------|-------|
 | `strength-poisson` | fit strength Poisson | edge table |
-| `strength-cost-poisson` | fit strength-cost Poisson | edge table + costs CSV |
+| `strength-cost-poisson` | fit strength-cost Poisson | edge table + coordinates CSV |
 | `strength-edges-poisson` | fit strength-edges Poisson (zero-inflated) | edge table |
 | `strength-degree-poisson` | fit strength-degree Poisson (zero-inflated) | edge table |
 | `degree-events-poisson` | fit degree-events Poisson (zero-inflated) | edge table |
@@ -25,7 +25,7 @@ lower-significant, or compatible with an independent MENoBiS null model.
 ```bash
 menobis filter strength-poisson edges.csv --output-prefix filtered/
 menobis filter strength-edges-poisson edges.csv --target-edges 500 --output-prefix filtered/
-menobis filter strength-cost-poisson edges.csv --costs costs.csv --target-cost 1.5 --output-prefix filtered/
+menobis filter strength-cost-poisson edges.csv --coordinates xy.csv --target-cost 1.5 --output-prefix filtered/
 menobis filter strength-degree-poisson edges.csv --output-prefix filtered/
 menobis filter degree-events-poisson edges.csv --output-prefix filtered/
 menobis filter custom-poisson edges.csv --rates rates.csv --output-prefix filtered/
@@ -58,5 +58,5 @@ Each file contains p-values, expected weight, and occupation probability.
 | `--self-loops/--no-self-loops` | diagonal handling |
 | `--target-edges` | target edge count (strength-edges-poisson) |
 | `--target-cost` | target average cost (strength-cost-poisson) |
-| `--costs` | cost CSV path (strength-cost-poisson) |
+| `--coordinates` | Projected XY coordinate CSV path (strength-cost-poisson) |
 | `--rates` | rates CSV path (custom-poisson) |

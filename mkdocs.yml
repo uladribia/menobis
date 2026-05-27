@@ -22,6 +22,7 @@ nav:
       - Maximum Entropy Models: concepts/maximum-entropy-models.md
       - Thesis Cases: concepts/thesis-cases.md
       - Spatial Costs: concepts/spatial-costs.md
+      - Cost Constraints: concepts/costs.md
       - W Ensemble: concepts/w-ensemble.md
       - Partial Constraints: concepts/partial-constraints.md
       - Statistical Filtering: concepts/statistical-filtering.md

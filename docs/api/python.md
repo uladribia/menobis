@@ -80,7 +80,7 @@ result = filter_model(edges, family=ModelFamily.ME, constraint=Constraint.STRENG
 |---|---|
 | Strength | `fit_strength_poisson`, `fit_strength_binomial`, `fit_strength_geometric`, `fit_strength_negative_binomial` |
 | Strength-cost | `fit_strength_cost_poisson`, `fit_strength_cost_binomial`, `fit_strength_cost_geometric`, `fit_strength_cost_negative_binomial` |
-| Coordinate strength-cost | `fit_strength_cost_*_coordinates` for ME, B, W, Wnb |
+| Coordinate strength-cost | `fit_strength_cost_*` for ME, B, W, Wnb using projected coordinates |
 | Strength-edges | `fit_strength_edges_poisson`, `fit_strength_edges_binomial`, `fit_strength_edges_geometric`, `fit_strength_edges_negative_binomial` |
 | Strength-degree | `fit_strength_degree_poisson`, `fit_strength_degree_binomial`, `fit_strength_degree_geometric`, `fit_strength_degree_negative_binomial` |
 | Degree-events | `fit_degree_events_poisson`, `fit_degree_events_binomial`, `fit_degree_events_geometric`, `fit_degree_events_negative_binomial` |

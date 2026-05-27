@@ -124,33 +124,6 @@ def _validate_strength_edges_constraints(
         raise ValueError(msg)
 
 
-def _validate_cost_entries(
-    cost_sources: NDArray[np.integer],
-    cost_targets: NDArray[np.integer],
-    cost_values: NDArray[np.floating],
-    *,
-    target_cost: float,
-    allow_zero_target: bool = False,
-) -> tuple[NDArray[np.uint64], NDArray[np.uint64], NDArray[np.float64]]:
-    """Validate shared sparse cost entries for strength-cost fitting."""
-    if not np.isfinite(target_cost) or (
-        target_cost < 0.0 if allow_zero_target else target_cost <= 0.0
-    ):
-        qualifier = "non-negative" if allow_zero_target else "positive"
-        msg = f"target_cost must be finite and {qualifier}"
-        raise ValueError(msg)
-    c_src = np.asarray(cost_sources, dtype=np.uint64)
-    c_tgt = np.asarray(cost_targets, dtype=np.uint64)
-    c_val = np.asarray(cost_values, dtype=np.float64)
-    if len(c_src) != len(c_tgt) or len(c_src) != len(c_val):
-        msg = "cost_sources, cost_targets, and cost_values must have the same length"
-        raise ValueError(msg)
-    if np.any(~np.isfinite(c_val)) or np.any(c_val < 0.0):
-        msg = "cost_values must be finite and non-negative"
-        raise ValueError(msg)
-    return c_src, c_tgt, c_val
-
-
 def _validate_degree_events_constraints(
     degree_out: NDArray[np.float64],
     degree_in: NDArray[np.float64],
@@ -278,88 +251,6 @@ def validate_strength_degree_constraints(
 def fit_strength_cost_poisson(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
-    cost_sources: NDArray[np.integer],
-    cost_targets: NDArray[np.integer],
-    cost_values: NDArray[np.floating],
-    target_cost: float,
-    *,
-    self_loops: bool = True,
-    tolerance: float = 1e-6,
-    verbose: int = 0,
-    max_iterations: int = 5000,
-) -> StrengthCostFit:
-    """Fit the strength-cost ME model: fixed strength + fixed total cost.
-
-    The fitted expectation is ``E[t_ij] = x_i y_j exp(-gamma d_ij)``.
-
-    Args:
-        strength_out: Outgoing strength per node.
-        strength_in: Incoming strength per node.
-        cost_sources: Source node ids for cost entries.
-        cost_targets: Target node ids for cost entries.
-        cost_values: Cost/distance values for each (source, target) pair.
-        target_cost: Observed total cost C = sum t_ij d_ij.
-        self_loops: Whether self loops are allowed.
-        tolerance: Solver tolerance.
-        verbose: Logging level (0=silent, 1=warnings, 2=info).
-        max_iterations: Maximum solver iterations.
-
-    Returns:
-        StrengthCostFit with x, y multipliers and gamma.
-    """
-    s_out = np.asarray(strength_out, dtype=np.float64)
-    s_in = np.asarray(strength_in, dtype=np.float64)
-    _validate_balanced_sequences(s_out, s_in, name="strength")
-    c_src_arr, c_tgt_arr, c_val_arr = _validate_cost_entries(
-        cost_sources, cost_targets, cost_values, target_cost=target_cost
-    )
-    if c_val_arr.size > 5_000_000:
-        warnings.warn(
-            "large sparse cost arrays may use substantial memory; use "
-            "fit_strength_cost_poisson_coordinates for complete Euclidean costs",
-            stacklevel=2,
-        )
-    c_src = c_src_arr.tolist()
-    c_tgt = c_tgt_arr.tolist()
-    c_val = c_val_arr.tolist()
-
-    t0 = time.perf_counter()
-    x_list, y_list, gamma, converged, iters = _menobis.fit_strength_cost_poisson(
-        s_out.tolist(),
-        s_in.tolist(),
-        c_src,
-        c_tgt,
-        c_val,
-        target_cost,
-        self_loops,
-        tolerance,
-        max_iterations,
-    )
-    n = len(s_out)
-    result = StrengthCostFit(
-        node=np.arange(n, dtype=np.uint64),
-        x=np.asarray(x_list, dtype=np.float64),
-        y=np.asarray(y_list, dtype=np.float64),
-        gamma=gamma,
-        self_loops=self_loops,
-        converged=converged,
-        iterations=iters,
-        family="poisson",
-        diagnostics=OptimizationDiagnostics(
-            converged=converged,
-            status="solved" if converged else "inaccurate",
-            iterations=iters,
-        ),
-    )
-    _log_fit_result(
-        "fit_strength_cost_poisson", converged, iters, time.perf_counter() - t0, verbose
-    )
-    return result
-
-
-def fit_strength_cost_poisson_coordinates(
-    strength_out: NDArray[np.floating],
-    strength_in: NDArray[np.floating],
     x: NDArray[np.floating],
     y: NDArray[np.floating],
     target_cost: float,
@@ -410,7 +301,7 @@ def fit_strength_cost_poisson_coordinates(
         ),
     )
     _log_fit_result(
-        "fit_strength_cost_poisson_coordinates",
+        "fit_strength_cost_poisson",
         converged,
         iters,
         time.perf_counter() - t0,
@@ -419,25 +310,7 @@ def fit_strength_cost_poisson_coordinates(
     return result
 
 
-def _coordinate_cost_triples(
-    x: NDArray[np.floating], y: NDArray[np.floating]
-) -> tuple[NDArray[np.uint64], NDArray[np.uint64], NDArray[np.float64]]:
-    """Build complete Euclidean cost triples from projected XY coordinates."""
-    coord_x = np.asarray(x, dtype=np.float64)
-    coord_y = np.asarray(y, dtype=np.float64)
-    n = len(coord_x)
-    source, target = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
-    distance = np.hypot(
-        coord_x[source] - coord_x[target], coord_y[source] - coord_y[target]
-    )
-    return (
-        source.ravel().astype(np.uint64),
-        target.ravel().astype(np.uint64),
-        distance.ravel().astype(np.float64),
-    )
-
-
-def fit_strength_cost_binomial_coordinates(
+def fit_strength_cost_binomial(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     x: NDArray[np.floating],
@@ -494,7 +367,7 @@ def fit_strength_cost_binomial_coordinates(
         ),
     )
     _log_fit_result(
-        "fit_strength_cost_binomial_coordinates",
+        "fit_strength_cost_binomial",
         converged,
         iters,
         time.perf_counter() - t0,
@@ -525,6 +398,9 @@ def _fit_strength_cost_w_coordinates(
     _validate_balanced_sequences(s_out, s_in, name="strength")
     if len(s_out) != len(coord_x) or len(s_out) != len(coord_y):
         msg = "strength and coordinate arrays must have the same length"
+        raise ValueError(msg)
+    if not np.all(np.isfinite(coord_x)) or not np.all(np.isfinite(coord_y)):
+        msg = "coordinates must be finite projected XY values"
         raise ValueError(msg)
     t0 = time.perf_counter()
     x_list, y_list, gamma, converged, iters = _menobis.fit_strength_cost_w_coordinates(
@@ -564,7 +440,7 @@ def _fit_strength_cost_w_coordinates(
     return result
 
 
-def fit_strength_cost_geometric_coordinates(
+def fit_strength_cost_geometric(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     x: NDArray[np.floating],
@@ -595,7 +471,7 @@ def fit_strength_cost_geometric_coordinates(
     )
 
 
-def fit_strength_cost_negative_binomial_coordinates(
+def fit_strength_cost_negative_binomial(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     x: NDArray[np.floating],
@@ -1311,113 +1187,6 @@ def _wrap_w_strength_cost_fit(
     )
 
 
-def fit_strength_cost_geometric(
-    strength_out: NDArray[np.integer] | NDArray[np.floating],
-    strength_in: NDArray[np.integer] | NDArray[np.floating],
-    cost_sources: NDArray[np.integer],
-    cost_targets: NDArray[np.integer],
-    cost_values: NDArray[np.floating],
-    target_cost: float,
-    *,
-    self_loops: bool = True,
-    tolerance: float = 1e-8,
-    verbose: int = 0,
-    max_iterations: int = 1000,
-) -> StrengthCostFit:
-    """Fit the W fixed-strength-plus-cost geometric model."""
-    s_out = np.asarray(strength_out, dtype=np.float64)
-    s_in = np.asarray(strength_in, dtype=np.float64)
-    _validate_balanced_sequences(s_out, s_in, name="strength")
-    c_src, c_tgt, c_val = _validate_cost_entries(
-        cost_sources,
-        cost_targets,
-        cost_values,
-        target_cost=target_cost,
-        allow_zero_target=True,
-    )
-
-    t0 = time.perf_counter()
-    result = _wrap_w_strength_cost_fit(
-        _menobis.fit_strength_cost_geometric(
-            s_out.tolist(),
-            s_in.tolist(),
-            c_src.tolist(),
-            c_tgt.tolist(),
-            c_val.tolist(),
-            float(target_cost),
-            self_loops,
-            tolerance,
-            max_iterations,
-        ),
-        node_count=len(s_out),
-        self_loops=self_loops,
-    )
-    _log_fit_result(
-        "fit_strength_cost_geometric",
-        result.converged,
-        result.iterations,
-        time.perf_counter() - t0,
-        verbose,
-    )
-    return result
-
-
-def fit_strength_cost_negative_binomial(
-    strength_out: NDArray[np.integer] | NDArray[np.floating],
-    strength_in: NDArray[np.integer] | NDArray[np.floating],
-    cost_sources: NDArray[np.integer],
-    cost_targets: NDArray[np.integer],
-    cost_values: NDArray[np.floating],
-    target_cost: float,
-    *,
-    layers: int = 3,
-    self_loops: bool = True,
-    tolerance: float = 1e-8,
-    verbose: int = 0,
-    max_iterations: int = 1000,
-) -> StrengthCostFit:
-    """Fit the W fixed-strength-plus-cost negative-binomial model."""
-    if layers <= 1:
-        msg = "negative binomial W fitting requires layers > 1; use geometric for M = 1"
-        raise ValueError(msg)
-    s_out = np.asarray(strength_out, dtype=np.float64)
-    s_in = np.asarray(strength_in, dtype=np.float64)
-    _validate_balanced_sequences(s_out, s_in, name="strength")
-    c_src, c_tgt, c_val = _validate_cost_entries(
-        cost_sources,
-        cost_targets,
-        cost_values,
-        target_cost=target_cost,
-        allow_zero_target=True,
-    )
-
-    t0 = time.perf_counter()
-    result = _wrap_w_strength_cost_fit(
-        _menobis.fit_strength_cost_negative_binomial(
-            s_out.tolist(),
-            s_in.tolist(),
-            c_src.tolist(),
-            c_tgt.tolist(),
-            c_val.tolist(),
-            float(target_cost),
-            layers,
-            self_loops,
-            tolerance,
-            max_iterations,
-        ),
-        node_count=len(s_out),
-        self_loops=self_loops,
-    )
-    _log_fit_result(
-        "fit_strength_cost_negative_binomial",
-        result.converged,
-        result.iterations,
-        time.perf_counter() - t0,
-        verbose,
-    )
-    return result
-
-
 def fit_degree_bernoulli(
     degree_out: NDArray[np.floating],
     degree_in: NDArray[np.floating],
@@ -1553,70 +1322,6 @@ def fit_strength_binomial(
             iterations=iters,
         ),
     )
-
-
-def fit_strength_cost_binomial(
-    strength_out: NDArray[np.floating],
-    strength_in: NDArray[np.floating],
-    cost_sources: NDArray[np.integer],
-    cost_targets: NDArray[np.integer],
-    cost_values: NDArray[np.floating],
-    target_cost: float,
-    *,
-    layers: int = 1,
-    self_loops: bool = True,
-    tolerance: float = 1e-6,
-    verbose: int = 0,
-    max_iterations: int = 5000,
-) -> StrengthCostFit:
-    """Fit the strength-cost binomial(M) model."""
-    s_out = np.asarray(strength_out, dtype=np.float64)
-    s_in = np.asarray(strength_in, dtype=np.float64)
-    _validate_balanced_sequences(s_out, s_in, name="strength")
-    c_src_arr, c_tgt_arr, c_val_arr = _validate_cost_entries(
-        cost_sources, cost_targets, cost_values, target_cost=target_cost
-    )
-    c_src = c_src_arr.tolist()
-    c_tgt = c_tgt_arr.tolist()
-    c_val = c_val_arr.tolist()
-    t0 = time.perf_counter()
-    x_list, y_list, gamma, converged, iters = _menobis.fit_strength_cost_binomial(
-        s_out.tolist(),
-        s_in.tolist(),
-        c_src,
-        c_tgt,
-        c_val,
-        target_cost,
-        layers,
-        self_loops,
-        tolerance,
-        max_iterations,
-    )
-    n = len(s_out)
-    result = StrengthCostFit(
-        node=np.arange(n, dtype=np.uint64),
-        x=np.asarray(x_list, dtype=np.float64),
-        y=np.asarray(y_list, dtype=np.float64),
-        gamma=gamma,
-        self_loops=self_loops,
-        converged=converged,
-        iterations=iters,
-        family="binomial",
-        layers=layers,
-        diagnostics=OptimizationDiagnostics(
-            converged=converged,
-            status="solved" if converged else "inaccurate",
-            iterations=iters,
-        ),
-    )
-    _log_fit_result(
-        "fit_strength_cost_binomial",
-        converged,
-        iters,
-        time.perf_counter() - t0,
-        verbose,
-    )
-    return result
 
 
 def fit_strength_edges_binomial(
@@ -1996,13 +1701,9 @@ __all__ = [
     "fit_degree_events_poisson",
     "fit_strength_binomial",
     "fit_strength_cost_binomial",
-    "fit_strength_cost_binomial_coordinates",
     "fit_strength_cost_geometric",
-    "fit_strength_cost_geometric_coordinates",
     "fit_strength_cost_negative_binomial",
-    "fit_strength_cost_negative_binomial_coordinates",
     "fit_strength_cost_poisson",
-    "fit_strength_cost_poisson_coordinates",
     "fit_strength_degree_binomial",
     "fit_strength_degree_geometric",
     "fit_strength_degree_negative_binomial",

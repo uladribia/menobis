@@ -193,9 +193,8 @@ pub(crate) fn filter_strength_cost_poisson(
     x: Vec<f64>,
     y: Vec<f64>,
     gamma: f64,
-    cost_sources: Vec<usize>,
-    cost_targets: Vec<usize>,
-    cost_values: Vec<f64>,
+    coord_x: Vec<f64>,
+    coord_y: Vec<f64>,
     sources: Vec<u64>,
     targets: Vec<u64>,
     weights: Vec<u64>,
@@ -204,15 +203,7 @@ pub(crate) fn filter_strength_cost_poisson(
         return Err(PyValueError::new_err("x and y must have same length"));
     }
     let result = core_filter_strength_cost_poisson(
-        &x,
-        &y,
-        gamma,
-        &cost_sources,
-        &cost_targets,
-        &cost_values,
-        &sources,
-        &targets,
-        &weights,
+        &x, &y, gamma, &coord_x, &coord_y, &sources, &targets, &weights,
     );
     Ok((
         result.upper_pvalues,
@@ -223,15 +214,14 @@ pub(crate) fn filter_strength_cost_poisson(
 }
 
 #[pyfunction]
-#[pyo3(signature = (x, y, gamma, cost_sources, cost_targets, cost_values, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
+#[pyo3(signature = (x, y, gamma, coord_x, coord_y, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn absent_strength_cost_poisson(
     x: Vec<f64>,
     y: Vec<f64>,
     gamma: f64,
-    cost_sources: Vec<usize>,
-    cost_targets: Vec<usize>,
-    cost_values: Vec<f64>,
+    coord_x: Vec<f64>,
+    coord_y: Vec<f64>,
     sources: Vec<u64>,
     targets: Vec<u64>,
     self_loops: bool,
@@ -247,9 +237,8 @@ pub(crate) fn absent_strength_cost_poisson(
         &x,
         &y,
         gamma,
-        &cost_sources,
-        &cost_targets,
-        &cost_values,
+        &coord_x,
+        &coord_y,
         &sources,
         &targets,
         self_loops,
@@ -514,25 +503,15 @@ pub(crate) fn filter_strength_cost_binomial(
     x: Vec<f64>,
     y: Vec<f64>,
     gamma: f64,
-    cost_sources: Vec<usize>,
-    cost_targets: Vec<usize>,
-    cost_values: Vec<f64>,
+    coord_x: Vec<f64>,
+    coord_y: Vec<f64>,
     layers: u32,
     sources: Vec<u64>,
     targets: Vec<u64>,
     weights: Vec<u64>,
 ) -> PyResult<ObservedFilter> {
     let result = core_filter_strength_cost_binomial(
-        &x,
-        &y,
-        gamma,
-        &cost_sources,
-        &cost_targets,
-        &cost_values,
-        layers,
-        &sources,
-        &targets,
-        &weights,
+        &x, &y, gamma, &coord_x, &coord_y, layers, &sources, &targets, &weights,
     );
     Ok((
         result.upper_pvalues,
@@ -543,15 +522,14 @@ pub(crate) fn filter_strength_cost_binomial(
 }
 
 #[pyfunction]
-#[pyo3(signature = (x, y, gamma, cost_sources, cost_targets, cost_values, layers, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
+#[pyo3(signature = (x, y, gamma, coord_x, coord_y, layers, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn absent_strength_cost_binomial(
     x: Vec<f64>,
     y: Vec<f64>,
     gamma: f64,
-    cost_sources: Vec<usize>,
-    cost_targets: Vec<usize>,
-    cost_values: Vec<f64>,
+    coord_x: Vec<f64>,
+    coord_y: Vec<f64>,
     layers: u32,
     sources: Vec<u64>,
     targets: Vec<u64>,
@@ -565,9 +543,8 @@ pub(crate) fn absent_strength_cost_binomial(
         &x,
         &y,
         gamma,
-        &cost_sources,
-        &cost_targets,
-        &cost_values,
+        &coord_x,
+        &coord_y,
         layers,
         &sources,
         &targets,
@@ -777,23 +754,14 @@ pub(crate) fn filter_strength_cost_geometric(
     x: Vec<f64>,
     y: Vec<f64>,
     gamma: f64,
-    cost_sources: Vec<usize>,
-    cost_targets: Vec<usize>,
-    cost_values: Vec<f64>,
+    coord_x: Vec<f64>,
+    coord_y: Vec<f64>,
     sources: Vec<u64>,
     targets: Vec<u64>,
     weights: Vec<u64>,
 ) -> PyResult<ObservedFilter> {
     let result = core_filter_strength_cost_geometric(
-        &x,
-        &y,
-        gamma,
-        &cost_sources,
-        &cost_targets,
-        &cost_values,
-        &sources,
-        &targets,
-        &weights,
+        &x, &y, gamma, &coord_x, &coord_y, &sources, &targets, &weights,
     );
     Ok((
         result.upper_pvalues,
@@ -804,15 +772,14 @@ pub(crate) fn filter_strength_cost_geometric(
 }
 
 #[pyfunction]
-#[pyo3(signature = (x, y, gamma, cost_sources, cost_targets, cost_values, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
+#[pyo3(signature = (x, y, gamma, coord_x, coord_y, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn absent_strength_cost_geometric(
     x: Vec<f64>,
     y: Vec<f64>,
     gamma: f64,
-    cost_sources: Vec<usize>,
-    cost_targets: Vec<usize>,
-    cost_values: Vec<f64>,
+    coord_x: Vec<f64>,
+    coord_y: Vec<f64>,
     sources: Vec<u64>,
     targets: Vec<u64>,
     self_loops: bool,
@@ -825,9 +792,8 @@ pub(crate) fn absent_strength_cost_geometric(
         &x,
         &y,
         gamma,
-        &cost_sources,
-        &cost_targets,
-        &cost_values,
+        &coord_x,
+        &coord_y,
         &sources,
         &targets,
         self_loops,
@@ -851,25 +817,15 @@ pub(crate) fn filter_strength_cost_negative_binomial(
     x: Vec<f64>,
     y: Vec<f64>,
     gamma: f64,
-    cost_sources: Vec<usize>,
-    cost_targets: Vec<usize>,
-    cost_values: Vec<f64>,
+    coord_x: Vec<f64>,
+    coord_y: Vec<f64>,
     layers: u32,
     sources: Vec<u64>,
     targets: Vec<u64>,
     weights: Vec<u64>,
 ) -> PyResult<ObservedFilter> {
     let result = core_filter_strength_cost_negative_binomial(
-        &x,
-        &y,
-        gamma,
-        &cost_sources,
-        &cost_targets,
-        &cost_values,
-        layers,
-        &sources,
-        &targets,
-        &weights,
+        &x, &y, gamma, &coord_x, &coord_y, layers, &sources, &targets, &weights,
     );
     Ok((
         result.upper_pvalues,
@@ -880,15 +836,14 @@ pub(crate) fn filter_strength_cost_negative_binomial(
 }
 
 #[pyfunction]
-#[pyo3(signature = (x, y, gamma, cost_sources, cost_targets, cost_values, layers, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
+#[pyo3(signature = (x, y, gamma, coord_x, coord_y, layers, sources, targets, self_loops, alpha_lower, min_occupation, min_expected, max_absent=None))]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn absent_strength_cost_negative_binomial(
     x: Vec<f64>,
     y: Vec<f64>,
     gamma: f64,
-    cost_sources: Vec<usize>,
-    cost_targets: Vec<usize>,
-    cost_values: Vec<f64>,
+    coord_x: Vec<f64>,
+    coord_y: Vec<f64>,
     layers: u32,
     sources: Vec<u64>,
     targets: Vec<u64>,
@@ -902,9 +857,8 @@ pub(crate) fn absent_strength_cost_negative_binomial(
         &x,
         &y,
         gamma,
-        &cost_sources,
-        &cost_targets,
-        &cost_values,
+        &coord_x,
+        &coord_y,
         layers,
         &sources,
         &targets,

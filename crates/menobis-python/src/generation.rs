@@ -88,28 +88,26 @@ pub(crate) fn sample_strength_edges_poisson(
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn sample_strength_cost_poisson(
+pub(crate) fn sample_strength_cost_poisson_coordinates(
     x: Vec<f64>,
     y: Vec<f64>,
     gamma: f64,
-    cost_sources: Vec<usize>,
-    cost_targets: Vec<usize>,
-    cost_values: Vec<f64>,
+    coord_x: Vec<f64>,
+    coord_y: Vec<f64>,
     self_loops: bool,
     seed: u64,
 ) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
     if x.len() != y.len() {
         return Err(PyValueError::new_err("x and y must have same length"));
     }
-    if cost_sources.len() != cost_targets.len() || cost_sources.len() != cost_values.len() {
-        return Err(PyValueError::new_err("cost arrays must have same length"));
+    if coord_x.len() != x.len() || coord_y.len() != x.len() {
+        return Err(PyValueError::new_err(
+            "coord_x and coord_y must match x/y length",
+        ));
     }
-    let costs = SparseCostEntries {
-        sources: &cost_sources,
-        targets: &cost_targets,
-        values: &cost_values,
-    };
-    let sample = core_sample_strength_cost_poisson(&x, &y, gamma, &costs, self_loops, seed);
+    let sample = core_sample_strength_cost_poisson_coordinates(
+        &x, &y, gamma, &coord_x, &coord_y, self_loops, seed,
+    );
     Ok((sample.sources, sample.targets, sample.weights))
 }
 
@@ -149,69 +147,70 @@ pub(crate) fn sample_strength_binomial(
 
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn sample_strength_cost_binomial(
+pub(crate) fn sample_strength_cost_binomial_coordinates(
     x: Vec<f64>,
     y: Vec<f64>,
     gamma: f64,
-    cost_sources: Vec<usize>,
-    cost_targets: Vec<usize>,
-    cost_values: Vec<f64>,
+    coord_x: Vec<f64>,
+    coord_y: Vec<f64>,
     layers: u32,
     self_loops: bool,
     seed: u64,
-) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
-    let costs = SparseCostEntries {
-        sources: &cost_sources,
-        targets: &cost_targets,
-        values: &cost_values,
-    };
-    let edges = core_sample_strength_cost_binomial(&x, &y, gamma, &costs, layers, self_loops, seed);
-    (edges.sources, edges.targets, edges.weights)
-}
-
-#[pyfunction]
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn sample_strength_cost_geometric(
-    x: Vec<f64>,
-    y: Vec<f64>,
-    gamma: f64,
-    cost_sources: Vec<usize>,
-    cost_targets: Vec<usize>,
-    cost_values: Vec<f64>,
-    self_loops: bool,
-    seed: u64,
-) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
-    let costs = SparseCostEntries {
-        sources: &cost_sources,
-        targets: &cost_targets,
-        values: &cost_values,
-    };
-    let edges = core_sample_strength_cost_geometric(&x, &y, gamma, &costs, self_loops, seed);
-    (edges.sources, edges.targets, edges.weights)
-}
-
-#[pyfunction]
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn sample_strength_cost_negative_binomial(
-    x: Vec<f64>,
-    y: Vec<f64>,
-    gamma: f64,
-    cost_sources: Vec<usize>,
-    cost_targets: Vec<usize>,
-    cost_values: Vec<f64>,
-    layers: u32,
-    self_loops: bool,
-    seed: u64,
-) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
-    let costs = SparseCostEntries {
-        sources: &cost_sources,
-        targets: &cost_targets,
-        values: &cost_values,
-    };
-    let edges = core_sample_strength_cost_negative_binomial(
-        &x, &y, gamma, &costs, layers, self_loops, seed,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    if x.len() != y.len() || coord_x.len() != x.len() || coord_y.len() != x.len() {
+        return Err(PyValueError::new_err(
+            "x, y, coord_x, and coord_y must have the same length",
+        ));
+    }
+    let edges = core_sample_strength_cost_binomial_coordinates(
+        &x, &y, gamma, &coord_x, &coord_y, layers, self_loops, seed,
     );
-    (edges.sources, edges.targets, edges.weights)
+    Ok((edges.sources, edges.targets, edges.weights))
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn sample_strength_cost_geometric_coordinates(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    gamma: f64,
+    coord_x: Vec<f64>,
+    coord_y: Vec<f64>,
+    self_loops: bool,
+    seed: u64,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    if x.len() != y.len() || coord_x.len() != x.len() || coord_y.len() != x.len() {
+        return Err(PyValueError::new_err(
+            "x, y, coord_x, and coord_y must have the same length",
+        ));
+    }
+    let edges = core_sample_strength_cost_geometric_coordinates(
+        &x, &y, gamma, &coord_x, &coord_y, self_loops, seed,
+    );
+    Ok((edges.sources, edges.targets, edges.weights))
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn sample_strength_cost_negative_binomial_coordinates(
+    x: Vec<f64>,
+    y: Vec<f64>,
+    gamma: f64,
+    coord_x: Vec<f64>,
+    coord_y: Vec<f64>,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    if x.len() != y.len() || coord_x.len() != x.len() || coord_y.len() != x.len() {
+        return Err(PyValueError::new_err(
+            "x, y, coord_x, and coord_y must have the same length",
+        ));
+    }
+    let edges = core_sample_strength_cost_negative_binomial_coordinates(
+        &x, &y, gamma, &coord_x, &coord_y, layers, self_loops, seed,
+    );
+    Ok((edges.sources, edges.targets, edges.weights))
 }
 
 #[pyfunction]
