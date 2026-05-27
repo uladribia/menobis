@@ -292,8 +292,6 @@ pub fn balance_strength_degree_poisson(
             }
         })
         .collect();
-    let mut others_q = vec![0.0_f64; n];
-    let mut others_v = vec![0.0_f64; n];
 
     for iter in 0..max_iterations {
         let old_x = x.clone();
@@ -301,61 +299,104 @@ pub fn balance_strength_degree_poisson(
         let old_z = z.clone();
         let old_w = w.clone();
 
+        // Update y: ratio correction for s_in
         for j in 0..n {
-            for i in 0..n {
-                if self_loops || i != j {
-                    others_q[i] = x[i];
-                    others_v[i] = z[i] * w[j];
-                } else {
-                    others_q[i] = 0.0;
-                    others_v[i] = 0.0;
-                }
+            if strength_in[j] <= 0.0 {
+                y[j] = 0.0;
+                continue;
             }
-            y[j] = solve_me_sd_factor_s(strength_in[j], &others_q, &others_v);
+            let predicted: f64 = (0..n)
+                .filter(|&i| self_loops || i != j)
+                .map(|i| me_sd_expected_weight(x[i] * y[j], z[i] * w[j]))
+                .sum();
+            if predicted > 0.0 {
+                y[j] *= strength_in[j] / predicted;
+            }
+            y[j] = y[j].max(1e-12);
         }
+
+        // Update x: ratio correction for s_out
         for i in 0..n {
-            for j in 0..n {
-                if self_loops || i != j {
-                    others_q[j] = y[j];
-                    others_v[j] = z[i] * w[j];
-                } else {
-                    others_q[j] = 0.0;
-                    others_v[j] = 0.0;
-                }
+            if strength_out[i] <= 0.0 {
+                x[i] = 0.0;
+                continue;
             }
-            x[i] = solve_me_sd_factor_s(strength_out[i], &others_q, &others_v);
+            let predicted: f64 = (0..n)
+                .filter(|&j| self_loops || i != j)
+                .map(|j| me_sd_expected_weight(x[i] * y[j], z[i] * w[j]))
+                .sum();
+            if predicted > 0.0 {
+                x[i] *= strength_out[i] / predicted;
+            }
+            x[i] = x[i].max(1e-12);
         }
+
+        // Update w: ratio correction for k_in (pinned if saturated)
         for j in 0..n {
             if saturated_in[j] {
                 w[j] = 1e30;
                 continue;
             }
-            for i in 0..n {
-                if self_loops || i != j {
-                    others_q[i] = x[i] * y[j];
-                    others_v[i] = z[i];
-                } else {
-                    others_q[i] = 0.0;
-                    others_v[i] = 0.0;
-                }
+            if degree_in[j] <= 0.0 {
+                w[j] = 0.0;
+                continue;
             }
-            w[j] = solve_me_sd_factor_k(degree_in[j], &others_q, &others_v);
+            let predicted: f64 = (0..n)
+                .filter(|&i| self_loops || i != j)
+                .map(|i| me_sd_occupation(x[i] * y[j], z[i] * w[j]))
+                .sum();
+            if predicted > 0.0 {
+                w[j] *= degree_in[j] / predicted;
+            }
+            w[j] = w[j].max(1e-12);
         }
+
+        // Update z: ratio correction for k_out (pinned if saturated)
         for i in 0..n {
             if saturated_out[i] {
                 z[i] = 1e30;
                 continue;
             }
-            for j in 0..n {
-                if self_loops || i != j {
-                    others_q[j] = x[i] * y[j];
-                    others_v[j] = w[j];
-                } else {
-                    others_q[j] = 0.0;
-                    others_v[j] = 0.0;
+            if degree_out[i] <= 0.0 {
+                z[i] = 0.0;
+                continue;
+            }
+            let predicted: f64 = (0..n)
+                .filter(|&j| self_loops || i != j)
+                .map(|j| me_sd_occupation(x[i] * y[j], z[i] * w[j]))
+                .sum();
+            if predicted > 0.0 {
+                z[i] *= degree_out[i] / predicted;
+            }
+            z[i] = z[i].max(1e-12);
+        }
+
+        // Normalize: keep sum(x) == sum(y) and sum(z) == sum(w)
+        let sx: f64 = x.iter().sum();
+        let sy: f64 = y.iter().sum();
+        if sx > 0.0 && sy > 0.0 {
+            let ratio = (sy / sx).sqrt();
+            for xi in x.iter_mut() {
+                *xi *= ratio;
+            }
+            for yj in y.iter_mut() {
+                *yj /= ratio;
+            }
+        }
+        let sz: f64 = z.iter().filter(|&&v| v < 1e20).sum();
+        let sw: f64 = w.iter().filter(|&&v| v < 1e20).sum();
+        if sz > 0.0 && sw > 0.0 {
+            let ratio = (sw / sz).sqrt();
+            for zi in z.iter_mut() {
+                if *zi < 1e20 {
+                    *zi *= ratio;
                 }
             }
-            z[i] = solve_me_sd_factor_k(degree_out[i], &others_q, &others_v);
+            for wj in w.iter_mut() {
+                if *wj < 1e20 {
+                    *wj /= ratio;
+                }
+            }
         }
 
         let delta = x
@@ -364,7 +405,10 @@ pub fn balance_strength_degree_poisson(
             .chain(y.iter().zip(old_y.iter()))
             .chain(z.iter().zip(old_z.iter()))
             .chain(w.iter().zip(old_w.iter()))
-            .map(|(&a, &b)| (a - b).abs())
+            .map(|(&a, &b)| {
+                let denom = a.abs().max(b.abs()).max(1e-12);
+                (a - b).abs() / denom
+            })
             .fold(0.0_f64, f64::max);
         if delta < tolerance {
             return StrengthDegreeFitResult {
@@ -387,21 +431,6 @@ pub fn balance_strength_degree_poisson(
     }
 }
 
-/// ME strength-degree pair mean: v*u / (exp(-u) + v*(1-exp(-u)))
-fn me_sd_pair_mean(xi: f64, oq: f64, ov: f64) -> f64 {
-    let u = xi * oq;
-    if u <= 0.0 {
-        return 0.0;
-    }
-    let v = ov;
-    let e_neg_u = (-u).exp();
-    let den = e_neg_u + v * (1.0 - e_neg_u);
-    if den <= 0.0 {
-        return 0.0;
-    }
-    v * u / den
-}
-
 /// ME strength-degree occupation: v*(1-exp(-u)) / (exp(-u) + v*(1-exp(-u)))
 fn me_sd_occupation(u: f64, v: f64) -> f64 {
     if u <= 0.0 || v <= 0.0 {
@@ -413,67 +442,6 @@ fn me_sd_occupation(u: f64, v: f64) -> f64 {
         return 0.0;
     }
     v * (1.0 - e_neg_u) / den
-}
-
-fn solve_me_sd_factor_s(target: f64, others_q: &[f64], others_v: &[f64]) -> f64 {
-    if target <= 0.0 {
-        return 0.0;
-    }
-    let mut low = 0.0_f64;
-    let mut high = 1e6_f64;
-    for _ in 0..60 {
-        let mid = 0.5 * (low + high);
-        let value: f64 = others_q
-            .iter()
-            .zip(others_v.iter())
-            .map(|(&oq, &ov)| me_sd_pair_mean(mid, oq, ov))
-            .sum();
-        if value < target {
-            low = mid;
-        } else {
-            high = mid;
-        }
-        if high - low < 1e-14 * high.max(1.0) {
-            break;
-        }
-    }
-    0.5 * (low + high)
-}
-
-fn solve_me_sd_factor_k(target: f64, others_q: &[f64], others_v: &[f64]) -> f64 {
-    if target <= 0.0 {
-        return 0.0;
-    }
-    let mut low = 0.0_f64;
-    let mut high = 1.0_f64;
-    for _ in 0..80 {
-        let value: f64 = others_q
-            .iter()
-            .zip(others_v.iter())
-            .map(|(&oq, &ov)| me_sd_occupation(oq, high * ov))
-            .sum();
-        if value >= target || high >= 1e30 {
-            break;
-        }
-        high *= 2.0;
-    }
-    for _ in 0..80 {
-        let mid = 0.5 * (low + high);
-        let value: f64 = others_q
-            .iter()
-            .zip(others_v.iter())
-            .map(|(&oq, &ov)| me_sd_occupation(oq, mid * ov))
-            .sum();
-        if value < target {
-            low = mid;
-        } else {
-            high = mid;
-        }
-        if high - low < 1e-14 * high.max(1.0) {
-            break;
-        }
-    }
-    0.5 * (low + high)
 }
 
 /// Sparse-mask monotone coordinate solver for ME strength-degree.
@@ -512,62 +480,104 @@ pub fn balance_sparse_masked_strength_degree_poisson(
         .iter()
         .map(|&k| (k / k_total * k_scale).max(1e-12))
         .collect();
-    let mut others_q = vec![0.0_f64; n];
-    let mut others_v = vec![0.0_f64; n];
 
+    // Multiplicative ratio-correction IPF:
+    // E[t_ij] = v_ij * q_ij * exp(q_ij) / (1 + v_ij * (exp(q_ij) - 1))
+    // p_ij    = v_ij * (1 - exp(-q_ij)) / (exp(-q_ij) + v_ij * (1 - exp(-q_ij)))
+    // where q_ij = x_i * y_j, v_ij = z_i * w_j
     for iter in 0..max_iterations {
         let old_x = x.clone();
         let old_y = y.clone();
         let old_z = z.clone();
         let old_w = w.clone();
 
+        // Update y: s_in[j] = sum_i E[t_ij] → y[j] *= s_in[j] / s_in_predicted[j]
         for j in 0..n {
-            for i in 0..n {
-                if !mask.is_masked(i, j) {
-                    others_q[i] = x[i];
-                    others_v[i] = z[i] * w[j];
-                } else {
-                    others_q[i] = 0.0;
-                    others_v[i] = 0.0;
-                }
+            if strength_in[j] <= 0.0 {
+                y[j] = 0.0;
+                continue;
             }
-            y[j] = solve_me_sd_factor_s(strength_in[j], &others_q, &others_v);
+            let predicted: f64 = (0..n)
+                .filter(|&i| !mask.is_masked(i, j))
+                .map(|i| me_sd_expected_weight(x[i] * y[j], z[i] * w[j]))
+                .sum();
+            if predicted > 0.0 {
+                y[j] *= strength_in[j] / predicted;
+            }
+            y[j] = y[j].max(1e-12);
         }
+
+        // Update x: s_out[i] = sum_j E[t_ij] → x[i] *= s_out[i] / s_out_predicted[i]
         for i in 0..n {
-            for j in 0..n {
-                if !mask.is_masked(i, j) {
-                    others_q[j] = y[j];
-                    others_v[j] = z[i] * w[j];
-                } else {
-                    others_q[j] = 0.0;
-                    others_v[j] = 0.0;
-                }
+            if strength_out[i] <= 0.0 {
+                x[i] = 0.0;
+                continue;
             }
-            x[i] = solve_me_sd_factor_s(strength_out[i], &others_q, &others_v);
+            let predicted: f64 = (0..n)
+                .filter(|&j| !mask.is_masked(i, j))
+                .map(|j| me_sd_expected_weight(x[i] * y[j], z[i] * w[j]))
+                .sum();
+            if predicted > 0.0 {
+                x[i] *= strength_out[i] / predicted;
+            }
+            x[i] = x[i].max(1e-12);
         }
+
+        // Update w: k_in[j] = sum_i p_ij → w[j] *= k_in[j] / k_in_predicted[j]
         for j in 0..n {
-            for i in 0..n {
-                if !mask.is_masked(i, j) {
-                    others_q[i] = x[i] * y[j];
-                    others_v[i] = z[i];
-                } else {
-                    others_q[i] = 0.0;
-                    others_v[i] = 0.0;
-                }
+            if degree_in[j] <= 0.0 {
+                w[j] = 0.0;
+                continue;
             }
-            w[j] = solve_me_sd_factor_k(degree_in[j], &others_q, &others_v);
+            let predicted: f64 = (0..n)
+                .filter(|&i| !mask.is_masked(i, j))
+                .map(|i| me_sd_occupation(x[i] * y[j], z[i] * w[j]))
+                .sum();
+            if predicted > 0.0 {
+                w[j] *= degree_in[j] / predicted;
+            }
+            w[j] = w[j].max(1e-12);
         }
+
+        // Update z: k_out[i] = sum_j p_ij → z[i] *= k_out[i] / k_out_predicted[i]
         for i in 0..n {
-            for j in 0..n {
-                if !mask.is_masked(i, j) {
-                    others_q[j] = x[i] * y[j];
-                    others_v[j] = w[j];
-                } else {
-                    others_q[j] = 0.0;
-                    others_v[j] = 0.0;
-                }
+            if degree_out[i] <= 0.0 {
+                z[i] = 0.0;
+                continue;
             }
-            z[i] = solve_me_sd_factor_k(degree_out[i], &others_q, &others_v);
+            let predicted: f64 = (0..n)
+                .filter(|&j| !mask.is_masked(i, j))
+                .map(|j| me_sd_occupation(x[i] * y[j], z[i] * w[j]))
+                .sum();
+            if predicted > 0.0 {
+                z[i] *= degree_out[i] / predicted;
+            }
+            z[i] = z[i].max(1e-12);
+        }
+
+        // Normalize: keep sum(x) == sum(y) and sum(z) == sum(w)
+        // to prevent drift of individual factors while products stay constant.
+        let sx: f64 = x.iter().sum();
+        let sy: f64 = y.iter().sum();
+        if sx > 0.0 && sy > 0.0 {
+            let ratio = (sy / sx).sqrt();
+            for xi in x.iter_mut() {
+                *xi *= ratio;
+            }
+            for yj in y.iter_mut() {
+                *yj /= ratio;
+            }
+        }
+        let sz: f64 = z.iter().sum();
+        let sw: f64 = w.iter().sum();
+        if sz > 0.0 && sw > 0.0 {
+            let ratio = (sw / sz).sqrt();
+            for zi in z.iter_mut() {
+                *zi *= ratio;
+            }
+            for wj in w.iter_mut() {
+                *wj /= ratio;
+            }
         }
 
         let delta = x
@@ -576,7 +586,10 @@ pub fn balance_sparse_masked_strength_degree_poisson(
             .chain(y.iter().zip(old_y.iter()))
             .chain(z.iter().zip(old_z.iter()))
             .chain(w.iter().zip(old_w.iter()))
-            .map(|(&a, &b)| (a - b).abs())
+            .map(|(&a, &b)| {
+                let denom = a.abs().max(b.abs()).max(1e-12);
+                (a - b).abs() / denom
+            })
             .fold(0.0_f64, f64::max);
         if delta < tolerance {
             return StrengthDegreeFitResult {
@@ -597,6 +610,22 @@ pub fn balance_sparse_masked_strength_degree_poisson(
         converged: false,
         iterations: max_iterations,
     }
+}
+
+/// ME strength-degree expected weight:
+/// E[t_ij] = v * q * exp(q) / (1 + v * (exp(q) - 1))
+/// where q = x_i * y_j, v = z_i * w_j
+#[inline]
+fn me_sd_expected_weight(q: f64, v: f64) -> f64 {
+    if q <= 0.0 || v <= 0.0 {
+        return 0.0;
+    }
+    let eq = q.exp();
+    let den = 1.0 + v * (eq - 1.0);
+    if den <= 0.0 {
+        return 0.0;
+    }
+    v * q * eq / den
 }
 
 /// Alternating coordinate fitting for directed binary fixed-degree models.

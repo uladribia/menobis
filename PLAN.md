@@ -67,6 +67,26 @@ Pipeline: PA geographic generate → fit → ensemble sample-check → null-filt
     5. Benchmark W strength-edges and W strength-degree to complete the picture.
     6. Document acceptable N ranges per family×constraint in `docs/decisions/`.
     7. Add timeout guards to the benchmark CLI to avoid hanging.
+    8. **ME strength-degree EM convergence fix**: The bisection-based solver was
+       replaced with multiplicative ratio-correction (EM-style IPF). This is
+       ~100× cheaper per iteration but does not converge for the degree (z/w)
+       multipliers because the sigmoid occupation function saturates. The ratio
+       correction gets stuck when `z*w*G(q) >> 1`. Options:
+       - Newton step in log-space for z/w (uses gradient `sum p*(1-p)`) — fast
+         convergence but breaks the pure-balancing philosophy.
+       - Better initialization of z/w to the correct scale (~0.3–0.6 for
+         typical inputs) so the sigmoid stays in the linear regime.
+       - Hybrid: ratio-correct x/y (works well), Newton for z/w.
+    9. **Implement proper peeling for strength-degree (all families)**:
+       Currently only B-strength and B-degree use `peel_degree_saturation`.
+       All strength-degree solvers (ME, B, W) use a crude "pin z/w=1e30" hack
+       instead. Proper peeling should:
+       - Deduct 1 per saturated neighbor from partner degree targets (constant).
+       - Keep saturated pairs in the strength balance with simplified formula
+         (no zero-inflation: `E[t_ij|v→∞] = q/(1-exp(-q))` for ME).
+       - Remove z/w for saturated nodes from the iteration.
+       Note: this improves robustness for edge cases but does NOT fix the
+       non-convergence at N=50 (no nodes are saturated there). Priority: medium.
 
 11. **Draft TODO.md** — Consolidate all detected issues into a single prioritized
     TODO list for future improvements. Erase the audit docs and merge their
