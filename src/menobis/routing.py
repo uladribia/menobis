@@ -111,6 +111,8 @@ def sample_model(
     strength_out: NDArray[Any] | None = None,
     strength_in: NDArray[Any] | None = None,
     total_events: int | None = None,
+    coord_x: NDArray[Any] | None = None,
+    coord_y: NDArray[Any] | None = None,
     layers: int = 1,
     seed: int = 0,
 ) -> EdgeTable:
@@ -126,6 +128,8 @@ def sample_model(
             strength_out=strength_out,
             strength_in=strength_in,
             total_events=total_events,
+            coord_x=coord_x,
+            coord_y=coord_y,
             layers=layers,
             seed=seed,
         ),
@@ -380,6 +384,8 @@ def _sample_model(
     strength_out: NDArray[Any] | None = None,
     strength_in: NDArray[Any] | None = None,
     total_events: int | None = None,
+    coord_x: NDArray[Any] | None = None,
+    coord_y: NDArray[Any] | None = None,
     layers: int = 1,
     seed: int = 0,
 ) -> EdgeTable:
@@ -444,6 +450,7 @@ def _sample_model(
         raise ValueError(msg)
     fit_layers = getattr(fit, "layers", None) or layers
     variant = _fit_variant(family, fit_layers)
+    fit_: Any = fit  # narrow type for dispatch lambdas
     if constraint == Constraint.STRENGTH:
         if not isinstance(fit, StrengthFit):
             msg = f"strength sampling requires StrengthFit, got {type(fit).__name__}"
@@ -484,6 +491,70 @@ def _sample_model(
             "geometric": lambda: sample_degree_events_geometric(fit, seed=seed),
             "negative_binomial": lambda: sample_degree_events_negative_binomial(
                 fit, seed=seed
+            ),
+        }
+        return dispatch[variant]()
+    if constraint == Constraint.STRENGTH_EDGES:
+        from menobis.models.generation import (
+            sample_strength_edges_binomial,
+            sample_strength_edges_geometric,
+            sample_strength_edges_negative_binomial,
+            sample_strength_edges_poisson,
+        )
+
+        dispatch = {
+            "poisson": lambda: sample_strength_edges_poisson(fit_, seed=seed),
+            "binomial": lambda: sample_strength_edges_binomial(
+                fit_, layers=fit_layers, seed=seed
+            ),
+            "geometric": lambda: sample_strength_edges_geometric(fit_, seed=seed),
+            "negative_binomial": lambda: sample_strength_edges_negative_binomial(
+                fit_, layers=fit_layers, seed=seed
+            ),
+        }
+        return dispatch[variant]()
+    if constraint == Constraint.STRENGTH_DEGREE:
+        from menobis.models.generation import (
+            sample_strength_degree_binomial,
+            sample_strength_degree_geometric,
+            sample_strength_degree_negative_binomial,
+            sample_strength_degree_poisson,
+        )
+
+        dispatch = {
+            "poisson": lambda: sample_strength_degree_poisson(fit_, seed=seed),
+            "binomial": lambda: sample_strength_degree_binomial(
+                fit_, layers=fit_layers, seed=seed
+            ),
+            "geometric": lambda: sample_strength_degree_geometric(fit_, seed=seed),
+            "negative_binomial": lambda: sample_strength_degree_negative_binomial(
+                fit_, layers=fit_layers, seed=seed
+            ),
+        }
+        return dispatch[variant]()
+    if constraint == Constraint.STRENGTH_COST:
+        from menobis.models.generation import (
+            sample_strength_cost_binomial,
+            sample_strength_cost_geometric,
+            sample_strength_cost_negative_binomial,
+            sample_strength_cost_poisson,
+        )
+
+        if coord_x is None or coord_y is None:
+            msg = "strength_cost sampling requires coord_x and coord_y"
+            raise ValueError(msg)
+        dispatch = {
+            "poisson": lambda: sample_strength_cost_poisson(
+                fit_, coord_x, coord_y, seed=seed
+            ),
+            "binomial": lambda: sample_strength_cost_binomial(
+                fit_, coord_x, coord_y, layers=fit_layers, seed=seed
+            ),
+            "geometric": lambda: sample_strength_cost_geometric(
+                fit_, coord_x, coord_y, seed=seed
+            ),
+            "negative_binomial": lambda: sample_strength_cost_negative_binomial(
+                fit_, coord_x, coord_y, layers=fit_layers, seed=seed
             ),
         }
         return dispatch[variant]()
@@ -549,11 +620,13 @@ def _filter_model(
         "tail": tail,
         "correction": correction,
         "detect_absent": detect_absent,
-        "self_loops": self_loops,
         "min_occupation": min_occupation,
         "min_expected": min_expected,
         "max_absent": max_absent,
     }
+    # self_loops is only accepted by strength-only filter functions
+    if constraint == Constraint.STRENGTH:
+        kwargs["self_loops"] = self_loops
     dispatch: dict[tuple[Constraint, str], Callable[..., FilterResult]] = {
         (Constraint.STRENGTH, "poisson"): filtering.filter_strength_poisson,
         (Constraint.STRENGTH, "binomial"): filtering.filter_strength_binomial,
@@ -631,9 +704,7 @@ __all__ = [
     "Ensemble",
     "ModelFamily",
     "UnsupportedModelCaseError",
-    "Verb",
     "filter_model",
     "fit_model",
-    "route_model",
     "sample_model",
 ]

@@ -62,18 +62,6 @@ Once the router is complete:
 
 ---
 
-## 2. Partial Fitting Coverage — COMPLETE
-
-All 12 family x constraint combinations now have partial fitting plumbing:
-
-| Constraint | ME | B | W |
-|---|---|---|---|
-| strength | full | full | full |
-| strength-cost (coordinates) | full | full | full |
-| strength-edges | full | full | full |
-| strength-degree | full | full | full |
-
----
 
 ## 3. Solver Convergence Issues
 
