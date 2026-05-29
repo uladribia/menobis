@@ -70,11 +70,15 @@ use menobis_core::fitting::{
 use menobis_core::fitting::{
     fit_partial_degree as core_fit_partial_degree,
     fit_partial_strength as core_fit_partial_strength,
+    fit_partial_strength_binomial as core_fit_partial_strength_binomial,
     fit_partial_strength_cost_binomial_coordinates as core_fit_partial_strength_cost_binomial_coordinates,
     fit_partial_strength_cost_coordinates as core_fit_partial_strength_cost_coordinates,
     fit_partial_strength_cost_w_coordinates as core_fit_partial_strength_cost_w_coordinates,
     fit_partial_strength_degree as core_fit_partial_strength_degree,
+    fit_partial_strength_degree_binomial as core_fit_partial_strength_degree_binomial,
     fit_partial_strength_edges as core_fit_partial_strength_edges,
+    fit_partial_strength_edges_binomial as core_fit_partial_strength_edges_binomial,
+    fit_partial_strength_edges_w as core_fit_partial_strength_edges_w,
 };
 use menobis_core::fitting::{
     fit_strength_cost_binomial_coordinates as core_fit_strength_cost_binomial_coordinates,
@@ -287,6 +291,10 @@ fn _menobis(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module,
         fitting::fit_partial_strength_cost_w_coordinates_full
     )?;
+    add_pyfunction!(module, fitting::fit_partial_strength_binomial_full)?;
+    add_pyfunction!(module, fitting::fit_partial_strength_edges_binomial_full)?;
+    add_pyfunction!(module, fitting::fit_partial_strength_degree_binomial_full)?;
+    add_pyfunction!(module, fitting::fit_partial_strength_edges_w_full)?;
     add_pyfunction!(module, filter::filter_strength_poisson)?;
     add_pyfunction!(module, filter::absent_strength_poisson)?;
     add_pyfunction!(module, filter::filter_custom_poisson)?;

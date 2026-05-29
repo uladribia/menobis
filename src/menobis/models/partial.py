@@ -509,6 +509,207 @@ def fit_partial_strength_cost_negative_binomial_coordinates(
 
 
 # ---------------------------------------------------------------------------
+# B (Binomial) partial fits
+# ---------------------------------------------------------------------------
+
+
+def fit_partial_strength_binomial(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    known_source: NDArray[np.integer],
+    known_target: NDArray[np.integer],
+    known_rate: NDArray[np.floating],
+    *,
+    layers: int = 10,
+    self_loops: bool = True,
+    tolerance: float = 1e-8,
+    max_iterations: int = 10000,
+) -> PartialFitResult:
+    """Partial B(M) strength fit with known pairs."""
+    _validate_known_feasibility(
+        np.asarray(strength_out, dtype=np.float64),
+        np.asarray(strength_in, dtype=np.float64),
+        np.asarray(known_source, dtype=np.uint64),
+        np.asarray(known_target, dtype=np.uint64),
+        np.asarray(known_rate, dtype=np.float64),
+    )
+    sources, targets, rates, converged, iterations = (
+        _menobis.fit_partial_strength_binomial_full(
+            np.asarray(strength_out, dtype=np.float64).tolist(),
+            np.asarray(strength_in, dtype=np.float64).tolist(),
+            np.asarray(known_source, dtype=np.uint64).tolist(),
+            np.asarray(known_target, dtype=np.uint64).tolist(),
+            np.asarray(known_rate, dtype=np.float64).tolist(),
+            int(layers),
+            self_loops,
+            tolerance,
+            max_iterations,
+        )
+    )
+    return _to_partial_result(
+        "fit_partial_strength_binomial",
+        sources,
+        targets,
+        rates,
+        converged,
+        iterations,
+        constraint="strength",
+        self_loops=self_loops,
+        family="binomial",
+    )
+
+
+def fit_partial_strength_edges_binomial(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    known_source: NDArray[np.integer],
+    known_target: NDArray[np.integer],
+    known_rate: NDArray[np.floating],
+    target_edges: float,
+    *,
+    layers: int = 10,
+    self_loops: bool = True,
+    tolerance: float = 1e-10,
+    max_iterations: int = 50000,
+) -> PartialFitResult:
+    """Partial B(M) strength-edges fit with known pairs."""
+    _validate_known_feasibility(
+        np.asarray(strength_out, dtype=np.float64),
+        np.asarray(strength_in, dtype=np.float64),
+        np.asarray(known_source, dtype=np.uint64),
+        np.asarray(known_target, dtype=np.uint64),
+        np.asarray(known_rate, dtype=np.float64),
+    )
+    sources, targets, rates, converged, iterations = (
+        _menobis.fit_partial_strength_edges_binomial_full(
+            np.asarray(strength_out, dtype=np.float64).tolist(),
+            np.asarray(strength_in, dtype=np.float64).tolist(),
+            np.asarray(known_source, dtype=np.uint64).tolist(),
+            np.asarray(known_target, dtype=np.uint64).tolist(),
+            np.asarray(known_rate, dtype=np.float64).tolist(),
+            float(target_edges),
+            int(layers),
+            self_loops,
+            tolerance,
+            max_iterations,
+        )
+    )
+    return _to_partial_result(
+        "fit_partial_strength_edges_binomial",
+        sources,
+        targets,
+        rates,
+        converged,
+        iterations,
+        constraint="strength-edges",
+        self_loops=self_loops,
+        family="binomial",
+    )
+
+
+def fit_partial_strength_degree_binomial(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    degree_out: NDArray[np.floating],
+    degree_in: NDArray[np.floating],
+    known_source: NDArray[np.integer],
+    known_target: NDArray[np.integer],
+    known_rate: NDArray[np.floating],
+    *,
+    layers: int = 10,
+    self_loops: bool = True,
+    tolerance: float = 1e-6,
+    max_iterations: int = 5000,
+) -> PartialFitResult:
+    """Partial B(M) strength-degree fit with known pairs."""
+    _validate_known_feasibility(
+        np.asarray(strength_out, dtype=np.float64),
+        np.asarray(strength_in, dtype=np.float64),
+        np.asarray(known_source, dtype=np.uint64),
+        np.asarray(known_target, dtype=np.uint64),
+        np.asarray(known_rate, dtype=np.float64),
+    )
+    sources, targets, rates, converged, iterations = (
+        _menobis.fit_partial_strength_degree_binomial_full(
+            np.asarray(strength_out, dtype=np.float64).tolist(),
+            np.asarray(strength_in, dtype=np.float64).tolist(),
+            np.asarray(degree_out, dtype=np.float64).tolist(),
+            np.asarray(degree_in, dtype=np.float64).tolist(),
+            np.asarray(known_source, dtype=np.uint64).tolist(),
+            np.asarray(known_target, dtype=np.uint64).tolist(),
+            np.asarray(known_rate, dtype=np.float64).tolist(),
+            int(layers),
+            self_loops,
+            tolerance,
+            max_iterations,
+        )
+    )
+    return _to_partial_result(
+        "fit_partial_strength_degree_binomial",
+        sources,
+        targets,
+        rates,
+        converged,
+        iterations,
+        constraint="strength-degree",
+        self_loops=self_loops,
+        family="binomial",
+    )
+
+
+# ---------------------------------------------------------------------------
+# W (Geometric) partial fits
+# ---------------------------------------------------------------------------
+
+
+def fit_partial_strength_edges_geometric(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    known_source: NDArray[np.integer],
+    known_target: NDArray[np.integer],
+    known_rate: NDArray[np.floating],
+    target_edges: float,
+    *,
+    self_loops: bool = True,
+    tolerance: float = 1e-10,
+    max_iterations: int = 50000,
+) -> PartialFitResult:
+    """Partial W (geometric) strength-edges fit with known pairs."""
+    _validate_known_feasibility(
+        np.asarray(strength_out, dtype=np.float64),
+        np.asarray(strength_in, dtype=np.float64),
+        np.asarray(known_source, dtype=np.uint64),
+        np.asarray(known_target, dtype=np.uint64),
+        np.asarray(known_rate, dtype=np.float64),
+    )
+    sources, targets, rates, converged, iterations = (
+        _menobis.fit_partial_strength_edges_w_full(
+            np.asarray(strength_out, dtype=np.float64).tolist(),
+            np.asarray(strength_in, dtype=np.float64).tolist(),
+            np.asarray(known_source, dtype=np.uint64).tolist(),
+            np.asarray(known_target, dtype=np.uint64).tolist(),
+            np.asarray(known_rate, dtype=np.float64).tolist(),
+            float(target_edges),
+            1,  # layers=1 for geometric
+            self_loops,
+            tolerance,
+            max_iterations,
+        )
+    )
+    return _to_partial_result(
+        "fit_partial_strength_edges_geometric",
+        sources,
+        targets,
+        rates,
+        converged,
+        iterations,
+        constraint="strength-edges",
+        self_loops=self_loops,
+        family="geometric",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Convenience: split by cutoff
 # ---------------------------------------------------------------------------
 
@@ -623,11 +824,15 @@ __all__ = [
     "PartialFitResult",
     "fit_from_network_cutoff",
     "fit_partial_degree_poisson",
+    "fit_partial_strength_binomial",
     "fit_partial_strength_cost_binomial_coordinates",
     "fit_partial_strength_cost_geometric_coordinates",
     "fit_partial_strength_cost_negative_binomial_coordinates",
     "fit_partial_strength_cost_poisson_coordinates",
+    "fit_partial_strength_degree_binomial",
     "fit_partial_strength_degree_poisson",
+    "fit_partial_strength_edges_binomial",
+    "fit_partial_strength_edges_geometric",
     "fit_partial_strength_edges_poisson",
     "fit_partial_strength_poisson",
 ]

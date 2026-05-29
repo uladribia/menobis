@@ -6,102 +6,94 @@ description: Canonical benchmark pipeline and commands.
 
 ## TL;DR
 
-Use the canonical PA geographic generator for every benchmark. It intentionally
-creates networks outside the MENoBiS null family, then fits MENoBiS nulls to the
-derived constraints.
+A single Python CLI (`benchmarks/cli.py`) exercises the full MENoBiS pipeline
+using PA-geographic networks. It measures time, memory, convergence, constraint
+precision, and parallelism across all model families and constraint types.
 
-## Testcase network
+## Benchmark matrix
 
-`generate_pa_geographic_network` creates directed weighted networks by:
-
-1. sampling binary support with preferential attachment;
-2. assigning projected XY coordinates;
-3. scoring occupied edges with origin/destination support degree and
-   `exp(-gamma * distance / distance_scale)`;
-4. normalizing positive integer weights to an exact total event count.
-
-This gives controlled density, exact total events, heterogeneous degrees,
-heterogeneous strengths, and spatially damped weights.
-
-## Pipeline
-
-| Stage | Purpose |
+| Dimension | Values |
 |---|---|
-| `generate` | Build PA geographic networks and derive constraints |
-| `fit` | Fit requested MENoBiS families/constraints to those constraints |
-| `sample` | Sample fitted nulls and compare ensemble means to constraints |
-| `filter` | Sample from fitted nulls, filter those null samples, assess FPR |
+| Node counts | 100, 500, 1000, 2000 |
+| Families | ME, B, W |
+| Constraints | strength, strength-cost, strength-edges, strength-degree |
+| Self-loops | no-self-loops (default) |
+| Known-pair fraction | 0%, 5%, 20% |
+| Regime | sparse, saturated |
 
-Filter calibration is measured on samples from the fitted null, not on the PA
-network itself. The PA network supplies constraints only.
+## Regimes
+
+| Regime | Parameters | Character |
+|---|---|---|
+| Sparse | `average_degree=3.0, events_per_edge=1.5` | k near s, low connectivity |
+| Saturated | `average_degree=0.85*(N-1), events_per_edge=5.0` | k near N-1, dense |
+
+## Metrics collected
+
+| Metric | How measured |
+|---|---|
+| Wall time | `time.perf_counter()` |
+| CPU time | `time.process_time()` |
+| Parallelism factor | CPU / wall ratio (>1 = multi-threaded Rust) |
+| Memory (Python) | `tracemalloc` peak delta |
+| Memory (RSS) | `/proc/self/status` VmRSS delta |
+| Convergence | `result.converged` + `result.iterations` |
+| Constraint precision | Max absolute residual per constraint type |
 
 ## Commands
 
 ```bash
-uv run python -m benchmarks all --nodes 100,500 --samples 5 --filter-samples 5
-uv run python -m benchmarks fit --nodes 500 --families me,w --constraints strength
-uv run python -m benchmarks filter --nodes 100 --json --output benchmarks/results/run
-uv run python -m benchmarks.legacy_compare --nodes 100,500
-uv run python -m benchmarks.legacy_fit_compare --nodes 100,500 --families me,b
-uv run python -m benchmarks.fit_memory_matrix --nodes 1000
-uv run --with scipy python -m benchmarks.legacy_supported_fit_compare --nodes 1000
+# Full matrix
+uv run python -m benchmarks all --nodes 100,500,1000 --output benchmarks/results/full.json
+
+# Quick CI smoke
+uv run python -m benchmarks all --nodes 20 --families me --constraints strength \
+  --regime sparse --known-pairs 0.0 --filter-samples 1 --no-memory
+
+# Fit-only with partial
+uv run python -m benchmarks fit --nodes 500,1000 --regime saturated --known-pairs 0.0,0.05,0.20
+
+# Compare regimes
+uv run python -m benchmarks compare --nodes 500 --families me,w --constraints strength-degree
 ```
 
-Options:
+## Options
 
 | Option | Meaning |
 |---|---|
-| `--nodes 100,500` | exact sizes |
-| `--families me,b,w,wnb` | model families |
-| `--constraints ...` | constraint families |
-| `--average-degree 8` | PA binary support density control |
-| `--density 0.05` | directed density override |
-| `--events-per-edge 6` | total event control |
-| `--samples 5` | sample-check ensemble size |
-| `--filter-samples 5` | null-filter calibration samples |
-| `--json` | machine-readable stdout |
-| `--output DIR` | logs, networks, summary JSON |
+| `--nodes N,N,...` | Node counts |
+| `--families me,b,w` | Model families |
+| `--constraints ...` | Constraint types |
+| `--regime sparse,saturated` | Regime selection |
+| `--known-pairs 0.0,0.05,0.20` | Known-pair fractions |
+| `--filter-samples N` | Null samples for FPR |
+| `--no-memory` | Skip memory profiling |
+| `--json` | Machine-readable stdout |
+| `--output PATH` | JSON results file |
 
-## Legacy comparison
+## Output format
 
-`benchmarks.legacy_compare` extracts the archived C analyzer from git history,
-compiles it with `gcc`, runs the same generated input network through both
-implementations, and reports JSON with:
+Results are JSON arrays. Each row contains stage, metrics, and precision fields.
+See `benchmarks/results/` for stored runs.
 
-- strength/degree/Y2 maximum absolute differences;
-- modern Python process time and peak RSS;
-- modern load+Rust-compute time excluding import/startup;
-- legacy C process time and peak RSS.
+## Partial fitting
 
-It requires GSL development headers and libraries for the archived analyzer.
+Partial benchmarks freeze a fraction of observed edges as known pairs and fit
+the remainder. Available for ME (all constraints) and all families
+(strength-cost coordinates). Reports convergence and timing for the free
+subproblem.
 
-`benchmarks.legacy_fit_compare` extracts the archived Python strength fitter,
-converts `fitter_s.py` to Python 3 in a temporary directory, and compares ME and
-B fixed-strength no-self-loop solvers. `benchmarks.fit_memory_matrix` runs every
-modern supported fit case in a fresh process and records peak RSS.
+## Parallelism detection
 
-N=1000 results are stored in `benchmarks/results/`:
+The CPU/wall ratio reveals whether Rust rayon parallelism is active:
 
-| Benchmark | Main result |
-|---|---|
-| `legacy_fit_n1000.json` | ME matches and modern is faster; B matches but modern is slower. |
-| `legacy_supported_fit_n1000.json` | legacy-supported ME/B/W/degree cases compared or recorded as legacy failures/timeouts. |
-| `fit_memory_n1000.json` | all 20 modern cases converged; per-process RSS was ~77-78 MB. |
+- ~1.0: single-threaded
+- >1.5: multi-threaded computation
+- Typically saturates around core count at N >= 500
 
-Legacy-supported N=1000 comparisons show ME strength, W strength, ME
-strength-cost, and degree observables match. Legacy strength-edges timed out or
-failed on the PA fixture, and legacy strength-degree failed; modern MENoBiS solved
-those same cases. After solver optimizations, the slowest N=1000 modern fits are
-W strength-cost (~228 s), W strength-edges (~107 s), WNB strength-edges (~109 s),
-and WNB strength-cost (~71 s).
+## Removed: Rust benchmark
 
-## Known skips
-
-| Case | Status |
-|---|---|
-| B strength-edges | skipped: known P5 wrapper uses ME kernel |
-| B strength-degree | skipped: known P5 wrapper uses ME kernel |
-| W no-self-loop N≥50 | track convergence separately until damping/projection is fixed |
-| B strength no-self-loop N≥200 | track wall time as a performance regression |
-
-Do not compare the skipped B zero-inflated cases until family-specific Rust kernels are added.
+The former `crates/menobis-core/benches/me_strength_degree.rs` has been removed.
+The Python benchmark captures Rust solver performance through PyO3 (overhead <1ms)
+and additionally measures RSS (captures Rust heap allocations) and CPU/wall ratio
+(captures rayon parallelism).

@@ -13,11 +13,27 @@ checks first, then the full suite before release.
 
 | Layer | Purpose |
 |---|---|
-| Rust unit tests | kernels, distributions, fitting invariants |
-| Python unit tests | public wrappers, dataclasses, validation |
-| CLI tests | command behavior and JSON output |
-| Benchmark tests | performance guardrails and case coverage |
-| Docs build | links, nav, API pages |
+| Rust unit tests (54 tests) | Kernels, gradients, overflow safety, mask logic |
+| Python formula tests | Verify E[t], E[Theta] match thesis equations |
+| Python validation tests | Input rejection at the boundary |
+| Python E2E tests | PA-geographic generate -> fit -> sample -> check |
+| Python sampling tests | Reproducibility, non-negativity, preservation |
+| Python filtering tests | FPR under null model |
+| Python saturation tests | Degree saturation edge cases |
+| CLI tests | Command behavior and JSON output |
+| Benchmark CLI tests | Smoke test the benchmark harness |
+| Docs build | Links, nav, API pages |
+
+## Test files (fitting/solver related)
+
+| File | N | What it tests |
+|---|---|---|
+| `test_fitting_equations.py` | 5 | Pure formula verification (ME, B, W) |
+| `test_fitting_validation.py` | 2-5 | Input rejection across families |
+| `test_fitting_e2e.py` | 20 | Full pipeline: 12 combos + partial + regimes |
+| `test_fitting_saturation.py` | 3 | Degree saturation multiplier clamping |
+| `test_sampling.py` | 20 | Seeded reproducibility, structure checks |
+| `test_filtering_e2e.py` | 20 | Null-model FPR bounds |
 
 ## Common commands
 
@@ -34,48 +50,34 @@ uv run mkdocs build --strict
 
 ## Canonical synthetic fixture
 
-End-to-end tests and benchmarks must use `menobis.utilities.synthetic.generate_pa_geographic_network` unless they are pure math/API smoke tests. The fixture is deliberately not an MENoBiS null model; it supplies realistic constraints for fit/sample/filter workflows.
+End-to-end tests and benchmarks use
+`menobis.utilities.synthetic.generate_pa_geographic_network`. The fixture creates
+networks outside the MENoBiS null family, supplying realistic constraints for
+fit/sample/filter workflows.
 
-## Invariants
+Tests use seed `54320` which is known to produce convergent fits for ME and B
+across all constraint types at N=20.
 
-| Invariant | Where used |
-|---|---|
-| `sum(s_out) == sum(s_in)` | directed weighted networks |
-| probabilities sum to one | pair distributions |
-| weights are non-negative integers | generation |
-| known partial pairs are preserved | partial fitting |
-| residual constraints recover targets | fitting |
-| seeded generation is reproducible | samplers |
-| PA support edge count is controlled | synthetic fixtures |
-| total events are controlled exactly | synthetic fixtures |
+## Regimes tested
 
-## Partial fitting tests
+| Regime | Parameters | Character |
+|---|---|---|
+| Sparse | `average_degree=5.0, events_per_edge=4.0` | Moderate connectivity |
+| Saturated | `average_degree=15.0, events_per_edge=5.0` | k near N-1 |
 
-Partial tests use known weighted pairs. For degree and edge constraints,
-occupation is inferred from positive known weights. Occupation-only partial mode
-is intentionally outside current benchmark scope.
-
-## Benchmark coverage test
-
-`tests/test_menobis_benchmark_cases.py` ensures the fitting benchmark covers full
-and partial ME/B/W combinations for the five constraint families.
-
-## Warnings policy
-
-Solver warnings should be actionable. Boundary cases may converge by residual
-rather than by multiplier delta; tests should assert the scientifically relevant
-residual behavior.
-
-## Known solver limitations
+## Known solver limitations (xfail in tests)
 
 | Model | Limitation |
 |---|---|
-| ME/W/Wnb **strength-degree** | Does NOT converge when any node has degree = capacity. Clip to `capacity - 1` or use degree-events. |
-| ME/W/Wnb **strength-edges** | Rejects `target_edges ≥ capacity`. Use strength-only when all pairs are occupied. |
-| B **strength-edges** / **strength-degree** | Known P5 bug: calls ME kernel. Do not use until fixed. |
-| W **self_loops=False** realistic N≥50 | Newton solver may fail to converge; needs adaptive damping/projection. |
-| B **strength self_loops=False** N≥200 | IPF is slow; needs convergence/performance investigation. |
+| W strength-edges | Newton solver does not converge with heterogeneous inputs |
+| W strength-degree | Newton solver does not converge with heterogeneous inputs |
+| W/B saturation N=3 | Small-N saturation not converging |
 
-Saturation peeling is implemented for B strength and all degree-events families
-(Bernoulli IPF). The coupled strength-degree case requires a mixed-constraint
-solver that is not yet implemented.
+## Partial fitting coverage
+
+| Constraint | ME | B | W |
+|---|---|---|---|
+| strength | full | full | not implemented (solver lacks mask) |
+| strength-cost (coord) | full | full | full |
+| strength-edges | full | full | full |
+| strength-degree | full | full | not implemented (solver lacks mask) |
