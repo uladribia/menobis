@@ -1,23 +1,23 @@
-# ADR-0018: L-BFGS Solver for Strength-Degree Fitting
+# ADR-0018: L-BFGS Solver for Zero-Inflated Fitting
 
 ## TL;DR
 
-Replace IPFP/damped-balancing with direct NLL minimization via L-BFGS for ME and B strength-degree (zero-inflated) models. O(N) memory, rayon-parallelized, 100% convergence on heterogeneous inputs up to N=1000.
+Replace IPFP/damped-balancing/bisection with direct NLL minimization via L-BFGS for ME and B zero-inflated models (strength-degree and strength-edges constraints). O(N) memory, rayon-parallelized, 100% convergence on heterogeneous inputs up to N=1000.
 
 ## Status
 
-Accepted. Implemented for ME (Poisson) and B (Binomial). W (Geometric/NegBin) pending.
+Accepted. Implemented for ME (Poisson) and B (Binomial), both strength-degree and strength-edges. W (Geometric/NegBin) strength-degree pending.
 
 ## Context
 
-The previous ME strength-degree solver used damped log-domain coordinate balancing (IPFP-style). This approach:
+The previous solvers had different algorithms per constraint type:
 
-- Diverged on highly heterogeneous networks (10× multiplier variation)
-- Required hand-tuned damping constants (`DAMPING=0.2`, `MAX_LOG_STEP=1.5`)
-- Had no convergence guarantees
-- Was numerically unstable near boundary nodes (k≈s or k≈N_max)
+- **Strength-degree (ME):** Damped log-domain coordinate balancing. Diverged on heterogeneous networks, required hand-tuned constants, no convergence guarantees.
+- **Strength-degree (B):** Alternating bisection on 4 blocks. Even slower than ME.
+- **Strength-edges (ME):** Nested bisection over λ with inner IPF per trial. O(N² · inner_iters · bisection_iters).
+- **Strength-edges (B):** Same nested bisection, extremely slow for B (31s at N=1000).
 
-The B solver used alternating bisection on 4 blocks of variables, which was even slower.
+All four cases share the same mathematical structure: minimize a convex NLL dual. A single L-BFGS approach replaces all four.
 
 ## Decision
 
@@ -25,41 +25,43 @@ Minimize the **convex dual NLL** of the grand-canonical ensemble directly using 
 
 ### Mathematical formulation
 
-For the zero-inflated model with 4N parameters θ = [α_x, α_y, α_v, α_w]:
+#### Strength-degree (4N parameters)
+
+θ = [α_x, α_y, α_v, α_w] where q_ij = exp(α_x[i] + α_y[j]) and v_ij = exp(α_v[i] + α_w[j]):
 
 ```
-q_ij = exp(α_x[i] + α_y[j])     (weight-generating parameter)
-v_ij = exp(α_v[i] + α_w[j])     (zero-inflation multiplier)
-Z_ij = 1 + v_ij · G_F(q_ij)     (pair partition function)
+f(θ) = Σ_{(i,j)} ln(Z_ij) - α_x·s_out - α_y·s_in - α_v·k_out - α_w·k_in
 ```
 
-where G_F is the family-specific positive-support partition factor:
-- ME: G_ME(q) = exp(q) - 1
-- B(M): G_B(q) = (1+q)^M - 1
-- W(M): G_W(q) = (1-q)^(-M) - 1
+Gradients: ∂f/∂α_x[i] = Σ_j E[t_ij] − s_out[i], etc.
 
-The NLL objective:
+#### Strength-edges (2N+1 parameters)
 
-```
-f(θ) = Σ_{(i,j) free} ln(Z_ij) - α_x · s_out - α_y · s_in - α_v · k_out - α_w · k_in
-```
-
-Gradients are simply predicted minus target:
+θ = [α_x, α_y, ln_λ] where q_ij = exp(α_x[i] + α_y[j]) and λ = exp(ln_λ) is a **scalar** (same for all pairs):
 
 ```
-∂f/∂α_x[i] = Σ_j E[t_ij] - s_out[i]
-∂f/∂α_y[j] = Σ_i E[t_ij] - s_in[j]
-∂f/∂α_v[i] = Σ_j E[Θ(t_ij>0)] - k_out[i]
-∂f/∂α_w[j] = Σ_i E[Θ(t_ij>0)] - k_in[j]
+f(θ) = Σ_{(i,j)} ln(Z_ij) - α_x·s_out - α_y·s_in - ln_λ·E_target
 ```
 
-This objective is convex (log-partition function of exponential family), so L-BFGS converges to the global minimum.
+Gradients: ∂f/∂ln_λ = Σ_{i,j} E[Θ(t_ij>0)] − E_target.
+
+#### Family-specific partition factors
+
+Both cases use Z_ij = 1 + v_ij · G_F(q_ij) with:
+
+| Family | G_F(q) | E[t_ij \| t>0] |
+|--------|--------|----------------|
+| ME (Poisson) | exp(q) − 1 | q·exp(q) / (exp(q)−1) |
+| B (Binomial, M) | (1+q)^M − 1 | M·q·(1+q)^(M−1) / ((1+q)^M−1) |
+| W (NegBin, M) | (1−q)^(−M) − 1 | M·q·(1−q)^(−M−1) / ((1−q)^(−M)−1) |
+
+The NLL is convex (log-partition of exponential family), so L-BFGS converges to the global minimum.
 
 ### Architecture
 
 ```
 ┌─────────────────────────────────────────┐
-│  1. Regularization (preprocessing)      │
+│  1. Regularization (strength-degree)    │
 │     - Relative ε boundary detection     │
 │     - Mass-preserving redistribution    │
 ├─────────────────────────────────────────┤
@@ -89,9 +91,9 @@ This objective is convex (log-partition function of exponential family), so L-BF
 | Family-specific evaluator | Each family has its own `*_pair_statistics` function |
 | Shared optimizer skeleton | `lbfgs_direction`, `recenter_theta`, line search are identical |
 
-## Benchmark
+## Benchmarks
 
-Heterogeneous 10× multiplier variation, no self-loops, tol=1e-6, 5 runs:
+### Strength-degree (heterogeneous 10× variation, tol=1e-6, 5 runs)
 
 | Model | N | Mean | Iterations | Converged |
 |-------|------|--------|-----------|-----------|
@@ -102,18 +104,33 @@ Heterogeneous 10× multiplier variation, no self-loops, tol=1e-6, 5 runs:
 | B(M=3) | 500 | 0.97s | 358 | 5/5 |
 | B(M=3) | 1000 | 3.88s | 372 | 5/5 |
 
-Scaling: O(N² · iters). Iterations are roughly constant across N.
+### Strength-edges: L-BFGS vs old bisection (release, tol=1e-6)
+
+| Model | N | Bisection | L-BFGS | Speedup |
+|-------|------|-----------|--------|---------|
+| ME | 100 | 0.070s | 0.007s | **10×** |
+| ME | 500 | 1.13s | 0.15s | **8×** |
+| ME | 1000 | 4.31s | 0.80s | **5×** |
+| B(M=3) | 100 | 0.27s | 0.005s | **56×** |
+| B(M=3) | 500 | 7.63s | 0.07s | **102×** |
+| B(M=3) | 1000 | 31.9s | 0.48s | **66×** |
+
+Both methods converge at all tested sizes. L-BFGS is the clear winner.
 
 ## Consequences
 
-- Old balancing code deleted (no backward compatibility needed per AGENTS.md)
+- Old balancing/bisection code deleted (no backward compatibility per AGENTS.md)
 - `PairMask` integration preserved for partial fitting
 - Saturated nodes (k≈N_max) handled via post-hoc clamping of z/w multipliers
 - The same architecture applies to W once implemented
-- Python API unchanged; `fit_strength_degree_poisson` and `fit_strength_degree_binomial` transparently use L-BFGS
+- Python API unchanged; all public fitting functions transparently use L-BFGS
 
 ## Files
 
-- `crates/menobis-core/src/fitting/me_lbfgs.rs` — ME solver
-- `crates/menobis-core/src/fitting/b_lbfgs.rs` — B solver
-- `crates/menobis-core/benches/me_strength_degree.rs` — benchmark
+| File | Contents |
+|------|----------|
+| `crates/menobis-core/src/fitting/me_lbfgs.rs` | ME strength-degree + strength-edges L-BFGS |
+| `crates/menobis-core/src/fitting/b_lbfgs.rs` | B strength-degree + strength-edges L-BFGS |
+| `crates/menobis-core/src/fitting/me.rs` | Thin wrappers delegating to L-BFGS |
+| `crates/menobis-core/src/fitting/b.rs` | Thin wrappers delegating to L-BFGS |
+| `crates/menobis-core/benches/me_strength_degree.rs` | Benchmark harness |
