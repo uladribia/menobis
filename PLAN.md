@@ -1,38 +1,88 @@
-# PLAN.md — Partial Fitting Coverage
+# PLAN.md — Outstanding Work
 
-## Status
+## 1. Router as Single Dispatch Point
 
-All partial fitting cases are now implemented. Every family (ME, B, W) supports
-known pairs for every constraint type where the underlying solver can accept a
-mask.
+The unified router (`menobis.routing.{fit_model, sample_model, filter_model}`)
+must become the only entry point for all model operations. Currently it has gaps.
 
-## Partial fitting matrix
+### fit_model — COMPLETE
+
+All 12 family x constraint combinations dispatch correctly.
+
+### sample_model — 9 of 12 MISSING
+
+Only `strength` constraint is routed. Cost, edges, and degree constraints raise
+`UnsupportedModelCaseError`.
 
 | Constraint | ME | B | W |
 |---|---|---|---|
-| strength | ✓ | ✓ | ✓ |
-| strength-cost (coordinates) | ✓ | ✓ | ✓ |
-| strength-edges | ✓ | ✓ | ✓ |
-| strength-degree | ✓ | ✓ | ✓ |
+| strength | ok | ok | ok |
+| strength-cost | MISSING | MISSING | MISSING |
+| strength-edges | MISSING | MISSING | MISSING |
+| strength-degree | MISSING | MISSING | MISSING |
 
-## Known convergence limitations
+**What to do**:
+1. Add `coord_x`, `coord_y` parameters to `sample_model` signature.
+2. Extend the dispatch table in `_sample_model` (in `routing.py`) to call the
+   existing `sample_strength_cost_*`, `sample_strength_edges_*`, and
+   `sample_strength_degree_*` standalone functions.
+3. The standalone functions already exist and work — only the routing is missing.
 
-| Case | Behavior |
-|---|---|
-| W strength-edges (all) | Often fails to converge with heterogeneous inputs |
-| W strength-degree (all) | Often fails to converge with heterogeneous inputs |
-| ME/B strength-edges (sparse, near-binary) | L-BFGS oscillates when s/k ≈ 1 |
+### filter_model — 9 of 12 BROKEN (TypeError)
 
-These are solver algorithm issues, not missing plumbing.
+The dispatch table exists for all constraints but the router passes
+`self_loops=` to filter functions that don't accept it. Additionally,
+cost-constraint filters need `coord_x`/`coord_y` which the router doesn't pass.
 
-## Implementation notes
+| Constraint | ME | B | W |
+|---|---|---|---|
+| strength | ok | ok | ok |
+| strength-cost | TypeError | TypeError | TypeError |
+| strength-edges | TypeError | TypeError | TypeError |
+| strength-degree | TypeError | TypeError | TypeError |
 
-- W strength partial uses a new `balance_sparse_masked_strength_w` IPF solver
-  in `crates/menobis-core/src/fitting/w.rs` that respects arbitrary `PairMask`.
-- W strength-degree partial uses `fit_strength_degree_w_newton_masked` which
-  accepts `&PairMask` and replaces `!self_loops && i == j` checks with
-  `mask.is_masked(i, j)`.
-- The `w_se_inner_solve` helper (used by strength-edges) still uses
-  `self_loops: bool` internally — this is acceptable because known pairs for
-  strength-edges are handled at the partial pipeline level (excess computation
-  removes their contribution before calling the solver).
+**What to do**:
+1. Stop passing `self_loops` to filter functions that don't accept it
+   (cost/edges/degree infer it from the fit result).
+2. Add `coord_x`, `coord_y` to `filter_model` signature and pass them only
+   to cost-constraint filter functions.
+3. Alternatively, unify all filter function signatures to accept `**kwargs`
+   and ignore unknown parameters.
+
+### After fixing the router
+
+Once the router is complete:
+- Delete all manual dispatch in `benchmarks/cli.py` (`_sample`, `_filter_one`)
+- Replace with `sample_model(...)` and `filter_model(...)` calls
+- The benchmark CLI shrinks by ~100 lines
+- The CLI commands (`menobis fit`, `menobis sample`, `menobis filter`) become
+  fully functional for all 12 model cases
+
+**Effort**: ~50 lines of routing.py changes + test updates.
+
+---
+
+## 2. Partial Fitting Coverage — COMPLETE
+
+All 12 family x constraint combinations now have partial fitting plumbing:
+
+| Constraint | ME | B | W |
+|---|---|---|---|
+| strength | full | full | full |
+| strength-cost (coordinates) | full | full | full |
+| strength-edges | full | full | full |
+| strength-degree | full | full | full |
+
+---
+
+## 3. Solver Convergence Issues
+
+Documented in `docs/decisions/convergence-issues.md`. Summary:
+
+| Case | Status | Proposed fix |
+|---|---|---|
+| W strength-edges | rarely converges | barrier + adaptive damping |
+| W strength-degree | rarely converges | barrier + adaptive damping |
+| ME/B strength-edges (very sparse) | fragile | scaled log-lambda + better init |
+
+These are algorithm improvements, not missing plumbing.
