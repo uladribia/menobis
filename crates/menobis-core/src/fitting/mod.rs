@@ -28,9 +28,11 @@ pub use me::{
 };
 pub use me_lbfgs::{fit_strength_degree_poisson_lbfgs, fit_strength_edges_poisson_lbfgs};
 pub use partial::{
-    fit_partial_degree, fit_partial_strength, fit_partial_strength_cost_binomial_coordinates,
-    fit_partial_strength_cost_coordinates, fit_partial_strength_cost_w_coordinates,
-    fit_partial_strength_degree, fit_partial_strength_edges,
+    fit_partial_degree, fit_partial_strength, fit_partial_strength_binomial,
+    fit_partial_strength_cost_binomial_coordinates, fit_partial_strength_cost_coordinates,
+    fit_partial_strength_cost_w_coordinates, fit_partial_strength_degree,
+    fit_partial_strength_degree_binomial, fit_partial_strength_edges,
+    fit_partial_strength_edges_binomial, fit_partial_strength_edges_w,
 };
 pub use strength_cost::{
     fit_strength_cost_binomial_coordinates, fit_strength_cost_binomial_coordinates_masked,

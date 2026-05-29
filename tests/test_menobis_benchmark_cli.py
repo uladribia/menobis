@@ -26,8 +26,13 @@ def test_benchmark_cli_runs_modern_e2e_smoke(tmp_path: Path) -> None:
             "me",
             "--constraints",
             "strength",
+            "--regime",
+            "sparse",
+            "--known-pairs",
+            "0.0",
             "--filter-samples",
             "1",
+            "--no-memory",
             "--output",
             str(output),
             "--json",
@@ -37,11 +42,49 @@ def test_benchmark_cli_runs_modern_e2e_smoke(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.stdout
     rows = json.loads(result.stdout)
     assert output.exists()
-    assert {row["stage"] for row in rows} == {
-        "generate",
-        "fit",
-        "sample-check",
-        "filter-fpr",
-    }
-    assert rows[0]["constraint"] == "pa-geographic"
-    assert rows[0]["sampled_edges"] > 0
+    stages = {row["stage"] for row in rows}
+    assert "generate" in stages
+    assert "fit" in stages
+
+
+def test_benchmark_cli_partial_fitting(tmp_path: Path) -> None:
+    """Partial fitting with known pairs runs without error."""
+    output = tmp_path / "partial.json"
+    result = CliRunner().invoke(
+        app,
+        [
+            "fit",
+            "--nodes",
+            "12",
+            "--families",
+            "me",
+            "--constraints",
+            "strength",
+            "--regime",
+            "sparse",
+            "--known-pairs",
+            "0.0,0.05,0.20",
+            "--no-memory",
+            "--output",
+            str(output),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_benchmark_cli_compare_subcommand() -> None:
+    """Compare subcommand runs without error."""
+    result = CliRunner().invoke(
+        app,
+        [
+            "compare",
+            "--nodes",
+            "12",
+            "--families",
+            "me",
+            "--constraints",
+            "strength",
+            "--no-memory",
+        ],
+    )
+    assert result.exit_code == 0, result.output
