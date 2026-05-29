@@ -116,6 +116,76 @@ Each dataset produces two files in the output directory:
 The CSV files are compatible with all MENoBiS commands (`analyze`, `fit`,
 `generate`, `filter`, `convert`).
 
+### Mercator coordinates (OpenFlights only)
+
+The OpenFlights download also produces a compressed coordinate file
+`openflights_coords.npz` containing Web Mercator projected airport
+coordinates (``x``, ``y`` arrays). These are needed for the
+``strength-cost`` constraint family.
+
+## Evaluating models on real data
+
+Use `scripts/evaluate_real_data.py` to run the MENoBiS pipeline
+(fit, sample, filter) on real datasets and see convergence behavior
+and precision.
+
+```bash
+# Quick test: email-eu, ME and B, strength-only
+uv run python scripts/evaluate_real_data.py email-eu \
+    --families me,b --constraints strength
+
+# OpenFlights strength fit across families
+uv run python scripts/evaluate_real_data.py openflights \
+    --families me,b --constraints strength
+
+# With sampling and FPR estimation
+uv run python scripts/evaluate_real_data.py email-eu \
+    --families me --constraints strength \
+    --sample --filter-samples 3
+
+# Cost constraint (requires coordinates)
+uv run python scripts/evaluate_real_data.py openflights \
+    --families me --constraints strength-cost
+
+# Save results as JSON
+uv run python scripts/evaluate_real_data.py openflights \
+    --families me,b --constraints strength \
+    --output results/openflights-eval.json
+```
+
+### evaluate_real_data.py CLI
+
+```
+Usage: evaluate_real_data.py [OPTIONS] [DATASET]
+
+Arguments:
+  [DATASET]  Dataset name or path [default: openflights]
+
+Options:
+  -f, --families TEXT      Model families: me,b,w [default: me,b,w]
+  -c, --constraints TEXT   Constraint types [default: strength,strength-edges,
+                                strength-degree]
+  --sample/--no-sample     Generate a sample from the fit
+  --filter-samples INT     Null samples for FPR [default: 0]
+  --alpha FLOAT            Upper-tail alpha for filtering [default: 0.05]
+  -t, --tolerance FLOAT    Solver tolerance [default: 1e-6]
+  --max-iterations INT     Max solver iterations [default: 10000]
+  -o, --output PATH        Output JSON path
+  --json                   Print JSON to stdout
+  --no-header              Suppress column header
+```
+
+### Known convergence notes
+
+- **W (geometric)**: For large N (N > 1000), the W solver may converge
+  slowly or not at all. This is a known issue documented in the AGENTS.md
+  and `docs/decisions/convergence-issues.md`. Stick to N ≤ 1000 for W.
+- **ME (Poisson)**: Fast and reliable for all constraint types.
+- **B (binomial)**: Generally fast but strength-edges may require more
+  iterations for large networks.
+- **strength-degree**: Can be slow for N > 1000; start with the tolerance
+  at 1e-4 for exploratory runs.
+
 ## Dependencies
 
 The script requires Python 3.11+ with `numpy` and `typer`. Both are

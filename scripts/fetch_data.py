@@ -149,17 +149,36 @@ def _download_to_text(url: str, dest: Path, force: bool = False) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Coordinate projection
+# ---------------------------------------------------------------------------
+
+
+def _web_mercator(lat: float, lon: float) -> tuple[float, float]:
+    """Project (lat, lon) degrees to Web Mercator (x, y) in meters."""
+    import math as _math
+
+    r = 6378137.0  # Earth radius in meters (WGS84)
+    x = _math.radians(lon) * r
+    y = _math.log(_math.tan(_math.pi / 4.0 + _math.radians(lat) / 2.0)) * r
+    return x, y
+
+
+# ---------------------------------------------------------------------------
 # Parsers
 # ---------------------------------------------------------------------------
 
 
 def _parse_openflights(
     cache_dir: Path, force: bool
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Parse OpenFlights airports + routes into an OD matrix.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Parse OpenFlights airports + routes into an OD matrix + Mercator coords.
 
     Airport IATA codes are mapped to sequential integer node IDs.
     Weight = number of airlines serving each directed route.
+
+    Returns:
+        (sources, targets, weights, coord_x, coord_y).
+        coord_x/y are Web Mercator projected coordinates, one per node.
     """
     ds = _DATASET_MAP["openflights"]
     airport_url = ds.urls["airports"]
@@ -171,21 +190,26 @@ def _parse_openflights(
     airport_lines = _download_to_text(airport_url, a_dest, force=force)
     route_lines = _download_to_text(routes_url, r_dest, force=force)
 
-    # Build IATA -> integer ID mapping
+    # Build IATA -> integer ID mapping, also collect lat/lon
     iata_to_id: dict[str, int] = {}
+    next_id = 0
+    lat_lon: dict[str, tuple[float, float]] = {}
     for line in airport_lines:
         parts = line.split(",")
-        if len(parts) < 5:
+        if len(parts) < 8:
             continue
         try:
-            # Airport ID, name, city, country, IATA, ICAO, ...
             iata = parts[4].strip('"')
             icao = parts[5].strip('"')
-        except IndexError:
+            lat = float(parts[6])
+            lon = float(parts[7])
+        except (ValueError, IndexError):
             continue
         code = iata or icao
         if code and code not in iata_to_id:
-            iata_to_id[code] = len(iata_to_id)
+            iata_to_id[code] = next_id
+            lat_lon[code] = (lat, lon)
+            next_id += 1
 
     # Aggregate routes: (src_code, dst_code) -> airline_count
     route_agg: dict[tuple[str, str], int] = {}
@@ -208,11 +232,24 @@ def _parse_openflights(
             targets.append(iata_to_id[dst])
             weights.append(cnt)
 
-    return _normalize(
+    sources_arr, targets_arr, weights_arr = _normalize(
         np.array(sources, dtype=np.uint64),
         np.array(targets, dtype=np.uint64),
         np.array(weights, dtype=np.uint64),
     )
+
+    # Build coordinate arrays (Web Mercator)
+    n_nodes = next_id
+    coord_x = np.zeros(n_nodes, dtype=np.float64)
+    coord_y = np.zeros(n_nodes, dtype=np.float64)
+    for code, node_id in iata_to_id.items():
+        if node_id < n_nodes and code in lat_lon:
+            lat, lon = lat_lon[code]
+            x, y = _web_mercator(lat, lon)
+            coord_x[node_id] = x
+            coord_y[node_id] = y
+
+    return sources_arr, targets_arr, weights_arr, coord_x, coord_y
 
 
 def _parse_snap_edge_list(
@@ -325,10 +362,17 @@ def prepare_dataset(
     dataset: DatasetInfo,
     cache_dir: Path,
     force: bool = False,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray | None,
+    np.ndarray | None,
+]:
     """Download and parse a built-in dataset.
 
-    Returns (sources, targets, weights) as uint64 arrays.
+    Returns (sources, targets, weights, coord_x, coord_y).
+    coord_x/y are Web Mercator projected coordinates or None.
     """
     fmt = dataset.format
     if fmt == "openflights":
@@ -336,7 +380,8 @@ def prepare_dataset(
 
     if fmt == "snap-edge":
         url = dataset.urls["edges"]
-        return _parse_snap_edge_list(url, cache_dir, force)
+        s, t, w = _parse_snap_edge_list(url, cache_dir, force)
+        return s, t, w, None, None
 
     msg = f"Unknown format: {fmt}"
     raise ValueError(msg)
@@ -572,7 +617,9 @@ def download(
     elif dataset in _DATASET_MAP:
         info = _DATASET_MAP[dataset]
         print(f"Preparing dataset: {dataset}", file=sys.stderr)
-        sources, targets, weights = prepare_dataset(info, effective_cache, force=force)
+        result = prepare_dataset(info, effective_cache, force=force)
+        sources, targets, weights = result[:3]
+        coord_x, coord_y = result[3], result[4]
         ds_info = info
         ds_name = dataset
     else:
@@ -584,6 +631,11 @@ def download(
     out_path = write_menobis_edges(sources, targets, weights, output_dir, ds_name)
     print(f"  Wrote {len(sources)} edges to: {out_path}", file=sys.stderr)
 
+    # Write Mercator coordinates (if available)
+    if coord_x is not None and coord_y is not None:
+        coords_path = output_dir / f"{ds_name}_coords.npz"
+        np.savez_compressed(coords_path, x=coord_x, y=coord_y)
+        print(f"  Wrote Mercator coordinates to: {coords_path}", file=sys.stderr)
     # Write summary
     write_summary(sources, targets, weights, output_dir, ds_name, dataset_info=ds_info)
 
@@ -600,11 +652,16 @@ def download(
     print(f"  Total weight: {total_weight}", file=sys.stderr)
     print(f"  Max weight:   {max_weight}", file=sys.stderr)
     print("  Format:       MENoBiS CSV (source, target, weight)", file=sys.stderr)
+    has_coords = coord_x is not None
+    coords_label = "Yes (Mercator)" if has_coords else "No"
+    print(f"  Coordinates:  {coords_label}", file=sys.stderr)
     print("\nUsage:", file=sys.stderr)
     print(f"  menobis analyze strengths {out_path}", file=sys.stderr)
     print(f"  menobis fit strength-poisson {out_path}", file=sys.stderr)
     print(f"  menobis generate strength-poisson {out_path} --seed 42", file=sys.stderr)
     print(f"  menobis filter strength-poisson {out_path} --alpha 0.05", file=sys.stderr)
+    if has_coords:
+        print(f"  menobis fit strength-cost-poisson {out_path}", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------

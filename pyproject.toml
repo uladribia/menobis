@@ -50,6 +50,7 @@ features = ["pyo3/extension-module"]
 target-version = "py311"
 include = [
   "pyproject.toml",
+  "scripts/**/*.py",
   "src/**/*.py",
   "tests/**/*.py",
 ]
