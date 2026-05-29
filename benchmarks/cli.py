@@ -21,50 +21,8 @@ import numpy as np
 import typer
 
 from menobis.data.frames import EdgeTable
-from menobis.filtering import (
-    filter_strength_binomial,
-    filter_strength_cost_binomial,
-    filter_strength_cost_geometric,
-    filter_strength_cost_poisson,
-    filter_strength_degree_binomial,
-    filter_strength_degree_geometric,
-    filter_strength_degree_poisson,
-    filter_strength_edges_binomial,
-    filter_strength_edges_geometric,
-    filter_strength_edges_poisson,
-    filter_strength_geometric,
-    filter_strength_poisson,
-)
-from menobis.models import (
-    sample_strength_binomial,
-    sample_strength_cost_binomial,
-    sample_strength_cost_geometric,
-    sample_strength_cost_poisson,
-    sample_strength_degree_binomial,
-    sample_strength_degree_geometric,
-    sample_strength_degree_poisson,
-    sample_strength_edges_binomial,
-    sample_strength_edges_geometric,
-    sample_strength_edges_poisson,
-    sample_strength_geometric,
-    sample_strength_poisson,
-)
-from menobis.models.partial import (
-    fit_partial_strength_binomial,
-    fit_partial_strength_cost_binomial_coordinates,
-    fit_partial_strength_cost_geometric_coordinates,
-    fit_partial_strength_cost_poisson_coordinates,
-    fit_partial_strength_degree_binomial,
-    fit_partial_strength_degree_geometric,
-    fit_partial_strength_degree_poisson,
-    fit_partial_strength_edges_binomial,
-    fit_partial_strength_edges_geometric,
-    fit_partial_strength_edges_poisson,
-    fit_partial_strength_geometric,
-    fit_partial_strength_poisson,
-)
 from menobis.models.spec import Constraint, ModelFamily
-from menobis.routing import fit_model
+from menobis.routing import filter_model, fit_model, sample_model
 from menobis.utilities.synthetic import (
     derive_synthetic_constraints,
     generate_pa_geographic_network,
@@ -186,10 +144,7 @@ def _regime_params(regime: str, node_count: int) -> dict[str, float]:
     return {"average_degree": 0.85 * (node_count - 1), "events_per_edge": 8.0}
 
 
-# --- Fitting dispatchers ---
-
-
-# --- Fitting via router ---
+# --- Model dispatch via router ---
 
 _FAMILY_MAP = {"me": ModelFamily.ME, "b": ModelFamily.B, "w": ModelFamily.W}
 _CONSTRAINT_MAP = {
@@ -200,7 +155,7 @@ _CONSTRAINT_MAP = {
 }
 
 
-def _fit_full(
+def _fit_case(
     family: str,
     constraint: str,
     network,
@@ -208,247 +163,80 @@ def _fit_full(
     *,
     self_loops: bool,
     tolerance: float,
+    known_fraction: float = 0.0,
+    seed: int = 0,
 ):
-    """Dispatch to the correct full-fit function via the unified router."""
+    """Fit a model (full or partial) via the unified router."""
     import warnings
 
     c = constraints_data
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        return fit_model(
-            family=_FAMILY_MAP[family],
-            constraint=_CONSTRAINT_MAP[constraint],
-            strength_out=c.strength_out,
-            strength_in=c.strength_in,
-            degree_out=c.degree_out if constraint == "strength-degree" else None,
-            degree_in=c.degree_in if constraint == "strength-degree" else None,
-            target_edges=c.total_edges if constraint == "strength-edges" else None,
-            target_cost=c.total_cost if constraint == "strength-cost" else None,
-            coord_x=network.x if constraint == "strength-cost" else None,
-            coord_y=network.y if constraint == "strength-cost" else None,
-            layers=c.binomial_layers if family == "b" else 1,
-            self_loops=self_loops,
-            tolerance=tolerance,
-        )
-
-
-# --- Partial fitting ---
-
-
-def _fit_partial(
-    family: str,
-    constraint: str,
-    network,
-    constraints_data,
-    known_fraction: float,
-    *,
-    self_loops: bool,
-    seed: int,
-):
-    """Dispatch to the correct partial-fit function."""
-    import warnings
-
-    n_known = max(1, int(known_fraction * network.edges.num_edges))
-    rng = np.random.default_rng(seed)
-    indices = rng.choice(network.edges.num_edges, size=n_known, replace=False)
-    known_src = network.edges.source[indices].astype(np.uint64)
-    known_tgt = network.edges.target[indices].astype(np.uint64)
-    known_rate = network.edges.weight[indices].astype(np.float64)
-    c = constraints_data
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        if constraint == "strength":
-            if family == "me":
-                return fit_partial_strength_poisson(
-                    c.strength_out,
-                    c.strength_in,
-                    known_src,
-                    known_tgt,
-                    known_rate,
-                    self_loops=self_loops,
-                )
-            if family == "b":
-                return fit_partial_strength_binomial(
-                    c.strength_out,
-                    c.strength_in,
-                    known_src,
-                    known_tgt,
-                    known_rate,
-                    layers=c.binomial_layers,
-                    self_loops=self_loops,
-                )
-            if family == "w":
-                return fit_partial_strength_geometric(
-                    c.strength_out,
-                    c.strength_in,
-                    known_src,
-                    known_tgt,
-                    known_rate,
-                    self_loops=self_loops,
-                )
-        elif constraint == "strength-cost":
-            if family == "me":
-                return fit_partial_strength_cost_poisson_coordinates(
-                    c.strength_out,
-                    c.strength_in,
-                    known_src,
-                    known_tgt,
-                    known_rate,
-                    network.x,
-                    network.y,
-                    c.total_cost,
-                    self_loops=self_loops,
-                )
-            if family == "b":
-                return fit_partial_strength_cost_binomial_coordinates(
-                    c.strength_out,
-                    c.strength_in,
-                    known_src,
-                    known_tgt,
-                    known_rate,
-                    network.x,
-                    network.y,
-                    c.total_cost,
-                    layers=c.binomial_layers,
-                    self_loops=self_loops,
-                )
-            if family == "w":
-                return fit_partial_strength_cost_geometric_coordinates(
-                    c.strength_out,
-                    c.strength_in,
-                    known_src,
-                    known_tgt,
-                    known_rate,
-                    network.x,
-                    network.y,
-                    c.total_cost,
-                    self_loops=self_loops,
-                )
-        elif constraint == "strength-edges":
-            if family == "me":
-                return fit_partial_strength_edges_poisson(
-                    c.strength_out,
-                    c.strength_in,
-                    known_src,
-                    known_tgt,
-                    known_rate,
-                    c.total_edges,
-                    self_loops=self_loops,
-                )
-            if family == "b":
-                return fit_partial_strength_edges_binomial(
-                    c.strength_out,
-                    c.strength_in,
-                    known_src,
-                    known_tgt,
-                    known_rate,
-                    c.total_edges,
-                    layers=c.binomial_layers,
-                    self_loops=self_loops,
-                )
-            if family == "w":
-                return fit_partial_strength_edges_geometric(
-                    c.strength_out,
-                    c.strength_in,
-                    known_src,
-                    known_tgt,
-                    known_rate,
-                    c.total_edges,
-                    self_loops=self_loops,
-                )
-        elif constraint == "strength-degree":
-            if family == "me":
-                return fit_partial_strength_degree_poisson(
-                    c.strength_out,
-                    c.strength_in,
-                    c.degree_out,
-                    c.degree_in,
-                    known_src,
-                    known_tgt,
-                    known_rate,
-                    self_loops=self_loops,
-                    tolerance=1e-4,
-                )
-            if family == "b":
-                return fit_partial_strength_degree_binomial(
-                    c.strength_out,
-                    c.strength_in,
-                    c.degree_out,
-                    c.degree_in,
-                    known_src,
-                    known_tgt,
-                    known_rate,
-                    layers=c.binomial_layers,
-                    self_loops=self_loops,
-                    tolerance=1e-4,
-                )
-            if family == "w":
-                return fit_partial_strength_degree_geometric(
-                    c.strength_out,
-                    c.strength_in,
-                    c.degree_out,
-                    c.degree_in,
-                    known_src,
-                    known_tgt,
-                    known_rate,
-                    self_loops=self_loops,
-                    tolerance=1e-3,
-                )
-    # Partial not supported for this family/constraint combo
-    return None
-
-
-# --- Sampling ---
-
-
-def _sample(
-    family: str, constraint: str, fit, network, c, seed: int
-) -> EdgeTable | None:
-    """Sample one null network from a fitted model."""
-    if constraint == "strength":
-        if family == "me":
-            return sample_strength_poisson(
-                fit.x, fit.y, self_loops=fit.self_loops, seed=seed
-            )
-        if family == "b":
-            return sample_strength_binomial(
-                fit.x,
-                fit.y,
-                layers=c.binomial_layers,
-                self_loops=fit.self_loops,
-                seed=seed,
-            )
-        return sample_strength_geometric(
-            fit.x, fit.y, self_loops=fit.self_loops, seed=seed
-        )
-    if constraint == "strength-cost":
-        if family == "me":
-            return sample_strength_cost_poisson(fit, network.x, network.y, seed=seed)
-        if family == "b":
-            return sample_strength_cost_binomial(
-                fit, network.x, network.y, layers=c.binomial_layers, seed=seed
-            )
-        return sample_strength_cost_geometric(fit, network.x, network.y, seed=seed)
+    kwargs: dict[str, Any] = {
+        "family": _FAMILY_MAP[family],
+        "constraint": _CONSTRAINT_MAP[constraint],
+        "strength_out": c.strength_out,
+        "strength_in": c.strength_in,
+        "self_loops": self_loops,
+        "tolerance": tolerance,
+    }
+    if constraint == "strength-degree":
+        kwargs["degree_out"] = c.degree_out
+        kwargs["degree_in"] = c.degree_in
     if constraint == "strength-edges":
-        if family == "me":
-            return sample_strength_edges_poisson(fit, seed=seed)
-        if family == "b":
-            return sample_strength_edges_binomial(
-                fit, layers=c.binomial_layers, seed=seed
-            )
-        return sample_strength_edges_geometric(fit, seed=seed)
-    # strength-degree
-    if family == "me":
-        return sample_strength_degree_poisson(fit, seed=seed)
+        kwargs["target_edges"] = c.total_edges
+    if constraint == "strength-cost":
+        kwargs["coord_x"] = network.x
+        kwargs["coord_y"] = network.y
+        kwargs["target_cost"] = c.total_cost
     if family == "b":
-        return sample_strength_degree_binomial(fit, layers=c.binomial_layers, seed=seed)
-    return sample_strength_degree_geometric(fit, seed=seed)
+        kwargs["layers"] = c.binomial_layers
+
+    if known_fraction > 0.0:
+        n_known = max(1, int(known_fraction * network.edges.num_edges))
+        rng = np.random.default_rng(seed)
+        indices = rng.choice(network.edges.num_edges, size=n_known, replace=False)
+        kwargs["known_source"] = network.edges.source[indices].astype(np.uint64)
+        kwargs["known_target"] = network.edges.target[indices].astype(np.uint64)
+        kwargs["known_rate"] = network.edges.weight[indices].astype(np.float64)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return fit_model(**kwargs)
+
+
+def _sample_case(family: str, constraint: str, fit, network, c, seed: int) -> EdgeTable:
+    """Sample one null network via the unified router."""
+    kwargs: dict[str, Any] = {
+        "family": _FAMILY_MAP[family],
+        "constraint": _CONSTRAINT_MAP[constraint],
+        "fit": fit,
+        "seed": seed,
+    }
+    if family == "b":
+        kwargs["layers"] = c.binomial_layers
+    if constraint == "strength-cost":
+        kwargs["coord_x"] = network.x
+        kwargs["coord_y"] = network.y
+    return sample_model(**kwargs)
+
+
+def _filter_case(family, constraint, sample, fit, network, c, alpha):
+    """Filter one sample via the unified router."""
+    kwargs: dict[str, Any] = {
+        "family": _FAMILY_MAP[family],
+        "constraint": _CONSTRAINT_MAP[constraint],
+        "fit": fit,
+        "alpha": alpha,
+        "tail": "upper",
+    }
+    if family == "b":
+        kwargs["layers"] = c.binomial_layers
+    if constraint == "strength-cost":
+        kwargs["coord_x"] = network.x
+        kwargs["coord_y"] = network.y
+    return filter_model(sample, **kwargs)
 
 
 # --- Precision computation ---
-
-
 def _compute_precision(
     fit, constraint: str, constraints_data, network, *, self_loops: bool
 ) -> dict[str, float | None]:
@@ -609,55 +397,6 @@ def _compute_precision(
     return result
 
 
-# --- Filter FPR ---
-
-
-def _filter_one(family, constraint, sample, fit, network, c, alpha):
-    """Apply filter to one sample."""
-    if constraint == "strength":
-        if family == "me":
-            return filter_strength_poisson(sample, fit, alpha=alpha, tail="upper")
-        if family == "b":
-            return filter_strength_binomial(
-                sample, fit, layers=c.binomial_layers, alpha=alpha, tail="upper"
-            )
-        return filter_strength_geometric(sample, fit, alpha=alpha, tail="upper")
-    if constraint == "strength-cost":
-        if family == "me":
-            return filter_strength_cost_poisson(
-                sample, fit, network.x, network.y, alpha=alpha, tail="upper"
-            )
-        if family == "b":
-            return filter_strength_cost_binomial(
-                sample,
-                fit,
-                network.x,
-                network.y,
-                layers=c.binomial_layers,
-                alpha=alpha,
-                tail="upper",
-            )
-        return filter_strength_cost_geometric(
-            sample, fit, network.x, network.y, alpha=alpha, tail="upper"
-        )
-    if constraint == "strength-edges":
-        if family == "me":
-            return filter_strength_edges_poisson(sample, fit, alpha=alpha, tail="upper")
-        if family == "b":
-            return filter_strength_edges_binomial(
-                sample, fit, layers=c.binomial_layers, alpha=alpha, tail="upper"
-            )
-        return filter_strength_edges_geometric(sample, fit, alpha=alpha, tail="upper")
-    # strength-degree
-    if family == "me":
-        return filter_strength_degree_poisson(sample, fit, alpha=alpha, tail="upper")
-    if family == "b":
-        return filter_strength_degree_binomial(
-            sample, fit, layers=c.binomial_layers, alpha=alpha, tail="upper"
-        )
-    return filter_strength_degree_geometric(sample, fit, alpha=alpha, tail="upper")
-
-
 # --- Main benchmark runner ---
 
 
@@ -811,31 +550,19 @@ def _run_one_cell(
 
     # Fit
     try:
-        if kp_fraction > 0:
-            fit, m = _measure(
-                lambda: _fit_partial(
-                    family,
-                    constraint,
-                    network,
-                    c,
-                    kp_fraction,
-                    self_loops=self_loops,
-                    seed=seed,
-                ),
-                track_memory=track_memory,
-            )
-        else:
-            fit, m = _measure(
-                lambda: _fit_full(
-                    family,
-                    constraint,
-                    network,
-                    c,
-                    self_loops=self_loops,
-                    tolerance=tolerance,
-                ),
-                track_memory=track_memory,
-            )
+        fit, m = _measure(
+            lambda: _fit_case(
+                family,
+                constraint,
+                network,
+                c,
+                self_loops=self_loops,
+                tolerance=tolerance,
+                known_fraction=kp_fraction,
+                seed=seed,
+            ),
+            track_memory=track_memory,
+        )
     except Exception as exc:
         rows.append(
             BenchmarkRow(
@@ -901,7 +628,7 @@ def _run_one_cell(
     # Sample
     try:
         sample, sm = _measure(
-            lambda: _sample(family, constraint, fit, network, c, seed),
+            lambda: _sample_case(family, constraint, fit, network, c, seed),
             track_memory=track_memory,
         )
         rows.append(
@@ -943,12 +670,12 @@ def _run_one_cell(
             fp_total = 0
             edge_total = 0
             for offset in range(filter_samples):
-                null_sample = _sample(
+                null_sample = _sample_case(
                     family, constraint, fit, network, c, seed + 10000 + offset
                 )
                 if null_sample is None:
                     continue
-                result = _filter_one(
+                result = _filter_case(
                     family, constraint, null_sample, fit, network, c, alpha
                 )
                 fp_total += result.upper.edges.num_edges
