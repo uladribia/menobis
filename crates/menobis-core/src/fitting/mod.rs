@@ -45,7 +45,9 @@ pub use w::{
     fit_strength_negative_binomial, independent_strength_residuals, strength_cost_residuals,
     strength_edges_residuals, DegreeEventsFitResult,
 };
-pub use w_lbfgs::{fit_strength_cost_w_lbfgs, fit_strength_edges_w_lbfgs};
+pub use w_lbfgs::{
+    fit_strength_cost_w_lbfgs, fit_strength_degree_w_newton, fit_strength_edges_w_lbfgs,
+};
 
 #[cfg(test)]
 mod tests {
