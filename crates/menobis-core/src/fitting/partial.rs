@@ -8,8 +8,9 @@ use super::mask::PairMask;
 use super::support::max_pair_delta;
 use super::{
     balance_sparse_masked_degree_bernoulli, balance_sparse_masked_strength_degree_poisson,
-    balance_sparse_masked_strength_poisson, fit_strength_cost_binomial_coordinates,
-    fit_strength_cost_w_lbfgs, CostFitOptions, FitResult, PartialFitResult, StrengthCostFitResult,
+    balance_sparse_masked_strength_poisson, fit_strength_cost_binomial_coordinates_masked,
+    fit_strength_cost_w_lbfgs_masked, CostFitOptions, FitResult, PartialFitResult,
+    StrengthCostFitResult,
 };
 
 // ---------------------------------------------------------------------------
@@ -698,7 +699,7 @@ fn fit_partial_strength_cost_coordinates_with(
     coord_y: &[f64],
     target_cost: f64,
     self_loops: bool,
-    fit_free: impl FnOnce(&[f64], &[f64], f64) -> StrengthCostFitResult,
+    fit_free: impl FnOnce(&[f64], &[f64], f64, &PairMask) -> StrengthCostFitResult,
     rate: impl Fn(usize, usize, &StrengthCostFitResult) -> f64,
 ) -> PartialFitResult {
     let n = infer_n(strength_out.len(), known_src, known_tgt);
@@ -741,7 +742,7 @@ fn fit_partial_strength_cost_coordinates_with(
         );
     }
     balance_excess(&mut excess_out, &mut excess_in);
-    let fit = fit_free(&excess_out, &excess_in, excess_cost);
+    let fit = fit_free(&excess_out, &excess_in, excess_cost, &mask);
     assemble_result_sparse(
         n,
         known_src,
@@ -770,8 +771,6 @@ pub fn fit_partial_strength_cost_coordinates(
     tolerance: f64,
     max_iterations: usize,
 ) -> PartialFitResult {
-    let n = infer_n(strength_out.len(), known_src, known_tgt);
-    let mask = PairMask::new(n, self_loops, known_src, known_tgt);
     fit_partial_strength_cost_coordinates_with(
         strength_out,
         strength_in,
@@ -782,14 +781,14 @@ pub fn fit_partial_strength_cost_coordinates(
         coord_y,
         target_cost,
         self_loops,
-        |excess_out, excess_in, excess_cost| {
+        |excess_out, excess_in, excess_cost, mask| {
             fit_masked_strength_cost_poisson_coordinates(
                 excess_out,
                 excess_in,
                 coord_x,
                 coord_y,
                 excess_cost,
-                &mask,
+                mask,
                 tolerance,
                 max_iterations,
             )
@@ -833,14 +832,15 @@ pub fn fit_partial_strength_cost_binomial_coordinates(
         coord_y,
         target_cost,
         self_loops,
-        |excess_out, excess_in, excess_cost| {
-            fit_strength_cost_binomial_coordinates(
+        |excess_out, excess_in, excess_cost, mask| {
+            fit_strength_cost_binomial_coordinates_masked(
                 excess_out,
                 excess_in,
                 coord_x,
                 coord_y,
                 excess_cost,
                 layers,
+                mask,
                 &opts,
             )
         },
@@ -869,11 +869,6 @@ pub fn fit_partial_strength_cost_w_coordinates(
     tolerance: f64,
     max_iterations: usize,
 ) -> PartialFitResult {
-    let opts = CostFitOptions {
-        self_loops,
-        tolerance,
-        max_iterations,
-    };
     fit_partial_strength_cost_coordinates_with(
         strength_out,
         strength_in,
@@ -884,15 +879,17 @@ pub fn fit_partial_strength_cost_w_coordinates(
         coord_y,
         target_cost,
         self_loops,
-        |excess_out, excess_in, excess_cost| {
-            fit_strength_cost_w_lbfgs(
+        |excess_out, excess_in, excess_cost, mask| {
+            fit_strength_cost_w_lbfgs_masked(
                 excess_out,
                 excess_in,
                 coord_x,
                 coord_y,
                 excess_cost,
                 layers,
-                &opts,
+                mask,
+                tolerance,
+                max_iterations,
             )
         },
         |i, j, fit| {

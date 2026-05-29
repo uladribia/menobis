@@ -9,13 +9,9 @@
 //! Both use IPF + gamma bisection, same structure as ME strength-cost
 //! but with family-specific E[t_ij] and IPF update equations.
 
-use super::{CostFitOptions, FitResult, StrengthCostFitResult};
-
-// ---------------------------------------------------------------------------
-// Shared coordinate distance helper
-// ---------------------------------------------------------------------------
-
+use super::mask::PairMask;
 use super::support::coord_distance;
+use super::{CostFitOptions, FitResult, StrengthCostFitResult};
 
 // ===========================================================================
 // B (Binomial M) strength-cost coordinate fitting
@@ -38,7 +34,7 @@ fn balance_b_strength_cost_coordinates(
     coord_y: &[f64],
     gamma: f64,
     layers: u32,
-    self_loops: bool,
+    mask: &PairMask,
     tolerance: f64,
     max_iterations: usize,
     x_init: Option<&[f64]>,
@@ -99,7 +95,7 @@ fn balance_b_strength_cost_coordinates(
             }
             let mut denom = 0.0;
             for i in 0..n {
-                if !self_loops && i == j {
+                if mask.is_masked(i, j) {
                     continue;
                 }
                 let f_ij = (-gamma * coord_distance(coord_x, coord_y, i, j)).exp();
@@ -114,7 +110,7 @@ fn balance_b_strength_cost_coordinates(
             }
             let mut denom = 0.0;
             for j in 0..n {
-                if !self_loops && i == j {
+                if mask.is_masked(i, j) {
                     continue;
                 }
                 let f_ij = (-gamma * coord_distance(coord_x, coord_y, i, j)).exp();
@@ -128,7 +124,7 @@ fn balance_b_strength_cost_coordinates(
         for i in 0..n {
             let mut pred = 0.0;
             for j in 0..n {
-                if !self_loops && i == j {
+                if mask.is_masked(i, j) {
                     continue;
                 }
                 let f_ij = (-gamma * coord_distance(coord_x, coord_y, i, j)).exp();
@@ -163,13 +159,13 @@ fn b_expected_cost_coordinates(
     coord_y: &[f64],
     gamma: f64,
     layers: u32,
-    self_loops: bool,
+    mask: &PairMask,
 ) -> f64 {
     let n = x.len();
     let mut total = 0.0;
     for i in 0..n {
         for j in 0..n {
-            if !self_loops && i == j {
+            if mask.is_masked(i, j) {
                 continue;
             }
             let d = coord_distance(coord_x, coord_y, i, j);
@@ -194,6 +190,32 @@ pub fn fit_strength_cost_binomial_coordinates(
     layers: u32,
     opts: &CostFitOptions,
 ) -> StrengthCostFitResult {
+    let n = strength_out.len();
+    let mask = PairMask::from_self_loops(n, opts.self_loops);
+    fit_strength_cost_binomial_coordinates_masked(
+        strength_out,
+        strength_in,
+        coord_x,
+        coord_y,
+        target_cost,
+        layers,
+        &mask,
+        opts,
+    )
+}
+
+/// Mask-aware B strength-cost fitting (used by partial fitting).
+#[allow(clippy::too_many_arguments)]
+pub fn fit_strength_cost_binomial_coordinates_masked(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    coord_x: &[f64],
+    coord_y: &[f64],
+    target_cost: f64,
+    layers: u32,
+    mask: &PairMask,
+    opts: &CostFitOptions,
+) -> StrengthCostFitResult {
     let solve_at = |gamma: f64, x_init: Option<&[f64]>, y_init: Option<&[f64]>| {
         let fit = balance_b_strength_cost_coordinates(
             strength_out,
@@ -202,21 +224,15 @@ pub fn fit_strength_cost_binomial_coordinates(
             coord_y,
             gamma,
             layers,
-            opts.self_loops,
+            mask,
             opts.tolerance,
             opts.max_iterations,
             x_init,
             y_init,
         );
-        let delta = b_expected_cost_coordinates(
-            &fit.x,
-            &fit.y,
-            coord_x,
-            coord_y,
-            gamma,
-            layers,
-            opts.self_loops,
-        ) - target_cost;
+        let delta =
+            b_expected_cost_coordinates(&fit.x, &fit.y, coord_x, coord_y, gamma, layers, mask)
+                - target_cost;
         (fit, delta)
     };
 
@@ -375,8 +391,9 @@ mod tests {
         let cx = vec![0.0, 3.0, 0.0];
         let cy = vec![0.0, 0.0, 4.0];
         let layers = 3_u32;
+        let mask = crate::fitting::mask::PairMask::from_self_loops(3, true);
         let fit = balance_b_strength_cost_coordinates(
-            &s_out, &s_in, &cx, &cy, 0.0, layers, true, 1e-4, 5000, None, None,
+            &s_out, &s_in, &cx, &cy, 0.0, layers, &mask, 1e-4, 5000, None, None,
         );
         eprintln!(
             "B IPF gamma=0: converged={} iters={} x={:?} y={:?}",

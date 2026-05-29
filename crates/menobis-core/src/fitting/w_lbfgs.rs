@@ -396,6 +396,40 @@ pub fn fit_strength_cost_w_lbfgs(
     }
 }
 
+/// Mask-aware W strength-cost fitting (used by partial fitting).
+///
+/// The mask's self_loops policy is used for pair exclusion. Known-pair
+/// positions beyond the diagonal are handled by the excess computation
+/// in the partial fitting pipeline.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn fit_strength_cost_w_lbfgs_masked(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    coord_x: &[f64],
+    coord_y: &[f64],
+    target_cost: f64,
+    layers: u32,
+    mask: &PairMask,
+    tolerance: f64,
+    max_iterations: usize,
+) -> StrengthCostFitResult {
+    let opts = CostFitOptions {
+        self_loops: mask.self_loops(),
+        tolerance,
+        max_iterations,
+    };
+    fit_strength_cost_w_lbfgs(
+        strength_out,
+        strength_in,
+        coord_x,
+        coord_y,
+        target_cost,
+        layers,
+        &opts,
+    )
+}
+
 #[inline]
 fn pair_dist(mode: &CostMode<'_>, i: usize, j: usize) -> f64 {
     match mode {

@@ -32,7 +32,9 @@ pub use partial::{
     fit_partial_strength_cost_coordinates, fit_partial_strength_cost_w_coordinates,
     fit_partial_strength_degree, fit_partial_strength_edges,
 };
-pub use strength_cost::fit_strength_cost_binomial_coordinates;
+pub use strength_cost::{
+    fit_strength_cost_binomial_coordinates, fit_strength_cost_binomial_coordinates_masked,
+};
 pub use types::{
     FitResult, PartialFitResult, StrengthCostFitResult, StrengthDegreeFitResult,
     StrengthEdgesFitResult, WConicFitOptions, WFitStatus, WProblemMetrics, WStrengthCostFitResult,
@@ -46,7 +48,8 @@ pub use w::{
     strength_edges_residuals, DegreeEventsFitResult,
 };
 pub use w_lbfgs::{
-    fit_strength_cost_w_lbfgs, fit_strength_degree_w_newton, fit_strength_edges_w_lbfgs,
+    fit_strength_cost_w_lbfgs, fit_strength_cost_w_lbfgs_masked, fit_strength_degree_w_newton,
+    fit_strength_edges_w_lbfgs,
 };
 
 #[cfg(test)]
