@@ -510,7 +510,11 @@ def _sample(
 def _compute_precision(
     fit, constraint: str, constraints_data, network, *, self_loops: bool
 ) -> dict[str, float | None]:
-    """Compute constraint precision metrics from the fitted model."""
+    """Compute constraint precision metrics from the fitted model.
+
+    Recomputes expected strengths/degrees/edges from fitted multipliers
+    for all constraint types, giving consistent reporting.
+    """
     c = constraints_data
     result: dict[str, float | None] = {
         "max_s_out_err": None,
@@ -525,29 +529,140 @@ def _compute_precision(
     if not hasattr(fit, "x") or fit.x is None:
         return result
 
-    x, y = fit.x, fit.y
+    x, y = np.asarray(fit.x), np.asarray(fit.y)
+    n = len(x)
+    layers = getattr(fit, "layers", 1) or 1
+    m = float(layers)
+    family = getattr(fit, "family", None) or "poisson"
 
-    if constraint == "strength":
-        expected = np.outer(x, y)
-        if not self_loops:
-            np.fill_diagonal(expected, 0.0)
-        s_out_err = np.abs(expected.sum(axis=1) - c.strength_out)
-        s_in_err = np.abs(expected.sum(axis=0) - c.strength_in)
-        max_s = max(c.strength_out.max(), c.strength_in.max(), 1.0)
-        result["max_s_out_err"] = float(s_out_err.max())
-        result["max_s_in_err"] = float(s_in_err.max())
-        result["rel_s_err"] = float(max(s_out_err.max(), s_in_err.max()) / max_s)
+    # Determine lam (for edges constraints) and z/w (for degree constraints)
+    lam = getattr(fit, "lam", None)
+    z = np.asarray(fit.z) if hasattr(fit, "z") and fit.z is not None else None
+    w = np.asarray(fit.w) if hasattr(fit, "w") and fit.w is not None else None
+    gamma = getattr(fit, "gamma", None)
 
-    elif constraint in ("strength-edges", "strength-degree", "strength-cost"):
-        # For ZI and cost models, use max_strength_residual if available
-        if (
-            hasattr(fit, "max_strength_residual")
-            and fit.max_strength_residual is not None
-        ):
-            max_s = max(c.strength_out.max(), c.strength_in.max(), 1.0)
-            result["max_s_out_err"] = float(fit.max_strength_residual)
-            result["max_s_in_err"] = float(fit.max_strength_residual)
-            result["rel_s_err"] = float(fit.max_strength_residual / max_s)
+    # Build expected strengths, degrees, edge count from multipliers
+    s_out = np.zeros(n)
+    s_in = np.zeros(n)
+    k_out = np.zeros(n)
+    k_in = np.zeros(n)
+    total_edges = 0.0
+    total_cost = 0.0
+
+    for i in range(n):
+        for j in range(n):
+            if not self_loops and i == j:
+                continue
+
+            # Compute q_ij
+            if constraint == "strength-cost" and gamma is not None:
+                d = float(
+                    np.hypot(network.x[i] - network.x[j], network.y[i] - network.y[j])
+                )
+                q = float(x[i] * y[j]) * np.exp(-gamma * d)
+            else:
+                q = float(x[i] * y[j])
+
+            if q <= 0.0:
+                continue
+
+            # Compute expected weight and occupation based on family + constraint
+            if constraint == "strength" or constraint == "strength-cost":
+                # Non-ZI: independent statistics
+                if "binomial" in family or "Binomial" in str(type(fit)):
+                    weight = m * q / (1.0 + q)
+                    occ = 1.0  # not ZI
+                elif "geometric" in family or "Geometric" in str(type(fit)):
+                    if q >= 1.0:
+                        continue
+                    weight = m * q / (1.0 - q)
+                    occ = 1.0
+                else:
+                    # ME/Poisson
+                    weight = q
+                    occ = 1.0
+            elif constraint == "strength-edges":
+                # ZI with scalar lam
+                if lam is None:
+                    continue
+                if "binomial" in family or "Binomial" in str(type(fit)):
+                    g = (1.0 + q) ** layers - 1.0
+                    den = 1.0 + lam * g
+                    occ = lam * g / den
+                    weight = lam * m * q * (1.0 + q) ** (layers - 1) / den
+                elif "geometric" in family or "Geometric" in str(type(fit)):
+                    if q >= 1.0:
+                        continue
+                    g = (1.0 - q) ** (-layers) - 1.0
+                    den = 1.0 + lam * g
+                    occ = lam * g / den
+                    weight = lam * m * q * (1.0 - q) ** (-layers - 1) / den
+                else:
+                    # ME
+                    exp_q = np.exp(q)
+                    g = exp_q - 1.0
+                    den = 1.0 + lam * g
+                    occ = lam * g / den
+                    weight = lam * q * exp_q / den
+            elif constraint == "strength-degree":
+                # ZI with per-node z/w
+                if z is None or w is None:
+                    continue
+                v = float(z[i] * w[j])
+                if v <= 0.0:
+                    continue
+                if "binomial" in family or "Binomial" in str(type(fit)):
+                    g = (1.0 + q) ** layers - 1.0
+                    den = 1.0 + v * g
+                    occ = v * g / den
+                    weight = v * m * q * (1.0 + q) ** (layers - 1) / den
+                elif "geometric" in family or "Geometric" in str(type(fit)):
+                    if q >= 1.0:
+                        continue
+                    g = (1.0 - q) ** (-layers) - 1.0
+                    den = 1.0 + v * g
+                    occ = v * g / den
+                    weight = v * m * q * (1.0 - q) ** (-layers - 1) / den
+                else:
+                    # ME
+                    exp_q = np.exp(q)
+                    g = exp_q - 1.0
+                    den = 1.0 + v * g
+                    occ = v * g / den
+                    weight = v * q * exp_q / den
+            else:
+                continue
+
+            s_out[i] += weight
+            s_in[j] += weight
+            k_out[i] += occ
+            k_in[j] += occ
+            total_edges += occ
+            if constraint == "strength-cost" and gamma is not None:
+                d = float(
+                    np.hypot(network.x[i] - network.x[j], network.y[i] - network.y[j])
+                )
+                total_cost += weight * d
+
+    # Compute errors
+    max_s = max(c.strength_out.max(), c.strength_in.max(), 1.0)
+    s_out_err = float(np.abs(s_out - c.strength_out).max())
+    s_in_err = float(np.abs(s_in - c.strength_in).max())
+    result["max_s_out_err"] = s_out_err
+    result["max_s_in_err"] = s_in_err
+    result["rel_s_err"] = max(s_out_err, s_in_err) / max_s
+
+    if constraint == "strength-degree":
+        k_out_err = float(np.abs(k_out - c.degree_out).max())
+        k_in_err = float(np.abs(k_in - c.degree_in).max())
+        result["max_k_out_err"] = k_out_err
+        result["max_k_in_err"] = k_in_err
+
+    if constraint == "strength-edges":
+        result["edge_count_err"] = abs(total_edges - c.total_edges)
+
+    if constraint == "strength-cost":
+        result["cost_err"] = abs(total_cost - c.total_cost)
 
     return result
 
@@ -616,6 +731,12 @@ def _format_row(row: BenchmarkRow) -> str:
     max_k = ""
     if row.max_k_out_err is not None:
         max_k = f"{max(row.max_k_out_err, row.max_k_in_err or 0):.2e}"
+    edge_err = ""
+    if row.edge_count_err is not None:
+        edge_err = f"{row.edge_count_err:.2e}"
+    cost_err = ""
+    if row.cost_err is not None:
+        cost_err = f"{row.cost_err:.2e}"
     kp_str = (
         f"{row.known_pair_fraction * 100:.0f}" if row.known_pair_fraction > 0 else "0"
     )
@@ -624,7 +745,7 @@ def _format_row(row: BenchmarkRow) -> str:
         f"{row.regime:<9} {kp_str:>4} {row.wall_seconds:>8.4f} {row.cpu_seconds:>8.4f} "
         f"{row.parallel_factor:>5.1f} {row.memory_python_peak_mb:>6.1f} "
         f"{row.memory_rss_peak_mb:>7.1f} {conv_str:>5} {iters_str:>6} "
-        f"{max_s:>10} {max_k:>10} {row.status:<8}"
+        f"{max_s:>10} {max_k:>10} {edge_err:>10} {cost_err:>10} {row.status:<8}"
     )
 
 
@@ -634,7 +755,7 @@ def _print_header() -> None:
         f"{'stage':<12} {'N':>5} {'fam':<3} {'constraint':<16} {'regime':<9} "
         f"{'kp%':>4} {'wall(s)':>8} {'cpu(s)':>8} {'parX':>5} "
         f"{'py_MB':>6} {'rss_MB':>7} {'conv':>5} {'iters':>6} "
-        f"{'max_s_err':>10} {'max_k_err':>10} {'status':<8}"
+        f"{'max_s_err':>10} {'max_k_err':>10} {'edge_err':>10} {'cost_err':>10} {'status':<8}"
     )
     typer.echo(header, err=True)
     typer.echo("\u2500" * len(header), err=True)
