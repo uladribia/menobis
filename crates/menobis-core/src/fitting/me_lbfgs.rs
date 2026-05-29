@@ -29,7 +29,7 @@
 use rayon::prelude::*;
 
 use super::mask::PairMask;
-use super::StrengthDegreeFitResult;
+use super::{StrengthDegreeFitResult, StrengthEdgesFitResult};
 
 // ---------------------------------------------------------------------------
 // Mass-Preserving Heuristic Regularization
@@ -767,6 +767,341 @@ fn theta_to_result(
 }
 
 // ---------------------------------------------------------------------------
+// Strength-Edges L-BFGS (2N+1 parameters: α_x, α_y, ln_λ)
+// ---------------------------------------------------------------------------
+
+/// NLL and gradient for ME strength-edges (scalar λ, not per-node).
+///
+/// θ = [α_x(N), α_y(N), ln_λ(1)]  →  2N+1 parameters.
+/// q_ij = exp(α_x[i] + α_y[j]),  λ = exp(ln_λ).
+/// Z_ij = 1 + λ·(exp(q_ij) - 1).
+fn me_strength_edges_nll_and_gradient(
+    theta: &[f64],
+    s_out_target: &[f64],
+    s_in_target: &[f64],
+    target_edges: f64,
+    mask: &PairMask,
+) -> (f64, Vec<f64>) {
+    let n = s_out_target.len();
+    debug_assert_eq!(theta.len(), 2 * n + 1);
+
+    let alpha_x = &theta[0..n];
+    let alpha_y = &theta[n..2 * n];
+    let log_lam = theta[2 * n];
+
+    // Reuse zip_pair_statistics with log_v = log_lam for all pairs
+    let (total_nll, s_out_pred, s_in_pred, total_occ) = (0..n)
+        .into_par_iter()
+        .fold(
+            || (0.0_f64, vec![0.0_f64; n], vec![0.0_f64; n], 0.0_f64),
+            |(mut nll, mut s_out, mut s_in, mut occ), i| {
+                for j in 0..n {
+                    if mask.is_masked(i, j) {
+                        continue;
+                    }
+                    let log_q = alpha_x[i] + alpha_y[j];
+                    let (ln_z, occupation, expected_weight) = zip_pair_statistics(log_q, log_lam);
+                    nll += ln_z;
+                    s_out[i] += expected_weight;
+                    s_in[j] += expected_weight;
+                    occ += occupation;
+                }
+                (nll, s_out, s_in, occ)
+            },
+        )
+        .reduce(
+            || (0.0_f64, vec![0.0_f64; n], vec![0.0_f64; n], 0.0_f64),
+            |(nll_a, mut so_a, mut si_a, occ_a), (nll_b, so_b, si_b, occ_b)| {
+                for (a, b) in so_a.iter_mut().zip(so_b.iter()) {
+                    *a += *b;
+                }
+                for (a, b) in si_a.iter_mut().zip(si_b.iter()) {
+                    *a += *b;
+                }
+                (nll_a + nll_b, so_a, si_a, occ_a + occ_b)
+            },
+        );
+
+    let mut nll = total_nll;
+    for i in 0..n {
+        nll -= alpha_x[i] * s_out_target[i];
+        nll -= alpha_y[i] * s_in_target[i];
+    }
+    nll -= log_lam * target_edges;
+
+    let mut grad = vec![0.0_f64; 2 * n + 1];
+    for i in 0..n {
+        grad[i] = s_out_pred[i] - s_out_target[i];
+        grad[n + i] = s_in_pred[i] - s_in_target[i];
+    }
+    grad[2 * n] = total_occ - target_edges;
+
+    (nll, grad)
+}
+
+/// Fit ME strength-edges using L-BFGS optimization.
+///
+/// Minimizes the NLL with 2N+1 parameters: log strength multipliers + scalar log λ.
+#[must_use]
+pub fn fit_strength_edges_poisson_lbfgs(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    target_edges: f64,
+    mask: &PairMask,
+    tolerance: f64,
+    max_iterations: usize,
+) -> StrengthEdgesFitResult {
+    let n = strength_out.len();
+    let n_free = mask.n_free() as f64;
+    let total: f64 = strength_out.iter().sum();
+
+    if n == 0 || target_edges <= 0.0 || target_edges >= n_free || target_edges > total {
+        return StrengthEdgesFitResult {
+            x: vec![0.0; n],
+            y: vec![0.0; n],
+            lam: 0.0,
+            converged: false,
+            iterations: 0,
+        };
+    }
+
+    let dim = 2 * n + 1;
+    let scale_s = total.sqrt().max(1.0);
+    let mut theta = vec![0.0_f64; dim];
+    for i in 0..n {
+        theta[i] = if strength_out[i] > 0.0 {
+            (strength_out[i] / scale_s).max(1e-12).ln()
+        } else {
+            -690.0
+        };
+    }
+    for j in 0..n {
+        theta[n + j] = if strength_in[j] > 0.0 {
+            (strength_in[j] / scale_s).max(1e-12).ln()
+        } else {
+            -690.0
+        };
+    }
+    // Initialize ln_λ from edge density
+    let lam_init = target_edges / (n_free - target_edges).max(0.01);
+    theta[2 * n] = lam_init.max(1e-12).ln();
+
+    // Recenter x/y
+    let mean_x = theta[..n].iter().sum::<f64>() / n as f64;
+    let mean_y = theta[n..2 * n].iter().sum::<f64>() / n as f64;
+    let shift = 0.5 * (mean_y - mean_x);
+    for v in &mut theta[..n] {
+        *v += shift;
+    }
+    for v in &mut theta[n..2 * n] {
+        *v -= shift;
+    }
+
+    let memory = 10_usize;
+    let (mut obj, mut grad) =
+        me_strength_edges_nll_and_gradient(&theta, strength_out, strength_in, target_edges, mask);
+
+    let target_scale = strength_out
+        .iter()
+        .chain(strength_in.iter())
+        .copied()
+        .fold(target_edges, f64::max);
+    let grad_tol = tolerance * target_scale;
+
+    if grad.iter().map(|v| v.abs()).fold(0.0_f64, f64::max) < grad_tol {
+        return se_theta_to_result(&theta, n, true, 0);
+    }
+
+    let mut s_hist: Vec<Vec<f64>> = Vec::new();
+    let mut y_hist: Vec<Vec<f64>> = Vec::new();
+    let mut rho_hist: Vec<f64> = Vec::new();
+
+    for iter in 0..max_iterations {
+        let direction = lbfgs_direction(&grad, &s_hist, &y_hist, &rho_hist);
+        let directional_deriv: f64 = grad.iter().zip(direction.iter()).map(|(g, d)| g * d).sum();
+
+        if directional_deriv >= 0.0 || !directional_deriv.is_finite() {
+            s_hist.clear();
+            y_hist.clear();
+            rho_hist.clear();
+            let sd: Vec<f64> = grad.iter().map(|g| -g).collect();
+            let sd_deriv: f64 = grad.iter().map(|g| -g * g).sum();
+            if sd_deriv >= 0.0 {
+                break;
+            }
+            if let Some((next, ng, no)) = se_line_search(
+                &theta,
+                &sd,
+                sd_deriv,
+                obj,
+                strength_out,
+                strength_in,
+                target_edges,
+                mask,
+                n,
+            ) {
+                update_lbfgs_history(
+                    &next,
+                    &theta,
+                    &ng,
+                    &grad,
+                    &mut s_hist,
+                    &mut y_hist,
+                    &mut rho_hist,
+                    memory,
+                );
+                theta = next;
+                grad = ng;
+                obj = no;
+            } else {
+                break;
+            }
+            continue;
+        }
+
+        let Some((mut next, _ng, _no)) = se_line_search(
+            &theta,
+            &direction,
+            directional_deriv,
+            obj,
+            strength_out,
+            strength_in,
+            target_edges,
+            mask,
+            n,
+        ) else {
+            if !s_hist.is_empty() {
+                s_hist.clear();
+                y_hist.clear();
+                rho_hist.clear();
+                continue;
+            }
+            break;
+        };
+
+        // Recenter x/y only (not λ)
+        let mx = next[..n].iter().sum::<f64>() / n as f64;
+        let my = next[n..2 * n].iter().sum::<f64>() / n as f64;
+        let sh = 0.5 * (my - mx);
+        for v in &mut next[..n] {
+            *v += sh;
+        }
+        for v in &mut next[n..2 * n] {
+            *v -= sh;
+        }
+
+        let (ro, rg) = me_strength_edges_nll_and_gradient(
+            &next,
+            strength_out,
+            strength_in,
+            target_edges,
+            mask,
+        );
+
+        update_lbfgs_history(
+            &next,
+            &theta,
+            &rg,
+            &grad,
+            &mut s_hist,
+            &mut y_hist,
+            &mut rho_hist,
+            memory,
+        );
+        theta = next;
+        grad = rg;
+        obj = ro;
+
+        if grad.iter().map(|v| v.abs()).fold(0.0_f64, f64::max) < grad_tol {
+            return se_theta_to_result(&theta, n, true, iter + 1);
+        }
+    }
+
+    se_theta_to_result(&theta, n, false, max_iterations)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn se_line_search(
+    theta: &[f64],
+    direction: &[f64],
+    directional_deriv: f64,
+    current_obj: f64,
+    s_out: &[f64],
+    s_in: &[f64],
+    target_edges: f64,
+    mask: &PairMask,
+    _n: usize,
+) -> Option<(Vec<f64>, Vec<f64>, f64)> {
+    let c1 = 1e-4;
+    let mut step = 1.0_f64;
+    let max_dir = direction.iter().map(|d| d.abs()).fold(0.0_f64, f64::max);
+    if max_dir * step > 5.0 {
+        step = 5.0 / max_dir;
+    }
+    for _ in 0..40 {
+        let cand: Vec<f64> = theta
+            .iter()
+            .zip(direction.iter())
+            .map(|(t, d)| t + step * d)
+            .collect();
+        let (co, cg) = me_strength_edges_nll_and_gradient(&cand, s_out, s_in, target_edges, mask);
+        if co.is_finite() && co <= current_obj + c1 * step * directional_deriv {
+            return Some((cand, cg, co));
+        }
+        step *= 0.5;
+        if step < 1e-15 {
+            break;
+        }
+    }
+    None
+}
+
+fn se_theta_to_result(
+    theta: &[f64],
+    n: usize,
+    converged: bool,
+    iterations: usize,
+) -> StrengthEdgesFitResult {
+    StrengthEdgesFitResult {
+        x: theta[..n].iter().map(|&v| v.exp()).collect(),
+        y: theta[n..2 * n].iter().map(|&v| v.exp()).collect(),
+        lam: theta[2 * n].exp(),
+        converged,
+        iterations,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn update_lbfgs_history(
+    next: &[f64],
+    prev: &[f64],
+    next_grad: &[f64],
+    prev_grad: &[f64],
+    s_hist: &mut Vec<Vec<f64>>,
+    y_hist: &mut Vec<Vec<f64>>,
+    rho_hist: &mut Vec<f64>,
+    memory: usize,
+) {
+    let s: Vec<f64> = next.iter().zip(prev.iter()).map(|(a, b)| a - b).collect();
+    let yv: Vec<f64> = next_grad
+        .iter()
+        .zip(prev_grad.iter())
+        .map(|(a, b)| a - b)
+        .collect();
+    let sy: f64 = s.iter().zip(yv.iter()).map(|(a, b)| a * b).sum();
+    if sy > 1e-12 && sy.is_finite() {
+        if s_hist.len() == memory {
+            s_hist.remove(0);
+            y_hist.remove(0);
+            rho_hist.remove(0);
+        }
+        s_hist.push(s);
+        y_hist.push(yv);
+        rho_hist.push(1.0 / sy);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1176,6 +1511,177 @@ mod tests {
                 (row_k - k_out[i]).abs() < tol,
                 "k_out[{i}]: expected {}, got {row_k}",
                 k_out[i]
+            );
+        }
+    }
+
+    // --- Strength-Edges tests ---
+
+    #[test]
+    fn se_gradient_finite_difference() {
+        let n = 3;
+        let s_out = vec![5.0, 10.0, 8.0];
+        let s_in = vec![7.0, 9.0, 7.0];
+        let target_edges = 4.0;
+        let mask = PairMask::from_self_loops(n, true);
+        let theta = vec![-0.5, 0.3, 0.1, 0.0, -0.2, 0.2, -1.0];
+
+        let (_obj, grad) =
+            me_strength_edges_nll_and_gradient(&theta, &s_out, &s_in, target_edges, &mask);
+        let eps = 1e-7;
+        for idx in 0..theta.len() {
+            let mut tp = theta.clone();
+            tp[idx] += eps;
+            let (op, _) =
+                me_strength_edges_nll_and_gradient(&tp, &s_out, &s_in, target_edges, &mask);
+            let mut tm = theta.clone();
+            tm[idx] -= eps;
+            let (om, _) =
+                me_strength_edges_nll_and_gradient(&tm, &s_out, &s_in, target_edges, &mask);
+            let fd = (op - om) / (2.0 * eps);
+            assert!(
+                (grad[idx] - fd).abs() < 1e-5,
+                "grad[{idx}]: analytic={:.8}, fd={:.8}",
+                grad[idx],
+                fd
+            );
+        }
+    }
+
+    #[test]
+    #[allow(clippy::needless_range_loop)]
+    fn se_lbfgs_recovers_constraints_n5() {
+        let n = 5;
+        let mask = PairMask::from_self_loops(n, false);
+        let x = [0.3_f64, 0.5, 0.2, 0.4, 0.35];
+        let y = [0.25_f64, 0.3, 0.45, 0.2, 0.35];
+        let lam = 0.8_f64;
+        let mut s_out = vec![0.0; n];
+        let mut s_in = vec![0.0; n];
+        let mut total_edges = 0.0;
+        for i in 0..n {
+            for j in 0..n {
+                if mask.is_masked(i, j) {
+                    continue;
+                }
+                let q = x[i] * y[j];
+                let em1 = q.exp_m1();
+                if em1 <= 0.0 {
+                    continue;
+                }
+                let vg = lam * em1;
+                let z = 1.0 + vg;
+                s_out[i] += lam * q * q.exp() / z;
+                s_in[j] += lam * q * q.exp() / z;
+                total_edges += vg / z;
+            }
+        }
+
+        let result =
+            fit_strength_edges_poisson_lbfgs(&s_out, &s_in, total_edges, &mask, 1e-6, 5000);
+        assert!(result.converged, "L-BFGS SE must converge");
+
+        let tol = 1e-3;
+        for i in 0..n {
+            let mut row_s = 0.0;
+            for j in 0..n {
+                if mask.is_masked(i, j) {
+                    continue;
+                }
+                let q = result.x[i] * result.y[j];
+                let em1 = q.exp_m1();
+                if em1 <= 0.0 {
+                    continue;
+                }
+                row_s += result.lam * q * q.exp() / (1.0 + result.lam * em1);
+            }
+            assert!(
+                (row_s - s_out[i]).abs() < tol,
+                "s_out[{i}]: expected {}, got {row_s}",
+                s_out[i]
+            );
+        }
+    }
+
+    #[test]
+    fn se_lbfgs_vs_bisection_comparison() {
+        use std::time::Instant;
+        let n = 20;
+        let x: Vec<f64> = (0..n).map(|i| 0.1 + 0.9 * (i as f64 / n as f64)).collect();
+        let y: Vec<f64> = (0..n)
+            .map(|j| 0.15 + 0.85 * ((n - 1 - j) as f64 / n as f64))
+            .collect();
+        let lam = 1.5_f64;
+        let mask = PairMask::from_self_loops(n, false);
+        let mut s_out = vec![0.0; n];
+        let mut s_in = vec![0.0; n];
+        let mut total_edges = 0.0;
+        for i in 0..n {
+            for j in 0..n {
+                if mask.is_masked(i, j) {
+                    continue;
+                }
+                let q = x[i] * y[j];
+                let em1 = q.exp_m1();
+                if em1 <= 0.0 {
+                    continue;
+                }
+                let vg = lam * em1;
+                let z = 1.0 + vg;
+                s_out[i] += lam * q * q.exp() / z;
+                s_in[j] += lam * q * q.exp() / z;
+                total_edges += vg / z;
+            }
+        }
+
+        let t0 = Instant::now();
+        let old = crate::fitting::me::balance_strength_edges_poisson(
+            &s_out,
+            &s_in,
+            total_edges,
+            false,
+            1e-6,
+            5000,
+        );
+        let old_time = t0.elapsed();
+
+        let t1 = Instant::now();
+        let new = fit_strength_edges_poisson_lbfgs(&s_out, &s_in, total_edges, &mask, 1e-6, 5000);
+        let new_time = t1.elapsed();
+
+        eprintln!(
+            "ME SE N={n}: bisection {:.4}s ({} iters, conv={}), lbfgs {:.4}s ({} iters, conv={})",
+            old_time.as_secs_f64(),
+            old.iterations,
+            old.converged,
+            new_time.as_secs_f64(),
+            new.iterations,
+            new.converged
+        );
+
+        assert!(
+            old.converged || new.converged,
+            "at least one method must converge"
+        );
+
+        if new.converged {
+            let mut pred_edges = 0.0;
+            for i in 0..n {
+                for j in 0..n {
+                    if mask.is_masked(i, j) {
+                        continue;
+                    }
+                    let q = new.x[i] * new.y[j];
+                    let em1 = q.exp_m1();
+                    if em1 <= 0.0 {
+                        continue;
+                    }
+                    pred_edges += new.lam * em1 / (1.0 + new.lam * em1);
+                }
+            }
+            assert!(
+                (pred_edges - total_edges).abs() < 0.1,
+                "L-BFGS edges: expected {total_edges}, got {pred_edges}"
             );
         }
     }

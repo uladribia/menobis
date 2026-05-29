@@ -19,14 +19,14 @@ pub use b::{
     balance_sparse_masked_strength_binomial, balance_strength_binomial,
     fit_strength_degree_binomial, fit_strength_edges_binomial,
 };
-pub use b_lbfgs::fit_strength_degree_binomial_lbfgs;
+pub use b_lbfgs::{fit_strength_degree_binomial_lbfgs, fit_strength_edges_binomial_lbfgs};
 pub use me::{
     balance_sparse_masked_strength_degree_poisson, balance_sparse_masked_strength_poisson,
     balance_strength_degree_poisson, balance_strength_edges_poisson, balance_strength_poisson,
     balance_weighted_factors, fit_strength_cost_poisson_coordinates, fit_strength_poisson,
     CostFitOptions,
 };
-pub use me_lbfgs::fit_strength_degree_poisson_lbfgs;
+pub use me_lbfgs::{fit_strength_degree_poisson_lbfgs, fit_strength_edges_poisson_lbfgs};
 pub use partial::{
     fit_partial_degree, fit_partial_strength, fit_partial_strength_cost_binomial_coordinates,
     fit_partial_strength_cost_coordinates, fit_partial_strength_cost_w_coordinates,

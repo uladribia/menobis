@@ -572,7 +572,6 @@ pub fn sample_strength_degree_poisson(
     )
 }
 
-
 /// Sample exact ME fixed-strength-and-edge-count zero-inflated model.
 #[must_use]
 pub fn sample_strength_edges_poisson(
