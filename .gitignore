@@ -12,6 +12,10 @@ htmlcov/
 target/
 *.so
 
+# Data
+benchmarks/results/
+data/
+
 # Docs
 site/
 

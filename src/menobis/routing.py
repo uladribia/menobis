@@ -72,12 +72,43 @@ def fit_model(
     target_cost: float | None = None,
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
+    known_source: NDArray[Any] | None = None,
+    known_target: NDArray[Any] | None = None,
+    known_rate: NDArray[Any] | None = None,
     layers: int = 1,
     self_loops: bool = True,
     tolerance: float = 1e-8,
     max_iterations: int = 10000,
 ) -> FitResult:
-    """Fit a model selected by ensemble, family, and constraint."""
+    """Fit a model selected by ensemble, family, and constraint.
+
+    When known_source, known_target, and known_rate are provided, performs
+    partial fitting where those pairs are frozen and only the remaining
+    pairs are fitted.
+    """
+    if known_source is not None and known_target is not None and known_rate is not None:
+        return cast(
+            "FitResult",
+            _fit_partial(
+                family=family,
+                constraint=constraint,
+                strength_out=strength_out,
+                strength_in=strength_in,
+                degree_out=degree_out,
+                degree_in=degree_in,
+                target_edges=target_edges,
+                target_cost=target_cost,
+                coord_x=coord_x,
+                coord_y=coord_y,
+                known_source=known_source,
+                known_target=known_target,
+                known_rate=known_rate,
+                layers=layers,
+                self_loops=self_loops,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
+            ),
+        )
     return cast(
         "FitResult",
         route_model(
@@ -697,6 +728,273 @@ def _filter_model(
         msg = f"unsupported (constraint, family): ({constraint!r}, {family!r})"
         raise UnsupportedModelCaseError(msg)
     return dispatch[key](edges, fit, **kwargs)
+
+
+def _fit_partial(
+    *,
+    family: ModelFamily,
+    constraint: Constraint,
+    strength_out: NDArray[Any] | None,
+    strength_in: NDArray[Any] | None,
+    degree_out: NDArray[Any] | None,
+    degree_in: NDArray[Any] | None,
+    target_edges: float | None,
+    target_cost: float | None,
+    coord_x: NDArray[Any] | None,
+    coord_y: NDArray[Any] | None,
+    known_source: NDArray[Any],
+    known_target: NDArray[Any],
+    known_rate: NDArray[Any],
+    layers: int,
+    self_loops: bool,
+    tolerance: float,
+    max_iterations: int,
+) -> Any:  # noqa: ANN401
+    """Dispatch partial fitting by family and constraint."""
+    from menobis.models.partial import (
+        fit_partial_strength_binomial,
+        fit_partial_strength_cost_binomial_coordinates,
+        fit_partial_strength_cost_geometric_coordinates,
+        fit_partial_strength_cost_negative_binomial_coordinates,
+        fit_partial_strength_cost_poisson_coordinates,
+        fit_partial_strength_degree_binomial,
+        fit_partial_strength_degree_geometric,
+        fit_partial_strength_degree_poisson,
+        fit_partial_strength_edges_binomial,
+        fit_partial_strength_edges_geometric,
+        fit_partial_strength_edges_poisson,
+        fit_partial_strength_geometric,
+        fit_partial_strength_poisson,
+    )
+
+    if strength_out is None or strength_in is None:
+        msg = "partial fitting requires strength_out and strength_in"
+        raise ValueError(msg)
+
+    variant = _fit_variant(family, layers)
+
+    if constraint == Constraint.STRENGTH:
+        dispatch: dict[str, Callable[..., Any]] = {
+            "poisson": lambda: fit_partial_strength_poisson(
+                strength_out,
+                strength_in,
+                known_source,
+                known_target,
+                known_rate,
+                self_loops=self_loops,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
+            ),
+            "binomial": lambda: fit_partial_strength_binomial(
+                strength_out,
+                strength_in,
+                known_source,
+                known_target,
+                known_rate,
+                layers=layers,
+                self_loops=self_loops,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
+            ),
+            "geometric": lambda: fit_partial_strength_geometric(
+                strength_out,
+                strength_in,
+                known_source,
+                known_target,
+                known_rate,
+                self_loops=self_loops,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
+            ),
+            "negative_binomial": lambda: fit_partial_strength_geometric(
+                strength_out,
+                strength_in,
+                known_source,
+                known_target,
+                known_rate,
+                self_loops=self_loops,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
+            ),
+        }
+        return dispatch[variant]()
+
+    if constraint == Constraint.STRENGTH_EDGES:
+        if target_edges is None:
+            msg = "partial strength-edges fitting requires target_edges"
+            raise ValueError(msg)
+        dispatch = {
+            "poisson": lambda: fit_partial_strength_edges_poisson(
+                strength_out,
+                strength_in,
+                known_source,
+                known_target,
+                known_rate,
+                target_edges,
+                self_loops=self_loops,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
+            ),
+            "binomial": lambda: fit_partial_strength_edges_binomial(
+                strength_out,
+                strength_in,
+                known_source,
+                known_target,
+                known_rate,
+                target_edges,
+                layers=layers,
+                self_loops=self_loops,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
+            ),
+            "geometric": lambda: fit_partial_strength_edges_geometric(
+                strength_out,
+                strength_in,
+                known_source,
+                known_target,
+                known_rate,
+                target_edges,
+                self_loops=self_loops,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
+            ),
+            "negative_binomial": lambda: fit_partial_strength_edges_geometric(
+                strength_out,
+                strength_in,
+                known_source,
+                known_target,
+                known_rate,
+                target_edges,
+                self_loops=self_loops,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
+            ),
+        }
+        return dispatch[variant]()
+
+    if constraint == Constraint.STRENGTH_DEGREE:
+        if degree_out is None or degree_in is None:
+            msg = "partial strength-degree fitting requires degree_out and degree_in"
+            raise ValueError(msg)
+        dispatch = {
+            "poisson": lambda: fit_partial_strength_degree_poisson(
+                strength_out,
+                strength_in,
+                degree_out,
+                degree_in,
+                known_source,
+                known_target,
+                known_rate,
+                self_loops=self_loops,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
+            ),
+            "binomial": lambda: fit_partial_strength_degree_binomial(
+                strength_out,
+                strength_in,
+                degree_out,
+                degree_in,
+                known_source,
+                known_target,
+                known_rate,
+                layers=layers,
+                self_loops=self_loops,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
+            ),
+            "geometric": lambda: fit_partial_strength_degree_geometric(
+                strength_out,
+                strength_in,
+                degree_out,
+                degree_in,
+                known_source,
+                known_target,
+                known_rate,
+                self_loops=self_loops,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
+            ),
+            "negative_binomial": lambda: fit_partial_strength_degree_geometric(
+                strength_out,
+                strength_in,
+                degree_out,
+                degree_in,
+                known_source,
+                known_target,
+                known_rate,
+                self_loops=self_loops,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
+            ),
+        }
+        return dispatch[variant]()
+
+    if constraint == Constraint.STRENGTH_COST:
+        if coord_x is None or coord_y is None or target_cost is None:
+            msg = "partial strength-cost requires coord_x, coord_y, target_cost"
+            raise ValueError(msg)
+        dispatch = {
+            "poisson": lambda: fit_partial_strength_cost_poisson_coordinates(
+                strength_out,
+                strength_in,
+                known_source,
+                known_target,
+                known_rate,
+                coord_x,
+                coord_y,
+                target_cost,
+                self_loops=self_loops,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
+            ),
+            "binomial": lambda: fit_partial_strength_cost_binomial_coordinates(
+                strength_out,
+                strength_in,
+                known_source,
+                known_target,
+                known_rate,
+                coord_x,
+                coord_y,
+                target_cost,
+                layers=layers,
+                self_loops=self_loops,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
+            ),
+            "geometric": lambda: fit_partial_strength_cost_geometric_coordinates(
+                strength_out,
+                strength_in,
+                known_source,
+                known_target,
+                known_rate,
+                coord_x,
+                coord_y,
+                target_cost,
+                self_loops=self_loops,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
+            ),
+            "negative_binomial": lambda: (
+                fit_partial_strength_cost_negative_binomial_coordinates(
+                    strength_out,
+                    strength_in,
+                    known_source,
+                    known_target,
+                    known_rate,
+                    coord_x,
+                    coord_y,
+                    target_cost,
+                    layers=layers,
+                    self_loops=self_loops,
+                    tolerance=tolerance,
+                    max_iterations=max_iterations,
+                )
+            ),
+        }
+        return dispatch[variant]()
+
+    msg = f"partial fitting not supported for constraint: {constraint!r}"
+    raise UnsupportedModelCaseError(msg)
 
 
 __all__ = [
