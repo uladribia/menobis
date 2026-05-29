@@ -46,9 +46,6 @@ import numpy as np
 import typer
 from typer import Option, Typer
 
-# Sentinel for dynamic default path
-_AUTO = object()
-
 # ---------------------------------------------------------------------------
 # Dataset registry
 # ---------------------------------------------------------------------------
@@ -374,10 +371,7 @@ def prepare_from_url(
         return _parse_generic_csv(path, delimiter=",")
     if fmt == "tsv":
         return _parse_generic_csv(path, delimiter="\t")
-    raise ValueError(
-        f"Cannot detect format for {filename}. "
-        f"Use --format mtx|csv|tsv"
-    )
+    raise ValueError(f"Cannot detect format for {filename}. Use --format mtx|csv|tsv")
 
 
 def _infer_format(suffix: str) -> str:
@@ -515,9 +509,7 @@ def list_datasets() -> None:
 def download(
     dataset: Annotated[
         str,
-        typer.Argument(
-            help="Dataset name (see ``list``) or 'url' for custom URL."
-        ),
+        typer.Argument(help="Dataset name (see ``list``) or 'url' for custom URL."),
     ],
     url: Annotated[
         str | None,
@@ -530,7 +522,7 @@ def download(
         Option(
             "--output-dir",
             "-o",
-            help="Output directory for prepared edge tables.  Defaults to ``data/`` at the repo root.",
+            help="Output directory.  Defaults to ``data/`` at the repo root.",
             file_okay=False,
             dir_okay=True,
         ),
@@ -564,6 +556,8 @@ def download(
     to download from a custom URL (Matrix Market, CSV, or TSV).
     """
     effective_cache = cache_dir or CACHE_DIR_DEFAULT
+    if output_dir is None:
+        output_dir = Path(__file__).resolve().parent.parent / "data"
 
     if dataset == "url":
         if not url:
