@@ -6,7 +6,7 @@ Replace IPFP/damped-balancing/bisection with direct NLL minimization via L-BFGS 
 
 ## Status
 
-Accepted. Implemented for ME (Poisson) and B (Binomial), both strength-degree and strength-edges. W (Geometric/NegBin) strength-degree pending.
+Accepted. Implemented for all three families (ME, B, W) and both zero-inflated constraint types (strength-degree, strength-edges).
 
 ## Context
 
@@ -119,11 +119,11 @@ Both methods converge at all tested sizes. L-BFGS is the clear winner.
 
 ## Consequences
 
-- Old balancing/bisection code deleted (no backward compatibility per AGENTS.md)
+- Old balancing/bisection code deleted for all families (no backward compatibility per AGENTS.md)
 - `PairMask` integration preserved for partial fitting
 - Saturated nodes (k≈N_max) handled via post-hoc clamping of z/w multipliers
-- The same architecture applies to W once implemented
-- Python API unchanged; all public fitting functions transparently use L-BFGS
+- Python API unchanged; all public fitting functions transparently use the new solvers
+- W uses a hybrid approach: Newton for (a,b) strength + bisection for (z,w) degree and scalar λ, because the W feasibility constraint (r>0) prevents joint unconstrained L-BFGS
 
 ## Files
 
@@ -131,6 +131,8 @@ Both methods converge at all tested sizes. L-BFGS is the clear winner.
 |------|----------|
 | `crates/menobis-core/src/fitting/me_lbfgs.rs` | ME strength-degree + strength-edges L-BFGS |
 | `crates/menobis-core/src/fitting/b_lbfgs.rs` | B strength-degree + strength-edges L-BFGS |
+| `crates/menobis-core/src/fitting/w_lbfgs.rs` | W strength-edges (bisect λ + Newton inner), W strength-degree (Newton + bisection) |
 | `crates/menobis-core/src/fitting/me.rs` | Thin wrappers delegating to L-BFGS |
 | `crates/menobis-core/src/fitting/b.rs` | Thin wrappers delegating to L-BFGS |
+| `crates/menobis-core/src/fitting/w.rs` | Thin wrappers delegating to Newton/L-BFGS |
 | `crates/menobis-core/benches/me_strength_degree.rs` | Benchmark harness |
