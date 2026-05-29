@@ -36,18 +36,6 @@ from menobis.filtering import (
     filter_strength_poisson,
 )
 from menobis.models import (
-    fit_strength_binomial,
-    fit_strength_cost_binomial,
-    fit_strength_cost_geometric,
-    fit_strength_cost_poisson,
-    fit_strength_degree_binomial,
-    fit_strength_degree_geometric,
-    fit_strength_degree_poisson,
-    fit_strength_edges_binomial,
-    fit_strength_edges_geometric,
-    fit_strength_edges_poisson,
-    fit_strength_geometric,
-    fit_strength_poisson,
     sample_strength_binomial,
     sample_strength_cost_binomial,
     sample_strength_cost_geometric,
@@ -75,6 +63,8 @@ from menobis.models.partial import (
     fit_partial_strength_geometric,
     fit_partial_strength_poisson,
 )
+from menobis.models.spec import Constraint, ModelFamily
+from menobis.routing import fit_model
 from menobis.utilities.synthetic import (
     derive_synthetic_constraints,
     generate_pa_geographic_network,
@@ -191,126 +181,55 @@ def _measure(fn, *, track_memory: bool = True) -> tuple[Any, Measurement]:
 def _regime_params(regime: str, node_count: int) -> dict[str, float]:
     """Return PA-geographic parameters for a regime."""
     if regime == "sparse":
-        return {"average_degree": 3.0, "events_per_edge": 1.5}
+        return {"average_degree": 3.0, "events_per_edge": 3.0}
     # saturated: degree near N-1
-    return {"average_degree": 0.85 * (node_count - 1), "events_per_edge": 5.0}
+    return {"average_degree": 0.85 * (node_count - 1), "events_per_edge": 8.0}
 
 
 # --- Fitting dispatchers ---
 
 
+# --- Fitting via router ---
+
+_FAMILY_MAP = {"me": ModelFamily.ME, "b": ModelFamily.B, "w": ModelFamily.W}
+_CONSTRAINT_MAP = {
+    "strength": Constraint.STRENGTH,
+    "strength-cost": Constraint.STRENGTH_COST,
+    "strength-edges": Constraint.STRENGTH_EDGES,
+    "strength-degree": Constraint.STRENGTH_DEGREE,
+}
+
+
 def _fit_full(
-    family: str, constraint: str, network, constraints_data, *, self_loops: bool
+    family: str,
+    constraint: str,
+    network,
+    constraints_data,
+    *,
+    self_loops: bool,
+    tolerance: float,
 ):
-    """Dispatch to the correct full-fit function."""
+    """Dispatch to the correct full-fit function via the unified router."""
     import warnings
 
+    c = constraints_data
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        if constraint == "strength":
-            return _fit_strength(family, constraints_data, self_loops)
-        if constraint == "strength-cost":
-            return _fit_strength_cost(family, network, constraints_data)
-        if constraint == "strength-edges":
-            return _fit_strength_edges(family, constraints_data, self_loops)
-        if constraint == "strength-degree":
-            return _fit_strength_degree(family, constraints_data, self_loops)
-    msg = f"unknown constraint: {constraint}"
-    raise ValueError(msg)
-
-
-def _fit_strength(family: str, c, self_loops: bool):
-    if family == "me":
-        return fit_strength_poisson(
-            c.strength_out, c.strength_in, self_loops=self_loops
-        )
-    if family == "b":
-        return fit_strength_binomial(
-            c.strength_out,
-            c.strength_in,
-            layers=c.binomial_layers,
+        return fit_model(
+            family=_FAMILY_MAP[family],
+            constraint=_CONSTRAINT_MAP[constraint],
+            strength_out=c.strength_out,
+            strength_in=c.strength_in,
+            degree_out=c.degree_out if constraint == "strength-degree" else None,
+            degree_in=c.degree_in if constraint == "strength-degree" else None,
+            target_edges=c.total_edges if constraint == "strength-edges" else None,
+            target_cost=c.total_cost if constraint == "strength-cost" else None,
+            coord_x=network.x if constraint == "strength-cost" else None,
+            coord_y=network.y if constraint == "strength-cost" else None,
+            layers=c.binomial_layers if family == "b" else 1,
             self_loops=self_loops,
+            tolerance=tolerance,
         )
-    return fit_strength_geometric(c.strength_out, c.strength_in, self_loops=self_loops)
-
-
-def _fit_strength_cost(family: str, network, c):
-    if family == "me":
-        return fit_strength_cost_poisson(
-            c.strength_out,
-            c.strength_in,
-            network.x,
-            network.y,
-            c.total_cost,
-            self_loops=network.self_loops,
-        )
-    if family == "b":
-        return fit_strength_cost_binomial(
-            c.strength_out,
-            c.strength_in,
-            network.x,
-            network.y,
-            c.total_cost,
-            layers=c.binomial_layers,
-            self_loops=network.self_loops,
-        )
-    return fit_strength_cost_geometric(
-        c.strength_out,
-        c.strength_in,
-        network.x,
-        network.y,
-        c.total_cost,
-        self_loops=network.self_loops,
-    )
-
-
-def _fit_strength_edges(family: str, c, self_loops: bool):
-    if family == "me":
-        return fit_strength_edges_poisson(
-            c.strength_out, c.strength_in, c.total_edges, self_loops=self_loops
-        )
-    if family == "b":
-        return fit_strength_edges_binomial(
-            c.strength_out,
-            c.strength_in,
-            c.total_edges,
-            layers=c.binomial_layers,
-            self_loops=self_loops,
-        )
-    return fit_strength_edges_geometric(
-        c.strength_out, c.strength_in, c.total_edges, self_loops=self_loops
-    )
-
-
-def _fit_strength_degree(family: str, c, self_loops: bool):
-    if family == "me":
-        return fit_strength_degree_poisson(
-            c.strength_out,
-            c.strength_in,
-            c.degree_out,
-            c.degree_in,
-            self_loops=self_loops,
-            tolerance=1e-4,
-        )
-    if family == "b":
-        return fit_strength_degree_binomial(
-            c.strength_out,
-            c.strength_in,
-            c.degree_out,
-            c.degree_in,
-            layers=c.binomial_layers,
-            self_loops=self_loops,
-            tolerance=1e-4,
-        )
-    return fit_strength_degree_geometric(
-        c.strength_out,
-        c.strength_in,
-        c.degree_out,
-        c.degree_in,
-        self_loops=self_loops,
-        tolerance=1e-3,
-        max_iterations=5000,
-    )
 
 
 # --- Partial fitting ---
@@ -796,6 +715,8 @@ def run_benchmark(
     filter_samples: int,
     alpha: float,
     track_memory: bool,
+    tol_sparse: float = 1e-6,
+    tol_saturated: float = 1e-6,
     fit_only: bool = False,
     verbose: bool = True,
 ) -> list[BenchmarkRow]:
@@ -846,6 +767,7 @@ def run_benchmark(
             for family in families:
                 for constraint in constraints:
                     for kp_fraction in known_pairs:
+                        tolerance = tol_sparse if regime == "sparse" else tol_saturated
                         cell_rows = _run_one_cell(
                             family=family,
                             constraint=constraint,
@@ -859,6 +781,7 @@ def run_benchmark(
                             alpha=alpha,
                             track_memory=track_memory,
                             fit_only=fit_only,
+                            tolerance=tolerance,
                         )
                         for r in cell_rows:
                             _emit(r)
@@ -879,6 +802,7 @@ def _run_one_cell(
     alpha,
     track_memory,
     fit_only,
+    tolerance,
 ) -> list[BenchmarkRow]:
     """Run fit (+ optional sample + filter) for one matrix cell."""
     rows: list[BenchmarkRow] = []
@@ -903,7 +827,12 @@ def _run_one_cell(
         else:
             fit, m = _measure(
                 lambda: _fit_full(
-                    family, constraint, network, c, self_loops=self_loops
+                    family,
+                    constraint,
+                    network,
+                    c,
+                    self_loops=self_loops,
+                    tolerance=tolerance,
                 ),
                 track_memory=track_memory,
             )
@@ -1084,6 +1013,13 @@ def all_command(
     no_memory: Annotated[
         bool, typer.Option("--no-memory", help="Skip memory profiling.")
     ] = False,
+    tol_sparse: Annotated[
+        float, typer.Option("--tol-sparse", help="Solver tolerance for sparse regime.")
+    ] = 1e-6,
+    tol_saturated: Annotated[
+        float,
+        typer.Option("--tol-saturated", help="Solver tolerance for saturated regime."),
+    ] = 1e-6,
     output: Annotated[Path, typer.Option("--output", "-o")] = Path(
         "benchmarks/results/e2e-modern.json"
     ),
@@ -1103,6 +1039,8 @@ def all_command(
         filter_samples=filter_samples,
         alpha=alpha,
         track_memory=not no_memory,
+        tol_sparse=tol_sparse,
+        tol_saturated=tol_saturated,
     )
     _save_and_display(rows, output, output_json)
 
@@ -1119,6 +1057,8 @@ def fit_command(
     seed: Annotated[int, typer.Option("--seed")] = 10_000,
     self_loops: Annotated[bool, typer.Option("--self-loops/--no-self-loops")] = False,
     no_memory: Annotated[bool, typer.Option("--no-memory")] = False,
+    tol_sparse: Annotated[float, typer.Option("--tol-sparse")] = 1e-6,
+    tol_saturated: Annotated[float, typer.Option("--tol-saturated")] = 1e-6,
     output: Annotated[Path, typer.Option("--output", "-o")] = Path(
         "benchmarks/results/fit-modern.json"
     ),
@@ -1135,6 +1075,8 @@ def fit_command(
         filter_samples=0,
         alpha=0.05,
         track_memory=not no_memory,
+        tol_sparse=tol_sparse,
+        tol_saturated=tol_saturated,
         fit_only=True,
     )
     _save_and_display(rows, output, False)
@@ -1148,6 +1090,8 @@ def compare_command(
     seed: Annotated[int, typer.Option("--seed")] = 10_000,
     self_loops: Annotated[bool, typer.Option("--self-loops/--no-self-loops")] = False,
     no_memory: Annotated[bool, typer.Option("--no-memory")] = False,
+    tol_sparse: Annotated[float, typer.Option("--tol-sparse")] = 1e-6,
+    tol_saturated: Annotated[float, typer.Option("--tol-saturated")] = 1e-6,
 ) -> None:
     """Compare regimes side-by-side."""
     rows = run_benchmark(
@@ -1161,6 +1105,8 @@ def compare_command(
         filter_samples=0,
         alpha=0.05,
         track_memory=not no_memory,
+        tol_sparse=tol_sparse,
+        tol_saturated=tol_saturated,
         fit_only=True,
     )
     _print_comparison(rows)

@@ -25,8 +25,8 @@ precision, and parallelism across all model families and constraint types.
 
 | Regime | Parameters | Character |
 |---|---|---|
-| Sparse | `average_degree=3.0, events_per_edge=1.5` | k near s, low connectivity |
-| Saturated | `average_degree=0.85*(N-1), events_per_edge=5.0` | k near N-1, dense |
+| Sparse | `average_degree=3.0, events_per_edge=3.0` | Low connectivity, s/k ~ 3 |
+| Saturated | `average_degree=0.85*(N-1), events_per_edge=8.0` | k near N-1, dense, high weight |
 
 ## Metrics collected
 
