@@ -7,8 +7,7 @@ use super::{FitResult, StrengthCostFitResult, StrengthDegreeFitResult, StrengthE
 
 /// Fit exact grand-canonical ME fixed-strength-and-edge-count zero-inflated constraints.
 ///
-/// Uses monotone coordinate bisection (same approach as W strength-edges)
-/// with Poisson pair mean: E[t_ij] = lam * u / (exp(-u) + lam*(1-exp(-u))).
+/// Uses L-BFGS optimization of the NLL dual with 2N+1 parameters.
 #[must_use]
 pub fn balance_strength_edges_poisson(
     strength_out: &[f64],
@@ -19,193 +18,15 @@ pub fn balance_strength_edges_poisson(
     max_iterations: usize,
 ) -> StrengthEdgesFitResult {
     let n = strength_out.len();
-    let n2 = if self_loops {
-        (n * n) as f64
-    } else {
-        (n * (n - 1).max(1)) as f64
-    };
-    let total: f64 = strength_out.iter().sum();
-    if n == 0 || target_edges <= 0.0 || target_edges >= n2 || target_edges > total {
-        return StrengthEdgesFitResult {
-            x: vec![0.0; n],
-            y: vec![0.0; n],
-            lam: 0.0,
-            converged: false,
-            iterations: 0,
-        };
-    }
-
-    let scale = total.sqrt().max(1.0);
-    let mut cur_x: Vec<f64> = strength_out
-        .iter()
-        .map(|&s| (s / scale).max(1e-12))
-        .collect();
-    let mut cur_y: Vec<f64> = strength_in
-        .iter()
-        .map(|&s| (s / scale).max(1e-12))
-        .collect();
-
-    let lam_init = target_edges / (n2 - target_edges).max(0.01);
-    let mut low = 1e-12_f64;
-    let mut high = lam_init.max(1.0);
-
-    for _ in 0..40 {
-        let (x, y, _, _) = balance_me_edges_for_lambda(
-            strength_out,
-            strength_in,
-            high,
-            self_loops,
-            tolerance,
-            max_iterations,
-            &cur_x,
-            &cur_y,
-        );
-        cur_x = x;
-        cur_y = y;
-        let edges = expected_edges_me(&cur_x, &cur_y, high, self_loops);
-        if edges >= target_edges || high > 1e30 {
-            break;
-        }
-        low = high;
-        high *= 2.0;
-    }
-
-    let mut total_iterations = 0;
-    let mut best_lam = high;
-    for _ in 0..60 {
-        let mid = 0.5 * (low + high);
-        let (x, y, _, iters) = balance_me_edges_for_lambda(
-            strength_out,
-            strength_in,
-            mid,
-            self_loops,
-            tolerance,
-            max_iterations,
-            &cur_x,
-            &cur_y,
-        );
-        cur_x = x;
-        cur_y = y;
-        total_iterations += iters;
-        let edges = expected_edges_me(&cur_x, &cur_y, mid, self_loops);
-        if (edges - target_edges).abs() < tolerance.max(1e-10) {
-            best_lam = mid;
-            break;
-        }
-        if edges < target_edges {
-            low = mid;
-        } else {
-            high = mid;
-        }
-        best_lam = mid;
-    }
-
-    StrengthEdgesFitResult {
-        x: cur_x,
-        y: cur_y,
-        lam: best_lam,
-        converged: true,
-        iterations: total_iterations,
-    }
-}
-
-fn me_edges_pair_mean(xi: f64, yj: f64, lam: f64) -> f64 {
-    let u = xi * yj;
-    if u <= 0.0 {
-        return 0.0;
-    }
-    let e_neg_u = (-u).exp();
-    let den = e_neg_u + lam * (1.0 - e_neg_u);
-    if den <= 0.0 {
-        return 0.0;
-    }
-    lam * u / den
-}
-
-fn expected_edges_me(x: &[f64], y: &[f64], lam: f64, self_loops: bool) -> f64 {
-    let mut total = 0.0;
-    for (i, &xi) in x.iter().enumerate() {
-        for (j, &yj) in y.iter().enumerate() {
-            if !self_loops && i == j {
-                continue;
-            }
-            let u = xi * yj;
-            if u <= 0.0 {
-                continue;
-            }
-            let e_neg_u = (-u).exp();
-            let den = e_neg_u + lam * (1.0 - e_neg_u);
-            if den > 0.0 {
-                total += lam * (1.0 - e_neg_u) / den;
-            }
-        }
-    }
-    total
-}
-
-fn solve_me_edges_factor(target: f64, other: &[f64], lam: f64) -> f64 {
-    if target <= 0.0 {
-        return 0.0;
-    }
-    let mut low = 0.0_f64;
-    let mut high = 1e6_f64;
-    for _ in 0..60 {
-        let mid = 0.5 * (low + high);
-        let value: f64 = other.iter().map(|&v| me_edges_pair_mean(mid, v, lam)).sum();
-        if value < target {
-            low = mid;
-        } else {
-            high = mid;
-        }
-        if high - low < 1e-14 * high.max(1.0) {
-            break;
-        }
-    }
-    0.5 * (low + high)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn balance_me_edges_for_lambda(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    lam: f64,
-    self_loops: bool,
-    tolerance: f64,
-    max_iterations: usize,
-    x_init: &[f64],
-    y_init: &[f64],
-) -> (Vec<f64>, Vec<f64>, bool, usize) {
-    let n = strength_out.len();
-    let mut x = x_init.to_vec();
-    let mut y = y_init.to_vec();
-    let mut others = vec![0.0_f64; n];
-
-    for iter in 0..max_iterations {
-        let old_x = x.clone();
-        let old_y = y.clone();
-        for j in 0..n {
-            for i in 0..n {
-                others[i] = if self_loops || i != j { x[i] } else { 0.0 };
-            }
-            y[j] = solve_me_edges_factor(strength_in[j], &others, lam);
-        }
-        for i in 0..n {
-            for j in 0..n {
-                others[j] = if self_loops || i != j { y[j] } else { 0.0 };
-            }
-            x[i] = solve_me_edges_factor(strength_out[i], &others, lam);
-        }
-        let delta = x
-            .iter()
-            .zip(old_x.iter())
-            .chain(y.iter().zip(old_y.iter()))
-            .map(|(&a, &b)| (a - b).abs())
-            .fold(0.0_f64, f64::max);
-        if delta < tolerance {
-            return (x, y, true, iter + 1);
-        }
-    }
-    (x, y, false, max_iterations)
+    let mask = PairMask::from_self_loops(n, self_loops);
+    super::me_lbfgs::fit_strength_edges_poisson_lbfgs(
+        strength_out,
+        strength_in,
+        target_edges,
+        &mask,
+        tolerance,
+        max_iterations,
+    )
 }
 
 /// Fit exact grand-canonical ME fixed-strength-degree zero-inflated constraints.
