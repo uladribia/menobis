@@ -8,9 +8,8 @@ use super::mask::PairMask;
 use super::support::max_pair_delta;
 use super::{
     balance_sparse_masked_degree_bernoulli, balance_sparse_masked_strength_degree_poisson,
-    balance_sparse_masked_strength_poisson, balance_strength_edges_poisson,
-    fit_strength_cost_binomial_coordinates, fit_strength_cost_w_lbfgs, CostFitOptions, FitResult,
-    PartialFitResult, StrengthCostFitResult,
+    balance_sparse_masked_strength_poisson, fit_strength_cost_binomial_coordinates,
+    fit_strength_cost_w_lbfgs, CostFitOptions, FitResult, PartialFitResult, StrengthCostFitResult,
 };
 
 // ---------------------------------------------------------------------------
@@ -417,11 +416,11 @@ pub fn fit_partial_strength_edges(
     }
 
     balance_excess(&mut excess_out, &mut excess_in);
-    let fit = balance_strength_edges_poisson(
+    let fit = super::me_lbfgs::fit_strength_edges_poisson_lbfgs(
         &excess_out,
         &excess_in,
         excess_edges,
-        self_loops,
+        &mask,
         tolerance,
         max_iterations,
     );
