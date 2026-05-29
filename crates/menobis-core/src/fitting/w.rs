@@ -94,6 +94,7 @@ pub fn w_positive_mean(q: f64, layers: u32) -> f64 {
     m * q / (one_minus_q * (1.0 - one_minus_q.powf(m)))
 }
 
+use super::mask::PairMask;
 use super::{
     WConicFitOptions, WFitStatus, WProblemMetrics, WStrengthDegreeFitResult,
     WStrengthEdgesFitResult, WStrengthFitResult, WStrengthResiduals,
@@ -260,60 +261,7 @@ pub fn strength_cost_residuals(
     )
 }
 
-fn initial_independent_strength_guess(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    layers: u32,
-) -> (Vec<f64>, Vec<f64>) {
-    let total = strength_out.iter().sum::<f64>().max(f64::EPSILON);
-    let m = f64::from(layers);
-    let x: Vec<f64> = strength_out
-        .iter()
-        .map(|&s| {
-            (s / (s + m * total.sqrt()))
-                .clamp(1e-12, 1.0 - 1e-12)
-                .sqrt()
-        })
-        .collect();
-    let y: Vec<f64> = strength_in
-        .iter()
-        .map(|&s| {
-            (s / (s + m * total.sqrt()))
-                .clamp(1e-12, 1.0 - 1e-12)
-                .sqrt()
-        })
-        .collect();
-    let a = x.iter().map(|&xi| -xi.ln()).collect();
-    let b = y.iter().map(|&yj| -yj.ln()).collect();
-    (a, b)
-}
-
-fn pair_count(n: usize, self_loops: bool) -> usize {
-    if self_loops {
-        n * n
-    } else {
-        n * n.saturating_sub(1)
-    }
-}
-
-fn w_strength_edges_metrics(n: usize, self_loops: bool) -> WProblemMetrics {
-    let pairs = pair_count(n, self_loops);
-    WProblemMetrics {
-        variables: 2 * n + 1,
-        auxiliary_variables: pairs,
-        exponential_cones: 2 * pairs,
-        power_cones: 0,
-        linear_constraints: 1,
-        sparse_nonzeros: 5 * pairs + 2 * n,
-    }
-}
-
-/// Start fixed-strength W geometric fitting.
-///
-/// This public kernel establishes validation, diagnostics, and the conic-solver
-/// boundary. The actual conic solve is enabled behind the `w-conic` feature and
-/// will replace the current not-yet-solved status as the Clarabel model is
-/// assembled.
+/// Fixed-strength W geometric fitting.
 #[must_use]
 pub fn fit_strength_geometric(
     strength_out: &[f64],
@@ -329,7 +277,7 @@ pub fn fit_strength_geometric(
     newton_to_w_strength_result(result, 1, strength_out, strength_in, opts)
 }
 
-/// Start fixed-strength W negative-binomial fitting.
+/// Fixed-strength W negative-binomial fitting.
 #[must_use]
 pub fn fit_strength_negative_binomial(
     strength_out: &[f64],
@@ -347,46 +295,7 @@ pub fn fit_strength_negative_binomial(
     newton_to_w_strength_result(result, layers, strength_out, strength_in, opts)
 }
 
-// ---------------------------------------------------------------------------
-// W strength-edges fitting
-// ---------------------------------------------------------------------------
-
-fn fit_strength_edges_w_not_solved(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    target_edges: f64,
-    layers: u32,
-    opts: WConicFitOptions,
-    status: WFitStatus,
-) -> WStrengthEdgesFitResult {
-    let (a, b) = initial_independent_strength_guess(strength_out, strength_in, layers);
-    let (residuals, edge_residual) = strength_edges_residuals(
-        &a,
-        &b,
-        1.0,
-        layers,
-        strength_out,
-        strength_in,
-        target_edges,
-        opts.self_loops,
-    );
-    WStrengthEdgesFitResult {
-        x: a.iter().map(|&ai| (-ai).exp()).collect(),
-        y: b.iter().map(|&bj| (-bj).exp()).collect(),
-        lam: 1.0,
-        layers,
-        status,
-        objective: f64::NAN,
-        iterations: 0,
-        min_margin: residuals.min_margin,
-        max_q: residuals.max_q,
-        max_strength_residual: residuals.max_abs,
-        total_strength_residual: residuals.total_abs,
-        edge_residual,
-        metrics: w_strength_edges_metrics(strength_out.len(), opts.self_loops),
-    }
-}
-
+/// Fixed strength-edges W geometric fitting.
 #[must_use]
 pub fn fit_strength_edges_geometric(
     strength_out: &[f64],
@@ -394,9 +303,20 @@ pub fn fit_strength_edges_geometric(
     target_edges: f64,
     opts: WConicFitOptions,
 ) -> WStrengthEdgesFitResult {
-    fit_strength_edges_w(strength_out, strength_in, target_edges, 1, opts)
+    let n = strength_out.len();
+    let mask = PairMask::from_self_loops(n, opts.self_loops);
+    super::w_lbfgs::fit_strength_edges_w_lbfgs(
+        strength_out,
+        strength_in,
+        target_edges,
+        1,
+        &mask,
+        opts.tolerance,
+        opts.max_iterations,
+    )
 }
 
+/// Fixed strength-edges W negative-binomial fitting.
 #[must_use]
 pub fn fit_strength_edges_negative_binomial(
     strength_out: &[f64],
@@ -405,273 +325,30 @@ pub fn fit_strength_edges_negative_binomial(
     layers: u32,
     opts: WConicFitOptions,
 ) -> WStrengthEdgesFitResult {
-    fit_strength_edges_w(strength_out, strength_in, target_edges, layers, opts)
-}
-
-fn solve_w_positive_mean(avg_weight: f64, layers: u32) -> f64 {
-    if layers == 1 {
-        return solve_ztg_q(avg_weight);
-    }
-    solve_ztnb_q(avg_weight, layers)
-}
-
-fn strength_edges_pair_mean(x: f64, y: f64, lam: f64, layers: u32) -> f64 {
-    let q = (x * y).clamp(0.0, 1.0 - 1e-14);
-    if q <= 0.0 {
-        return 0.0;
-    }
-    w_zip_mean(lam, -q.ln(), layers)
-}
-
-fn strength_edges_pair_occupation(x: f64, y: f64, lam: f64, layers: u32) -> f64 {
-    let q = (x * y).clamp(0.0, 1.0 - 1e-14);
-    if q <= 0.0 {
-        return 0.0;
-    }
-    w_occupation(lam, -q.ln(), layers)
-}
-
-fn solve_strength_edges_factor(target: f64, other: &[f64], lam: f64, layers: u32) -> f64 {
-    if target <= 0.0 {
-        return 0.0;
-    }
-    let max_other = other.iter().copied().fold(0.0_f64, f64::max);
-    if max_other <= 0.0 {
-        return 0.0;
-    }
-    let mut low = 0.0_f64;
-    let mut high = ((1.0 - 1e-12) / max_other).min(1e30);
-    for _ in 0..60 {
-        let mid = 0.5 * (low + high);
-        let value: f64 = other
-            .iter()
-            .map(|&v| strength_edges_pair_mean(mid, v, lam, layers))
-            .sum();
-        if value < target {
-            low = mid;
-        } else {
-            high = mid;
-        }
-        if high - low < 1e-14 * high.max(1.0) {
-            break;
-        }
-    }
-    0.5 * (low + high)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn balance_strength_edges_for_lambda(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    lam: f64,
-    layers: u32,
-    self_loops: bool,
-    tolerance: f64,
-    max_iterations: usize,
-    x_init: &[f64],
-    y_init: &[f64],
-) -> (Vec<f64>, Vec<f64>, bool, usize) {
     let n = strength_out.len();
-    let mut x = x_init.to_vec();
-    let mut y = y_init.to_vec();
-    let mut others = vec![0.0_f64; n];
-
-    for iter in 0..max_iterations {
-        let old_x = x.clone();
-        let old_y = y.clone();
-        for j in 0..n {
-            for i in 0..n {
-                others[i] = if self_loops || i != j { x[i] } else { 0.0 };
-            }
-            y[j] = solve_strength_edges_factor(strength_in[j], &others, lam, layers);
-        }
-        for i in 0..n {
-            for j in 0..n {
-                others[j] = if self_loops || i != j { y[j] } else { 0.0 };
-            }
-            x[i] = solve_strength_edges_factor(strength_out[i], &others, lam, layers);
-        }
-        let delta = x
-            .iter()
-            .zip(old_x.iter())
-            .chain(y.iter().zip(old_y.iter()))
-            .map(|(&a, &b)| (a - b).abs())
-            .fold(0.0_f64, f64::max);
-        if delta < tolerance {
-            return (x, y, true, iter + 1);
-        }
-    }
-    (x, y, false, max_iterations)
-}
-
-fn strength_edges_expected_edges(
-    x: &[f64],
-    y: &[f64],
-    lam: f64,
-    layers: u32,
-    self_loops: bool,
-) -> f64 {
-    let n = x.len();
-    let mut total = 0.0;
-    for (i, &xi) in x.iter().enumerate().take(n) {
-        for (j, &yj) in y.iter().enumerate().take(n) {
-            if self_loops || i != j {
-                total += strength_edges_pair_occupation(xi, yj, lam, layers);
-            }
-        }
-    }
-    total
-}
-
-fn fit_strength_edges_w(
-    strength_out: &[f64],
-    strength_in: &[f64],
-    target_edges: f64,
-    layers: u32,
-    opts: WConicFitOptions,
-) -> WStrengthEdgesFitResult {
-    let n = strength_out.len();
-    let pairs = pair_count(n, opts.self_loops);
-    let total_strength = strength_out.iter().sum::<f64>();
-    if n == 0
-        || n != strength_in.len()
-        || layers == 0
-        || target_edges <= 0.0
-        || target_edges >= pairs as f64
-        || target_edges > total_strength
-    {
-        return fit_strength_edges_w_not_solved(
-            strength_out,
-            strength_in,
-            target_edges,
-            layers,
-            opts,
-            WFitStatus::Infeasible,
-        );
-    }
-
-    let avg_weight = total_strength / target_edges;
-    let q = solve_w_positive_mean(avg_weight, layers).clamp(1e-15, 1.0 - 1e-15);
-    let occupation = target_edges / pairs as f64;
-    let g = w_g(-q.ln(), layers);
-    let homogeneous_lam = occupation / ((1.0 - occupation) * g);
-
-    let scale = total_strength.sqrt().max(1.0);
-    let mut cur_x: Vec<f64> = strength_out
-        .iter()
-        .map(|&s| (s / (s + scale)).clamp(1e-12, 0.5))
-        .collect();
-    let mut cur_y: Vec<f64> = strength_in
-        .iter()
-        .map(|&s| (s / (s + scale)).clamp(1e-12, 0.5))
-        .collect();
-
-    let mut low = 1e-12_f64;
-    let mut high = homogeneous_lam.max(1.0);
-    let mut best = None;
-
-    for _ in 0..80 {
-        let (x, y, converged, iterations) = balance_strength_edges_for_lambda(
-            strength_out,
-            strength_in,
-            high,
-            layers,
-            opts.self_loops,
-            opts.tolerance,
-            opts.max_iterations,
-            &cur_x,
-            &cur_y,
-        );
-        cur_x = x.clone();
-        cur_y = y.clone();
-        let edges = strength_edges_expected_edges(&x, &y, high, layers, opts.self_loops);
-        best = Some((x, y, converged, iterations, high, edges));
-        if edges >= target_edges || high > 1e30 {
-            break;
-        }
-        low = high;
-        high *= 2.0;
-    }
-
-    let mut total_iterations = 0;
-    for _ in 0..60 {
-        let mid = 0.5 * (low + high);
-        let (x, y, converged, iterations) = balance_strength_edges_for_lambda(
-            strength_out,
-            strength_in,
-            mid,
-            layers,
-            opts.self_loops,
-            opts.tolerance,
-            opts.max_iterations,
-            &cur_x,
-            &cur_y,
-        );
-        cur_x = x.clone();
-        cur_y = y.clone();
-        total_iterations += iterations;
-        let edges = strength_edges_expected_edges(&x, &y, mid, layers, opts.self_loops);
-        best = Some((x, y, converged, total_iterations, mid, edges));
-        if (edges - target_edges).abs() <= opts.tolerance.max(1e-10) {
-            break;
-        }
-        if edges < target_edges {
-            low = mid;
-        } else {
-            high = mid;
-        }
-    }
-
-    let Some((x, y, converged, iterations, lam, _)) = best else {
-        return fit_strength_edges_w_not_solved(
-            strength_out,
-            strength_in,
-            target_edges,
-            layers,
-            opts,
-            WFitStatus::Failed,
-        );
-    };
-    let a: Vec<f64> = x.iter().map(|&xi| -xi.ln()).collect();
-    let b: Vec<f64> = y.iter().map(|&yi| -yi.ln()).collect();
-    let (residuals, edge_residual) = strength_edges_residuals(
-        &a,
-        &b,
-        lam,
-        layers,
+    let mask = PairMask::from_self_loops(n, opts.self_loops);
+    super::w_lbfgs::fit_strength_edges_w_lbfgs(
         strength_out,
         strength_in,
         target_edges,
-        opts.self_loops,
-    );
-    let status = if converged
-        && residuals.max_abs <= opts.tolerance.max(1e-6) * total_strength.max(1.0)
-        && edge_residual.abs() <= opts.tolerance.max(1e-6) * target_edges.max(1.0)
-    {
-        WFitStatus::Solved
-    } else {
-        WFitStatus::Inaccurate
-    };
-    WStrengthEdgesFitResult {
-        x,
-        y,
-        lam,
         layers,
-        status,
-        objective: f64::NAN,
-        iterations,
-        min_margin: residuals.min_margin,
-        max_q: residuals.max_q,
-        max_strength_residual: residuals.max_abs,
-        total_strength_residual: residuals.total_abs,
-        edge_residual,
-        metrics: w_strength_edges_metrics(n, opts.self_loops),
-    }
+        &mask,
+        opts.tolerance,
+        opts.max_iterations,
+    )
 }
 
 // ---------------------------------------------------------------------------
 // W strength-degree fitting
 // ---------------------------------------------------------------------------
+
+fn pair_count(n: usize, self_loops: bool) -> usize {
+    if self_loops {
+        n * n
+    } else {
+        n * n.saturating_sub(1)
+    }
+}
 
 fn w_strength_degree_metrics(n: usize, self_loops: bool) -> WProblemMetrics {
     let pairs = pair_count(n, self_loops);

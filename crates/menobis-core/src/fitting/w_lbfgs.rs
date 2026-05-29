@@ -3,10 +3,12 @@
 //! Alternating Newton updates on (a, b, γ) with damping.
 //! Memory: O(N). Time per iteration: O(N²). No dense cost matrix.
 
+use super::mask::PairMask;
 use super::me::fit_strength_cost_poisson_coordinates;
 use super::support::coord_distance;
-use super::w::w_mean;
-use super::{CostFitOptions, StrengthCostFitResult};
+use super::types::{WFitStatus, WProblemMetrics};
+use super::w::{w_g, w_mean, w_occupation};
+use super::{CostFitOptions, StrengthCostFitResult, WStrengthEdgesFitResult};
 
 /// How pair costs are provided to the W Newton solver.
 enum CostMode<'a> {
@@ -914,6 +916,437 @@ fn fit_w_newton_inner(
     }
 }
 
+// ---------------------------------------------------------------------------
+// W Strength-Edges L-BFGS (2N+1 parameters: a, b, ln_λ)
+// ---------------------------------------------------------------------------
+
+/// Fit W strength-edges using bisection over λ with Newton inner solve.
+///
+/// Strategy: bisect over λ; at each λ, solve (a,b) via damped Newton
+/// coordinate-descent (same as `fit_strength_cost_w_lbfgs` inner loop).
+/// The W feasibility constraint (r_ij > 0) is handled naturally by the
+/// Newton inner solver's feasibility projection.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn fit_strength_edges_w_lbfgs(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    target_edges: f64,
+    layers: u32,
+    mask: &PairMask,
+    tolerance: f64,
+    max_iterations: usize,
+) -> WStrengthEdgesFitResult {
+    let n = strength_out.len();
+    let n_free = mask.n_free() as f64;
+    let total = strength_out.iter().sum::<f64>();
+    let r_min = 1e-4_f64;
+    let self_loops = mask.self_loops();
+
+    if n == 0
+        || target_edges <= 0.0
+        || target_edges >= n_free
+        || target_edges > total
+        || layers == 0
+    {
+        return w_se_not_solved(n, layers, WFitStatus::Infeasible);
+    }
+
+    let m = f64::from(layers);
+    let n_active = if self_loops { n } else { n - 1 };
+
+    // Initialize (a, b)
+    let mut cur_a: Vec<f64> = strength_out
+        .iter()
+        .map(|&s| {
+            if s <= 0.0 {
+                return 10.0;
+            }
+            let avg = s / n_active.max(1) as f64;
+            let q = avg / (avg + m);
+            (-(q.clamp(1e-15, 1.0 - 1e-15)).ln() * 0.5).clamp(r_min, 20.0)
+        })
+        .collect();
+    let mut cur_b: Vec<f64> = strength_in
+        .iter()
+        .map(|&s| {
+            if s <= 0.0 {
+                return 10.0;
+            }
+            let avg = s / n_active.max(1) as f64;
+            let q = avg / (avg + m);
+            (-(q.clamp(1e-15, 1.0 - 1e-15)).ln() * 0.5).clamp(r_min, 20.0)
+        })
+        .collect();
+
+    // Expected edges for given (a, b, lam)
+    #[allow(clippy::needless_range_loop)]
+    let expected_edges_fn = |a: &[f64], b: &[f64], lam: f64| -> f64 {
+        let mut edges = 0.0;
+        for i in 0..n {
+            for j in 0..n {
+                if mask.is_masked(i, j) {
+                    continue;
+                }
+                let r = (a[i] + b[j]).max(r_min);
+                edges += w_occupation(lam, r, layers);
+            }
+        }
+        edges
+    };
+
+    // Bracket λ
+    let avg_weight = total / target_edges;
+    let q_init = avg_weight / (avg_weight + m);
+    let r_hom = -(q_init.clamp(1e-15, 1.0 - 1e-15)).ln();
+    let g_hom = w_g(r_hom, layers);
+    let occ_frac = target_edges / n_free;
+    let lam_est = occ_frac / ((1.0 - occ_frac).max(1e-12) * g_hom.max(1e-12));
+
+    let mut low = 1e-12_f64;
+    let mut high = lam_est.max(1.0);
+    let mut total_iters = 0;
+
+    for _ in 0..40 {
+        let (a, b, _, iters) = w_se_inner_solve(
+            strength_out,
+            strength_in,
+            high,
+            layers,
+            self_loops,
+            tolerance,
+            max_iterations.min(500),
+            &cur_a,
+            &cur_b,
+            r_min,
+        );
+        total_iters += iters;
+        cur_a = a;
+        cur_b = b;
+        let edges = expected_edges_fn(&cur_a, &cur_b, high);
+        if edges >= target_edges || high > 1e30 {
+            break;
+        }
+        low = high;
+        high *= 2.0;
+    }
+
+    // Bisect over λ
+    let mut best_lam = high;
+    let mut best_a = cur_a.clone();
+    let mut best_b = cur_b.clone();
+    let mut best_edge_err = f64::INFINITY;
+
+    for _ in 0..60 {
+        let mid = 0.5 * (low + high);
+        let (a, b, _, iters) = w_se_inner_solve(
+            strength_out,
+            strength_in,
+            mid,
+            layers,
+            self_loops,
+            tolerance,
+            max_iterations.min(500),
+            &cur_a,
+            &cur_b,
+            r_min,
+        );
+        total_iters += iters;
+        let edges = expected_edges_fn(&a, &b, mid);
+        let edge_err = (edges - target_edges).abs();
+        cur_a = a.clone();
+        cur_b = b.clone();
+
+        if edge_err < best_edge_err {
+            best_edge_err = edge_err;
+            best_lam = mid;
+            best_a = a;
+            best_b = b;
+        }
+
+        if edge_err <= tolerance.max(1e-10) {
+            break;
+        }
+        if edges < target_edges {
+            low = mid;
+        } else {
+            high = mid;
+        }
+        if high - low < 1e-12 * high.max(1.0) {
+            break;
+        }
+    }
+
+    w_se_build_result(
+        &best_a,
+        &best_b,
+        best_lam,
+        n,
+        layers,
+        mask,
+        strength_out,
+        strength_in,
+        target_edges,
+        tolerance,
+        total,
+        total_iters,
+    )
+}
+
+/// Inner Newton coordinate-descent for W strength with fixed λ.
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::needless_range_loop)]
+fn w_se_inner_solve(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    lam: f64,
+    layers: u32,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+    a_init: &[f64],
+    b_init: &[f64],
+    r_min: f64,
+) -> (Vec<f64>, Vec<f64>, bool, usize) {
+    let n = strength_out.len();
+    let m = f64::from(layers);
+    let mut a = a_init.to_vec();
+    let mut b = b_init.to_vec();
+    let mut damping = 0.5_f64;
+    let mut prev_err = f64::INFINITY;
+    let mut stall = 0usize;
+
+    for iter in 0..max_iterations {
+        let a_bak = a.clone();
+        let b_bak = b.clone();
+
+        for j in 0..n {
+            if strength_in[j] <= 0.0 {
+                continue;
+            }
+            let mut pred = 0.0;
+            let mut dpred = 0.0;
+            for i in 0..n {
+                if !self_loops && i == j {
+                    continue;
+                }
+                let r = (a[i] + b[j]).max(r_min);
+                let q = (-r).exp();
+                let omq = 1.0 - q;
+                if omq <= 1e-15 {
+                    continue;
+                }
+                let am = omq.powf(-m);
+                let g = am - 1.0;
+                let z = 1.0 + lam * g;
+                let wt = lam * m * q * omq.powf(-(m + 1.0)) / z;
+                pred += wt;
+                // d(wt)/dr ≈ -wt * (1 + q/(omq) * ((m+1) + lam*m*am/z))
+                dpred += w_mean_deriv((a[i] + b[j]).max(r_min), layers) * lam / z.max(1e-15);
+            }
+            if dpred.abs() > 1e-15 {
+                let step = -(pred - strength_in[j]) / dpred;
+                let min_c: f64 = (0..n)
+                    .filter(|&i| self_loops || i != j)
+                    .map(|i| a[i])
+                    .fold(f64::INFINITY, f64::min);
+                b[j] = (b[j] + damping * step).max(r_min - min_c);
+            }
+        }
+
+        for i in 0..n {
+            if strength_out[i] <= 0.0 {
+                continue;
+            }
+            let mut pred = 0.0;
+            let mut dpred = 0.0;
+            for j in 0..n {
+                if !self_loops && i == j {
+                    continue;
+                }
+                let r = (a[i] + b[j]).max(r_min);
+                let q = (-r).exp();
+                let omq = 1.0 - q;
+                if omq <= 1e-15 {
+                    continue;
+                }
+                let am = omq.powf(-m);
+                let g = am - 1.0;
+                let z = 1.0 + lam * g;
+                let wt = lam * m * q * omq.powf(-(m + 1.0)) / z;
+                pred += wt;
+                dpred += w_mean_deriv((a[i] + b[j]).max(r_min), layers) * lam / z.max(1e-15);
+            }
+            if dpred.abs() > 1e-15 {
+                let step = -(pred - strength_out[i]) / dpred;
+                let min_c: f64 = (0..n)
+                    .filter(|&j| self_loops || i != j)
+                    .map(|j| b[j])
+                    .fold(f64::INFINITY, f64::min);
+                a[i] = (a[i] + damping * step).max(r_min - min_c);
+            }
+        }
+
+        // Check convergence
+        let mut max_err = 0.0_f64;
+        for i in 0..n {
+            let mut p = 0.0;
+            for j in 0..n {
+                if !self_loops && i == j {
+                    continue;
+                }
+                let r = (a[i] + b[j]).max(r_min);
+                let q = (-r).exp();
+                let omq = 1.0 - q;
+                if omq <= 1e-15 {
+                    continue;
+                }
+                let z = 1.0 + lam * (omq.powf(-m) - 1.0);
+                p += lam * m * q * omq.powf(-(m + 1.0)) / z;
+            }
+            max_err = max_err.max((p - strength_out[i]).abs());
+        }
+
+        if max_err < tolerance {
+            return (a, b, true, iter + 1);
+        }
+        if max_err < prev_err * 0.999 {
+            stall = 0;
+            if damping < 0.9 {
+                damping = (damping * 1.05).min(0.9);
+            }
+        } else {
+            stall += 1;
+            if stall >= 3 {
+                a = a_bak;
+                b = b_bak;
+                damping *= 0.5;
+                stall = 0;
+                if damping < 1e-6 {
+                    break;
+                }
+            }
+        }
+        prev_err = max_err;
+    }
+    (a, b, false, max_iterations)
+}
+
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::needless_range_loop)]
+fn w_se_build_result(
+    a: &[f64],
+    b: &[f64],
+    lam: f64,
+    n: usize,
+    layers: u32,
+    mask: &PairMask,
+    s_out: &[f64],
+    s_in: &[f64],
+    target_edges: f64,
+    tolerance: f64,
+    total: f64,
+    iterations: usize,
+) -> WStrengthEdgesFitResult {
+    let r_min = 1e-4;
+    let m = f64::from(layers);
+    let x: Vec<f64> = a.iter().map(|&ai| (-ai).exp()).collect();
+    let y: Vec<f64> = b.iter().map(|&bj| (-bj).exp()).collect();
+
+    let mut max_s_err = 0.0_f64;
+    let mut total_s_err = 0.0_f64;
+    let mut pred_edges = 0.0_f64;
+    let mut min_margin = f64::INFINITY;
+    let mut max_q = 0.0_f64;
+
+    for i in 0..n {
+        let mut row_s = 0.0;
+        for j in 0..n {
+            if mask.is_masked(i, j) {
+                continue;
+            }
+            let r = (a[i] + b[j]).max(r_min);
+            min_margin = min_margin.min(r);
+            let q = (-r).exp();
+            max_q = max_q.max(q);
+            let omq = 1.0 - q;
+            if omq <= 0.0 {
+                continue;
+            }
+            let am = omq.powf(-m);
+            let g = am - 1.0;
+            let z = 1.0 + lam * g;
+            row_s += lam * m * q * omq.powf(-(m + 1.0)) / z;
+            pred_edges += lam * g / z;
+        }
+        let err = (row_s - s_out[i]).abs();
+        max_s_err = max_s_err.max(err);
+        total_s_err += err;
+    }
+    for j in 0..n {
+        let mut col_s = 0.0;
+        for i in 0..n {
+            if mask.is_masked(i, j) {
+                continue;
+            }
+            let r = (a[i] + b[j]).max(r_min);
+            let q = (-r).exp();
+            let omq = 1.0 - q;
+            if omq <= 0.0 {
+                continue;
+            }
+            let z = 1.0 + lam * (omq.powf(-m) - 1.0);
+            col_s += lam * m * q * omq.powf(-(m + 1.0)) / z;
+        }
+        let err = (col_s - s_in[j]).abs();
+        max_s_err = max_s_err.max(err);
+        total_s_err += err;
+    }
+    let edge_residual = pred_edges - target_edges;
+
+    let status = if max_s_err <= tolerance.max(1e-6) * total.max(1.0)
+        && edge_residual.abs() <= tolerance.max(1e-6) * target_edges.max(1.0)
+    {
+        WFitStatus::Solved
+    } else {
+        WFitStatus::Inaccurate
+    };
+
+    WStrengthEdgesFitResult {
+        x,
+        y,
+        lam,
+        layers,
+        status,
+        objective: f64::NAN,
+        iterations,
+        min_margin,
+        max_q,
+        max_strength_residual: max_s_err,
+        total_strength_residual: total_s_err,
+        edge_residual,
+        metrics: WProblemMetrics::default(),
+    }
+}
+
+fn w_se_not_solved(n: usize, layers: u32, status: WFitStatus) -> WStrengthEdgesFitResult {
+    WStrengthEdgesFitResult {
+        x: vec![0.0; n],
+        y: vec![0.0; n],
+        lam: 0.0,
+        layers,
+        status,
+        objective: f64::NAN,
+        iterations: 0,
+        min_margin: 0.0,
+        max_q: 0.0,
+        max_strength_residual: f64::INFINITY,
+        total_strength_residual: f64::INFINITY,
+        edge_residual: f64::INFINITY,
+        metrics: WProblemMetrics::default(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::me::fit_strength_cost_poisson_coordinates;
@@ -993,5 +1426,75 @@ mod tests {
                 "s_out[{i}]: expected {expected}, got {pred}"
             );
         }
+    }
+
+    #[test]
+    fn w_se_lbfgs_vs_bisection_n20() {
+        use crate::fitting::{
+            mask::PairMask, types::WFitStatus, w::fit_strength_edges_geometric, w::w_occupation,
+            w::w_zip_mean, WConicFitOptions,
+        };
+        use std::time::Instant;
+        let n = 20;
+        let layers = 1u32;
+        let x: Vec<f64> = (0..n).map(|i| 0.1 + 0.8 * (i as f64 / n as f64)).collect();
+        let y: Vec<f64> = (0..n)
+            .map(|j| 0.15 + 0.7 * ((n - 1 - j) as f64 / n as f64))
+            .collect();
+        let lam = 1.0_f64;
+        let mask = PairMask::from_self_loops(n, false);
+        let mut s_out = vec![0.0; n];
+        let mut s_in = vec![0.0; n];
+        let mut te = 0.0;
+        for i in 0..n {
+            for j in 0..n {
+                if mask.is_masked(i, j) {
+                    continue;
+                }
+                let q = x[i] * y[j];
+                let r = -(q.clamp(1e-15, 1.0 - 1e-15)).ln();
+                let wt = w_zip_mean(lam, r, layers);
+                let occ = w_occupation(lam, r, layers);
+                if wt.is_finite() {
+                    s_out[i] += wt;
+                    s_in[j] += wt;
+                }
+                if occ.is_finite() {
+                    te += occ;
+                }
+            }
+        }
+
+        let t0 = Instant::now();
+        let old = fit_strength_edges_geometric(
+            &s_out,
+            &s_in,
+            te,
+            WConicFitOptions {
+                self_loops: false,
+                tolerance: 1e-6,
+                max_iterations: 5000,
+            },
+        );
+        let old_time = t0.elapsed();
+
+        let t1 = Instant::now();
+        let new = fit_strength_edges_w_lbfgs(&s_out, &s_in, te, layers, &mask, 1e-6, 5000);
+        let new_time = t1.elapsed();
+
+        eprintln!(
+            "W(M={layers}) SE N={n}: bisection {:.4}s ({} iters, status={:?}), lbfgs {:.4}s ({} iters, status={:?})",
+            old_time.as_secs_f64(), old.iterations, old.status,
+            new_time.as_secs_f64(), new.iterations, new.status,
+        );
+
+        // L-BFGS must converge
+        assert!(
+            new.status == WFitStatus::Solved,
+            "W L-BFGS SE must solve: status={:?}, edge_resid={}, max_s_resid={}",
+            new.status,
+            new.edge_residual,
+            new.max_strength_residual
+        );
     }
 }
