@@ -662,6 +662,100 @@ def fit_partial_strength_degree_binomial(
 # ---------------------------------------------------------------------------
 
 
+def fit_partial_strength_geometric(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    known_source: NDArray[np.integer],
+    known_target: NDArray[np.integer],
+    known_rate: NDArray[np.floating],
+    *,
+    self_loops: bool = True,
+    tolerance: float = 1e-8,
+    max_iterations: int = 10000,
+) -> PartialFitResult:
+    """Partial W (geometric) strength fit with known pairs."""
+    _validate_known_feasibility(
+        np.asarray(strength_out, dtype=np.float64),
+        np.asarray(strength_in, dtype=np.float64),
+        np.asarray(known_source, dtype=np.uint64),
+        np.asarray(known_target, dtype=np.uint64),
+        np.asarray(known_rate, dtype=np.float64),
+    )
+    sources, targets, rates, converged, iterations = (
+        _menobis.fit_partial_strength_w_full(
+            np.asarray(strength_out, dtype=np.float64).tolist(),
+            np.asarray(strength_in, dtype=np.float64).tolist(),
+            np.asarray(known_source, dtype=np.uint64).tolist(),
+            np.asarray(known_target, dtype=np.uint64).tolist(),
+            np.asarray(known_rate, dtype=np.float64).tolist(),
+            1,  # layers=1 for geometric
+            self_loops,
+            tolerance,
+            max_iterations,
+        )
+    )
+    return _to_partial_result(
+        "fit_partial_strength_geometric",
+        sources,
+        targets,
+        rates,
+        converged,
+        iterations,
+        constraint="strength",
+        self_loops=self_loops,
+        family="geometric",
+    )
+
+
+def fit_partial_strength_degree_geometric(
+    strength_out: NDArray[np.floating],
+    strength_in: NDArray[np.floating],
+    degree_out: NDArray[np.floating],
+    degree_in: NDArray[np.floating],
+    known_source: NDArray[np.integer],
+    known_target: NDArray[np.integer],
+    known_rate: NDArray[np.floating],
+    *,
+    self_loops: bool = True,
+    tolerance: float = 1e-6,
+    max_iterations: int = 5000,
+) -> PartialFitResult:
+    """Partial W (geometric) strength-degree fit with known pairs."""
+    _validate_known_feasibility(
+        np.asarray(strength_out, dtype=np.float64),
+        np.asarray(strength_in, dtype=np.float64),
+        np.asarray(known_source, dtype=np.uint64),
+        np.asarray(known_target, dtype=np.uint64),
+        np.asarray(known_rate, dtype=np.float64),
+    )
+    sources, targets, rates, converged, iterations = (
+        _menobis.fit_partial_strength_degree_w_full(
+            np.asarray(strength_out, dtype=np.float64).tolist(),
+            np.asarray(strength_in, dtype=np.float64).tolist(),
+            np.asarray(degree_out, dtype=np.float64).tolist(),
+            np.asarray(degree_in, dtype=np.float64).tolist(),
+            np.asarray(known_source, dtype=np.uint64).tolist(),
+            np.asarray(known_target, dtype=np.uint64).tolist(),
+            np.asarray(known_rate, dtype=np.float64).tolist(),
+            1,  # layers=1 for geometric
+            self_loops,
+            tolerance,
+            max_iterations,
+        )
+    )
+    return _to_partial_result(
+        "fit_partial_strength_degree_geometric",
+        sources,
+        targets,
+        rates,
+        converged,
+        iterations,
+        constraint="strength-degree",
+        self_loops=self_loops,
+        family="geometric",
+    )
+
+
 def fit_partial_strength_edges_geometric(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
@@ -830,9 +924,11 @@ __all__ = [
     "fit_partial_strength_cost_negative_binomial_coordinates",
     "fit_partial_strength_cost_poisson_coordinates",
     "fit_partial_strength_degree_binomial",
+    "fit_partial_strength_degree_geometric",
     "fit_partial_strength_degree_poisson",
     "fit_partial_strength_edges_binomial",
     "fit_partial_strength_edges_geometric",
     "fit_partial_strength_edges_poisson",
+    "fit_partial_strength_geometric",
     "fit_partial_strength_poisson",
 ]

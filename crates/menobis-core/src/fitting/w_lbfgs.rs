@@ -1414,6 +1414,34 @@ pub fn fit_strength_degree_w_newton(
     max_iterations: usize,
 ) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, bool, usize) {
     let n = strength_out.len();
+    let mask = PairMask::from_self_loops(n, self_loops);
+    fit_strength_degree_w_newton_masked(
+        strength_out,
+        strength_in,
+        degree_out,
+        degree_in,
+        layers,
+        &mask,
+        tolerance,
+        max_iterations,
+    )
+}
+
+/// Masked variant of W strength-degree Newton solver.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn fit_strength_degree_w_newton_masked(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    degree_out: &[f64],
+    degree_in: &[f64],
+    layers: u32,
+    mask: &PairMask,
+    tolerance: f64,
+    max_iterations: usize,
+) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, bool, usize) {
+    let n = strength_out.len();
+    let self_loops = mask.self_loops();
     let m = f64::from(layers);
     let r_min = 1e-4_f64;
     let capacity = if self_loops {
@@ -1503,7 +1531,7 @@ pub fn fit_strength_degree_w_newton(
                 let mut pred = 0.0;
                 let mut dpred = 0.0;
                 for i in 0..n {
-                    if !self_loops && i == j {
+                    if mask.is_masked(i, j) {
                         continue;
                     }
                     let r = (a[i] + b[j]).max(r_min);
@@ -1541,7 +1569,7 @@ pub fn fit_strength_degree_w_newton(
                 let mut pred = 0.0;
                 let mut dpred = 0.0;
                 for j in 0..n {
-                    if !self_loops && i == j {
+                    if mask.is_masked(i, j) {
                         continue;
                     }
                     let r = (a[i] + b[j]).max(r_min);
@@ -1673,7 +1701,7 @@ pub fn fit_strength_degree_w_newton(
                 let mut ps = 0.0;
                 let mut pk = 0.0;
                 for j in 0..n {
-                    if !self_loops && i == j {
+                    if mask.is_masked(i, j) {
                         continue;
                     }
                     let r = (a[i] + b[j]).max(r_min);

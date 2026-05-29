@@ -261,6 +261,136 @@ pub fn strength_cost_residuals(
     )
 }
 
+/// Masked W(M) strength IPF: iterates x,y such that E[t_ij]=M*q/(1-q) where q=x_i*y_j.
+///
+/// Respects arbitrary `PairMask` (self-loops + known pairs).
+#[must_use]
+#[allow(clippy::needless_range_loop)]
+pub fn balance_sparse_masked_strength_w(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    mask: &super::mask::PairMask,
+    layers: u32,
+    tolerance: f64,
+    max_iterations: usize,
+) -> super::FitResult {
+    let n = strength_out.len();
+    let m = f64::from(layers);
+    let total: f64 = strength_out.iter().sum();
+    // Initialize: x_i*y_j should give q such that M*q/(1-q) ~ avg weight per pair
+    // avg_weight = total / n_free, q = avg/(avg+M), sqrt for factorization
+    let n_free = mask.n_free().max(1) as f64;
+    let avg = total / n_free;
+    let q_init = (avg / (avg + m)).sqrt().clamp(1e-8, 0.5);
+    let mut x: Vec<f64> = strength_out
+        .iter()
+        .map(|&s| if s > 0.0 { q_init } else { 0.0 })
+        .collect();
+    let mut y: Vec<f64> = strength_in
+        .iter()
+        .map(|&s| if s > 0.0 { q_init } else { 0.0 })
+        .collect();
+
+    let q_max = 1.0 - 1e-8;
+
+    for iter in 0..max_iterations {
+        let x_old = x.clone();
+        let y_old = y.clone();
+
+        // Update y[j]: target s_in[j] = sum_i M * x[i]*y[j] / (1 - x[i]*y[j])
+        for j in 0..n {
+            if strength_in[j] <= 0.0 {
+                y[j] = 0.0;
+                continue;
+            }
+            let mut pred = 0.0;
+            let mut dpred = 0.0;
+            for i in 0..n {
+                if mask.is_masked(i, j) {
+                    continue;
+                }
+                let q = (x[i] * y[j]).min(q_max);
+                if q <= 0.0 {
+                    continue;
+                }
+                let omq = 1.0 - q;
+                pred += m * q / omq;
+                // d/dy[j] of M*x[i]*y[j]/(1-x[i]*y[j]) = M*x[i]/(1-q)^2
+                dpred += m * x[i] / (omq * omq);
+            }
+            if dpred > 1e-15 {
+                let step = (strength_in[j] - pred) / dpred;
+                let new_y = (y[j] + step).max(1e-15);
+                y[j] = new_y;
+            }
+        }
+
+        // Update x[i]: target s_out[i]
+        for i in 0..n {
+            if strength_out[i] <= 0.0 {
+                x[i] = 0.0;
+                continue;
+            }
+            let mut pred = 0.0;
+            let mut dpred = 0.0;
+            for j in 0..n {
+                if mask.is_masked(i, j) {
+                    continue;
+                }
+                let q = (x[i] * y[j]).min(q_max);
+                if q <= 0.0 {
+                    continue;
+                }
+                let omq = 1.0 - q;
+                pred += m * q / omq;
+                dpred += m * y[j] / (omq * omq);
+            }
+            if dpred > 1e-15 {
+                let step = (strength_out[i] - pred) / dpred;
+                let new_x = (x[i] + step).max(1e-15);
+                x[i] = new_x;
+            }
+        }
+
+        // Clamp q products
+        for i in 0..n {
+            for j in 0..n {
+                if mask.is_masked(i, j) {
+                    continue;
+                }
+                if x[i] * y[j] >= q_max {
+                    let scale = (q_max * 0.99) / (x[i] * y[j]);
+                    x[i] *= scale.sqrt();
+                    y[j] *= scale.sqrt();
+                }
+            }
+        }
+
+        // Convergence check
+        let max_delta = x
+            .iter()
+            .zip(x_old.iter())
+            .chain(y.iter().zip(y_old.iter()))
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0_f64, f64::max);
+        if max_delta < tolerance {
+            return super::FitResult {
+                x,
+                y,
+                converged: true,
+                iterations: iter + 1,
+            };
+        }
+    }
+
+    super::FitResult {
+        x,
+        y,
+        converged: false,
+        iterations: max_iterations,
+    }
+}
+
 /// Fixed-strength W geometric fitting.
 #[must_use]
 pub fn fit_strength_geometric(

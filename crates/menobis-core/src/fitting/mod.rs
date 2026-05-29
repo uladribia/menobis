@@ -31,8 +31,9 @@ pub use partial::{
     fit_partial_degree, fit_partial_strength, fit_partial_strength_binomial,
     fit_partial_strength_cost_binomial_coordinates, fit_partial_strength_cost_coordinates,
     fit_partial_strength_cost_w_coordinates, fit_partial_strength_degree,
-    fit_partial_strength_degree_binomial, fit_partial_strength_edges,
-    fit_partial_strength_edges_binomial, fit_partial_strength_edges_w,
+    fit_partial_strength_degree_binomial, fit_partial_strength_degree_w,
+    fit_partial_strength_edges, fit_partial_strength_edges_binomial, fit_partial_strength_edges_w,
+    fit_partial_strength_w,
 };
 pub use strength_cost::{
     fit_strength_cost_binomial_coordinates, fit_strength_cost_binomial_coordinates_masked,
@@ -43,15 +44,16 @@ pub use types::{
     WStrengthDegreeFitResult, WStrengthEdgesFitResult, WStrengthFitResult, WStrengthResiduals,
 };
 pub use w::{
-    fit_degree_events_geometric, fit_degree_events_negative_binomial,
-    fit_strength_degree_geometric, fit_strength_degree_negative_binomial,
-    fit_strength_edges_geometric, fit_strength_edges_negative_binomial, fit_strength_geometric,
-    fit_strength_negative_binomial, independent_strength_residuals, strength_cost_residuals,
-    strength_edges_residuals, DegreeEventsFitResult,
+    balance_sparse_masked_strength_w, fit_degree_events_geometric,
+    fit_degree_events_negative_binomial, fit_strength_degree_geometric,
+    fit_strength_degree_negative_binomial, fit_strength_edges_geometric,
+    fit_strength_edges_negative_binomial, fit_strength_geometric, fit_strength_negative_binomial,
+    independent_strength_residuals, strength_cost_residuals, strength_edges_residuals,
+    DegreeEventsFitResult,
 };
 pub use w_lbfgs::{
     fit_strength_cost_w_lbfgs, fit_strength_cost_w_lbfgs_masked, fit_strength_degree_w_newton,
-    fit_strength_edges_w_lbfgs,
+    fit_strength_degree_w_newton_masked, fit_strength_edges_w_lbfgs,
 };
 
 #[cfg(test)]

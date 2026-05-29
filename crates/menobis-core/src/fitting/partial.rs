@@ -1185,6 +1185,198 @@ pub fn fit_partial_strength_degree_binomial(
 // W (Geometric/NegBin) partial fits
 // ---------------------------------------------------------------------------
 
+/// Full partial W(M) strength fit: excess -> masked IPF -> rate table.
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn fit_partial_strength_w(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    known_src: &[u64],
+    known_tgt: &[u64],
+    known_rate: &[f64],
+    layers: u32,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PartialFitResult {
+    let n = infer_n(strength_out.len(), known_src, known_tgt);
+    let s_out = pad_to_n(strength_out, n);
+    let s_in = pad_to_n(strength_in, n);
+    let mask = PairMask::new(n, self_loops, known_src, known_tgt);
+
+    let (mut excess_out, mut excess_in) =
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+            Some(v) => v,
+            None => {
+                return assemble_result_sparse(
+                    n,
+                    known_src,
+                    known_tgt,
+                    known_rate,
+                    &mask,
+                    |_, _| 0.0,
+                    false,
+                    0,
+                )
+            }
+        };
+
+    if excess_out.iter().sum::<f64>() <= 0.0 {
+        return assemble_result_sparse(
+            n,
+            known_src,
+            known_tgt,
+            known_rate,
+            &mask,
+            |_, _| 0.0,
+            true,
+            0,
+        );
+    }
+
+    balance_excess(&mut excess_out, &mut excess_in);
+    let fit = super::w::balance_sparse_masked_strength_w(
+        &excess_out,
+        &excess_in,
+        &mask,
+        layers,
+        tolerance,
+        max_iterations,
+    );
+    let x = fit.x;
+    let y = fit.y;
+    let m = f64::from(layers);
+    assemble_result_sparse(
+        n,
+        known_src,
+        known_tgt,
+        known_rate,
+        &mask,
+        |i, j| {
+            let q = x[i] * y[j];
+            if q <= 0.0 || q >= 1.0 {
+                return 0.0;
+            }
+            m * q / (1.0 - q)
+        },
+        fit.converged,
+        fit.iterations,
+    )
+}
+
+/// Full partial W(M) strength-degree fit: excess -> masked Newton -> rate table.
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn fit_partial_strength_degree_w(
+    strength_out: &[f64],
+    strength_in: &[f64],
+    degree_out: &[f64],
+    degree_in: &[f64],
+    known_src: &[u64],
+    known_tgt: &[u64],
+    known_rate: &[f64],
+    layers: u32,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PartialFitResult {
+    let n = infer_n(strength_out.len(), known_src, known_tgt);
+    let s_out = pad_to_n(strength_out, n);
+    let s_in = pad_to_n(strength_in, n);
+    let k_out = pad_to_n(degree_out, n);
+    let k_in = pad_to_n(degree_in, n);
+    let mask = PairMask::new(n, self_loops, known_src, known_tgt);
+
+    let (mut excess_s_out, mut excess_s_in) =
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+            Some(v) => v,
+            None => {
+                return assemble_result_sparse(
+                    n,
+                    known_src,
+                    known_tgt,
+                    known_rate,
+                    &mask,
+                    |_, _| 0.0,
+                    false,
+                    0,
+                )
+            }
+        };
+
+    let known_binary: Vec<f64> = vec![1.0; known_src.len()];
+    let (mut excess_k_out, mut excess_k_in) =
+        match compute_excess(&k_out, &k_in, known_src, known_tgt, &known_binary) {
+            Some(v) => v,
+            None => {
+                return assemble_result_sparse(
+                    n,
+                    known_src,
+                    known_tgt,
+                    known_rate,
+                    &mask,
+                    |_, _| 0.0,
+                    false,
+                    0,
+                )
+            }
+        };
+
+    if excess_s_out.iter().sum::<f64>() <= 0.0 {
+        return assemble_result_sparse(
+            n,
+            known_src,
+            known_tgt,
+            known_rate,
+            &mask,
+            |_, _| 0.0,
+            true,
+            0,
+        );
+    }
+
+    balance_excess(&mut excess_s_out, &mut excess_s_in);
+    balance_excess(&mut excess_k_out, &mut excess_k_in);
+
+    let (x, y, z, w, converged, iterations) = super::w_lbfgs::fit_strength_degree_w_newton_masked(
+        &excess_s_out,
+        &excess_s_in,
+        &excess_k_out,
+        &excess_k_in,
+        layers,
+        &mask,
+        tolerance,
+        max_iterations,
+    );
+    let m = f64::from(layers);
+    assemble_result_sparse(
+        n,
+        known_src,
+        known_tgt,
+        known_rate,
+        &mask,
+        |i, j| {
+            let q = x[i] * y[j];
+            if q <= 0.0 || q >= 1.0 {
+                return 0.0;
+            }
+            let v = z[i] * w[j];
+            if v <= 0.0 {
+                return 0.0;
+            }
+            let g = (1.0 - q).powf(-m) - 1.0;
+            let den = 1.0 + v * g;
+            if den > 0.0 {
+                v * m * q * (1.0 - q).powf(-m - 1.0) / den
+            } else {
+                0.0
+            }
+        },
+        converged,
+        iterations,
+    )
+}
+
 /// Full partial W strength-edges fit: excess → L-BFGS → rate table.
 #[allow(clippy::too_many_arguments)]
 #[must_use]

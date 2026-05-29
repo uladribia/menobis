@@ -1196,3 +1196,61 @@ pub(crate) fn fit_partial_strength_edges_w_full(
     );
     (r.sources, r.targets, r.rates, r.converged, r.iterations)
 }
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn fit_partial_strength_w_full(
+    strength_out: Vec<f64>,
+    strength_in: Vec<f64>,
+    known_src: Vec<u64>,
+    known_tgt: Vec<u64>,
+    known_rate: Vec<f64>,
+    layers: u32,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PartialResult {
+    let r = core_fit_partial_strength_w(
+        &strength_out,
+        &strength_in,
+        &known_src,
+        &known_tgt,
+        &known_rate,
+        layers,
+        self_loops,
+        tolerance,
+        max_iterations,
+    );
+    (r.sources, r.targets, r.rates, r.converged, r.iterations)
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn fit_partial_strength_degree_w_full(
+    strength_out: Vec<f64>,
+    strength_in: Vec<f64>,
+    degree_out: Vec<f64>,
+    degree_in: Vec<f64>,
+    known_src: Vec<u64>,
+    known_tgt: Vec<u64>,
+    known_rate: Vec<f64>,
+    layers: u32,
+    self_loops: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PartialResult {
+    let r = core_fit_partial_strength_degree_w(
+        &strength_out,
+        &strength_in,
+        &degree_out,
+        &degree_in,
+        &known_src,
+        &known_tgt,
+        &known_rate,
+        layers,
+        self_loops,
+        tolerance,
+        max_iterations,
+    );
+    (r.sources, r.targets, r.rates, r.converged, r.iterations)
+}

@@ -1,43 +1,38 @@
-# PLAN.md — Partial Fitting: Missing Cases
+# PLAN.md — Partial Fitting Coverage
 
 ## Status
 
-The partial fitting plumbing (known pairs via `PairMask`) is now complete for
-all cases where the underlying Rust solver accepts an external mask.
+All partial fitting cases are now implemented. Every family (ME, B, W) supports
+known pairs for every constraint type where the underlying solver can accept a
+mask.
 
-## Implemented partial fitting
+## Partial fitting matrix
 
 | Constraint | ME | B | W |
 |---|---|---|---|
-| strength | ✓ | ✓ | ✗ |
+| strength | ✓ | ✓ | ✓ |
 | strength-cost (coordinates) | ✓ | ✓ | ✓ |
 | strength-edges | ✓ | ✓ | ✓ |
-| strength-degree | ✓ | ✓ | ✗ |
+| strength-degree | ✓ | ✓ | ✓ |
 
-## Missing: W partial strength
+## Known convergence limitations
 
-**Root cause**: `fit_strength_w_newton` in `crates/menobis-core/src/fitting/w_lbfgs.rs`
-takes `opts: &CostFitOptions` which only contains `self_loops: bool`. It internally
-creates `PairMask::from_self_loops(n, opts.self_loops)`.
+| Case | Behavior |
+|---|---|
+| W strength-edges (all) | Often fails to converge with heterogeneous inputs |
+| W strength-degree (all) | Often fails to converge with heterogeneous inputs |
+| ME/B strength-edges (sparse, near-binary) | L-BFGS oscillates when s/k ≈ 1 |
 
-**Fix**: Add a `mask: &PairMask` parameter to `fit_strength_w_newton` (or create a
-`fit_strength_w_newton_masked` variant), then wire through PyO3 + Python.
+These are solver algorithm issues, not missing plumbing.
 
-**Effort**: ~30 lines Rust + 20 lines PyO3 + 20 lines Python.
+## Implementation notes
 
-## Missing: W partial strength-degree
-
-**Root cause**: `fit_strength_degree_w_newton` in `crates/menobis-core/src/fitting/w_lbfgs.rs`
-takes `self_loops: bool` and internally constructs the mask via
-`PairMask::from_self_loops(n, false)`.
-
-**Fix**: Add a `mask: &PairMask` parameter (or create a masked variant), then wire
-through PyO3 + Python.
-
-**Effort**: ~30 lines Rust + 20 lines PyO3 + 20 lines Python.
-
-## Priority
-
-Low — these W solvers already have convergence issues with heterogeneous inputs
-(documented in AGENTS.md). Fixing the convergence is higher priority than adding
-partial support for non-convergent solvers.
+- W strength partial uses a new `balance_sparse_masked_strength_w` IPF solver
+  in `crates/menobis-core/src/fitting/w.rs` that respects arbitrary `PairMask`.
+- W strength-degree partial uses `fit_strength_degree_w_newton_masked` which
+  accepts `&PairMask` and replaces `!self_loops && i == j` checks with
+  `mask.is_masked(i, j)`.
+- The `w_se_inner_solve` helper (used by strength-edges) still uses
+  `self_loops: bool` internally — this is acceptable because known pairs for
+  strength-edges are handled at the partial pipeline level (excess computation
+  removes their contribution before calling the solver).

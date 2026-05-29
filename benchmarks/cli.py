@@ -67,10 +67,12 @@ from menobis.models.partial import (
     fit_partial_strength_cost_geometric_coordinates,
     fit_partial_strength_cost_poisson_coordinates,
     fit_partial_strength_degree_binomial,
+    fit_partial_strength_degree_geometric,
     fit_partial_strength_degree_poisson,
     fit_partial_strength_edges_binomial,
     fit_partial_strength_edges_geometric,
     fit_partial_strength_edges_poisson,
+    fit_partial_strength_geometric,
     fit_partial_strength_poisson,
 )
 from menobis.utilities.synthetic import (
@@ -357,6 +359,15 @@ def _fit_partial(
                     layers=c.binomial_layers,
                     self_loops=self_loops,
                 )
+            if family == "w":
+                return fit_partial_strength_geometric(
+                    c.strength_out,
+                    c.strength_in,
+                    known_src,
+                    known_tgt,
+                    known_rate,
+                    self_loops=self_loops,
+                )
         elif constraint == "strength-cost":
             if family == "me":
                 return fit_partial_strength_cost_poisson_coordinates(
@@ -452,6 +463,18 @@ def _fit_partial(
                     layers=c.binomial_layers,
                     self_loops=self_loops,
                     tolerance=1e-4,
+                )
+            if family == "w":
+                return fit_partial_strength_degree_geometric(
+                    c.strength_out,
+                    c.strength_in,
+                    c.degree_out,
+                    c.degree_in,
+                    known_src,
+                    known_tgt,
+                    known_rate,
+                    self_loops=self_loops,
+                    tolerance=1e-3,
                 )
     # Partial not supported for this family/constraint combo
     return None

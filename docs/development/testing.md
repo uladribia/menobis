@@ -77,7 +77,7 @@ across all constraint types at N=20.
 
 | Constraint | ME | B | W |
 |---|---|---|---|
-| strength | full | full | not implemented (solver lacks mask) |
+| strength | full | full | full |
 | strength-cost (coord) | full | full | full |
 | strength-edges | full | full | full |
-| strength-degree | full | full | not implemented (solver lacks mask) |
+| strength-degree | full | full | full |

@@ -1020,6 +1020,32 @@ def fit_partial_strength_edges_w_full(
     max_iterations: int,
 ) -> tuple[list[int], list[int], list[float], bool, int]: ...
 
+def fit_partial_strength_w_full(
+    strength_out: list[float],
+    strength_in: list[float],
+    known_src: list[int],
+    known_tgt: list[int],
+    known_rate: list[float],
+    layers: int,
+    self_loops: bool,
+    tolerance: float,
+    max_iterations: int,
+) -> tuple[list[int], list[int], list[float], bool, int]: ...
+
+def fit_partial_strength_degree_w_full(
+    strength_out: list[float],
+    strength_in: list[float],
+    degree_out: list[float],
+    degree_in: list[float],
+    known_src: list[int],
+    known_tgt: list[int],
+    known_rate: list[float],
+    layers: int,
+    self_loops: bool,
+    tolerance: float,
+    max_iterations: int,
+) -> tuple[list[int], list[int], list[float], bool, int]: ...
+
 def absent_strength_edges_geometric(
     x: list[float],
     y: list[float],
