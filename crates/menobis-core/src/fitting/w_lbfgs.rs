@@ -3,6 +3,8 @@
 //! Alternating Newton updates on (a, b, γ) with damping.
 //! Memory: O(N). Time per iteration: O(N²). No dense cost matrix.
 
+use rayon::prelude::*;
+
 use super::mask::PairMask;
 use super::me::fit_strength_cost_poisson_coordinates;
 use super::support::coord_distance;
@@ -1120,92 +1122,101 @@ fn w_se_inner_solve(
         let a_bak = a.clone();
         let b_bak = b.clone();
 
-        for j in 0..n {
-            if strength_in[j] <= 0.0 {
-                continue;
-            }
-            let mut pred = 0.0;
-            let mut dpred = 0.0;
-            for i in 0..n {
-                if !self_loops && i == j {
-                    continue;
-                }
-                let r = (a[i] + b[j]).max(r_min);
-                let q = (-r).exp();
-                let omq = 1.0 - q;
-                if omq <= 1e-15 {
-                    continue;
-                }
-                let am = omq.powf(-m);
-                let g = am - 1.0;
-                let z = 1.0 + lam * g;
-                let wt = lam * m * q * omq.powf(-(m + 1.0)) / z;
-                pred += wt;
-                // d(wt)/dr ≈ -wt * (1 + q/(omq) * ((m+1) + lam*m*am/z))
-                dpred += w_mean_deriv((a[i] + b[j]).max(r_min), layers) * lam / z.max(1e-15);
-            }
-            if dpred.abs() > 1e-15 {
-                let step = -(pred - strength_in[j]) / dpred;
-                let min_c: f64 = (0..n)
-                    .filter(|&i| self_loops || i != j)
-                    .map(|i| a[i])
-                    .fold(f64::INFINITY, f64::min);
-                b[j] = (b[j] + damping * step).max(r_min - min_c);
-            }
-        }
+        // Precompute min_a for feasibility projection of b
+        let min_a = a.iter().copied().fold(f64::INFINITY, f64::min);
 
-        for i in 0..n {
-            if strength_out[i] <= 0.0 {
-                continue;
-            }
-            let mut pred = 0.0;
-            let mut dpred = 0.0;
-            for j in 0..n {
-                if !self_loops && i == j {
-                    continue;
+        // Update b[j] in parallel — each j reads a[i] (stable)
+        let new_b: Vec<f64> = (0..n)
+            .into_par_iter()
+            .map(|j| {
+                if strength_in[j] <= 0.0 {
+                    return b[j];
                 }
-                let r = (a[i] + b[j]).max(r_min);
-                let q = (-r).exp();
-                let omq = 1.0 - q;
-                if omq <= 1e-15 {
-                    continue;
+                let mut pred = 0.0;
+                let mut dpred = 0.0;
+                for i in 0..n {
+                    if !self_loops && i == j {
+                        continue;
+                    }
+                    let r = (a[i] + b[j]).max(r_min);
+                    let q = (-r).exp();
+                    let omq = 1.0 - q;
+                    if omq <= 1e-15 {
+                        continue;
+                    }
+                    let z = 1.0 + lam * (omq.powf(-m) - 1.0);
+                    let wt = lam * m * q * omq.powf(-(m + 1.0)) / z;
+                    pred += wt;
+                    dpred += w_mean_deriv(r, layers) * lam / z.max(1e-15);
                 }
-                let am = omq.powf(-m);
-                let g = am - 1.0;
-                let z = 1.0 + lam * g;
-                let wt = lam * m * q * omq.powf(-(m + 1.0)) / z;
-                pred += wt;
-                dpred += w_mean_deriv((a[i] + b[j]).max(r_min), layers) * lam / z.max(1e-15);
-            }
-            if dpred.abs() > 1e-15 {
-                let step = -(pred - strength_out[i]) / dpred;
-                let min_c: f64 = (0..n)
-                    .filter(|&j| self_loops || i != j)
-                    .map(|j| b[j])
-                    .fold(f64::INFINITY, f64::min);
-                a[i] = (a[i] + damping * step).max(r_min - min_c);
-            }
-        }
+                if dpred.abs() > 1e-15 {
+                    let step = -(pred - strength_in[j]) / dpred;
+                    (b[j] + damping * step).max(r_min - min_a)
+                } else {
+                    b[j]
+                }
+            })
+            .collect();
+        b = new_b;
 
-        // Check convergence
-        let mut max_err = 0.0_f64;
-        for i in 0..n {
-            let mut p = 0.0;
-            for j in 0..n {
-                if !self_loops && i == j {
-                    continue;
+        // Precompute min_b for feasibility projection of a
+        let min_b = b.iter().copied().fold(f64::INFINITY, f64::min);
+
+        // Update a[i] in parallel — each i reads b[j] (stable)
+        let new_a: Vec<f64> = (0..n)
+            .into_par_iter()
+            .map(|i| {
+                if strength_out[i] <= 0.0 {
+                    return a[i];
                 }
-                let r = (a[i] + b[j]).max(r_min);
-                let q = (-r).exp();
-                let omq = 1.0 - q;
-                if omq <= 1e-15 {
-                    continue;
+                let mut pred = 0.0;
+                let mut dpred = 0.0;
+                for j in 0..n {
+                    if !self_loops && i == j {
+                        continue;
+                    }
+                    let r = (a[i] + b[j]).max(r_min);
+                    let q = (-r).exp();
+                    let omq = 1.0 - q;
+                    if omq <= 1e-15 {
+                        continue;
+                    }
+                    let z = 1.0 + lam * (omq.powf(-m) - 1.0);
+                    let wt = lam * m * q * omq.powf(-(m + 1.0)) / z;
+                    pred += wt;
+                    dpred += w_mean_deriv(r, layers) * lam / z.max(1e-15);
                 }
-                let z = 1.0 + lam * (omq.powf(-m) - 1.0);
-                p += lam * m * q * omq.powf(-(m + 1.0)) / z;
-            }
-            max_err = max_err.max((p - strength_out[i]).abs());
-        }
+                if dpred.abs() > 1e-15 {
+                    let step = -(pred - strength_out[i]) / dpred;
+                    (a[i] + damping * step).max(r_min - min_b)
+                } else {
+                    a[i]
+                }
+            })
+            .collect();
+        a = new_a;
+
+        // Check convergence in parallel
+        let max_err: f64 = (0..n)
+            .into_par_iter()
+            .map(|i| {
+                let mut p = 0.0;
+                for j in 0..n {
+                    if !self_loops && i == j {
+                        continue;
+                    }
+                    let r = (a[i] + b[j]).max(r_min);
+                    let q = (-r).exp();
+                    let omq = 1.0 - q;
+                    if omq <= 1e-15 {
+                        continue;
+                    }
+                    let z = 1.0 + lam * (omq.powf(-m) - 1.0);
+                    p += lam * m * q * omq.powf(-(m + 1.0)) / z;
+                }
+                (p - strength_out[i]).abs()
+            })
+            .reduce(|| 0.0_f64, f64::max);
 
         if max_err < tolerance {
             return (a, b, true, iter + 1);
@@ -1371,14 +1382,12 @@ pub fn fit_strength_degree_w_newton(
     let n = strength_out.len();
     let m = f64::from(layers);
     let r_min = 1e-4_f64;
-    let _total = strength_out.iter().sum::<f64>().max(1.0);
     let capacity = if self_loops {
         n as f64
     } else {
         n.saturating_sub(1) as f64
     };
 
-    // Detect saturated nodes
     let saturated_out: Vec<bool> = degree_out
         .iter()
         .map(|&k| k >= capacity - tolerance.max(1e-9))
@@ -1388,7 +1397,6 @@ pub fn fit_strength_degree_w_newton(
         .map(|&k| k >= capacity - tolerance.max(1e-9))
         .collect();
 
-    // Initialize a, b (log-space strength multipliers)
     let n_active = if self_loops { n } else { n - 1 };
     let mut a: Vec<f64> = strength_out
         .iter()
@@ -1413,7 +1421,6 @@ pub fn fit_strength_degree_w_newton(
         })
         .collect();
 
-    // Initialize z, w (occupation multipliers)
     let k_total = degree_out.iter().sum::<f64>().max(1.0);
     let k_scale = (k_total / n.max(1) as f64).sqrt().max(0.1);
     let mut z: Vec<f64> = degree_out
@@ -1449,196 +1456,212 @@ pub fn fit_strength_degree_w_newton(
         let z_bak = z.clone();
         let w_bak = w.clone();
 
-        // Update b[j] (strength_in)
-        for j in 0..n {
-            if strength_in[j] <= 0.0 {
-                continue;
-            }
-            let mut pred = 0.0;
-            let mut dpred = 0.0;
-            for i in 0..n {
-                if !self_loops && i == j {
-                    continue;
-                }
-                let r = (a[i] + b[j]).max(r_min);
-                let q = (-r).exp();
-                let omq = 1.0 - q;
-                if omq <= 1e-15 {
-                    continue;
-                }
-                let v = z[i] * w[j];
-                let am = omq.powf(-m);
-                let zz = 1.0 + v * (am - 1.0);
-                let wt = v * m * q * omq.powf(-(m + 1.0)) / zz;
-                pred += wt;
-                dpred += w_mean_deriv(r, layers) * v / zz.max(1e-15);
-            }
-            if dpred.abs() > 1e-15 {
-                let step = -(pred - strength_in[j]) / dpred;
-                let min_c: f64 = (0..n)
-                    .filter(|&i| self_loops || i != j)
-                    .map(|i| a[i])
-                    .fold(f64::INFINITY, f64::min);
-                b[j] = (b[j] + damping * step).max(r_min - min_c);
-            }
-        }
+        // Precompute min_a for b feasibility projection
+        let min_a = a.iter().copied().fold(f64::INFINITY, f64::min);
 
-        // Update a[i] (strength_out)
-        for i in 0..n {
-            if strength_out[i] <= 0.0 {
-                continue;
-            }
-            let mut pred = 0.0;
-            let mut dpred = 0.0;
-            for j in 0..n {
-                if !self_loops && i == j {
-                    continue;
+        // Update b[j] (strength_in) in parallel
+        let new_b: Vec<f64> = (0..n)
+            .into_par_iter()
+            .map(|j| {
+                if strength_in[j] <= 0.0 {
+                    return b[j];
                 }
-                let r = (a[i] + b[j]).max(r_min);
-                let q = (-r).exp();
-                let omq = 1.0 - q;
-                if omq <= 1e-15 {
-                    continue;
+                let mut pred = 0.0;
+                let mut dpred = 0.0;
+                for i in 0..n {
+                    if !self_loops && i == j {
+                        continue;
+                    }
+                    let r = (a[i] + b[j]).max(r_min);
+                    let q = (-r).exp();
+                    let omq = 1.0 - q;
+                    if omq <= 1e-15 {
+                        continue;
+                    }
+                    let v = z[i] * w[j];
+                    let zz = 1.0 + v * (omq.powf(-m) - 1.0);
+                    let wt = v * m * q * omq.powf(-(m + 1.0)) / zz;
+                    pred += wt;
+                    dpred += w_mean_deriv(r, layers) * v / zz.max(1e-15);
                 }
-                let v = z[i] * w[j];
-                let am = omq.powf(-m);
-                let zz = 1.0 + v * (am - 1.0);
-                let wt = v * m * q * omq.powf(-(m + 1.0)) / zz;
-                pred += wt;
-                dpred += w_mean_deriv(r, layers) * v / zz.max(1e-15);
-            }
-            if dpred.abs() > 1e-15 {
-                let step = -(pred - strength_out[i]) / dpred;
-                let min_c: f64 = (0..n)
-                    .filter(|&j| self_loops || i != j)
-                    .map(|j| b[j])
-                    .fold(f64::INFINITY, f64::min);
-                a[i] = (a[i] + damping * step).max(r_min - min_c);
-            }
-        }
-
-        // Update w[j] (degree_in) via bisection (occupation is monotone in w)
-        for j in 0..n {
-            if saturated_in[j] {
-                w[j] = 1e30;
-                continue;
-            }
-            if degree_in[j] <= 0.0 {
-                continue;
-            }
-            let target_k = degree_in[j];
-            let mut lo = 0.0_f64;
-            let mut hi = w[j].max(1.0);
-            // Bracket
-            for _ in 0..40 {
-                let val: f64 = (0..n)
-                    .filter(|&i| self_loops || i != j)
-                    .map(|i| {
-                        let r = (a[i] + b[j]).max(r_min);
-                        w_occupation(hi * z[i], r, layers)
-                    })
-                    .sum();
-                if val >= target_k || hi > 1e30 {
-                    break;
-                }
-                lo = hi;
-                hi *= 2.0;
-            }
-            for _ in 0..60 {
-                let mid = 0.5 * (lo + hi);
-                let val: f64 = (0..n)
-                    .filter(|&i| self_loops || i != j)
-                    .map(|i| {
-                        let r = (a[i] + b[j]).max(r_min);
-                        w_occupation(mid * z[i], r, layers)
-                    })
-                    .sum();
-                if val < target_k {
-                    lo = mid;
+                if dpred.abs() > 1e-15 {
+                    let step = -(pred - strength_in[j]) / dpred;
+                    (b[j] + damping * step).max(r_min - min_a)
                 } else {
-                    hi = mid;
+                    b[j]
                 }
-                if hi - lo < 1e-14 * hi.max(1.0) {
-                    break;
-                }
-            }
-            w[j] = 0.5 * (lo + hi);
-        }
+            })
+            .collect();
+        b = new_b;
 
-        // Update z[i] (degree_out) via bisection
-        for i in 0..n {
-            if saturated_out[i] {
-                z[i] = 1e30;
-                continue;
-            }
-            if degree_out[i] <= 0.0 {
-                continue;
-            }
-            let target_k = degree_out[i];
-            let mut lo = 0.0_f64;
-            let mut hi = z[i].max(1.0);
-            for _ in 0..40 {
-                let val: f64 = (0..n)
-                    .filter(|&j| self_loops || i != j)
-                    .map(|j| {
-                        let r = (a[i] + b[j]).max(r_min);
-                        w_occupation(hi * w[j], r, layers)
-                    })
-                    .sum();
-                if val >= target_k || hi > 1e30 {
-                    break;
+        // Precompute min_b for a feasibility projection
+        let min_b = b.iter().copied().fold(f64::INFINITY, f64::min);
+
+        // Update a[i] (strength_out) in parallel
+        let new_a: Vec<f64> = (0..n)
+            .into_par_iter()
+            .map(|i| {
+                if strength_out[i] <= 0.0 {
+                    return a[i];
                 }
-                lo = hi;
-                hi *= 2.0;
-            }
-            for _ in 0..60 {
-                let mid = 0.5 * (lo + hi);
-                let val: f64 = (0..n)
-                    .filter(|&j| self_loops || i != j)
-                    .map(|j| {
-                        let r = (a[i] + b[j]).max(r_min);
-                        w_occupation(mid * w[j], r, layers)
-                    })
-                    .sum();
-                if val < target_k {
-                    lo = mid;
+                let mut pred = 0.0;
+                let mut dpred = 0.0;
+                for j in 0..n {
+                    if !self_loops && i == j {
+                        continue;
+                    }
+                    let r = (a[i] + b[j]).max(r_min);
+                    let q = (-r).exp();
+                    let omq = 1.0 - q;
+                    if omq <= 1e-15 {
+                        continue;
+                    }
+                    let v = z[i] * w[j];
+                    let zz = 1.0 + v * (omq.powf(-m) - 1.0);
+                    let wt = v * m * q * omq.powf(-(m + 1.0)) / zz;
+                    pred += wt;
+                    dpred += w_mean_deriv(r, layers) * v / zz.max(1e-15);
+                }
+                if dpred.abs() > 1e-15 {
+                    let step = -(pred - strength_out[i]) / dpred;
+                    (a[i] + damping * step).max(r_min - min_b)
                 } else {
-                    hi = mid;
+                    a[i]
                 }
-                if hi - lo < 1e-14 * hi.max(1.0) {
-                    break;
-                }
-            }
-            z[i] = 0.5 * (lo + hi);
-        }
+            })
+            .collect();
+        a = new_a;
 
-        // Check convergence
-        let mut max_err = 0.0_f64;
-        for i in 0..n {
-            let mut ps = 0.0;
-            let mut pk = 0.0;
-            for j in 0..n {
-                if !self_loops && i == j {
-                    continue;
+        // Update w[j] (degree_in) via bisection — in parallel
+        let new_w: Vec<f64> = (0..n)
+            .into_par_iter()
+            .map(|j| {
+                if saturated_in[j] {
+                    return 1e30;
                 }
-                let r = (a[i] + b[j]).max(r_min);
-                let q = (-r).exp();
-                let omq = 1.0 - q;
-                if omq <= 1e-15 {
-                    continue;
+                if degree_in[j] <= 0.0 {
+                    return w[j];
                 }
-                let v = z[i] * w[j];
-                let am = omq.powf(-m);
-                let g = am - 1.0;
-                let zz = 1.0 + v * g;
-                ps += v * m * q * omq.powf(-(m + 1.0)) / zz;
-                pk += v * g / zz;
-            }
-            max_err = max_err.max((ps - strength_out[i]).abs());
-            if !saturated_out[i] {
-                max_err = max_err.max((pk - degree_out[i]).abs());
-            }
-        }
+                let target_k = degree_in[j];
+                let mut lo = 0.0_f64;
+                let mut hi = w[j].max(1.0);
+                for _ in 0..40 {
+                    let val: f64 = (0..n)
+                        .filter(|&i| self_loops || i != j)
+                        .map(|i| {
+                            let r = (a[i] + b[j]).max(r_min);
+                            w_occupation(hi * z[i], r, layers)
+                        })
+                        .sum();
+                    if val >= target_k || hi > 1e30 {
+                        break;
+                    }
+                    lo = hi;
+                    hi *= 2.0;
+                }
+                for _ in 0..60 {
+                    let mid = 0.5 * (lo + hi);
+                    let val: f64 = (0..n)
+                        .filter(|&i| self_loops || i != j)
+                        .map(|i| {
+                            let r = (a[i] + b[j]).max(r_min);
+                            w_occupation(mid * z[i], r, layers)
+                        })
+                        .sum();
+                    if val < target_k {
+                        lo = mid;
+                    } else {
+                        hi = mid;
+                    }
+                    if hi - lo < 1e-14 * hi.max(1.0) {
+                        break;
+                    }
+                }
+                0.5 * (lo + hi)
+            })
+            .collect();
+        w = new_w;
+
+        // Update z[i] (degree_out) via bisection — in parallel
+        let new_z: Vec<f64> = (0..n)
+            .into_par_iter()
+            .map(|i| {
+                if saturated_out[i] {
+                    return 1e30;
+                }
+                if degree_out[i] <= 0.0 {
+                    return z[i];
+                }
+                let target_k = degree_out[i];
+                let mut lo = 0.0_f64;
+                let mut hi = z[i].max(1.0);
+                for _ in 0..40 {
+                    let val: f64 = (0..n)
+                        .filter(|&j| self_loops || i != j)
+                        .map(|j| {
+                            let r = (a[i] + b[j]).max(r_min);
+                            w_occupation(hi * w[j], r, layers)
+                        })
+                        .sum();
+                    if val >= target_k || hi > 1e30 {
+                        break;
+                    }
+                    lo = hi;
+                    hi *= 2.0;
+                }
+                for _ in 0..60 {
+                    let mid = 0.5 * (lo + hi);
+                    let val: f64 = (0..n)
+                        .filter(|&j| self_loops || i != j)
+                        .map(|j| {
+                            let r = (a[i] + b[j]).max(r_min);
+                            w_occupation(mid * w[j], r, layers)
+                        })
+                        .sum();
+                    if val < target_k {
+                        lo = mid;
+                    } else {
+                        hi = mid;
+                    }
+                    if hi - lo < 1e-14 * hi.max(1.0) {
+                        break;
+                    }
+                }
+                0.5 * (lo + hi)
+            })
+            .collect();
+        z = new_z;
+
+        // Check convergence in parallel
+        let max_err: f64 = (0..n)
+            .into_par_iter()
+            .map(|i| {
+                let mut ps = 0.0;
+                let mut pk = 0.0;
+                for j in 0..n {
+                    if !self_loops && i == j {
+                        continue;
+                    }
+                    let r = (a[i] + b[j]).max(r_min);
+                    let q = (-r).exp();
+                    let omq = 1.0 - q;
+                    if omq <= 1e-15 {
+                        continue;
+                    }
+                    let v = z[i] * w[j];
+                    let am = omq.powf(-m);
+                    let g = am - 1.0;
+                    let zz = 1.0 + v * g;
+                    ps += v * m * q * omq.powf(-(m + 1.0)) / zz;
+                    pk += v * g / zz;
+                }
+                let mut e = (ps - strength_out[i]).abs();
+                if !saturated_out[i] {
+                    e = e.max((pk - degree_out[i]).abs());
+                }
+                e
+            })
+            .reduce(|| 0.0_f64, f64::max);
 
         if max_err < tolerance {
             let x: Vec<f64> = a.iter().map(|&ai| (-ai).exp()).collect();
