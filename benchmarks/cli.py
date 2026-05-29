@@ -604,6 +604,42 @@ def _filter_one(family, constraint, sample, fit, network, c, alpha):
 # --- Main benchmark runner ---
 
 
+def _format_row(row: BenchmarkRow) -> str:
+    """Format a single row for immediate display."""
+    conv_str = ""
+    if row.converged is not None:
+        conv_str = "\u2713" if row.converged else "\u2717"
+    iters_str = str(row.iterations) if row.iterations else ""
+    max_s = ""
+    if row.max_s_out_err is not None:
+        max_s = f"{max(row.max_s_out_err, row.max_s_in_err or 0):.2e}"
+    max_k = ""
+    if row.max_k_out_err is not None:
+        max_k = f"{max(row.max_k_out_err, row.max_k_in_err or 0):.2e}"
+    kp_str = (
+        f"{row.known_pair_fraction * 100:.0f}" if row.known_pair_fraction > 0 else "0"
+    )
+    return (
+        f"{row.stage:<12} {row.node_count:>5} {row.family:<3} {row.constraint:<16} "
+        f"{row.regime:<9} {kp_str:>4} {row.wall_seconds:>8.4f} {row.cpu_seconds:>8.4f} "
+        f"{row.parallel_factor:>5.1f} {row.memory_python_peak_mb:>6.1f} "
+        f"{row.memory_rss_peak_mb:>7.1f} {conv_str:>5} {iters_str:>6} "
+        f"{max_s:>10} {max_k:>10} {row.status:<8}"
+    )
+
+
+def _print_header() -> None:
+    """Print the table header."""
+    header = (
+        f"{'stage':<12} {'N':>5} {'fam':<3} {'constraint':<16} {'regime':<9} "
+        f"{'kp%':>4} {'wall(s)':>8} {'cpu(s)':>8} {'parX':>5} "
+        f"{'py_MB':>6} {'rss_MB':>7} {'conv':>5} {'iters':>6} "
+        f"{'max_s_err':>10} {'max_k_err':>10} {'status':<8}"
+    )
+    typer.echo(header, err=True)
+    typer.echo("\u2500" * len(header), err=True)
+
+
 def run_benchmark(
     *,
     nodes: tuple[int, ...],
@@ -617,8 +653,17 @@ def run_benchmark(
     alpha: float,
     track_memory: bool,
     fit_only: bool = False,
+    verbose: bool = True,
 ) -> list[BenchmarkRow]:
     """Run the benchmark matrix."""
+    if verbose:
+        _print_header()
+
+    def _emit(row: BenchmarkRow) -> None:
+        rows.append(row)
+        if verbose:
+            typer.echo(_format_row(row), err=True)
+
     rows: list[BenchmarkRow] = []
 
     for n_index, node_count in enumerate(nodes):
@@ -635,7 +680,7 @@ def run_benchmark(
                 track_memory=track_memory,
             )
             c = derive_synthetic_constraints(net)
-            rows.append(
+            _emit(
                 BenchmarkRow(
                     stage="generate",
                     node_count=node_count,
@@ -657,7 +702,7 @@ def run_benchmark(
             for family in families:
                 for constraint in constraints:
                     for kp_fraction in known_pairs:
-                        row = _run_one_cell(
+                        cell_rows = _run_one_cell(
                             family=family,
                             constraint=constraint,
                             regime=regime,
@@ -671,7 +716,8 @@ def run_benchmark(
                             track_memory=track_memory,
                             fit_only=fit_only,
                         )
-                        rows.extend(row)
+                        for r in cell_rows:
+                            _emit(r)
     return rows
 
 
@@ -988,56 +1034,15 @@ def _save_and_display(
     if output_json:
         typer.echo(json.dumps(payload, indent=2))
     else:
-        _print_table(rows)
+        _print_summary(rows)
         typer.echo(f"\nResults: {output}", err=True)
 
 
-def _print_table(rows: list[BenchmarkRow]) -> None:
-    """Print human-readable summary table."""
-    header = (
-        f"{'stage':<12} {'N':>5} {'fam':<3} {'constraint':<16} {'regime':<9} "
-        f"{'kp%':>4} {'wall(s)':>8} {'cpu(s)':>8} {'parX':>5} "
-        f"{'py_MB':>6} {'rss_MB':>7} {'conv':>5} {'iters':>6} "
-        f"{'max_s_err':>10} {'max_k_err':>10} {'status':<8}"
-    )
-    typer.echo(header, err=True)
-    typer.echo("─" * len(header), err=True)
-
-    converged_count = 0
-    error_count = 0
-    total_wall = 0.0
-
-    for row in rows:
-        conv_str = ""
-        if row.converged is not None:
-            conv_str = "✓" if row.converged else "✗"
-            if row.converged:
-                converged_count += 1
-        iters_str = str(row.iterations) if row.iterations else ""
-        max_s = ""
-        if row.max_s_out_err is not None:
-            max_s = f"{max(row.max_s_out_err, row.max_s_in_err or 0):.2e}"
-        max_k = ""
-        if row.max_k_out_err is not None:
-            max_k = f"{max(row.max_k_out_err, row.max_k_in_err or 0):.2e}"
-        if row.status == "error":
-            error_count += 1
-        total_wall += row.wall_seconds
-        kp_str = (
-            f"{row.known_pair_fraction * 100:.0f}"
-            if row.known_pair_fraction > 0
-            else "0"
-        )
-
-        typer.echo(
-            f"{row.stage:<12} {row.node_count:>5} {row.family:<3} {row.constraint:<16} "
-            f"{row.regime:<9} {kp_str:>4} {row.wall_seconds:>8.4f} {row.cpu_seconds:>8.4f} "
-            f"{row.parallel_factor:>5.1f} {row.memory_python_peak_mb:>6.1f} "
-            f"{row.memory_rss_peak_mb:>7.1f} {conv_str:>5} {iters_str:>6} "
-            f"{max_s:>10} {max_k:>10} {row.status:<8}",
-            err=True,
-        )
-
+def _print_summary(rows: list[BenchmarkRow]) -> None:
+    """Print summary totals after streaming rows."""
+    converged_count = sum(1 for r in rows if r.converged is True)
+    error_count = sum(1 for r in rows if r.status == "error")
+    total_wall = sum(r.wall_seconds for r in rows)
     typer.echo(
         f"\nTotals: {len(rows)} rows | {converged_count} converged | {error_count} errors | wall={total_wall:.1f}s",
         err=True,
