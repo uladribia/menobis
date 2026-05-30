@@ -14,12 +14,14 @@ precision, and parallelism across all model families and constraint types.
 
 | Dimension | Values |
 |---|---|
-| Node counts | 100, 500, 1000, 2000 |
+| Node counts | 10, 100, 1000, 5000 |
 | Families | ME, B, W |
 | Constraints | strength, strength-cost, strength-edges, strength-degree |
 | Self-loops | no-self-loops (default) |
 | Known-pair fraction | 0%, 5%, 20% |
 | Regime | sparse, saturated |
+
+For the initial ME-only benchmark the node counts were \{10, 100, 1000, 5000\}.
 
 ## Regimes
 

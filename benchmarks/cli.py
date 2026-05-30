@@ -237,6 +237,113 @@ def _filter_case(family, constraint, sample, fit, network, c, alpha):
 
 
 # --- Precision computation ---
+
+
+def _compute_partial_precision(
+    fit, constraint: str, c, network, *, self_loops: bool
+) -> dict[str, float | None]:
+    """Compute precision for a PartialFitResult (source/target/rate format).
+
+    The partial fit returns expected rates for free (fitted) pairs.
+    Known pairs are edges present in network.edges but not in the free-pair
+    list; they contribute their observed weights directly.
+    """
+    result: dict[str, float | None] = {
+        "max_s_out_err": None,
+        "max_s_in_err": None,
+        "rel_s_err": None,
+        "max_k_out_err": None,
+        "max_k_in_err": None,
+        "edge_count_err": None,
+        "cost_err": None,
+    }
+
+    fit_src = np.asarray(fit.source, dtype=np.int64)
+    fit_tgt = np.asarray(fit.target, dtype=np.int64)
+    fit_rate = np.asarray(fit.rate, dtype=np.float64)
+
+    # Build a lookup set of free (source, target) pairs
+    free_pairs: set[tuple[int, int]] = set()
+    for i in range(len(fit_src)):
+        free_pairs.add((int(fit_src[i]), int(fit_tgt[i])))
+
+    # Determine total node count
+    max_node = 0
+    if len(fit_src) > 0:
+        max_node = max(max_node, int(fit_src.max()), int(fit_tgt.max()))
+    if network.edges is not None and len(network.edges) > 0:
+        max_node = max(
+            max_node,
+            int(network.edges.source.max()),
+            int(network.edges.target.max()),
+        )
+    n = max(max_node + 1, len(c.strength_out))
+
+    # 1. Expected strengths from free-pair rates
+    s_out = np.zeros(n, dtype=np.float64)
+    s_in = np.zeros(n, dtype=np.float64)
+    np.add.at(s_out, fit_src, fit_rate)
+    np.add.at(s_in, fit_tgt, fit_rate)
+
+    # 2. Add known-pair contributions (edges in network but NOT in free pairs)
+    for i_edge in range(len(network.edges)):
+        s = int(network.edges.source[i_edge])
+        t = int(network.edges.target[i_edge])
+        w = float(network.edges.weight[i_edge])
+        if (s, t) not in free_pairs:
+            s_out[s] += w
+            s_in[t] += w
+
+    # Strength errors
+    max_s = max(float(c.strength_out.max()), float(c.strength_in.max()), 1.0)
+    s_out_err = float(np.abs(s_out[: len(c.strength_out)] - c.strength_out).max())
+    s_in_err = float(np.abs(s_in[: len(c.strength_in)] - c.strength_in).max())
+    result["max_s_out_err"] = s_out_err
+    result["max_s_in_err"] = s_in_err
+    result["rel_s_err"] = max(s_out_err, s_in_err) / max_s
+
+    # Edge count: known edges are counted as 1 each (occupied).
+    # Free pairs contribute P(t_ij > 0). For ME/Poisson free pairs
+    # (non-ZI), this is 1 - exp(-rate). For ZI free pairs, this is
+    # approximate. Known pairs count as 1.
+    if constraint == "strength-edges":
+        total_edges = float(len(network.edges) - len(free_pairs))  # known edges
+        total_edges += float(np.sum(1.0 - np.exp(-fit_rate)))
+        result["edge_count_err"] = abs(total_edges - c.total_edges)
+
+    # Cost: free + known pairs, each weighted by Euclidean distance
+    if constraint == "strength-cost":
+        total_cost = 0.0
+        for i in range(len(fit_src)):
+            s, t = int(fit_src[i]), int(fit_tgt[i])
+            if not self_loops and s == t:
+                continue
+            d = float(
+                np.hypot(
+                    float(network.x[s]) - float(network.x[t]),
+                    float(network.y[s]) - float(network.y[t]),
+                )
+            )
+            total_cost += float(fit_rate[i]) * d
+        for i_edge in range(len(network.edges)):
+            s = int(network.edges.source[i_edge])
+            t = int(network.edges.target[i_edge])
+            if (s, t) in free_pairs:
+                continue
+            if not self_loops and s == t:
+                continue
+            d = float(
+                np.hypot(
+                    float(network.x[s]) - float(network.x[t]),
+                    float(network.y[s]) - float(network.y[t]),
+                )
+            )
+            total_cost += float(network.edges.weight[i_edge]) * d
+        result["cost_err"] = abs(total_cost - c.total_cost)
+
+    return result
+
+
 def _compute_precision(
     fit, constraint: str, constraints_data, network, *, self_loops: bool
 ) -> dict[str, float | None]:
@@ -256,7 +363,12 @@ def _compute_precision(
         "cost_err": None,
     }
 
+    # PartialFitResult: use source/target/rate based computation
     if not hasattr(fit, "x") or fit.x is None:
+        if hasattr(fit, "source") and fit.source is not None and len(fit.source) > 0:
+            return _compute_partial_precision(
+                fit, constraint, c, network, self_loops=self_loops
+            )
         return result
 
     x, y = np.asarray(fit.x), np.asarray(fit.y)
