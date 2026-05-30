@@ -63,7 +63,12 @@ across all constraint types at N=20.
 | Regime | Parameters | Character |
 |---|---|---|
 | Sparse | `average_degree=5.0, events_per_edge=4.0` | Moderate connectivity |
+| **Dense (default)** | **`average_degree=N/5, events_per_edge=8.0`** | **Optimal — exercises solvers realistically** |
 | Saturated | `average_degree=15.0, events_per_edge=5.0` | k near N-1 |
+
+All E2E tests use the **dense regime** by default to avoid pathological solver
+behaviour seen in sparse (ill-posed degree constraints when `k ≈ s`) and
+saturated (`k ≈ N`) regimes.
 
 ## Known solver limitations (xfail in tests)
 

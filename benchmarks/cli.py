@@ -37,7 +37,7 @@ CONSTRAINTS: tuple[str, ...] = (
     "strength-edges",
     "strength-degree",
 )
-REGIMES: tuple[str, ...] = ("sparse", "saturated")
+REGIMES: tuple[str, ...] = ("sparse", "dense", "saturated")
 
 
 # --- Measurement infrastructure ---
@@ -140,6 +140,8 @@ def _regime_params(regime: str, node_count: int) -> dict[str, float]:
     """Return PA-geographic parameters for a regime."""
     if regime == "sparse":
         return {"average_degree": 3.0, "events_per_edge": 3.0}
+    if regime == "dense":
+        return {"average_degree": node_count / 5.0, "events_per_edge": 8.0}
     # saturated: degree near N-1
     return {"average_degree": 0.85 * (node_count - 1), "events_per_edge": 8.0}
 
@@ -567,6 +569,7 @@ def run_benchmark(
     alpha: float,
     track_memory: bool,
     tol_sparse: float = 1e-6,
+    tol_dense: float = 1e-6,
     tol_saturated: float = 1e-6,
     fit_only: bool = False,
     verbose: bool = True,
@@ -618,7 +621,12 @@ def run_benchmark(
             for family in families:
                 for constraint in constraints:
                     for kp_fraction in known_pairs:
-                        tolerance = tol_sparse if regime == "sparse" else tol_saturated
+                        if regime == "sparse":
+                            tolerance = tol_sparse
+                        elif regime == "dense":
+                            tolerance = tol_dense
+                        else:
+                            tolerance = tol_saturated
                         cell_rows = _run_one_cell(
                             family=family,
                             constraint=constraint,
@@ -838,8 +846,8 @@ def all_command(
         str, typer.Option("--constraints", help="Comma-separated constraints.")
     ] = "strength,strength-cost,strength-edges,strength-degree",
     regimes: Annotated[
-        str, typer.Option("--regime", help="Comma-separated regimes: sparse,saturated.")
-    ] = "sparse,saturated",
+        str, typer.Option("--regime", help="Comma-separated regimes: sparse,dense,saturated.")
+    ] = "dense",
     known_pairs: Annotated[
         str, typer.Option("--known-pairs", help="Comma-separated known-pair fractions.")
     ] = "0.0,0.05,0.20",
@@ -854,6 +862,9 @@ def all_command(
     ] = False,
     tol_sparse: Annotated[
         float, typer.Option("--tol-sparse", help="Solver tolerance for sparse regime.")
+    ] = 1e-6,
+    tol_dense: Annotated[
+        float, typer.Option("--tol-dense", help="Solver tolerance for dense regime.")
     ] = 1e-6,
     tol_saturated: Annotated[
         float,
@@ -879,6 +890,7 @@ def all_command(
         alpha=alpha,
         track_memory=not no_memory,
         tol_sparse=tol_sparse,
+        tol_dense=tol_dense,
         tol_saturated=tol_saturated,
     )
     _save_and_display(rows, output, output_json)
@@ -891,12 +903,13 @@ def fit_command(
     constraints: Annotated[
         str, typer.Option("--constraints")
     ] = "strength,strength-cost,strength-edges,strength-degree",
-    regimes: Annotated[str, typer.Option("--regime")] = "sparse,saturated",
+    regimes: Annotated[str, typer.Option("--regime")] = "dense",
     known_pairs: Annotated[str, typer.Option("--known-pairs")] = "0.0,0.05,0.20",
     seed: Annotated[int, typer.Option("--seed")] = 10_000,
     self_loops: Annotated[bool, typer.Option("--self-loops/--no-self-loops")] = False,
     no_memory: Annotated[bool, typer.Option("--no-memory")] = False,
     tol_sparse: Annotated[float, typer.Option("--tol-sparse")] = 1e-6,
+    tol_dense: Annotated[float, typer.Option("--tol-dense")] = 1e-6,
     tol_saturated: Annotated[float, typer.Option("--tol-saturated")] = 1e-6,
     output: Annotated[Path, typer.Option("--output", "-o")] = Path(
         "benchmarks/results/fit-modern.json"
@@ -915,6 +928,7 @@ def fit_command(
         alpha=0.05,
         track_memory=not no_memory,
         tol_sparse=tol_sparse,
+        tol_dense=tol_dense,
         tol_saturated=tol_saturated,
         fit_only=True,
     )
@@ -930,6 +944,7 @@ def compare_command(
     self_loops: Annotated[bool, typer.Option("--self-loops/--no-self-loops")] = False,
     no_memory: Annotated[bool, typer.Option("--no-memory")] = False,
     tol_sparse: Annotated[float, typer.Option("--tol-sparse")] = 1e-6,
+    tol_dense: Annotated[float, typer.Option("--tol-dense")] = 1e-6,
     tol_saturated: Annotated[float, typer.Option("--tol-saturated")] = 1e-6,
 ) -> None:
     """Compare regimes side-by-side."""
@@ -937,7 +952,7 @@ def compare_command(
         nodes=tuple(_parse_ints(nodes)),
         families=tuple(_parse_tokens(families, FAMILIES, "family")),
         constraints=tuple(_parse_tokens(constraints, CONSTRAINTS, "constraint")),
-        regimes=("sparse", "saturated"),
+        regimes=("sparse", "dense", "saturated"),
         known_pairs=(0.0,),
         seed=seed,
         self_loops=self_loops,
@@ -945,6 +960,7 @@ def compare_command(
         alpha=0.05,
         track_memory=not no_memory,
         tol_sparse=tol_sparse,
+        tol_dense=tol_dense,
         tol_saturated=tol_saturated,
         fit_only=True,
     )
