@@ -1,13 +1,5 @@
 # PLAN.md — Outstanding Work
 
-## Simplify package to intended use case target users
-
-- Do not expose analysis functions in CLI. Are convert tool needed as CLI?
-- Where are analysis functions used in the code? And the convert functions?
-- THe internal modules are not using the routers properly. Minimize public python API exposure.
-- Partial and full solvers should share the same public signature, one should only be called with the empty mask. For "known_" features.
-- Filter and FIT CLI is not using the routing tools. Only the main fit_model, sample_model and filter_model should be used. SImplify signatures
-
 ## Missing: Update tests to use dense regime
 
 All E2E tests (`test_fitting_e2e.py`, `test_filtering_e2e.py`,

@@ -645,9 +645,6 @@ def _filter_model(
         "min_expected": min_expected,
         "max_absent": max_absent,
     }
-    # self_loops is only accepted by strength-only filter functions
-    if constraint == Constraint.STRENGTH:
-        kwargs["self_loops"] = self_loops
     dispatch: dict[tuple[Constraint, str], Callable[..., FilterResult]] = {
         (Constraint.STRENGTH, "poisson"): filtering._filter_strength_poisson,
         (Constraint.STRENGTH, "binomial"): filtering._filter_strength_binomial,

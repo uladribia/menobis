@@ -33,9 +33,11 @@ def _filter_strength_poisson(
     min_occupation: float = 0.5,
     min_expected: float = 0.0,
     max_absent: int | None = None,
-    self_loops: bool = True,
 ) -> FilterResult:
-    """Filter edges against the independent Poisson fixed-strength ME null."""
+    """Filter edges against the independent Poisson fixed-strength ME null.
+
+    self_loops is read from fit.self_loops.
+    """
     upper, lower, expected, occupation = _menobis.filter_strength_poisson(
         fit.x.tolist(),
         fit.y.tolist(),
@@ -50,7 +52,7 @@ def _filter_strength_poisson(
             fit.y.tolist(),
             edges.source.tolist(),
             edges.target.tolist(),
-            self_loops,
+            fit.self_loops,
             _lower_alpha(alpha, tail),
             min_occupation,
             min_expected,
@@ -328,12 +330,14 @@ def _filter_strength_geometric(
     tail: Tail = "two-sided",
     correction: Correction = "none",
     detect_absent: bool = False,
-    self_loops: bool = True,
     min_occupation: float = 0.5,
     min_expected: float = 0.0,
     max_absent: int | None = None,
 ) -> FilterResult:
-    """Filter edges against a geometric null model."""
+    """Filter edges against a geometric null model.
+
+    self_loops is read from fit.self_loops.
+    """
     upper, lower, expected, occupation = _menobis.filter_strength_geometric(
         fit.x.tolist(),
         fit.y.tolist(),
@@ -348,7 +352,7 @@ def _filter_strength_geometric(
             fit.y.tolist(),
             edges.source.tolist(),
             edges.target.tolist(),
-            self_loops,
+            fit.self_loops,
             _lower_alpha(alpha, tail),
             min_occupation,
             min_expected,
@@ -376,12 +380,14 @@ def _filter_strength_binomial(
     tail: Tail = "two-sided",
     correction: Correction = "none",
     detect_absent: bool = False,
-    self_loops: bool = True,
     min_occupation: float = 0.5,
     min_expected: float = 0.0,
     max_absent: int | None = None,
 ) -> FilterResult:
-    """Filter edges against a binomial(M) null model."""
+    """Filter edges against a binomial(M) null model.
+
+    self_loops is read from fit.self_loops.
+    """
     upper, lower, expected, occupation = _menobis.filter_strength_binomial(
         fit.x.tolist(),
         fit.y.tolist(),
@@ -398,7 +404,7 @@ def _filter_strength_binomial(
             layers,
             edges.source.tolist(),
             edges.target.tolist(),
-            self_loops,
+            fit.self_loops,
             _lower_alpha(alpha, tail),
             min_occupation,
             min_expected,
@@ -426,7 +432,6 @@ def _filter_strength_negative_binomial(
     tail: Tail = "two-sided",
     correction: Correction = "none",
     detect_absent: bool = False,
-    self_loops: bool = True,
     min_occupation: float = 0.5,
     min_expected: float = 0.0,
     max_absent: int | None = None,
@@ -448,7 +453,7 @@ def _filter_strength_negative_binomial(
             layers,
             edges.source.tolist(),
             edges.target.tolist(),
-            self_loops,
+            fit.self_loops,
             _lower_alpha(alpha, tail),
             min_occupation,
             min_expected,
