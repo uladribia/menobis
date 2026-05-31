@@ -3,11 +3,15 @@
 import numpy as np
 
 from menobis.data.frames import EdgeTable, ProbabilityTable
-from menobis.filtering import (
-    filter_custom_poisson,
-    filter_strength_edges_poisson,
+from menobis.filtering.models import (
+    _filter_custom_poisson as filter_custom_poisson,
 )
-from menobis.models import fit_strength_edges_poisson
+from menobis.filtering.models import (
+    _filter_strength_edges_poisson as filter_strength_edges_poisson,
+)
+from menobis.models.fitting import (
+    _fit_strength_edges_poisson as fit_strength_edges_poisson,
+)
 from menobis.routing import Constraint, ModelFamily, filter_model
 
 

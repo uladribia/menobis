@@ -271,44 +271,44 @@ def _fit_model(
 
     variant = _fit_variant(family, layers)
     dispatch: dict[tuple[Constraint, str], Callable[..., FitResult]] = {
-        (Constraint.STRENGTH, "poisson"): fitting.fit_strength_poisson,
-        (Constraint.STRENGTH, "binomial"): fitting.fit_strength_binomial,
-        (Constraint.STRENGTH, "geometric"): fitting.fit_strength_geometric,
+        (Constraint.STRENGTH, "poisson"): fitting._fit_strength_poisson,
+        (Constraint.STRENGTH, "binomial"): fitting._fit_strength_binomial,
+        (Constraint.STRENGTH, "geometric"): fitting._fit_strength_geometric,
         (
             Constraint.STRENGTH,
             "negative_binomial",
-        ): fitting.fit_strength_negative_binomial,
-        (Constraint.STRENGTH_EDGES, "poisson"): fitting.fit_strength_edges_poisson,
-        (Constraint.STRENGTH_EDGES, "binomial"): fitting.fit_strength_edges_binomial,
-        (Constraint.STRENGTH_EDGES, "geometric"): fitting.fit_strength_edges_geometric,
+        ): fitting._fit_strength_negative_binomial,
+        (Constraint.STRENGTH_EDGES, "poisson"): fitting._fit_strength_edges_poisson,
+        (Constraint.STRENGTH_EDGES, "binomial"): fitting._fit_strength_edges_binomial,
+        (Constraint.STRENGTH_EDGES, "geometric"): fitting._fit_strength_edges_geometric,
         (
             Constraint.STRENGTH_EDGES,
             "negative_binomial",
-        ): fitting.fit_strength_edges_negative_binomial,
-        (Constraint.STRENGTH_DEGREE, "poisson"): fitting.fit_strength_degree_poisson,
-        (Constraint.STRENGTH_DEGREE, "binomial"): fitting.fit_strength_degree_binomial,
+        ): fitting._fit_strength_edges_negative_binomial,
+        (Constraint.STRENGTH_DEGREE, "poisson"): fitting._fit_strength_degree_poisson,
+        (Constraint.STRENGTH_DEGREE, "binomial"): fitting._fit_strength_degree_binomial,
         (
             Constraint.STRENGTH_DEGREE,
             "geometric",
-        ): fitting.fit_strength_degree_geometric,
+        ): fitting._fit_strength_degree_geometric,
         (
             Constraint.STRENGTH_DEGREE,
             "negative_binomial",
-        ): fitting.fit_strength_degree_negative_binomial,
-        (Constraint.STRENGTH_COST, "poisson"): fitting.fit_strength_cost_poisson,
-        (Constraint.STRENGTH_COST, "binomial"): fitting.fit_strength_cost_binomial,
-        (Constraint.STRENGTH_COST, "geometric"): fitting.fit_strength_cost_geometric,
+        ): fitting._fit_strength_degree_negative_binomial,
+        (Constraint.STRENGTH_COST, "poisson"): fitting._fit_strength_cost_poisson,
+        (Constraint.STRENGTH_COST, "binomial"): fitting._fit_strength_cost_binomial,
+        (Constraint.STRENGTH_COST, "geometric"): fitting._fit_strength_cost_geometric,
         (
             Constraint.STRENGTH_COST,
             "negative_binomial",
-        ): fitting.fit_strength_cost_negative_binomial,
-        (Constraint.DEGREE_EVENTS, "poisson"): fitting.fit_degree_events_poisson,
-        (Constraint.DEGREE_EVENTS, "binomial"): fitting.fit_degree_events_binomial,
-        (Constraint.DEGREE_EVENTS, "geometric"): fitting.fit_degree_events_geometric,
+        ): fitting._fit_strength_cost_negative_binomial,
+        (Constraint.DEGREE_EVENTS, "poisson"): fitting._fit_degree_events_poisson,
+        (Constraint.DEGREE_EVENTS, "binomial"): fitting._fit_degree_events_binomial,
+        (Constraint.DEGREE_EVENTS, "geometric"): fitting._fit_degree_events_geometric,
         (
             Constraint.DEGREE_EVENTS,
             "negative_binomial",
-        ): fitting.fit_degree_events_negative_binomial,
+        ): fitting._fit_degree_events_negative_binomial,
     }
     key = (constraint, variant)
     if key not in dispatch:
@@ -372,10 +372,10 @@ def _fit_model(
                 msg = "strength_cost requires projected coord_x and coord_y"
                 raise ValueError(msg)
             coord_dispatch: dict[str, Callable[..., FitResult]] = {
-                "poisson": fitting.fit_strength_cost_poisson,
-                "binomial": fitting.fit_strength_cost_binomial,
-                "geometric": fitting.fit_strength_cost_geometric,
-                "negative_binomial": fitting.fit_strength_cost_negative_binomial,
+                "poisson": fitting._fit_strength_cost_poisson,
+                "binomial": fitting._fit_strength_cost_binomial,
+                "geometric": fitting._fit_strength_cost_geometric,
+                "negative_binomial": fitting._fit_strength_cost_negative_binomial,
             }
             return coord_dispatch[variant](
                 s_out,
@@ -421,16 +421,28 @@ def _sample_model(
     seed: int = 0,
 ) -> EdgeTable:
     from menobis.models.generation import (
-        sample_degree_events_binomial,
-        sample_degree_events_geometric,
-        sample_degree_events_negative_binomial,
-        sample_degree_events_poisson,
-        sample_strength_binomial,
-        sample_strength_geometric,
-        sample_strength_multinomial,
-        sample_strength_negative_binomial,
-        sample_strength_poisson,
-        sample_strength_stub_matching,
+        _sample_degree_events_binomial,
+        _sample_degree_events_geometric,
+        _sample_degree_events_negative_binomial,
+        _sample_degree_events_poisson,
+        _sample_strength_binomial,
+        _sample_strength_cost_binomial,
+        _sample_strength_cost_geometric,
+        _sample_strength_cost_negative_binomial,
+        _sample_strength_cost_poisson,
+        _sample_strength_degree_binomial,
+        _sample_strength_degree_geometric,
+        _sample_strength_degree_negative_binomial,
+        _sample_strength_degree_poisson,
+        _sample_strength_edges_binomial,
+        _sample_strength_edges_geometric,
+        _sample_strength_edges_negative_binomial,
+        _sample_strength_edges_poisson,
+        _sample_strength_geometric,
+        _sample_strength_multinomial,
+        _sample_strength_negative_binomial,
+        _sample_strength_poisson,
+        _sample_strength_stub_matching,
     )
     from menobis.models.types import DegreeEventsFit, StrengthFit
 
@@ -442,7 +454,7 @@ def _sample_model(
             if strength_out is None or strength_in is None:
                 msg = "microcanonical requires strength_out and strength_in"
                 raise ValueError(msg)
-            return sample_strength_stub_matching(
+            return _sample_strength_stub_matching(
                 np.asarray(strength_out, dtype=np.uint64),
                 np.asarray(strength_in, dtype=np.uint64),
                 seed=seed,
@@ -463,7 +475,7 @@ def _sample_model(
             if total_events is None:
                 msg = "canonical sampling requires total_events"
                 raise ValueError(msg)
-            return sample_strength_multinomial(
+            return _sample_strength_multinomial(
                 fit.x,
                 fit.y,
                 total_events=total_events,
@@ -481,26 +493,25 @@ def _sample_model(
         raise ValueError(msg)
     fit_layers = getattr(fit, "layers", None) or layers
     variant = _fit_variant(family, fit_layers)
-    fit_: Any = fit  # narrow type for dispatch lambdas
     if constraint == Constraint.STRENGTH:
         if not isinstance(fit, StrengthFit):
             msg = f"strength sampling requires StrengthFit, got {type(fit).__name__}"
             raise TypeError(msg)
         dispatch = {
-            "poisson": lambda: sample_strength_poisson(
+            "poisson": lambda: _sample_strength_poisson(
                 fit.x, fit.y, self_loops=fit.self_loops, seed=seed
             ),
-            "binomial": lambda: sample_strength_binomial(
+            "binomial": lambda: _sample_strength_binomial(
                 fit.x,
                 fit.y,
                 layers=fit.layers or 1,
                 self_loops=fit.self_loops,
                 seed=seed,
             ),
-            "geometric": lambda: sample_strength_geometric(
+            "geometric": lambda: _sample_strength_geometric(
                 fit.x, fit.y, self_loops=fit.self_loops, seed=seed
             ),
-            "negative_binomial": lambda: sample_strength_negative_binomial(
+            "negative_binomial": lambda: _sample_strength_negative_binomial(
                 fit.x,
                 fit.y,
                 layers=fit.layers or 1,
@@ -517,75 +528,54 @@ def _sample_model(
             )
             raise TypeError(msg)
         dispatch = {
-            "poisson": lambda: sample_degree_events_poisson(fit, seed=seed),
-            "binomial": lambda: sample_degree_events_binomial(fit, seed=seed),
-            "geometric": lambda: sample_degree_events_geometric(fit, seed=seed),
-            "negative_binomial": lambda: sample_degree_events_negative_binomial(
+            "poisson": lambda: _sample_degree_events_poisson(fit, seed=seed),
+            "binomial": lambda: _sample_degree_events_binomial(fit, seed=seed),
+            "geometric": lambda: _sample_degree_events_geometric(fit, seed=seed),
+            "negative_binomial": lambda: _sample_degree_events_negative_binomial(
                 fit, seed=seed
             ),
         }
         return dispatch[variant]()
     if constraint == Constraint.STRENGTH_EDGES:
-        from menobis.models.generation import (
-            sample_strength_edges_binomial,
-            sample_strength_edges_geometric,
-            sample_strength_edges_negative_binomial,
-            sample_strength_edges_poisson,
-        )
-
         dispatch = {
-            "poisson": lambda: sample_strength_edges_poisson(fit_, seed=seed),
-            "binomial": lambda: sample_strength_edges_binomial(
-                fit_, layers=fit_layers, seed=seed
+            "poisson": lambda: _sample_strength_edges_poisson(fit, seed=seed),
+            "binomial": lambda: _sample_strength_edges_binomial(
+                fit, layers=fit_layers, seed=seed
             ),
-            "geometric": lambda: sample_strength_edges_geometric(fit_, seed=seed),
-            "negative_binomial": lambda: sample_strength_edges_negative_binomial(
-                fit_, layers=fit_layers, seed=seed
+            "geometric": lambda: _sample_strength_edges_geometric(fit, seed=seed),
+            "negative_binomial": lambda: _sample_strength_edges_negative_binomial(
+                fit, layers=fit_layers, seed=seed
             ),
         }
         return dispatch[variant]()
     if constraint == Constraint.STRENGTH_DEGREE:
-        from menobis.models.generation import (
-            sample_strength_degree_binomial,
-            sample_strength_degree_geometric,
-            sample_strength_degree_negative_binomial,
-            sample_strength_degree_poisson,
-        )
-
         dispatch = {
-            "poisson": lambda: sample_strength_degree_poisson(fit_, seed=seed),
-            "binomial": lambda: sample_strength_degree_binomial(
-                fit_, layers=fit_layers, seed=seed
+            "poisson": lambda: _sample_strength_degree_poisson(fit, seed=seed),
+            "binomial": lambda: _sample_strength_degree_binomial(
+                fit, layers=fit_layers, seed=seed
             ),
-            "geometric": lambda: sample_strength_degree_geometric(fit_, seed=seed),
-            "negative_binomial": lambda: sample_strength_degree_negative_binomial(
-                fit_, layers=fit_layers, seed=seed
+            "geometric": lambda: _sample_strength_degree_geometric(fit, seed=seed),
+            "negative_binomial": lambda: _sample_strength_degree_negative_binomial(
+                fit, layers=fit_layers, seed=seed
             ),
         }
         return dispatch[variant]()
     if constraint == Constraint.STRENGTH_COST:
-        from menobis.models.generation import (
-            sample_strength_cost_binomial,
-            sample_strength_cost_geometric,
-            sample_strength_cost_negative_binomial,
-            sample_strength_cost_poisson,
-        )
-
         if coord_x is None or coord_y is None:
             msg = "strength_cost sampling requires coord_x and coord_y"
             raise ValueError(msg)
         dispatch = {
-            "poisson": lambda: sample_strength_cost_poisson(
-                fit_, coord_x, coord_y, seed=seed
+            "poisson": lambda: _sample_strength_cost_poisson(
+                fit, coord_x, coord_y, seed=seed
             ),
-            "binomial": lambda: sample_strength_cost_binomial(
-                fit_, coord_x, coord_y, layers=fit_layers, seed=seed
+            "binomial": lambda: _sample_strength_cost_binomial(
+                fit, coord_x, coord_y, layers=fit_layers, seed=seed
             ),
-            "geometric": lambda: sample_strength_cost_geometric(
-                fit_, coord_x, coord_y, seed=seed
+            "geometric": lambda: _sample_strength_cost_geometric(
+                fit, coord_x, coord_y, seed=seed
             ),
-            "negative_binomial": lambda: sample_strength_cost_negative_binomial(
-                fit_, coord_x, coord_y, layers=fit_layers, seed=seed
+            "negative_binomial": lambda: _sample_strength_cost_negative_binomial(
+                fit, coord_x, coord_y, layers=fit_layers, seed=seed
             ),
         }
         return dispatch[variant]()
@@ -659,62 +649,71 @@ def _filter_model(
     if constraint == Constraint.STRENGTH:
         kwargs["self_loops"] = self_loops
     dispatch: dict[tuple[Constraint, str], Callable[..., FilterResult]] = {
-        (Constraint.STRENGTH, "poisson"): filtering.filter_strength_poisson,
-        (Constraint.STRENGTH, "binomial"): filtering.filter_strength_binomial,
-        (Constraint.STRENGTH, "geometric"): filtering.filter_strength_geometric,
+        (Constraint.STRENGTH, "poisson"): filtering._filter_strength_poisson,
+        (Constraint.STRENGTH, "binomial"): filtering._filter_strength_binomial,
+        (Constraint.STRENGTH, "geometric"): filtering._filter_strength_geometric,
         (
             Constraint.STRENGTH,
             "negative_binomial",
-        ): filtering.filter_strength_negative_binomial,
-        (Constraint.STRENGTH_COST, "poisson"): filtering.filter_strength_cost_poisson,
-        (Constraint.STRENGTH_COST, "binomial"): filtering.filter_strength_cost_binomial,
+        ): filtering._filter_strength_negative_binomial,
+        (Constraint.STRENGTH_COST, "poisson"): filtering._filter_strength_cost_poisson,
+        (
+            Constraint.STRENGTH_COST,
+            "binomial",
+        ): filtering._filter_strength_cost_binomial,
         (
             Constraint.STRENGTH_COST,
             "geometric",
-        ): filtering.filter_strength_cost_geometric,
+        ): filtering._filter_strength_cost_geometric,
         (
             Constraint.STRENGTH_COST,
             "negative_binomial",
-        ): filtering.filter_strength_cost_negative_binomial,
-        (Constraint.STRENGTH_EDGES, "poisson"): filtering.filter_strength_edges_poisson,
+        ): filtering._filter_strength_cost_negative_binomial,
+        (
+            Constraint.STRENGTH_EDGES,
+            "poisson",
+        ): filtering._filter_strength_edges_poisson,
         (
             Constraint.STRENGTH_EDGES,
             "binomial",
-        ): filtering.filter_strength_edges_binomial,
+        ): filtering._filter_strength_edges_binomial,
         (
             Constraint.STRENGTH_EDGES,
             "geometric",
-        ): filtering.filter_strength_edges_geometric,
+        ): filtering._filter_strength_edges_geometric,
         (
             Constraint.STRENGTH_EDGES,
             "negative_binomial",
-        ): filtering.filter_strength_edges_negative_binomial,
+        ): filtering._filter_strength_edges_negative_binomial,
         (
             Constraint.STRENGTH_DEGREE,
             "poisson",
-        ): filtering.filter_strength_degree_poisson,
+        ): filtering._filter_strength_degree_poisson,
         (
             Constraint.STRENGTH_DEGREE,
             "binomial",
-        ): filtering.filter_strength_degree_binomial,
+        ): filtering._filter_strength_degree_binomial,
         (
             Constraint.STRENGTH_DEGREE,
             "geometric",
-        ): filtering.filter_strength_degree_geometric,
+        ): filtering._filter_strength_degree_geometric,
         (
             Constraint.STRENGTH_DEGREE,
             "negative_binomial",
-        ): filtering.filter_strength_degree_negative_binomial,
-        (Constraint.DEGREE_EVENTS, "poisson"): filtering.filter_degree_events_poisson,
-        (Constraint.DEGREE_EVENTS, "binomial"): filtering.filter_degree_events_binomial,
+        ): filtering._filter_strength_degree_negative_binomial,
+        (Constraint.DEGREE_EVENTS, "poisson"): filtering._filter_degree_events_poisson,
+        (
+            Constraint.DEGREE_EVENTS,
+            "binomial",
+        ): filtering._filter_degree_events_binomial,
         (
             Constraint.DEGREE_EVENTS,
             "geometric",
-        ): filtering.filter_degree_events_geometric,
+        ): filtering._filter_degree_events_geometric,
         (
             Constraint.DEGREE_EVENTS,
             "negative_binomial",
-        ): filtering.filter_degree_events_negative_binomial,
+        ): filtering._filter_degree_events_negative_binomial,
     }
     if constraint == Constraint.STRENGTH_COST:
         if coord_x is None or coord_y is None:
@@ -752,19 +751,19 @@ def _fit_partial(
 ) -> Any:  # noqa: ANN401
     """Dispatch partial fitting by family and constraint."""
     from menobis.models.partial import (
-        fit_partial_strength_binomial,
-        fit_partial_strength_cost_binomial_coordinates,
-        fit_partial_strength_cost_geometric_coordinates,
-        fit_partial_strength_cost_negative_binomial_coordinates,
-        fit_partial_strength_cost_poisson_coordinates,
-        fit_partial_strength_degree_binomial,
-        fit_partial_strength_degree_geometric,
-        fit_partial_strength_degree_poisson,
-        fit_partial_strength_edges_binomial,
-        fit_partial_strength_edges_geometric,
-        fit_partial_strength_edges_poisson,
-        fit_partial_strength_geometric,
-        fit_partial_strength_poisson,
+        _fit_partial_strength_binomial,
+        _fit_partial_strength_cost_binomial_coordinates,
+        _fit_partial_strength_cost_geometric_coordinates,
+        _fit_partial_strength_cost_negative_binomial_coordinates,
+        _fit_partial_strength_cost_poisson_coordinates,
+        _fit_partial_strength_degree_binomial,
+        _fit_partial_strength_degree_geometric,
+        _fit_partial_strength_degree_poisson,
+        _fit_partial_strength_edges_binomial,
+        _fit_partial_strength_edges_geometric,
+        _fit_partial_strength_edges_poisson,
+        _fit_partial_strength_geometric,
+        _fit_partial_strength_poisson,
     )
 
     if strength_out is None or strength_in is None:
@@ -775,7 +774,7 @@ def _fit_partial(
 
     if constraint == Constraint.STRENGTH:
         dispatch: dict[str, Callable[..., Any]] = {
-            "poisson": lambda: fit_partial_strength_poisson(
+            "poisson": lambda: _fit_partial_strength_poisson(
                 strength_out,
                 strength_in,
                 known_source,
@@ -785,7 +784,7 @@ def _fit_partial(
                 tolerance=tolerance,
                 max_iterations=max_iterations,
             ),
-            "binomial": lambda: fit_partial_strength_binomial(
+            "binomial": lambda: _fit_partial_strength_binomial(
                 strength_out,
                 strength_in,
                 known_source,
@@ -796,7 +795,7 @@ def _fit_partial(
                 tolerance=tolerance,
                 max_iterations=max_iterations,
             ),
-            "geometric": lambda: fit_partial_strength_geometric(
+            "geometric": lambda: _fit_partial_strength_geometric(
                 strength_out,
                 strength_in,
                 known_source,
@@ -806,7 +805,7 @@ def _fit_partial(
                 tolerance=tolerance,
                 max_iterations=max_iterations,
             ),
-            "negative_binomial": lambda: fit_partial_strength_geometric(
+            "negative_binomial": lambda: _fit_partial_strength_geometric(
                 strength_out,
                 strength_in,
                 known_source,
@@ -824,7 +823,7 @@ def _fit_partial(
             msg = "partial strength-edges fitting requires target_edges"
             raise ValueError(msg)
         dispatch = {
-            "poisson": lambda: fit_partial_strength_edges_poisson(
+            "poisson": lambda: _fit_partial_strength_edges_poisson(
                 strength_out,
                 strength_in,
                 known_source,
@@ -835,7 +834,7 @@ def _fit_partial(
                 tolerance=tolerance,
                 max_iterations=max_iterations,
             ),
-            "binomial": lambda: fit_partial_strength_edges_binomial(
+            "binomial": lambda: _fit_partial_strength_edges_binomial(
                 strength_out,
                 strength_in,
                 known_source,
@@ -847,7 +846,7 @@ def _fit_partial(
                 tolerance=tolerance,
                 max_iterations=max_iterations,
             ),
-            "geometric": lambda: fit_partial_strength_edges_geometric(
+            "geometric": lambda: _fit_partial_strength_edges_geometric(
                 strength_out,
                 strength_in,
                 known_source,
@@ -858,7 +857,7 @@ def _fit_partial(
                 tolerance=tolerance,
                 max_iterations=max_iterations,
             ),
-            "negative_binomial": lambda: fit_partial_strength_edges_geometric(
+            "negative_binomial": lambda: _fit_partial_strength_edges_geometric(
                 strength_out,
                 strength_in,
                 known_source,
@@ -877,7 +876,7 @@ def _fit_partial(
             msg = "partial strength-degree fitting requires degree_out and degree_in"
             raise ValueError(msg)
         dispatch = {
-            "poisson": lambda: fit_partial_strength_degree_poisson(
+            "poisson": lambda: _fit_partial_strength_degree_poisson(
                 strength_out,
                 strength_in,
                 degree_out,
@@ -889,7 +888,7 @@ def _fit_partial(
                 tolerance=tolerance,
                 max_iterations=max_iterations,
             ),
-            "binomial": lambda: fit_partial_strength_degree_binomial(
+            "binomial": lambda: _fit_partial_strength_degree_binomial(
                 strength_out,
                 strength_in,
                 degree_out,
@@ -902,7 +901,7 @@ def _fit_partial(
                 tolerance=tolerance,
                 max_iterations=max_iterations,
             ),
-            "geometric": lambda: fit_partial_strength_degree_geometric(
+            "geometric": lambda: _fit_partial_strength_degree_geometric(
                 strength_out,
                 strength_in,
                 degree_out,
@@ -914,7 +913,7 @@ def _fit_partial(
                 tolerance=tolerance,
                 max_iterations=max_iterations,
             ),
-            "negative_binomial": lambda: fit_partial_strength_degree_geometric(
+            "negative_binomial": lambda: _fit_partial_strength_degree_geometric(
                 strength_out,
                 strength_in,
                 degree_out,
@@ -934,7 +933,7 @@ def _fit_partial(
             msg = "partial strength-cost requires coord_x, coord_y, target_cost"
             raise ValueError(msg)
         dispatch = {
-            "poisson": lambda: fit_partial_strength_cost_poisson_coordinates(
+            "poisson": lambda: _fit_partial_strength_cost_poisson_coordinates(
                 strength_out,
                 strength_in,
                 known_source,
@@ -947,7 +946,7 @@ def _fit_partial(
                 tolerance=tolerance,
                 max_iterations=max_iterations,
             ),
-            "binomial": lambda: fit_partial_strength_cost_binomial_coordinates(
+            "binomial": lambda: _fit_partial_strength_cost_binomial_coordinates(
                 strength_out,
                 strength_in,
                 known_source,
@@ -961,7 +960,7 @@ def _fit_partial(
                 tolerance=tolerance,
                 max_iterations=max_iterations,
             ),
-            "geometric": lambda: fit_partial_strength_cost_geometric_coordinates(
+            "geometric": lambda: _fit_partial_strength_cost_geometric_coordinates(
                 strength_out,
                 strength_in,
                 known_source,
@@ -975,7 +974,7 @@ def _fit_partial(
                 max_iterations=max_iterations,
             ),
             "negative_binomial": lambda: (
-                fit_partial_strength_cost_negative_binomial_coordinates(
+                _fit_partial_strength_cost_negative_binomial_coordinates(
                     strength_out,
                     strength_in,
                     known_source,

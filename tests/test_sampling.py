@@ -7,18 +7,38 @@ Tests all sampler families and constraint types.
 import numpy as np
 import pytest
 
-from menobis.models import (
-    fit_strength_binomial,
-    fit_strength_degree_poisson,
-    fit_strength_edges_poisson,
-    fit_strength_geometric,
-    fit_strength_poisson,
-    sample_strength_binomial,
-    sample_strength_degree_poisson,
-    sample_strength_edges_poisson,
-    sample_strength_geometric,
-    sample_strength_multinomial,
-    sample_strength_poisson,
+from menobis.models.fitting import (
+    _fit_strength_binomial as fit_strength_binomial,
+)
+from menobis.models.fitting import (
+    _fit_strength_degree_poisson as fit_strength_degree_poisson,
+)
+from menobis.models.fitting import (
+    _fit_strength_edges_poisson as fit_strength_edges_poisson,
+)
+from menobis.models.fitting import (
+    _fit_strength_geometric as fit_strength_geometric,
+)
+from menobis.models.fitting import (
+    _fit_strength_poisson as fit_strength_poisson,
+)
+from menobis.models.generation import (
+    _sample_strength_binomial as sample_strength_binomial,
+)
+from menobis.models.generation import (
+    _sample_strength_degree_poisson as sample_strength_degree_poisson,
+)
+from menobis.models.generation import (
+    _sample_strength_edges_poisson as sample_strength_edges_poisson,
+)
+from menobis.models.generation import (
+    _sample_strength_geometric as sample_strength_geometric,
+)
+from menobis.models.generation import (
+    _sample_strength_multinomial as sample_strength_multinomial,
+)
+from menobis.models.generation import (
+    _sample_strength_poisson as sample_strength_poisson,
 )
 from menobis.utilities.synthetic import (
     derive_synthetic_constraints,

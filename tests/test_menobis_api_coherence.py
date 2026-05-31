@@ -3,36 +3,78 @@
 import numpy as np
 import pytest
 
-from menobis.models import (
+from menobis.models.fitting import (
+    _fit_degree_bernoulli as fit_degree_bernoulli,
+)
+from menobis.models.fitting import (
+    _fit_degree_events_binomial as fit_degree_events_binomial,
+)
+from menobis.models.fitting import (
+    _fit_degree_events_geometric as fit_degree_events_geometric,
+)
+from menobis.models.fitting import (
+    _fit_degree_events_negative_binomial as fit_degree_events_negative_binomial,
+)
+from menobis.models.fitting import (
+    _fit_degree_events_poisson as fit_degree_events_poisson,
+)
+from menobis.models.fitting import (
+    _fit_strength_binomial as fit_strength_binomial,
+)
+from menobis.models.fitting import (
+    _fit_strength_cost_binomial as fit_strength_cost_binomial,
+)
+from menobis.models.fitting import (
+    _fit_strength_cost_geometric as fit_strength_cost_geometric,
+)
+from menobis.models.fitting import (
+    _fit_strength_cost_negative_binomial as fit_strength_cost_negative_binomial,
+)
+from menobis.models.fitting import (
+    _fit_strength_cost_poisson as fit_strength_cost_poisson,
+)
+from menobis.models.fitting import (
+    _fit_strength_degree_binomial as fit_strength_degree_binomial,
+)
+from menobis.models.fitting import (
+    _fit_strength_degree_geometric as fit_strength_degree_geometric,
+)
+from menobis.models.fitting import (
+    _fit_strength_degree_negative_binomial as fit_strength_degree_negative_binomial,
+)
+from menobis.models.fitting import (
+    _fit_strength_degree_poisson as fit_strength_degree_poisson,
+)
+from menobis.models.fitting import (
+    _fit_strength_edges_binomial as fit_strength_edges_binomial,
+)
+from menobis.models.fitting import (
+    _fit_strength_edges_geometric as fit_strength_edges_geometric,
+)
+from menobis.models.fitting import (
+    _fit_strength_edges_negative_binomial as fit_strength_edges_negative_binomial,
+)
+from menobis.models.fitting import (
+    _fit_strength_edges_poisson as fit_strength_edges_poisson,
+)
+from menobis.models.fitting import (
+    _fit_strength_geometric as fit_strength_geometric,
+)
+from menobis.models.fitting import (
+    _fit_strength_negative_binomial as fit_strength_negative_binomial,
+)
+from menobis.models.fitting import (
+    _fit_strength_poisson as fit_strength_poisson,
+)
+from menobis.models.types import (
     DegreeEventsFit,
     DegreeFit,
+    OptimizationDiagnostics,
     StrengthCostFit,
     StrengthDegreeFit,
     StrengthEdgesFit,
     StrengthFit,
-    fit_degree_bernoulli,
-    fit_degree_events_binomial,
-    fit_degree_events_geometric,
-    fit_degree_events_negative_binomial,
-    fit_degree_events_poisson,
-    fit_strength_binomial,
-    fit_strength_cost_binomial,
-    fit_strength_cost_geometric,
-    fit_strength_cost_negative_binomial,
-    fit_strength_cost_poisson,
-    fit_strength_degree_binomial,
-    fit_strength_degree_geometric,
-    fit_strength_degree_negative_binomial,
-    fit_strength_degree_poisson,
-    fit_strength_edges_binomial,
-    fit_strength_edges_geometric,
-    fit_strength_edges_negative_binomial,
-    fit_strength_edges_poisson,
-    fit_strength_geometric,
-    fit_strength_negative_binomial,
-    fit_strength_poisson,
 )
-from menobis.models.types import OptimizationDiagnostics
 
 S_OUT = np.array([2.0, 2.0])
 S_IN = np.array([2.0, 2.0])

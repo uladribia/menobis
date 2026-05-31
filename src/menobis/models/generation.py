@@ -37,7 +37,7 @@ def _as_int_list(values: NDArray[np.integer]) -> list[int]:
     return np.asarray(values, dtype=np.int64).tolist()
 
 
-def sample_strength_cost_poisson(
+def _sample_strength_cost_poisson(
     fit: StrengthCostFit,
     coord_x: NDArray[np.floating],
     coord_y: NDArray[np.floating],
@@ -59,7 +59,7 @@ def sample_strength_cost_poisson(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_stub_matching(
+def _sample_strength_stub_matching(
     strength_out: NDArray[np.integer],
     strength_in: NDArray[np.integer],
     *,
@@ -88,7 +88,7 @@ def sample_strength_stub_matching(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_custom_poisson(
+def _sample_custom_poisson(
     probabilities: ProbabilityTable,
     *,
     total_events: int,
@@ -105,7 +105,7 @@ def sample_custom_poisson(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_custom_multinomial(
+def _sample_custom_multinomial(
     probabilities: ProbabilityTable,
     *,
     total_events: int,
@@ -122,7 +122,7 @@ def sample_custom_multinomial(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_edges_poisson(
+def _sample_strength_edges_poisson(
     fit: StrengthEdgesFit,
     *,
     seed: int = 0,
@@ -134,7 +134,7 @@ def sample_strength_edges_poisson(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_poisson(
+def _sample_strength_poisson(
     x: NDArray[np.floating],
     y: NDArray[np.floating],
     *,
@@ -148,7 +148,7 @@ def sample_strength_poisson(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_degree_events_poisson(
+def _sample_degree_events_poisson(
     fit: DegreeEventsFit,
     *,
     seed: int = 0,
@@ -160,7 +160,7 @@ def sample_degree_events_poisson(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_degree_poisson(
+def _sample_strength_degree_poisson(
     fit: StrengthDegreeFit,
     *,
     seed: int = 0,
@@ -177,7 +177,7 @@ def sample_strength_degree_poisson(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_multinomial(
+def _sample_strength_multinomial(
     x: NDArray[np.floating],
     y: NDArray[np.floating],
     *,
@@ -192,7 +192,7 @@ def sample_strength_multinomial(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_geometric(
+def _sample_strength_geometric(
     x: NDArray[np.floating],
     y: NDArray[np.floating],
     *,
@@ -206,7 +206,7 @@ def sample_strength_geometric(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_binomial(
+def _sample_strength_binomial(
     x: NDArray[np.floating],
     y: NDArray[np.floating],
     *,
@@ -221,7 +221,7 @@ def sample_strength_binomial(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_negative_binomial(
+def _sample_strength_negative_binomial(
     x: NDArray[np.floating],
     y: NDArray[np.floating],
     *,
@@ -236,7 +236,7 @@ def sample_strength_negative_binomial(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_cost_binomial(
+def _sample_strength_cost_binomial(
     fit: "StrengthCostFit",
     coord_x: NDArray[np.floating],
     coord_y: NDArray[np.floating],
@@ -258,7 +258,7 @@ def sample_strength_cost_binomial(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_cost_geometric(
+def _sample_strength_cost_geometric(
     fit: "StrengthCostFit",
     coord_x: NDArray[np.floating],
     coord_y: NDArray[np.floating],
@@ -278,7 +278,7 @@ def sample_strength_cost_geometric(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_cost_negative_binomial(
+def _sample_strength_cost_negative_binomial(
     fit: "StrengthCostFit",
     coord_x: NDArray[np.floating],
     coord_y: NDArray[np.floating],
@@ -302,7 +302,7 @@ def sample_strength_cost_negative_binomial(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_edges_binomial(
+def _sample_strength_edges_binomial(
     fit: "StrengthEdgesFit",
     *,
     layers: int = 1,
@@ -320,7 +320,7 @@ def sample_strength_edges_binomial(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_degree_binomial(
+def _sample_strength_degree_binomial(
     fit: "StrengthDegreeFit",
     *,
     layers: int = 1,
@@ -339,7 +339,7 @@ def sample_strength_degree_binomial(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_degree_events_binomial(
+def _sample_degree_events_binomial(
     fit: "DegreeEventsFit",
     *,
     seed: int = 0,
@@ -356,7 +356,7 @@ def sample_degree_events_binomial(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_edges_geometric(
+def _sample_strength_edges_geometric(
     fit: "StrengthEdgesFit",
     *,
     seed: int = 0,
@@ -372,7 +372,7 @@ def sample_strength_edges_geometric(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_edges_negative_binomial(
+def _sample_strength_edges_negative_binomial(
     fit: "StrengthEdgesFit",
     *,
     layers: int = 1,
@@ -390,7 +390,7 @@ def sample_strength_edges_negative_binomial(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_degree_geometric(
+def _sample_strength_degree_geometric(
     fit: "StrengthDegreeFit",
     *,
     seed: int = 0,
@@ -407,7 +407,7 @@ def sample_strength_degree_geometric(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_strength_degree_negative_binomial(
+def _sample_strength_degree_negative_binomial(
     fit: "StrengthDegreeFit",
     *,
     layers: int = 1,
@@ -426,7 +426,7 @@ def sample_strength_degree_negative_binomial(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_degree_events_geometric(
+def _sample_degree_events_geometric(
     fit: "DegreeEventsFit",
     *,
     seed: int = 0,
@@ -442,7 +442,7 @@ def sample_degree_events_geometric(
     return _edge_table_from_lists(sources, targets, weights)
 
 
-def sample_degree_events_negative_binomial(
+def _sample_degree_events_negative_binomial(
     fit: "DegreeEventsFit",
     *,
     layers: int | None = None,
@@ -459,31 +459,3 @@ def sample_degree_events_negative_binomial(
         seed,
     )
     return _edge_table_from_lists(sources, targets, weights)
-
-
-__all__ = [
-    "sample_custom_multinomial",
-    "sample_custom_poisson",
-    "sample_degree_events_binomial",
-    "sample_degree_events_geometric",
-    "sample_degree_events_negative_binomial",
-    "sample_degree_events_poisson",
-    "sample_strength_binomial",
-    "sample_strength_cost_binomial",
-    "sample_strength_cost_geometric",
-    "sample_strength_cost_negative_binomial",
-    "sample_strength_cost_poisson",
-    "sample_strength_degree_binomial",
-    "sample_strength_degree_geometric",
-    "sample_strength_degree_negative_binomial",
-    "sample_strength_degree_poisson",
-    "sample_strength_edges_binomial",
-    "sample_strength_edges_geometric",
-    "sample_strength_edges_negative_binomial",
-    "sample_strength_edges_poisson",
-    "sample_strength_geometric",
-    "sample_strength_multinomial",
-    "sample_strength_negative_binomial",
-    "sample_strength_poisson",
-    "sample_strength_stub_matching",
-]

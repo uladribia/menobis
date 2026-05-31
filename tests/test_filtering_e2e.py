@@ -9,24 +9,26 @@ from __future__ import annotations
 
 import pytest
 
-from menobis.filtering import (
-    filter_strength_binomial,
-    filter_strength_degree_poisson,
-    filter_strength_edges_poisson,
-    filter_strength_geometric,
-    filter_strength_poisson,
+from menobis.filtering.models import (
+    _filter_strength_binomial,
+    _filter_strength_degree_poisson,
+    _filter_strength_edges_poisson,
+    _filter_strength_geometric,
+    _filter_strength_poisson,
 )
-from menobis.models import (
-    fit_strength_binomial,
-    fit_strength_degree_poisson,
-    fit_strength_edges_poisson,
-    fit_strength_geometric,
-    fit_strength_poisson,
-    sample_strength_binomial,
-    sample_strength_degree_poisson,
-    sample_strength_edges_poisson,
-    sample_strength_geometric,
-    sample_strength_poisson,
+from menobis.models.fitting import (
+    _fit_strength_binomial,
+    _fit_strength_degree_poisson,
+    _fit_strength_edges_poisson,
+    _fit_strength_geometric,
+    _fit_strength_poisson,
+)
+from menobis.models.generation import (
+    _sample_strength_binomial,
+    _sample_strength_degree_poisson,
+    _sample_strength_edges_poisson,
+    _sample_strength_geometric,
+    _sample_strength_poisson,
 )
 from menobis.utilities.synthetic import (
     derive_synthetic_constraints,
@@ -75,12 +77,12 @@ class TestMEFilteringFPR:
     """ME family filtering produces bounded FPR."""
 
     def test_strength_fpr(self, constraints) -> None:
-        fit = fit_strength_poisson(
+        fit = _fit_strength_poisson(
             constraints.strength_out, constraints.strength_in, self_loops=False
         )
         fpr = _compute_fpr(
-            filter_strength_poisson,
-            lambda seed, **kw: sample_strength_poisson(
+            _filter_strength_poisson,
+            lambda seed, **kw: _sample_strength_poisson(
                 fit.x, fit.y, self_loops=False, seed=seed
             ),
             fit,
@@ -88,21 +90,21 @@ class TestMEFilteringFPR:
         assert fpr <= FPR_TOLERANCE, f"FPR={fpr:.4f} exceeds tolerance"
 
     def test_strength_edges_fpr(self, constraints) -> None:
-        fit = fit_strength_edges_poisson(
+        fit = _fit_strength_edges_poisson(
             constraints.strength_out,
             constraints.strength_in,
             constraints.total_edges,
             self_loops=False,
         )
         fpr = _compute_fpr(
-            filter_strength_edges_poisson,
-            lambda seed, **kw: sample_strength_edges_poisson(fit, seed=seed),
+            _filter_strength_edges_poisson,
+            lambda seed, **kw: _sample_strength_edges_poisson(fit, seed=seed),
             fit,
         )
         assert fpr <= FPR_TOLERANCE, f"FPR={fpr:.4f} exceeds tolerance"
 
     def test_strength_degree_fpr(self, constraints) -> None:
-        fit = fit_strength_degree_poisson(
+        fit = _fit_strength_degree_poisson(
             constraints.strength_out,
             constraints.strength_in,
             constraints.degree_out,
@@ -113,8 +115,8 @@ class TestMEFilteringFPR:
         if not fit.converged:
             pytest.skip("solver did not converge")
         fpr = _compute_fpr(
-            filter_strength_degree_poisson,
-            lambda seed, **kw: sample_strength_degree_poisson(fit, seed=seed),
+            _filter_strength_degree_poisson,
+            lambda seed, **kw: _sample_strength_degree_poisson(fit, seed=seed),
             fit,
         )
         assert fpr <= FPR_TOLERANCE, f"FPR={fpr:.4f} exceeds tolerance"
@@ -124,15 +126,15 @@ class TestBFilteringFPR:
     """B family filtering produces bounded FPR."""
 
     def test_strength_fpr(self, constraints) -> None:
-        fit = fit_strength_binomial(
+        fit = _fit_strength_binomial(
             constraints.strength_out,
             constraints.strength_in,
             layers=constraints.binomial_layers,
             self_loops=False,
         )
         fpr = _compute_fpr(
-            filter_strength_binomial,
-            lambda seed, **kw: sample_strength_binomial(
+            _filter_strength_binomial,
+            lambda seed, **kw: _sample_strength_binomial(
                 fit.x,
                 fit.y,
                 layers=constraints.binomial_layers,
@@ -149,12 +151,12 @@ class TestWFilteringFPR:
     """W family filtering produces bounded FPR."""
 
     def test_strength_fpr(self, constraints) -> None:
-        fit = fit_strength_geometric(
+        fit = _fit_strength_geometric(
             constraints.strength_out, constraints.strength_in, self_loops=False
         )
         fpr = _compute_fpr(
-            filter_strength_geometric,
-            lambda seed, **kw: sample_strength_geometric(
+            _filter_strength_geometric,
+            lambda seed, **kw: _sample_strength_geometric(
                 fit.x, fit.y, self_loops=False, seed=seed
             ),
             fit,

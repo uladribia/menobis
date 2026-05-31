@@ -17,11 +17,15 @@ from menobis.analysis import directed_degrees, directed_strengths
 from menobis.analysis.graph_algorithms import clustering_coefficient
 from menobis.analysis.stats import compute_all_stats
 from menobis.data.frames import EdgeTable
-from menobis.models import (
-    fit_strength_poisson,
-    sample_strength_multinomial,
-    sample_strength_poisson,
-    sample_strength_stub_matching,
+from menobis.models.fitting import _fit_strength_poisson as fit_strength_poisson
+from menobis.models.generation import (
+    _sample_strength_multinomial as sample_strength_multinomial,
+)
+from menobis.models.generation import (
+    _sample_strength_poisson as sample_strength_poisson,
+)
+from menobis.models.generation import (
+    _sample_strength_stub_matching as sample_strength_stub_matching,
 )
 
 FIGURES_DIR = Path(__file__).resolve().parent.parent / "docs" / "figures"

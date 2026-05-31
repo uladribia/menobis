@@ -4,9 +4,11 @@ import numpy as np
 import pytest
 
 from menobis.data.frames import normalize_probabilities
-from menobis.models import (
-    sample_custom_multinomial,
-    sample_custom_poisson,
+from menobis.models.generation import (
+    _sample_custom_multinomial as sample_custom_multinomial,
+)
+from menobis.models.generation import (
+    _sample_custom_poisson as sample_custom_poisson,
 )
 
 

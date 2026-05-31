@@ -1,7 +1,7 @@
 """Typer commands for MENoBiS statistical filtering."""
 
 from pathlib import Path
-from typing import Annotated, cast
+from typing import Annotated
 
 import numpy as np
 import pyarrow.csv as pa_csv
@@ -10,23 +10,8 @@ from typer import Option, Typer
 
 from menobis.data.frames import ProbabilityTable
 from menobis.data.io import read_edges
-from menobis.filtering import (
-    Correction,
-    FilteredEdges,
-    FilterResult,
-    Tail,
-    filter_custom_poisson,
-    filter_degree_events_poisson,
-    filter_strength_cost_poisson,
-    filter_strength_degree_poisson,
-    filter_strength_edges_poisson,
-)
-from menobis.models.types import (
-    DegreeEventsFit,
-    StrengthCostFit,
-    StrengthDegreeFit,
-    StrengthEdgesFit,
-)
+from menobis.filtering.models import _filter_custom_poisson as filter_custom_poisson
+from menobis.filtering.types import Correction, FilteredEdges, FilterResult, Tail
 from menobis.routing import (
     Constraint,
     ModelFamily,
@@ -169,25 +154,24 @@ def strength_edges(
 ) -> None:
     """Fit strength-edges ME, then filter against its zero-inflated null."""
     edges = read_edges(input_path)
-    node_count = int(max(edges.source.max(), edges.target.max())) + 1
-    s_out = np.zeros(node_count, dtype=np.float64)
-    s_in = np.zeros(node_count, dtype=np.float64)
+    nc = int(max(edges.source.max(), edges.target.max())) + 1
+    s_out = np.zeros(nc, dtype=np.float64)
+    s_in = np.zeros(nc, dtype=np.float64)
     np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
     np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
-    fit = cast(
-        StrengthEdgesFit,
-        fit_model(
-            family=ModelFamily.ME,
-            constraint=Constraint.STRENGTH_EDGES,
-            strength_out=s_out,
-            strength_in=s_in,
-            target_edges=target_edges,
-            self_loops=self_loops,
-        ),
+    fit = fit_model(
+        family=ModelFamily.ME,
+        constraint=Constraint.STRENGTH_EDGES,
+        strength_out=s_out,
+        strength_in=s_in,
+        target_edges=target_edges,
+        self_loops=self_loops,
     )
-    result = filter_strength_edges_poisson(
+    result = filter_model(
         edges,
-        fit,
+        family=ModelFamily.ME,
+        constraint=Constraint.STRENGTH_EDGES,
+        fit=fit,
         alpha=alpha,
         tail=tail,
         correction=correction,
@@ -241,29 +225,28 @@ def strength_cost(
     coordinate_table = pa_csv.read_csv(coordinates_path)
     coord_x = coordinate_table.column("x").to_numpy().astype(np.float64)
     coord_y = coordinate_table.column("y").to_numpy().astype(np.float64)
-    node_count = int(max(edges.source.max(), edges.target.max())) + 1
-    s_out = np.zeros(node_count, dtype=np.float64)
-    s_in = np.zeros(node_count, dtype=np.float64)
+    nc = int(max(edges.source.max(), edges.target.max())) + 1
+    s_out = np.zeros(nc, dtype=np.float64)
+    s_in = np.zeros(nc, dtype=np.float64)
     np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
     np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
-    fit = cast(
-        StrengthCostFit,
-        fit_model(
-            family=ModelFamily.ME,
-            constraint=Constraint.STRENGTH_COST,
-            strength_out=s_out,
-            strength_in=s_in,
-            coord_x=coord_x,
-            coord_y=coord_y,
-            target_cost=target_cost,
-            self_loops=self_loops,
-        ),
+    fit = fit_model(
+        family=ModelFamily.ME,
+        constraint=Constraint.STRENGTH_COST,
+        strength_out=s_out,
+        strength_in=s_in,
+        coord_x=coord_x,
+        coord_y=coord_y,
+        target_cost=target_cost,
+        self_loops=self_loops,
     )
-    result = filter_strength_cost_poisson(
+    result = filter_model(
         edges,
-        fit,
-        coord_x,
-        coord_y,
+        family=ModelFamily.ME,
+        constraint=Constraint.STRENGTH_COST,
+        fit=fit,
+        coord_x=coord_x,
+        coord_y=coord_y,
         alpha=alpha,
         tail=tail,
         correction=correction,
@@ -307,32 +290,31 @@ def strength_degree(
 ) -> None:
     """Fit strength-degree ME, then filter against its zero-inflated null."""
     edges = read_edges(input_path)
-    node_count = int(max(edges.source.max(), edges.target.max())) + 1
-    s_out = np.zeros(node_count, dtype=np.float64)
-    s_in = np.zeros(node_count, dtype=np.float64)
-    d_out = np.zeros(node_count, dtype=np.float64)
-    d_in = np.zeros(node_count, dtype=np.float64)
+    nc = int(max(edges.source.max(), edges.target.max())) + 1
+    s_out = np.zeros(nc, dtype=np.float64)
+    s_in = np.zeros(nc, dtype=np.float64)
+    d_out = np.zeros(nc, dtype=np.float64)
+    d_in = np.zeros(nc, dtype=np.float64)
     np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
     np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
     for src in edges.source:
         d_out[src] += 1
     for tgt in edges.target:
         d_in[tgt] += 1
-    fit = cast(
-        StrengthDegreeFit,
-        fit_model(
-            family=ModelFamily.ME,
-            constraint=Constraint.STRENGTH_DEGREE,
-            strength_out=s_out,
-            strength_in=s_in,
-            degree_out=d_out,
-            degree_in=d_in,
-            self_loops=self_loops,
-        ),
+    fit = fit_model(
+        family=ModelFamily.ME,
+        constraint=Constraint.STRENGTH_DEGREE,
+        strength_out=s_out,
+        strength_in=s_in,
+        degree_out=d_out,
+        degree_in=d_in,
+        self_loops=self_loops,
     )
-    result = filter_strength_degree_poisson(
+    result = filter_model(
         edges,
-        fit,
+        family=ModelFamily.ME,
+        constraint=Constraint.STRENGTH_DEGREE,
+        fit=fit,
         alpha=alpha,
         tail=tail,
         correction=correction,
@@ -376,27 +358,26 @@ def degree_events(
 ) -> None:
     """Fit degree-events ME, then filter against its zero-inflated null."""
     edges = read_edges(input_path)
-    node_count = int(max(edges.source.max(), edges.target.max())) + 1
-    d_out = np.zeros(node_count, dtype=np.float64)
-    d_in = np.zeros(node_count, dtype=np.float64)
+    nc = int(max(edges.source.max(), edges.target.max())) + 1
+    d_out = np.zeros(nc, dtype=np.float64)
+    d_in = np.zeros(nc, dtype=np.float64)
     for src in edges.source:
         d_out[src] += 1
     for tgt in edges.target:
         d_in[tgt] += 1
-    fit = cast(
-        DegreeEventsFit,
-        fit_model(
-            family=ModelFamily.ME,
-            constraint=Constraint.DEGREE_EVENTS,
-            degree_out=d_out,
-            degree_in=d_in,
-            total_events=int(edges.weight.sum()),
-            self_loops=self_loops,
-        ),
+    fit = fit_model(
+        family=ModelFamily.ME,
+        constraint=Constraint.DEGREE_EVENTS,
+        degree_out=d_out,
+        degree_in=d_in,
+        total_events=int(edges.weight.sum()),
+        self_loops=self_loops,
     )
-    result = filter_degree_events_poisson(
+    result = filter_model(
         edges,
-        fit,
+        family=ModelFamily.ME,
+        constraint=Constraint.DEGREE_EVENTS,
+        fit=fit,
         alpha=alpha,
         tail=tail,
         correction=correction,

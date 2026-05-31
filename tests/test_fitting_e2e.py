@@ -16,32 +16,34 @@ import warnings
 import numpy as np
 import pytest
 
-from menobis.models import (
-    fit_strength_binomial,
-    fit_strength_cost_binomial,
-    fit_strength_cost_geometric,
-    fit_strength_cost_poisson,
-    fit_strength_degree_binomial,
-    fit_strength_degree_geometric,
-    fit_strength_degree_poisson,
-    fit_strength_edges_binomial,
-    fit_strength_edges_geometric,
-    fit_strength_edges_poisson,
-    fit_strength_geometric,
-    fit_strength_poisson,
-    sample_strength_binomial,
-    sample_strength_degree_poisson,
-    sample_strength_edges_poisson,
-    sample_strength_geometric,
-    sample_strength_poisson,
+from menobis.models.fitting import (
+    _fit_strength_binomial,
+    _fit_strength_cost_binomial,
+    _fit_strength_cost_geometric,
+    _fit_strength_cost_poisson,
+    _fit_strength_degree_binomial,
+    _fit_strength_degree_geometric,
+    _fit_strength_degree_poisson,
+    _fit_strength_edges_binomial,
+    _fit_strength_edges_geometric,
+    _fit_strength_edges_poisson,
+    _fit_strength_geometric,
+    _fit_strength_poisson,
+)
+from menobis.models.generation import (
+    _sample_strength_binomial,
+    _sample_strength_degree_poisson,
+    _sample_strength_edges_poisson,
+    _sample_strength_geometric,
+    _sample_strength_poisson,
 )
 from menobis.models.partial import (
-    fit_partial_strength_binomial,
-    fit_partial_strength_cost_poisson_coordinates,
-    fit_partial_strength_degree_binomial,
-    fit_partial_strength_degree_poisson,
-    fit_partial_strength_edges_poisson,
-    fit_partial_strength_poisson,
+    _fit_partial_strength_binomial,
+    _fit_partial_strength_cost_poisson_coordinates,
+    _fit_partial_strength_degree_binomial,
+    _fit_partial_strength_degree_poisson,
+    _fit_partial_strength_edges_poisson,
+    _fit_partial_strength_poisson,
 )
 from menobis.utilities.synthetic import (
     derive_synthetic_constraints,
@@ -112,7 +114,7 @@ class TestMEStrength:
     """ME strength fitting E2E."""
 
     def test_sparse(self, sparse_constraints) -> None:
-        fit = fit_strength_poisson(
+        fit = _fit_strength_poisson(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             self_loops=False,
@@ -121,7 +123,7 @@ class TestMEStrength:
         _check_strength_recovery(fit, sparse_constraints, self_loops=False)
 
     def test_saturated(self, saturated_constraints) -> None:
-        fit = fit_strength_poisson(
+        fit = _fit_strength_poisson(
             saturated_constraints.strength_out,
             saturated_constraints.strength_in,
             self_loops=False,
@@ -134,7 +136,7 @@ class TestMEStrengthCost:
     """ME strength-cost fitting E2E."""
 
     def test_sparse(self, sparse_network, sparse_constraints) -> None:
-        fit = fit_strength_cost_poisson(
+        fit = _fit_strength_cost_poisson(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             sparse_network.x,
@@ -145,7 +147,7 @@ class TestMEStrengthCost:
         assert fit.converged
 
     def test_saturated(self, saturated_network, saturated_constraints) -> None:
-        fit = fit_strength_cost_poisson(
+        fit = _fit_strength_cost_poisson(
             saturated_constraints.strength_out,
             saturated_constraints.strength_in,
             saturated_network.x,
@@ -160,7 +162,7 @@ class TestMEStrengthEdges:
     """ME strength-edges fitting E2E."""
 
     def test_sparse(self, sparse_constraints) -> None:
-        fit = fit_strength_edges_poisson(
+        fit = _fit_strength_edges_poisson(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             sparse_constraints.total_edges,
@@ -169,7 +171,7 @@ class TestMEStrengthEdges:
         assert fit.converged
 
     def test_saturated(self, saturated_constraints) -> None:
-        fit = fit_strength_edges_poisson(
+        fit = _fit_strength_edges_poisson(
             saturated_constraints.strength_out,
             saturated_constraints.strength_in,
             saturated_constraints.total_edges,
@@ -182,7 +184,7 @@ class TestMEStrengthDegree:
     """ME strength-degree fitting E2E."""
 
     def test_sparse(self, sparse_constraints) -> None:
-        fit = fit_strength_degree_poisson(
+        fit = _fit_strength_degree_poisson(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             sparse_constraints.degree_out,
@@ -193,7 +195,7 @@ class TestMEStrengthDegree:
         assert fit.converged
 
     def test_saturated(self, saturated_constraints) -> None:
-        fit = fit_strength_degree_poisson(
+        fit = _fit_strength_degree_poisson(
             saturated_constraints.strength_out,
             saturated_constraints.strength_in,
             saturated_constraints.degree_out,
@@ -211,7 +213,7 @@ class TestBStrength:
     """B strength fitting E2E."""
 
     def test_sparse(self, sparse_constraints) -> None:
-        fit = fit_strength_binomial(
+        fit = _fit_strength_binomial(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             layers=sparse_constraints.binomial_layers,
@@ -220,7 +222,7 @@ class TestBStrength:
         assert fit.converged
 
     def test_saturated(self, saturated_constraints) -> None:
-        fit = fit_strength_binomial(
+        fit = _fit_strength_binomial(
             saturated_constraints.strength_out,
             saturated_constraints.strength_in,
             layers=saturated_constraints.binomial_layers,
@@ -233,7 +235,7 @@ class TestBStrengthCost:
     """B strength-cost fitting E2E."""
 
     def test_sparse(self, sparse_network, sparse_constraints) -> None:
-        fit = fit_strength_cost_binomial(
+        fit = _fit_strength_cost_binomial(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             sparse_network.x,
@@ -245,7 +247,7 @@ class TestBStrengthCost:
         assert fit.converged
 
     def test_saturated(self, saturated_network, saturated_constraints) -> None:
-        fit = fit_strength_cost_binomial(
+        fit = _fit_strength_cost_binomial(
             saturated_constraints.strength_out,
             saturated_constraints.strength_in,
             saturated_network.x,
@@ -261,7 +263,7 @@ class TestBStrengthEdges:
     """B strength-edges fitting E2E."""
 
     def test_sparse(self, sparse_constraints) -> None:
-        fit = fit_strength_edges_binomial(
+        fit = _fit_strength_edges_binomial(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             sparse_constraints.total_edges,
@@ -271,7 +273,7 @@ class TestBStrengthEdges:
         assert fit.converged
 
     def test_saturated(self, saturated_constraints) -> None:
-        fit = fit_strength_edges_binomial(
+        fit = _fit_strength_edges_binomial(
             saturated_constraints.strength_out,
             saturated_constraints.strength_in,
             saturated_constraints.total_edges,
@@ -285,7 +287,7 @@ class TestBStrengthDegree:
     """B strength-degree fitting E2E."""
 
     def test_sparse(self, sparse_constraints) -> None:
-        fit = fit_strength_degree_binomial(
+        fit = _fit_strength_degree_binomial(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             sparse_constraints.degree_out,
@@ -297,7 +299,7 @@ class TestBStrengthDegree:
         assert fit.converged
 
     def test_saturated(self, saturated_constraints) -> None:
-        fit = fit_strength_degree_binomial(
+        fit = _fit_strength_degree_binomial(
             saturated_constraints.strength_out,
             saturated_constraints.strength_in,
             saturated_constraints.degree_out,
@@ -316,7 +318,7 @@ class TestWStrength:
     """W strength fitting E2E."""
 
     def test_sparse(self, sparse_constraints) -> None:
-        fit = fit_strength_geometric(
+        fit = _fit_strength_geometric(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             self_loops=False,
@@ -327,7 +329,7 @@ class TestWStrength:
         assert fit.max_q < 1.0
 
     def test_saturated(self, saturated_constraints) -> None:
-        fit = fit_strength_geometric(
+        fit = _fit_strength_geometric(
             saturated_constraints.strength_out,
             saturated_constraints.strength_in,
             self_loops=False,
@@ -341,7 +343,7 @@ class TestWStrengthCost:
     """W strength-cost fitting E2E."""
 
     def test_sparse(self, sparse_network, sparse_constraints) -> None:
-        fit = fit_strength_cost_geometric(
+        fit = _fit_strength_cost_geometric(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             sparse_network.x,
@@ -352,7 +354,7 @@ class TestWStrengthCost:
         assert fit.converged
 
     def test_saturated(self, saturated_network, saturated_constraints) -> None:
-        fit = fit_strength_cost_geometric(
+        fit = _fit_strength_cost_geometric(
             saturated_constraints.strength_out,
             saturated_constraints.strength_in,
             saturated_network.x,
@@ -370,7 +372,7 @@ class TestWStrengthEdges:
     def test_sparse(self, sparse_constraints) -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            fit = fit_strength_edges_geometric(
+            fit = _fit_strength_edges_geometric(
                 sparse_constraints.strength_out,
                 sparse_constraints.strength_in,
                 sparse_constraints.total_edges,
@@ -383,7 +385,7 @@ class TestWStrengthEdges:
     def test_saturated(self, saturated_constraints) -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            fit = fit_strength_edges_geometric(
+            fit = _fit_strength_edges_geometric(
                 saturated_constraints.strength_out,
                 saturated_constraints.strength_in,
                 saturated_constraints.total_edges,
@@ -400,7 +402,7 @@ class TestWStrengthDegree:
     def test_sparse(self, sparse_constraints) -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            fit = fit_strength_degree_geometric(
+            fit = _fit_strength_degree_geometric(
                 sparse_constraints.strength_out,
                 sparse_constraints.strength_in,
                 sparse_constraints.degree_out,
@@ -415,7 +417,7 @@ class TestWStrengthDegree:
     def test_saturated(self, saturated_constraints) -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            fit = fit_strength_degree_geometric(
+            fit = _fit_strength_degree_geometric(
                 saturated_constraints.strength_out,
                 saturated_constraints.strength_in,
                 saturated_constraints.degree_out,
@@ -434,23 +436,23 @@ class TestSamplingRecovery:
     """Verify sampled networks have correct structure."""
 
     def test_me_strength_sample_positive_weights(self, sparse_constraints) -> None:
-        fit = fit_strength_poisson(
+        fit = _fit_strength_poisson(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             self_loops=False,
         )
-        sample = sample_strength_poisson(fit.x, fit.y, self_loops=False, seed=42)
+        sample = _sample_strength_poisson(fit.x, fit.y, self_loops=False, seed=42)
         assert np.all(sample.weight > 0)
         assert np.all(sample.source != sample.target)
 
     def test_b_strength_sample_positive_weights(self, sparse_constraints) -> None:
-        fit = fit_strength_binomial(
+        fit = _fit_strength_binomial(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             layers=sparse_constraints.binomial_layers,
             self_loops=False,
         )
-        sample = sample_strength_binomial(
+        sample = _sample_strength_binomial(
             fit.x,
             fit.y,
             layers=sparse_constraints.binomial_layers,
@@ -460,27 +462,27 @@ class TestSamplingRecovery:
         assert np.all(sample.weight > 0)
 
     def test_w_strength_sample_positive_weights(self, sparse_constraints) -> None:
-        fit = fit_strength_geometric(
+        fit = _fit_strength_geometric(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             self_loops=False,
         )
-        sample = sample_strength_geometric(fit.x, fit.y, self_loops=False, seed=42)
+        sample = _sample_strength_geometric(fit.x, fit.y, self_loops=False, seed=42)
         assert np.all(sample.weight > 0)
 
     def test_me_strength_edges_sample(self, sparse_constraints) -> None:
-        fit = fit_strength_edges_poisson(
+        fit = _fit_strength_edges_poisson(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             sparse_constraints.total_edges,
             self_loops=False,
         )
-        sample = sample_strength_edges_poisson(fit, seed=42)
+        sample = _sample_strength_edges_poisson(fit, seed=42)
         assert sample.num_edges > 0
         assert np.all(sample.weight > 0)
 
     def test_me_strength_degree_sample(self, sparse_constraints) -> None:
-        fit = fit_strength_degree_poisson(
+        fit = _fit_strength_degree_poisson(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             sparse_constraints.degree_out,
@@ -490,7 +492,7 @@ class TestSamplingRecovery:
         )
         if not fit.converged:
             pytest.skip("solver did not converge")
-        sample = sample_strength_degree_poisson(fit, seed=42)
+        sample = _sample_strength_degree_poisson(fit, seed=42)
         assert sample.num_edges > 0
         assert np.all(sample.weight > 0)
 
@@ -517,7 +519,7 @@ class TestPartialFitting:
         self, sparse_network, sparse_constraints, fraction
     ) -> None:
         known_src, known_tgt, known_rate = self._freeze_pairs(sparse_network, fraction)
-        result = fit_partial_strength_poisson(
+        result = _fit_partial_strength_poisson(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             known_src,
@@ -536,7 +538,7 @@ class TestPartialFitting:
         known_src, known_tgt, known_rate = self._freeze_pairs(sparse_network, fraction)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            result = fit_partial_strength_edges_poisson(
+            result = _fit_partial_strength_edges_poisson(
                 sparse_constraints.strength_out,
                 sparse_constraints.strength_in,
                 known_src,
@@ -555,7 +557,7 @@ class TestPartialFitting:
         known_src, known_tgt, known_rate = self._freeze_pairs(sparse_network, fraction)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            result = fit_partial_strength_degree_poisson(
+            result = _fit_partial_strength_degree_poisson(
                 sparse_constraints.strength_out,
                 sparse_constraints.strength_in,
                 sparse_constraints.degree_out,
@@ -574,7 +576,7 @@ class TestPartialFitting:
         self, sparse_network, sparse_constraints, fraction
     ) -> None:
         known_src, known_tgt, known_rate = self._freeze_pairs(sparse_network, fraction)
-        result = fit_partial_strength_cost_poisson_coordinates(
+        result = _fit_partial_strength_cost_poisson_coordinates(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             known_src,
@@ -593,7 +595,7 @@ class TestPartialFitting:
         self, sparse_network, sparse_constraints, fraction
     ) -> None:
         known_src, known_tgt, known_rate = self._freeze_pairs(sparse_network, fraction)
-        result = fit_partial_strength_binomial(
+        result = _fit_partial_strength_binomial(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             known_src,
@@ -612,7 +614,7 @@ class TestPartialFitting:
         known_src, known_tgt, known_rate = self._freeze_pairs(sparse_network, fraction)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            result = fit_partial_strength_degree_binomial(
+            result = _fit_partial_strength_degree_binomial(
                 sparse_constraints.strength_out,
                 sparse_constraints.strength_in,
                 sparse_constraints.degree_out,

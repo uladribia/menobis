@@ -10,10 +10,14 @@ import warnings
 import numpy as np
 import pytest
 
-from menobis.models import (
-    fit_strength_degree_binomial,
-    fit_strength_degree_geometric,
-    fit_strength_degree_poisson,
+from menobis.models.fitting import (
+    _fit_strength_degree_binomial as fit_strength_degree_binomial,
+)
+from menobis.models.fitting import (
+    _fit_strength_degree_geometric as fit_strength_degree_geometric,
+)
+from menobis.models.fitting import (
+    _fit_strength_degree_poisson as fit_strength_degree_poisson,
 )
 
 

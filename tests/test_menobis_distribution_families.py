@@ -5,17 +5,25 @@ from __future__ import annotations
 import numpy as np
 
 from menobis.data.frames import EdgeTable
-from menobis.filtering import (
-    FilterResult,
-    filter_strength_binomial,
-    filter_strength_geometric,
-    filter_strength_negative_binomial,
+from menobis.filtering.models import (
+    _filter_strength_binomial as filter_strength_binomial,
 )
-from menobis.models.fitting import fit_strength_binomial
+from menobis.filtering.models import (
+    _filter_strength_geometric as filter_strength_geometric,
+)
+from menobis.filtering.models import (
+    _filter_strength_negative_binomial as filter_strength_negative_binomial,
+)
+from menobis.filtering.types import FilterResult
+from menobis.models.fitting import _fit_strength_binomial as fit_strength_binomial
 from menobis.models.generation import (
-    sample_strength_binomial,
-    sample_strength_geometric,
-    sample_strength_negative_binomial,
+    _sample_strength_binomial as sample_strength_binomial,
+)
+from menobis.models.generation import (
+    _sample_strength_geometric as sample_strength_geometric,
+)
+from menobis.models.generation import (
+    _sample_strength_negative_binomial as sample_strength_negative_binomial,
 )
 from menobis.models.types import StrengthFit
 

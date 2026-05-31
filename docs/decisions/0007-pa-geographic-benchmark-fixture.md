@@ -17,6 +17,10 @@ All end-to-end tests and benchmarks use a canonical synthetic fixture:
 The fixture is intentionally not sampled from an MENoBiS null model. MENoBiS nulls are
 fitted afterward from derived constraints.
 
+There are three regimes: Sparse (where $s~k$), saturated (where $k ~ O(N)$) and dense (where neither of the other cases hold).
+The saturated and sparse regimes are hard for B and W families, and ME when edge related constraints are included (or degrees).
+Use by default the dense case for testing.
+
 ## Filter calibration
 
 Filtering is calibrated on samples drawn from the fitted null, not on the PA

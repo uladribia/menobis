@@ -2,8 +2,12 @@
 
 import numpy as np
 
-from menobis.models import sample_strength_stub_matching
-from menobis.models.generation import sample_strength_negative_binomial
+from menobis.models.generation import (
+    _sample_strength_negative_binomial as sample_strength_negative_binomial,
+)
+from menobis.models.generation import (
+    _sample_strength_stub_matching as sample_strength_stub_matching,
+)
 
 
 def test_stub_matching_replaces_stub_matching_name() -> None:

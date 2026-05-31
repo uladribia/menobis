@@ -2,10 +2,12 @@
 
 import numpy as np
 
-from menobis.models import (
-    fit_strength_poisson,
-    sample_strength_multinomial,
-    sample_strength_poisson,
+from menobis.models.fitting import _fit_strength_poisson as fit_strength_poisson
+from menobis.models.generation import (
+    _sample_strength_multinomial as sample_strength_multinomial,
+)
+from menobis.models.generation import (
+    _sample_strength_poisson as sample_strength_poisson,
 )
 
 

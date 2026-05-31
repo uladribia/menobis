@@ -4,12 +4,20 @@ import numpy as np
 import pytest
 
 from menobis.data.frames import normalize_probabilities
-from menobis.models import (
-    fit_degree_bernoulli,
-    fit_strength_degree_poisson,
-    fit_strength_edges_poisson,
-    fit_strength_poisson,
-    validate_strength_degree_constraints,
+from menobis.models.fitting import (
+    _fit_degree_bernoulli as fit_degree_bernoulli,
+)
+from menobis.models.fitting import (
+    _fit_strength_degree_poisson as fit_strength_degree_poisson,
+)
+from menobis.models.fitting import (
+    _fit_strength_edges_poisson as fit_strength_edges_poisson,
+)
+from menobis.models.fitting import (
+    _fit_strength_poisson as fit_strength_poisson,
+)
+from menobis.models.fitting import (
+    _validate_strength_degree_constraints as validate_strength_degree_constraints,
 )
 
 

@@ -211,7 +211,7 @@ def _solve_positive_binomial_rate(positive_mean: float, layers: int) -> float:
     return 0.5 * (lo + hi)
 
 
-def validate_strength_degree_constraints(
+def _validate_strength_degree_constraints(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     degree_out: NDArray[np.floating],
@@ -248,7 +248,7 @@ def validate_strength_degree_constraints(
         raise ValueError(msg)
 
 
-def fit_strength_cost_poisson(
+def _fit_strength_cost_poisson(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     x: NDArray[np.floating],
@@ -310,7 +310,7 @@ def fit_strength_cost_poisson(
     return result
 
 
-def fit_strength_cost_binomial(
+def _fit_strength_cost_binomial(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     x: NDArray[np.floating],
@@ -440,7 +440,7 @@ def _fit_strength_cost_w_coordinates(
     return result
 
 
-def fit_strength_cost_geometric(
+def _fit_strength_cost_geometric(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     x: NDArray[np.floating],
@@ -471,7 +471,7 @@ def fit_strength_cost_geometric(
     )
 
 
-def fit_strength_cost_negative_binomial(
+def _fit_strength_cost_negative_binomial(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     x: NDArray[np.floating],
@@ -503,7 +503,7 @@ def fit_strength_cost_negative_binomial(
     )
 
 
-def fit_strength_edges_poisson(
+def _fit_strength_edges_poisson(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     target_edges: float,
@@ -617,7 +617,7 @@ def _wrap_w_strength_edges_fit(
     )
 
 
-def fit_strength_edges_geometric(
+def _fit_strength_edges_geometric(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     target_edges: float,
@@ -656,7 +656,7 @@ def fit_strength_edges_geometric(
     return result
 
 
-def fit_strength_edges_negative_binomial(
+def _fit_strength_edges_negative_binomial(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     target_edges: float,
@@ -766,7 +766,7 @@ def _wrap_w_strength_degree_fit(
     )
 
 
-def fit_strength_degree_geometric(
+def _fit_strength_degree_geometric(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     degree_out: NDArray[np.floating],
@@ -782,7 +782,7 @@ def fit_strength_degree_geometric(
     s_in = np.asarray(strength_in, dtype=np.float64)
     k_out = np.asarray(degree_out, dtype=np.float64)
     k_in = np.asarray(degree_in, dtype=np.float64)
-    validate_strength_degree_constraints(s_out, s_in, k_out, k_in)
+    _validate_strength_degree_constraints(s_out, s_in, k_out, k_in)
     t0 = time.perf_counter()
     result = _wrap_w_strength_degree_fit(
         _menobis.fit_strength_degree_geometric(
@@ -807,7 +807,7 @@ def fit_strength_degree_geometric(
     return result
 
 
-def fit_strength_degree_negative_binomial(
+def _fit_strength_degree_negative_binomial(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     degree_out: NDArray[np.floating],
@@ -827,7 +827,7 @@ def fit_strength_degree_negative_binomial(
     s_in = np.asarray(strength_in, dtype=np.float64)
     k_out = np.asarray(degree_out, dtype=np.float64)
     k_in = np.asarray(degree_in, dtype=np.float64)
-    validate_strength_degree_constraints(s_out, s_in, k_out, k_in)
+    _validate_strength_degree_constraints(s_out, s_in, k_out, k_in)
     t0 = time.perf_counter()
     result = _wrap_w_strength_degree_fit(
         _menobis.fit_strength_degree_negative_binomial(
@@ -853,7 +853,7 @@ def fit_strength_degree_negative_binomial(
     return result
 
 
-def fit_strength_degree_poisson(
+def _fit_strength_degree_poisson(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     degree_out: NDArray[np.floating],
@@ -887,7 +887,7 @@ def fit_strength_degree_poisson(
     s_in = np.asarray(strength_in, dtype=np.float64)
     k_out = np.asarray(degree_out, dtype=np.float64)
     k_in = np.asarray(degree_in, dtype=np.float64)
-    validate_strength_degree_constraints(s_out, s_in, k_out, k_in)
+    _validate_strength_degree_constraints(s_out, s_in, k_out, k_in)
 
     t0 = time.perf_counter()
     x_list, y_list, z_list, w_list, converged, iters = (
@@ -928,7 +928,7 @@ def fit_strength_degree_poisson(
     return result
 
 
-def fit_strength_poisson(
+def _fit_strength_poisson(
     strength_out: NDArray[np.integer] | NDArray[np.floating],
     strength_in: NDArray[np.integer] | NDArray[np.floating],
     *,
@@ -1049,7 +1049,7 @@ def _wrap_w_strength_fit(
     )
 
 
-def fit_strength_geometric(
+def _fit_strength_geometric(
     strength_out: NDArray[np.integer] | NDArray[np.floating],
     strength_in: NDArray[np.integer] | NDArray[np.floating],
     *,
@@ -1081,7 +1081,7 @@ def fit_strength_geometric(
     return result
 
 
-def fit_strength_negative_binomial(
+def _fit_strength_negative_binomial(
     strength_out: NDArray[np.integer] | NDArray[np.floating],
     strength_in: NDArray[np.integer] | NDArray[np.floating],
     *,
@@ -1187,7 +1187,7 @@ def _wrap_w_strength_cost_fit(
     )
 
 
-def fit_degree_bernoulli(
+def _fit_degree_bernoulli(
     degree_out: NDArray[np.floating],
     degree_in: NDArray[np.floating],
     *,
@@ -1265,7 +1265,7 @@ def fit_degree_bernoulli(
     return result
 
 
-def fit_strength_binomial(
+def _fit_strength_binomial(
     strength_out: NDArray[np.integer] | NDArray[np.floating],
     strength_in: NDArray[np.integer] | NDArray[np.floating],
     *,
@@ -1324,7 +1324,7 @@ def fit_strength_binomial(
     )
 
 
-def fit_strength_edges_binomial(
+def _fit_strength_edges_binomial(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     target_edges: float,
@@ -1378,7 +1378,7 @@ def fit_strength_edges_binomial(
     return result
 
 
-def fit_strength_degree_binomial(
+def _fit_strength_degree_binomial(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     degree_out: NDArray[np.floating],
@@ -1395,7 +1395,7 @@ def fit_strength_degree_binomial(
     s_in = np.asarray(strength_in, dtype=np.float64)
     k_out = np.asarray(degree_out, dtype=np.float64)
     k_in = np.asarray(degree_in, dtype=np.float64)
-    validate_strength_degree_constraints(s_out, s_in, k_out, k_in)
+    _validate_strength_degree_constraints(s_out, s_in, k_out, k_in)
     _validate_binomial_feasibility(s_out, s_in, layers, self_loops=self_loops)
     t0 = time.perf_counter()
     x_list, y_list, z_list, w_list, converged, iters = (
@@ -1438,7 +1438,7 @@ def fit_strength_degree_binomial(
     return result
 
 
-def fit_degree_events_poisson(
+def _fit_degree_events_poisson(
     degree_out: NDArray[np.floating],
     degree_in: NDArray[np.floating],
     total_events: int,
@@ -1485,7 +1485,7 @@ def fit_degree_events_poisson(
     )
 
 
-def fit_degree_events_binomial(
+def _fit_degree_events_binomial(
     degree_out: NDArray[np.floating],
     degree_in: NDArray[np.floating],
     total_events: int,
@@ -1537,7 +1537,7 @@ def fit_degree_events_binomial(
     )
 
 
-def fit_degree_events_geometric(
+def _fit_degree_events_geometric(
     degree_out: NDArray[np.floating],
     degree_in: NDArray[np.floating],
     total_events: int,
@@ -1608,7 +1608,7 @@ def fit_degree_events_geometric(
     )
 
 
-def fit_degree_events_negative_binomial(
+def _fit_degree_events_negative_binomial(
     degree_out: NDArray[np.floating],
     degree_in: NDArray[np.floating],
     total_events: int,
@@ -1694,26 +1694,4 @@ __all__ = [
     "StrengthDegreeFit",
     "StrengthEdgesFit",
     "StrengthFit",
-    "fit_degree_bernoulli",
-    "fit_degree_events_binomial",
-    "fit_degree_events_geometric",
-    "fit_degree_events_negative_binomial",
-    "fit_degree_events_poisson",
-    "fit_strength_binomial",
-    "fit_strength_cost_binomial",
-    "fit_strength_cost_geometric",
-    "fit_strength_cost_negative_binomial",
-    "fit_strength_cost_poisson",
-    "fit_strength_degree_binomial",
-    "fit_strength_degree_geometric",
-    "fit_strength_degree_negative_binomial",
-    "fit_strength_degree_poisson",
-    "fit_strength_edges_binomial",
-    "fit_strength_edges_geometric",
-    "fit_strength_edges_negative_binomial",
-    "fit_strength_edges_poisson",
-    "fit_strength_geometric",
-    "fit_strength_negative_binomial",
-    "fit_strength_poisson",
-    "validate_strength_degree_constraints",
 ]

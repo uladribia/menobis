@@ -97,7 +97,7 @@ def _to_partial_result(
 # ---------------------------------------------------------------------------
 
 
-def fit_partial_strength_poisson(
+def _fit_partial_strength_poisson(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
@@ -140,7 +140,7 @@ def fit_partial_strength_poisson(
     )
 
 
-def fit_partial_degree_poisson(
+def _fit_partial_degree_poisson(
     degree_out: NDArray[np.floating],
     degree_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
@@ -179,7 +179,7 @@ def fit_partial_degree_poisson(
     )
 
 
-def fit_partial_strength_degree_poisson(
+def _fit_partial_strength_degree_poisson(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     degree_out: NDArray[np.floating],
@@ -227,7 +227,7 @@ def fit_partial_strength_degree_poisson(
     )
 
 
-def fit_partial_strength_edges_poisson(
+def _fit_partial_strength_edges_poisson(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
@@ -271,7 +271,7 @@ def fit_partial_strength_edges_poisson(
     )
 
 
-def fit_partial_strength_cost_poisson_coordinates(
+def _fit_partial_strength_cost_poisson_coordinates(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
@@ -388,7 +388,7 @@ def _partial_family_coordinate(
     )
 
 
-def fit_partial_strength_cost_binomial_coordinates(
+def _fit_partial_strength_cost_binomial_coordinates(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
@@ -429,7 +429,7 @@ def fit_partial_strength_cost_binomial_coordinates(
     )
 
 
-def fit_partial_strength_cost_geometric_coordinates(
+def _fit_partial_strength_cost_geometric_coordinates(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
@@ -468,7 +468,7 @@ def fit_partial_strength_cost_geometric_coordinates(
     )
 
 
-def fit_partial_strength_cost_negative_binomial_coordinates(
+def _fit_partial_strength_cost_negative_binomial_coordinates(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
@@ -513,7 +513,7 @@ def fit_partial_strength_cost_negative_binomial_coordinates(
 # ---------------------------------------------------------------------------
 
 
-def fit_partial_strength_binomial(
+def _fit_partial_strength_binomial(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
@@ -559,7 +559,7 @@ def fit_partial_strength_binomial(
     )
 
 
-def fit_partial_strength_edges_binomial(
+def _fit_partial_strength_edges_binomial(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
@@ -607,7 +607,7 @@ def fit_partial_strength_edges_binomial(
     )
 
 
-def fit_partial_strength_degree_binomial(
+def _fit_partial_strength_degree_binomial(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     degree_out: NDArray[np.floating],
@@ -662,7 +662,7 @@ def fit_partial_strength_degree_binomial(
 # ---------------------------------------------------------------------------
 
 
-def fit_partial_strength_geometric(
+def _fit_partial_strength_geometric(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
@@ -707,7 +707,7 @@ def fit_partial_strength_geometric(
     )
 
 
-def fit_partial_strength_degree_geometric(
+def _fit_partial_strength_degree_geometric(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     degree_out: NDArray[np.floating],
@@ -756,7 +756,7 @@ def fit_partial_strength_degree_geometric(
     )
 
 
-def fit_partial_strength_edges_geometric(
+def _fit_partial_strength_edges_geometric(
     strength_out: NDArray[np.floating],
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
@@ -808,7 +808,7 @@ def fit_partial_strength_edges_geometric(
 # ---------------------------------------------------------------------------
 
 
-def fit_from_network_cutoff(
+def _fit_from_network_cutoff(
     edges: EdgeTable,
     cutoff: float,
     model: str = "strength",
@@ -828,7 +828,7 @@ def fit_from_network_cutoff(
     known_rate = edges.weight[heavy].astype(np.float64)
 
     if model == "strength":
-        return fit_partial_strength_poisson(
+        return _fit_partial_strength_poisson(
             s.out.astype(np.float64),
             s.incoming.astype(np.float64),
             known_source,
@@ -840,7 +840,7 @@ def fit_from_network_cutoff(
         )
     if model == "degree":
         k = directed_degrees(edges)
-        return fit_partial_degree_poisson(
+        return _fit_partial_degree_poisson(
             k.out.astype(np.float64),
             k.incoming.astype(np.float64),
             known_source,
@@ -851,7 +851,7 @@ def fit_from_network_cutoff(
         )
     if model == "strength-degree":
         k = directed_degrees(edges)
-        return fit_partial_strength_degree_poisson(
+        return _fit_partial_strength_degree_poisson(
             s.out.astype(np.float64),
             s.incoming.astype(np.float64),
             k.out.astype(np.float64),
@@ -864,7 +864,7 @@ def fit_from_network_cutoff(
             max_iterations=max_iterations,
         )
     if model == "strength-edges":
-        return fit_partial_strength_edges_poisson(
+        return _fit_partial_strength_edges_poisson(
             s.out.astype(np.float64),
             s.incoming.astype(np.float64),
             known_source,
@@ -893,7 +893,7 @@ def fit_from_network_cutoff(
                     )
                 )
             )
-        return fit_partial_strength_cost_poisson_coordinates(
+        return _fit_partial_strength_cost_poisson_coordinates(
             s.out.astype(np.float64),
             s.incoming.astype(np.float64),
             known_source,
@@ -912,23 +912,3 @@ def fit_from_network_cutoff(
         "'strength-edges', or 'strength-cost'."
     )
     raise ValueError(msg)
-
-
-__all__ = [
-    "PartialFitResult",
-    "fit_from_network_cutoff",
-    "fit_partial_degree_poisson",
-    "fit_partial_strength_binomial",
-    "fit_partial_strength_cost_binomial_coordinates",
-    "fit_partial_strength_cost_geometric_coordinates",
-    "fit_partial_strength_cost_negative_binomial_coordinates",
-    "fit_partial_strength_cost_poisson_coordinates",
-    "fit_partial_strength_degree_binomial",
-    "fit_partial_strength_degree_geometric",
-    "fit_partial_strength_degree_poisson",
-    "fit_partial_strength_edges_binomial",
-    "fit_partial_strength_edges_geometric",
-    "fit_partial_strength_edges_poisson",
-    "fit_partial_strength_geometric",
-    "fit_partial_strength_poisson",
-]

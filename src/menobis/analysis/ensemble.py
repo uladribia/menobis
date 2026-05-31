@@ -4,12 +4,19 @@ Example:
 -------
 ```python
 from menobis.analysis import directed_strengths, ensemble_average
-from menobis.models import fit_strength_poisson, sample_strength_poisson
+from menobis.routing import fit_model, sample_model
+from menobis.models import Constraint, ModelFamily
 
-result = fit_strength_poisson(s_out, s_in)
+result = fit_model(
+    family=ModelFamily.ME, constraint=Constraint.STRENGTH,
+    strength_out=s_out, strength_in=s_in,
+)
 
 def generate(seed: int):
-    return sample_strength_poisson(result.x, result.y, seed=seed)
+    return sample_model(
+        family=ModelFamily.ME, constraint=Constraint.STRENGTH,
+        fit=result, seed=seed,
+    )
 
 mean, std = ensemble_average(
     generate=generate,

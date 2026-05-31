@@ -7,16 +7,32 @@ NaN/Inf, unbalanced sequences, capacity overflow, bad coordinates, etc.
 import numpy as np
 import pytest
 
-from menobis.models import (
-    fit_strength_binomial,
-    fit_strength_cost_geometric,
-    fit_strength_cost_poisson,
-    fit_strength_edges_binomial,
-    fit_strength_edges_geometric,
-    fit_strength_edges_poisson,
-    fit_strength_geometric,
-    fit_strength_poisson,
-    validate_strength_degree_constraints,
+from menobis.models.fitting import (
+    _fit_strength_binomial as fit_strength_binomial,
+)
+from menobis.models.fitting import (
+    _fit_strength_cost_geometric as fit_strength_cost_geometric,
+)
+from menobis.models.fitting import (
+    _fit_strength_cost_poisson as fit_strength_cost_poisson,
+)
+from menobis.models.fitting import (
+    _fit_strength_edges_binomial as fit_strength_edges_binomial,
+)
+from menobis.models.fitting import (
+    _fit_strength_edges_geometric as fit_strength_edges_geometric,
+)
+from menobis.models.fitting import (
+    _fit_strength_edges_poisson as fit_strength_edges_poisson,
+)
+from menobis.models.fitting import (
+    _fit_strength_geometric as fit_strength_geometric,
+)
+from menobis.models.fitting import (
+    _fit_strength_poisson as fit_strength_poisson,
+)
+from menobis.models.fitting import (
+    _validate_strength_degree_constraints as validate_strength_degree_constraints,
 )
 
 

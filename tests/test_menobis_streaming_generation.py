@@ -2,12 +2,16 @@
 
 import numpy as np
 
-from menobis.models import (
-    StrengthCostFit,
-    sample_strength_cost_poisson,
-    sample_strength_multinomial,
-    sample_strength_poisson,
+from menobis.models.generation import (
+    _sample_strength_cost_poisson as sample_strength_cost_poisson,
 )
+from menobis.models.generation import (
+    _sample_strength_multinomial as sample_strength_multinomial,
+)
+from menobis.models.generation import (
+    _sample_strength_poisson as sample_strength_poisson,
+)
+from menobis.models.types import StrengthCostFit
 
 
 def test_factorized_poisson_generation_scales_to_1000_nodes() -> None:

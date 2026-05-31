@@ -9,7 +9,10 @@ from menobis.analysis import (
     ensemble_average,
     ensemble_scalar_average,
 )
-from menobis.models import fit_strength_poisson, sample_strength_poisson
+from menobis.models.fitting import _fit_strength_poisson as fit_strength_poisson
+from menobis.models.generation import (
+    _sample_strength_poisson as sample_strength_poisson,
+)
 
 
 def _gen(n: int, total: int):
