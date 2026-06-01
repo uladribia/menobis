@@ -22,7 +22,7 @@ indistinguishable events (W).
 | `cff-version` | `1.2.0` |
 | `title` | `MENoBiS: Max Entropy NOn Binary Suite` |
 | `type` | `software` |
-| `version` | `1.0.0` |
+| `version` | `1.0.1` |
 | `license` | `GPL-3.0-or-later` |
 | `repository-code` | `https://github.com/uladribia/menobis` |
 | `url` | `https://uladribia.github.io/menobis/` |

@@ -7,6 +7,12 @@ maximum-entropy null models of directed non-binary networks. It fits constraints
 samples null networks, filters statistically significant node pairs, and computes
 network magnitudes.
 
+## Agentic coding disclosure
+
+MENoBiS was coded and documented with help from agentic coding workflows using
+the Pi coding agent and several LLM providers. Human maintainers directed,
+reviewed, tested, and accepted the changes.
+
 ## Install for development
 
 ```bash

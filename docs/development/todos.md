@@ -6,7 +6,7 @@ description: Prioritized pending work for MENoBiS.
 
 ## TL;DR
 
-The public documentation release is complete for MENoBiS `1.0.0`. Remaining
+The public documentation release is complete for MENoBiS `1.0.1`. Remaining
 work focuses on solver robustness, benchmark reporting, packaging, and extension
 walkthroughs.
 
@@ -17,7 +17,7 @@ walkthroughs.
 | GitHub Pages site | completed for `https://uladribia.github.io/menobis/` |
 | Rendered and downloadable notebook | completed: `docs/examples/main-use-cases.ipynb` |
 | User-first docs structure | completed: tutorials, model selection, reference, development |
-| Public version metadata | completed for release `1.0.0` |
+| Public version metadata | completed for release `1.0.1` |
 | Strict docs build | required before every release |
 
 !!! note "Release follow-up"

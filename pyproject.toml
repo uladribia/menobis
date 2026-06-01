@@ -1,6 +1,6 @@
 [project]
 name = "MENoBiS"
-version = "1.0.0"
+version = "1.0.1"
 description = "Max Entropy NOn Binary Suite for null modeling in Rust and Python"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"

@@ -15,6 +15,11 @@ network-magnitude checks.
     $t_{ij}\in\{0,1,2,\ldots\}$. Weighted, multi-edge, and aggregated binary
     interpretations are different event families, not synonyms.
 
+!!! info "Agentic coding disclosure"
+    MENoBiS was coded and documented with help from agentic coding workflows
+    using the Pi coding agent and several LLM providers. Human maintainers
+    directed, reviewed, tested, and accepted the changes.
+
 ## Why MENoBiS?
 
 Origin-destination matrices and other non-binary networks often have strong
