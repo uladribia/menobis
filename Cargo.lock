@@ -95,7 +95,7 @@ dependencies = [
 
 [[package]]
 name = "menobis-core"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "rand",
  "rand_distr",
@@ -105,7 +105,7 @@ dependencies = [
 
 [[package]]
 name = "menobis-python"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "menobis-core",
  "pyo3",

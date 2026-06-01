@@ -67,5 +67,4 @@ solver is conforming.
   metric as supported core functionality.
 
 See [Network Metrics](network-metrics.md) for optional graph-library extension
-recipes and [Ontology conformance audit](../development/ontology-conformance-audit.md)
-for current gaps.
+recipes and [TODOs](../development/todos.md) for current gaps.

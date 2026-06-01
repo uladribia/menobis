@@ -1,71 +1,75 @@
 ---
-description: Python API for MENoBiS statistical filtering.
+description: Python filtering result types and options.
 ---
 
 # Filtering API
 
 ## TL;DR
 
-Filtering compares observed edges with a fitted independent null model and
-returns upper, lower, compatible, and absent-edge tables. It should use the same
-pair-provider math as generation.
+`filter_model` compares an observed sparse `EdgeTable` with a fitted independent
+null model and returns sparse edge subsets with p-values and expectations.
 
-## Function groups
+## Entry point
 
-| Group | Functions |
+```python
+from menobis.filtering import filter_model
+
+result = filter_model(
+    edges,
+    family=ModelFamily.ME,
+    constraint=Constraint.STRENGTH,
+    fit=fit,
+    alpha=0.05,
+    tail="two-sided",
+)
+```
+
+Strength-cost filtering also needs coordinates:
+
+```python
+result = filter_model(
+    edges,
+    family=ModelFamily.ME,
+    constraint=Constraint.STRENGTH_COST,
+    fit=fit,
+    coord_x=x,
+    coord_y=y,
+)
+```
+
+## Options
+
+| Option | Default | Meaning |
+|---|---:|---|
+| `alpha` | `0.05` | significance level |
+| `tail` | `two-sided` | `upper`, `lower`, or `two-sided` |
+| `correction` | `none` | `none`, `bonferroni`, or `fdr` |
+| `detect_absent` | `False` | scan zero-weight candidate pairs |
+| `min_occupation` | `0.5` | absent-pair occupation threshold |
+| `min_expected` | `0.0` | absent-pair expected-weight threshold |
+| `max_absent` | `None` | cap absent output |
+
+## Result shape
+
+```python
+result.upper
+result.lower
+result.compatible
+result.absent_lower
+```
+
+Each field is a `FilteredEdges` object with:
+
+| Field | Meaning |
 |---|---|
-| ME strength/cost/binary | `filter_strength_poisson`, `filter_strength_cost_poisson`, `filter_strength_edges_poisson`, `filter_strength_degree_poisson`, `filter_degree_events_poisson` |
-| B | `filter_strength_binomial`, `filter_strength_cost_binomial`, `filter_strength_edges_binomial`, `filter_strength_degree_binomial`, `filter_degree_events_binomial` |
-| W | `filter_strength_geometric`, `filter_strength_negative_binomial`, `filter_strength_cost_geometric`, `filter_strength_cost_negative_binomial`, zero-inflated W filters |
-| Custom/partial | `filter_custom_poisson` over sparse expected-rate tables |
+| `edges` | sparse edge table |
+| `upper_pvalue` | upper-tail p-values |
+| `lower_pvalue` | lower-tail p-values |
+| `expected` | null expected occupation |
+| `occupation` | null probability of positive occupation |
 
-Independent-strength filters accept raw `x`, `y` multipliers. Multi-parameter
-models, including degree-events filters, accept fitted result objects so `family`,
-`layers`, `self_loops`, and positive-weight parameters stay consistent.
+## Supported constraints
 
-## Common options
-
-| Parameter | Type | Default |
-|---|---|---|
-| `alpha` | `float` | `0.05` |
-| `tail` | `"upper"`, `"lower"`, `"two-sided"` | `"two-sided"` |
-| `correction` | `"none"`, `"bonferroni"`, `"fdr"` | `"none"` |
-| `detect_absent` | `bool` | `False` |
-| `min_occupation` | `float` | `0.5` |
-| `min_expected` | `float` | `0.0` |
-| `max_absent` | `int | None` | `None` |
-
-## Result types
-
-```python
-@dataclass(frozen=True)
-class FilterResult:
-    upper: FilteredEdges
-    lower: FilteredEdges
-    compatible: FilteredEdges
-    absent_lower: FilteredEdges
-    alpha: float
-    tail: Tail
-    correction: Correction
-```
-
-`FilteredEdges` stores the sparse `EdgeTable`, p-values, expected weights, and
-occupation probabilities.
-
-## Example
-
-```python
-from menobis.filtering import filter_strength_poisson
-from menobis.data.io import read_edges
-
-edges = read_edges("network.csv")
-result = filter_strength_poisson(edges, alpha=0.05, detect_absent=True)
-
-print(len(result.upper.edges), len(result.lower.edges))
-```
-
-## Conformance note
-
-Degree-events generation and filtering read ME/B/W positive-weight parameters
-from `DegreeEventsFit`. Low-level PyO3 bindings still expose primitive arrays for
-internal wrappers; see the [Ontology conformance audit](../development/ontology-conformance-audit.md).
+Filtering is for independent grand-canonical nulls: strength, strength-cost,
+strength-edges, strength-degree, degree-events, and sparse custom/partial Poisson
+rates through lower-level wrappers.

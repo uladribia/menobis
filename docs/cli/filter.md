@@ -42,7 +42,7 @@ menobis filter custom-poisson edges.csv --rates rates.csv --output-prefix filter
 | `compatible.csv` | observed edges compatible with the null |
 | `absent_lower.csv` | absent pairs that should exist under the null |
 
-Each file contains p-values, expected weight, and occupation probability.
+Each file contains p-values, expected occupation, and occupation probability.
 
 ## Options
 
@@ -57,6 +57,6 @@ Each file contains p-values, expected weight, and occupation probability.
 | `--max-absent` | cap absent output size |
 | `--self-loops/--no-self-loops` | diagonal handling |
 | `--target-edges` | target edge count (strength-edges-poisson) |
-| `--target-cost` | target average cost (strength-cost-poisson) |
+| `--target-cost` | target total cost $\sum t_{ij}d_{ij}$ (strength-cost-poisson) |
 | `--coordinates` | Projected XY coordinate CSV path (strength-cost-poisson) |
 | `--rates` | rates CSV path (custom-poisson) |

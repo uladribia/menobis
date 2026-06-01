@@ -1,7 +1,8 @@
 site_name: MENoBiS
 site_description: Max Entropy NOn Binary Suite for null modeling
-repo_url: ''
-edit_uri: ''
+site_url: https://uladribia.github.io/menobis/
+repo_url: https://github.com/uladribia/menobis
+edit_uri: edit/master/docs/
 
 theme:
   name: material
@@ -14,66 +15,55 @@ theme:
     - content.code.copy
 
 nav:
-  - Home: index.md
-  - Thesis Context: thesis-context.md
-  - Getting Started: getting-started.md
-  - Concepts:
-      - Non-binary Networks: concepts/non-binary-networks.md
-      - Maximum Entropy Models: concepts/maximum-entropy-models.md
-      - Thesis Cases: concepts/thesis-cases.md
-      - Spatial Costs: concepts/spatial-costs.md
-      - Cost Constraints: concepts/costs.md
-      - W Ensemble: concepts/w-ensemble.md
-      - Partial Constraints: concepts/partial-constraints.md
-      - Statistical Filtering: concepts/statistical-filtering.md
-      - Ensembles: concepts/ensembles.md
-  - API:
-      - Python: api/python.md
-      - Rust: api/rust.md
-      - Network Metrics: api/network-metrics.md
-      - Filtering: api/filtering.md
-  - CLI:
-      - Analyze: cli/analyze.md
-      - Fit: cli/fit.md
-      - Generate: cli/generate.md
-      - Filter: cli/filter.md
-      - Convert: cli/convert.md
+  - Start here:
+      - Home: index.md
+      - Getting started: getting-started.md
+      - Main use cases: examples/main-use-cases.ipynb
+      - Thesis and citations: thesis-context.md
+  - Tutorials:
+      - Filter a network: tutorials/filter-network.md
+      - Sample ensemble magnitudes: tutorials/sample-ensemble-magnitudes.md
+      - Use spatial costs: tutorials/use-spatial-costs.md
+  - Model selection and maths:
+      - Choose a null model: concepts/choose-null-model.md
+      - Equations: concepts/equations.md
+      - Partial constraints: concepts/partial-constraints.md
+      - Solvers and scaling: concepts/solvers-and-scaling.md
+      - Filtering statistics: concepts/filtering.md
+  - Reference:
+      - Python API: api/python.md
+      - File formats: api/file-formats.md
+      - Filtering API: api/filtering.md
+      - Network metrics: api/network-metrics.md
+      - Rust API: api/rust.md
+      - CLI:
+          - Fit: cli/fit.md
+          - Generate: cli/generate.md
+          - Filter: cli/filter.md
   - Development:
+      - Extending thesis cases: development/extending-thesis-cases.md
       - Testing: development/testing.md
       - Benchmarking: development/benchmarking.md
-      - Benchmark Results: development/benchmark-results.md
       - Scalability: development/scalability.md
-      - v2 Readiness Audit: development/v2-readiness-audit.md
-      - Ontology Conformance Audit: development/ontology-conformance-audit.md
-      - Contributing and Extending: development/contributing-and-extending.md
-      - Fetching Real-World Data: development/fetching-data.md
-      - Release Process: development/release-process.md
-  - Decisions:
-      - Rust and Python Architecture: decisions/0001-rust-python-architecture.md
-      - Streaming Generation: decisions/0002-streaming-generation.md
-      - Provider Pipeline: decisions/0003-provider-pipeline.md
-      - W Conic Solver Boundary: decisions/0004-w-conic-solver-boundary.md
-      - Fitting Failure Policy: decisions/0005-fitting-failure-policy.md
-      - PA Geographic Benchmark Fixture: decisions/0007-pa-geographic-benchmark-fixture.md
-      - Saturation Peeling: decisions/0008-saturation-peeling.md
-      - External Graph Libraries: decisions/0009-external-graph-libraries.md
-      - Python Domain Layout: decisions/0010-python-domain-layout.md
-      - Archive Legacy Thesis Folders: decisions/0011-archive-legacy-thesis-folders.md
-      - Solver Performance Optimization: decisions/0012-solver-performance-optimization.md
-      - Project Rename to MENoBiS: decisions/0013-project-rename.md
-      - Sparse Pair Mask: decisions/0014-sparse-pair-mask.md
-      - Unified Routing API: decisions/0015-unified-routing-api.md
-      - Unified Verb Router: decisions/0016-unified-verb-router.md
-      - PyO3 Binding Split: decisions/0017-pyo3-binding-split.md
+      - Fetching real-world data: development/fetching-data.md
+      - Release process: development/release-process.md
+      - TODOs: development/todos.md
 
 plugins:
   - search
+  - mkdocs-jupyter:
+      execute: false
+      include_source: true
   - mkdocstrings
 
 markdown_extensions:
   - admonition
   - pymdownx.details
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.arithmatex:
       generic: true
   - attr_list
@@ -81,3 +71,4 @@ markdown_extensions:
 
 extra_javascript:
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+  - https://unpkg.com/mermaid@10/dist/mermaid.min.js

@@ -2,66 +2,59 @@
 
 ## TL;DR
 
-MENoBiS (**Max Entropy NOn Binary Suite**) is a Rust + Python suite
-for null modeling of directed, weighted non-binary networks. It fits model
-parameters, samples null networks, and filters statistically significant edges.
+MENoBiS (**Max Entropy NOn Binary Suite**) is a Rust + Python library for
+maximum-entropy null models of directed non-binary networks. It fits constraints,
+samples null networks, filters statistically significant node pairs, and computes
+network magnitudes.
 
 ## Install for development
 
 ```bash
-git clone <repo-url> MENoBiS
-cd MENoBiS
+git clone https://github.com/uladribia/menobis.git
+cd menobis
 uv sync
 uv run maturin develop --release -m crates/menobis-python/Cargo.toml
 ```
 
-## Quickstart: Python
+## Python quickstart
+
+Use feasible constraints derived from a network:
 
 ```python
-import numpy as np
-from menobis.models import fit_strength_poisson, sample_strength_poisson
+from menobis.analysis import directed_strengths
+from menobis.models import Constraint, ModelFamily, fit_model, sample_model
+from menobis.utilities.synthetic import generate_pa_geographic_network
 
-strength_out = np.array([10.0, 20.0, 30.0])
-strength_in = np.array([15.0, 25.0, 20.0])
+network = generate_pa_geographic_network(30, average_degree=6.0, seed=7)
+strengths = directed_strengths(network.edges)
 
-fit = fit_strength_poisson(strength_out, strength_in)
-sample = sample_strength_poisson(fit.x, fit.y, seed=42)
+fit = fit_model(
+    family=ModelFamily.ME,
+    constraint=Constraint.STRENGTH,
+    strength_out=strengths.out,
+    strength_in=strengths.incoming,
+    self_loops=False,
+)
 
-print(sample.source, sample.target, sample.weight)
+sample = sample_model(
+    family=ModelFamily.ME,
+    constraint=Constraint.STRENGTH,
+    fit=fit,
+    seed=42,
+)
 ```
 
-## Quickstart: CLI
+## CLI quickstart
 
 ```bash
 uv run menobis --help
-uv run menobis analyze strengths tests/sample.tr --json
-uv run menobis fit strength-poisson tests/sample.tr --json
-uv run menobis generate strength-poisson tests/sample.tr --output sample.csv
-uv run menobis filter strength-poisson tests/sample.tr --alpha 0.05
+uv run python scripts/fetch_data.py download openflights
+uv run python scripts/evaluate_real_data.py openflights \
+  --families me,b --constraints strength --sample --filter-samples 3
+uv run menobis fit strength-poisson data/openflights.csv --json
+uv run menobis generate strength-poisson data/openflights.csv --output sample.csv
+uv run menobis filter strength-poisson data/openflights.csv --output-prefix filtered/
 ```
-
-## Model families
-
-| Family | Weight law | Typical use |
-|---|---|---|
-| ME | Poisson / multinomial | Multi-edge distinguishable events |
-| B | Binomial(M) | Bounded layer/event count |
-| W | Geometric / negative-binomial | Weighted non-binary null models |
-
-Supported constraints include strengths, degree-events, strengths plus total
-edges, strengths plus degrees, and strengths plus cost.
-
-## Benchmarks
-
-Run repository benchmarks without installing a MENoBiS benchmark entry point:
-
-```bash
-uv run python -m benchmarks fit --nodes 100 --families me,b,w,wnb \
-  --constraints strength --output benchmarks/results/example
-```
-
-Large all-case runs are expensive. Run them in chunks and keep benchmark code in
-`benchmarks/`, not under `src/menobis`.
 
 ## Documentation
 
@@ -70,29 +63,29 @@ uv run mkdocs serve
 uv run mkdocs build --strict
 ```
 
-Start with:
+Public documentation starts at `docs/index.md` and is published to:
 
-- `docs/getting-started.md`
-- `docs/concepts/maximum-entropy-models.md`
-- `docs/development/benchmarking.md`
-- `docs/development/contributing-and-extending.md`
+<https://uladribia.github.io/menobis/>
+
+## Model families
+
+| Family | Meaning | Pair law |
+|---|---|---|
+| ME | distinguishable events | Poisson |
+| B | bounded aggregated binary layers | Binomial(M) |
+| W | indistinguishable events | geometric / negative-binomial |
 
 ## Repository layout
 
-The modern MENoBiS implementation lives under `src/`, `crates/`, `tests/`, and
-`docs/`. Thesis-era C/Python folders were removed from the active tree; git
-history remains the archive.
+| Path | Purpose |
+|---|---|
+| `crates/menobis-core` | Rust kernels and solvers |
+| `crates/menobis-python` | PyO3 extension |
+| `src/menobis` | Python API and CLI |
+| `tests` | Python test suite |
+| `docs` | MkDocs site and notebooks |
+| `benchmarks` | repository benchmark harness |
 
+## Citation
 
-
-
-MENoBiS package DOCS: technical and license information
-========================================================================
-
- Copyright 2014-2026 Oleguer Sagarra. All rights reserved. Code under License GPLv3.
-______________________________________________________________________________________
-
-This folder contains technical information about the models used and the implementations of algorithms present in MENoBiS.
-
-It also includes the corresponding extended version of the LICENSE document.
-
+Use `CITATION.cff` or see `docs/thesis-context.md`.

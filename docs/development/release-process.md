@@ -33,7 +33,7 @@ Before any future release:
 
 ## Versioning
 
-MENoBiS follows semantic versioning. The current version is `0.1.0` (pre-release).
+MENoBiS follows semantic versioning. The current public documentation release is `1.0.0`.
 
 ## Future plans
 

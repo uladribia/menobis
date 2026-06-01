@@ -1,0 +1,48 @@
+name: docs
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    env:
+      UV_EXCLUDE_NEWER: "2026-05-25"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-groups
+
+      - name: Build Python extension
+        run: uv run --frozen maturin develop --release -m crates/menobis-python/Cargo.toml
+
+      - name: Build documentation
+        run: uv run --frozen mkdocs build --strict
+
+      - name: Deploy to GitHub Pages
+        if: github.event_name == 'push'
+        run: uv run --frozen mkdocs gh-deploy --force --no-history

@@ -6,85 +6,63 @@ description: Partial-constraint fitting with frozen known node pairs.
 
 ## TL;DR
 
-Partial fitting is not a new model family. It freezes known pair statistics,
-computes excess constraints on the free support, and then calls the matching
-full solver for the selected family and constraint.
+Partial fitting freezes known node-pair occupations, subtracts their contribution
+from the requested constraints, and fits the parent model on the remaining free
+support.
 
-## Problem setup
+!!! note "Not a separate family"
+    Partial constraints are a support transformation. The inner solver remains
+    the selected ME, B, or W family with the selected constraint layer.
 
-Partition candidate pairs into known pairs $Q$ and free pairs $\bar Q$.
-Known weighted pairs contribute fixed expectations $q_{ij}$.
+## When to use partial fitting
 
-$$
-s_i^{out,free}=s_i^{out}-\sum_{j:(i,j)\in Q} q_{ij}.
-$$
-
-Incoming strengths, binary degrees, total binary edges, and total cost are
-reduced the same way. Negative excess constraints are infeasible.
+| Situation | Why partial helps |
+|---|---|
+| Known structural links | keep trusted node pairs fixed |
+| Data integration | combine observed high-confidence pairs with null-model free pairs |
+| Filtering with frozen pairs | avoid treating known occupations as random |
+| Scenario analysis | remove or keep a selected support while preserving totals |
 
 ## Excess constraints
 
-| Constraint | Free value |
-|---|---|
-| Out strength | $s_i^{out} - \sum_{j:(i,j)\in Q} q_{ij}$ |
-| In strength | $s_j^{in} - \sum_{i:(i,j)\in Q} q_{ij}$ |
-| Out degree | $k_i^{out} - \sum_{j:(i,j)\in Q}\Theta(q_{ij})$ |
-| In degree | $k_j^{in} - \sum_{i:(i,j)\in Q}\Theta(q_{ij})$ |
-| Binary edges | $E - \sum_{(i,j)\in Q}\Theta(q_{ij})$ |
-| Cost | $C - \sum_{(i,j)\in Q} q_{ij}d_{ij}$ |
+If $Q$ is the set of frozen pairs and $r_{ij}$ is the known occupation, then the
+free outgoing strength is:
 
-## Required solver pattern
+$$
+s_i^{out,free}=s_i^{out}-\sum_{j:(i,j)\in Q} r_{ij}.
+$$
 
-```text
-partial fit = compute excess + free support + full family solver
-```
+Incoming strengths, binary degrees, total binary edges, and total cost are
+reduced in the same way. Negative excess means the partial problem is infeasible.
 
-The inner solver logic must not be duplicated in a partial path. Masks, excess
-computation, and sparse rate-table assembly belong in Rust.
+## Public route
 
-## Current public helpers
-
-| Helper | Family/constraint |
-|---|---|
-| `fit_partial_strength_poisson` | ME strength |
-| `fit_partial_degree_poisson` | ME degree-events occupation |
-| `fit_partial_strength_edges_poisson` | ME strength-edges |
-| `fit_partial_strength_degree_poisson` | ME strength-degree |
-| `fit_partial_strength_cost_poisson` | ME strength-cost |
-| `fit_partial_strength_cost_*_coordinates` | ME/B/W coordinate strength-cost; `coordinate_metric="euclidean"` only |
-
-Coordinate metric names are explicit so future releases can add Manhattan or
-geodesic distances without changing function shape. Passing any metric except
-`"euclidean"` raises `ValueError` today.
-
-The coordinate helpers now route ME/B/W excess computation, fitting, and sparse
-rate-table assembly through Rust. Rust still uses dense internal masks in some
-partial paths; see [Ontology conformance audit](../development/ontology-conformance-audit.md).
-
-## Cutoff-based splitting
+Pass `known_source`, `known_target`, and `known_rate` to `fit_model`:
 
 ```python
-from menobis.models.partial import fit_from_network_cutoff
-
-result = fit_from_network_cutoff(
-    edges,
-    cutoff=10,
-    model="strength",  # strength, degree, strength-degree, strength-edges, strength-cost
+partial_fit = fit_model(
+    family=ModelFamily.ME,
+    constraint=Constraint.STRENGTH_COST,
+    strength_out=strength_out,
+    strength_in=strength_in,
+    target_cost=total_cost,
+    coord_x=x,
+    coord_y=y,
+    known_source=known_source,
+    known_target=known_target,
+    known_rate=known_rate,
     self_loops=False,
 )
 ```
 
-Edges with `weight > cutoff` become known positive pairs. Remaining constraints
-are fitted on free pairs.
+`partial_fit` is a sparse `PartialFitResult` with `source`, `target`, and `rate`
+arrays for frozen and fitted free pairs.
 
-## Sampling from partial fits
+## Implementation rule
 
-`PartialFitResult.rate` stores expected counts for known and free pairs. Use the
-custom Poisson sampler for a sparse independent sample:
-
-```python
-from menobis.models import sample_custom_poisson
-
-rates = result.as_probability_table()
-sample = sample_custom_poisson(rates, total_events=T, seed=42)
+```text
+partial fit = compute excess constraints + free support + full family solver
 ```
+
+The partial path should not duplicate solver math. Masks, excess computation,
+and sparse rate-table assembly belong in Rust.

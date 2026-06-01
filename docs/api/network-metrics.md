@@ -6,20 +6,20 @@ description: Computing network metrics without coupling MENoBiS to graph librari
 
 ## TL;DR
 
-MENoBiS computes core weighted directed statistics in Rust. NetworkX and rustworkx
-are optional user choices: install them in your own environment and convert an
-`EdgeTable` at the boundary of your application.
+MENoBiS computes core directed non-binary statistics in Rust. NetworkX and
+rustworkx are optional user choices: install them in your own environment and
+convert an `EdgeTable` at the boundary of your application.
 
 ## Built-in MENoBiS metrics
 
 | API | Runtime | Purpose |
 |---|---|---|
-| `directed_strengths(edges)` | Rust via Python | out/in weighted strengths |
+| `directed_strengths(edges)` | Rust via Python | out/in event totals |
 | `directed_degrees(edges)` | Rust via Python | out/in binary degrees |
 | `compute_all_stats(edges)` | Rust via Python | strengths, degrees, Y2, nearest-neighbour stats |
-| `weight_distribution(edges)` | Rust via Python | edge-weight histogram |
+| `weight_distribution(edges)` | Rust via Python | occupation-count histogram |
 | `clustering_coefficient(edges)` | Rust via Python | binary clustering |
-| `weighted_clustering_coefficient(edges)` | Rust via Python | weighted clustering |
+| `weighted_clustering_coefficient(edges)` | Rust via Python | occupation-weighted clustering helper |
 
 ```python
 from menobis.analysis import compute_all_stats
@@ -28,16 +28,6 @@ from menobis.data.io import read_edges
 edges = read_edges("edges.csv")
 stats = compute_all_stats(edges)
 print(stats.strength_out)
-```
-
-Rust users can call `menobis-core` graph/stat modules directly:
-
-```rust
-use menobis_core::graph::{directed_strengths, WeightedEdge};
-
-let edges = vec![WeightedEdge::new(0, 1, 3), WeightedEdge::new(1, 2, 4)];
-let strengths = directed_strengths(3, &edges);
-assert_eq!(strengths.out, vec![3, 4, 0]);
 ```
 
 ## Optional NetworkX recipe
@@ -64,13 +54,6 @@ centrality = nx.pagerank(graph, weight="weight")
 
 ## Optional rustworkx recipe
 
-rustworkx can be useful when you want Python access to Rust graph algorithms.
-Keep conversion code outside MENoBiS and treat node identifiers as your own API.
-
-```bash
-python -m pip install rustworkx
-```
-
 ```python
 import rustworkx as rx
 
@@ -84,9 +67,6 @@ for source, target, weight in zip(edges.source, edges.target, edges.weight, stri
     graph.add_edge(int(source), int(target), int(weight))
 ```
 
-## Rust-side extension guidance
-
-If MENoBiS's Rust metrics are insufficient, create a downstream crate or binary
-that depends on `menobis-core` plus your chosen graph crate. Convert
-`WeightedEdge` streams at that boundary. Do not add those graph crates to MENoBiS
-unless a metric becomes a supported MENoBiS feature with Rust tests and docs.
+!!! note "Dependency policy"
+    External graph libraries remain downstream adapters unless MENoBiS adopts a
+    metric as supported core functionality with Rust tests and docs.

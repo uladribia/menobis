@@ -1,0 +1,79 @@
+cff-version: 1.2.0
+message: "If you use MENoBiS, please cite the software and the scientific references below."
+title: "MENoBiS: Max Entropy NOn Binary Suite"
+type: software
+version: "1.0.0"
+license: GPL-3.0-or-later
+repository-code: "https://github.com/uladribia/menobis"
+url: "https://uladribia.github.io/menobis/"
+abstract: >-
+  MENoBiS is a Rust and Python library for fitting, sampling, filtering, and
+  analysing maximum-entropy null models of directed non-binary networks with
+  non-negative integer node-pair occupations.
+authors:
+  - family-names: Sagarra
+    given-names: Oleguer
+    email: ula@dribia.com
+    website: "https://scholar.google.com/citations?user=jg_7n5MAAAAJ&hl=ca"
+references:
+  - type: thesis
+    title: "Non-binary maximum entropy network ensembles and their application to the study of urban mobility"
+    authors:
+      - family-names: Sagarra
+        given-names: Oleguer
+    year: 2015
+    url: "https://hdl.handle.net/10803/400560"
+  - type: article
+    title: "Statistical mechanics of multiedge networks"
+    authors:
+      - family-names: Sagarra
+        given-names: Oleguer
+      - family-names: Pérez Vicente
+        given-names: Conrad J.
+      - family-names: Díaz-Guilera
+        given-names: Albert
+    journal: "Physical Review E"
+    year: 2013
+    doi: "10.1103/PhysRevE.88.062806"
+  - type: article
+    title: "The configuration multi-edge model: Assessing the effect of fixing node strengths on weighted network magnitudes"
+    authors:
+      - family-names: Sagarra
+        given-names: Oleguer
+      - family-names: Font-Clos
+        given-names: Francesc
+      - family-names: Pérez-Vicente
+        given-names: Conrad J.
+      - family-names: Díaz-Guilera
+        given-names: Albert
+    journal: "EPL (Europhysics Letters)"
+    year: 2014
+    doi: "10.1209/0295-5075/107/38002"
+  - type: article
+    title: "Supersampling and Network Reconstruction of Urban Mobility"
+    authors:
+      - family-names: Sagarra
+        given-names: Oleguer
+      - family-names: Szell
+        given-names: Michael
+      - family-names: Santi
+        given-names: Paolo
+      - family-names: Díaz-Guilera
+        given-names: Albert
+      - family-names: Ratti
+        given-names: Carlo
+    journal: "PLOS ONE"
+    year: 2015
+    doi: "10.1371/journal.pone.0134508"
+  - type: article
+    title: "Role of adjacency-matrix degeneracy in maximum-entropy-weighted network models"
+    authors:
+      - family-names: Sagarra
+        given-names: Oleguer
+      - family-names: Pérez Vicente
+        given-names: Conrad J.
+      - family-names: Díaz-Guilera
+        given-names: Albert
+    journal: "Physical Review E"
+    year: 2015
+    doi: "10.1103/PhysRevE.92.052816"
