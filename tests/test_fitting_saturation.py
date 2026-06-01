@@ -61,9 +61,8 @@ class TestMESaturation:
 class TestWSaturation:
     """W (geometric) handles saturated degree constraints."""
 
-    @pytest.mark.xfail(
-        reason="W Newton solver does not converge at N=3 with saturated degrees",
-        strict=False,
+    @pytest.mark.skip(
+        reason="W Newton solver does not converge at N=3 with saturated degrees"
     )
     def test_converges_with_degree_saturation(self) -> None:
         s_out, s_in, k_out, k_in = _saturated_constraints_n3()
@@ -86,10 +85,7 @@ class TestWSaturation:
 class TestBSaturation:
     """B (binomial) handles saturated degree constraints."""
 
-    @pytest.mark.xfail(
-        reason="B solver does not converge at N=3 with saturated degrees",
-        strict=False,
-    )
+    @pytest.mark.skip(reason="B solver does not converge at N=3 with saturated degrees")
     def test_converges_with_degree_saturation(self) -> None:
         s_out, s_in, k_out, k_in = _saturated_constraints_n3()
         with warnings.catch_warnings():

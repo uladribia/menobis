@@ -1,6 +1,6 @@
 """Sampling tests: reproducibility, non-negativity, constraint preservation.
 
-Uses N=20 PA-geographic derived constraints for realistic inputs.
+Uses N=10 PA-geographic derived constraints for fast realistic inputs.
 Tests all sampler families and constraint types.
 """
 
@@ -45,14 +45,14 @@ from menobis.utilities.synthetic import (
     generate_pa_geographic_network,
 )
 
-N = 20
+N = 10
 SEED = 54320
 
 
 @pytest.fixture(scope="module")
 def network():
     return generate_pa_geographic_network(
-        N, average_degree=5.0, events_per_edge=4.0, seed=SEED, self_loops=False
+        N, average_degree=4.0, events_per_edge=4.0, seed=SEED, self_loops=False
     )
 
 

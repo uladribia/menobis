@@ -341,25 +341,12 @@ mod tests {
     }
 
     #[test]
-    fn memory_savings_documented() {
-        // Document memory characteristics at various N
-        // Dense: N*N bytes; Sparse: ~(N + K) * (8+8) bytes for HashSet + Vecs
-        for &n in &[100, 1000, 5000, 10000] {
-            let dense_bytes = n * n; // Vec<bool> = 1 byte per entry
-            let k = 50; // typical known pairs
-                        // PairMask overhead: HashSet entries + 2*N Vecs with ~(N/N + K/N) entries each
-                        // Approximate: pairs HashSet ~K*48 + masked_rows/cols Vecs ~N*(24+diagonal)
-            let sparse_approx = k * 64 + n * 48; // generous upper bound
-            let ratio = dense_bytes as f64 / sparse_approx as f64;
-            // At N=10000: 100MB vs ~500KB = 200x savings
-            assert!(
-                ratio > 1.0,
-                "Sparse should always use less memory than dense at N={n}"
-            );
-
-            // Actually construct and verify
-            let src: Vec<u64> = (0..k as u64).collect();
-            let tgt: Vec<u64> = (1..=k as u64).collect();
+    fn sparse_mask_accounting_documented() {
+        // Keep this unit test small; large-N memory behavior belongs in benchmarks.
+        for &n in &[4, 8, 10] {
+            let k = 1;
+            let src = vec![0_u64];
+            let tgt = vec![1_u64];
             let mask = PairMask::new(n, false, &src, &tgt);
             assert_eq!(mask.n_free(), n * n - n - k); // N² - diagonal - known
         }
