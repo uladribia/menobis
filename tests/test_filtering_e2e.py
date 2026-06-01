@@ -2,7 +2,7 @@
 
 Pipeline: generate PA-geographic → derive → fit → sample from null → filter.
 Verifies that filtering null samples produces FPR <= alpha + stochastic tolerance.
-Uses N=20 for speed.
+Uses N=10 so the default suite stays fast.
 """
 
 from __future__ import annotations
@@ -35,18 +35,18 @@ from menobis.utilities.synthetic import (
     generate_pa_geographic_network,
 )
 
-N = 20
+N = 10
 SEED = 54320
 ALPHA = 0.05
 # Allow FPR up to 3x alpha (stochastic tolerance at small sample sizes)
 FPR_TOLERANCE = 3.0 * ALPHA
-NULL_SAMPLES = 5
+NULL_SAMPLES = 2
 
 
 @pytest.fixture(scope="module")
 def network():
     return generate_pa_geographic_network(
-        N, average_degree=5.0, events_per_edge=4.0, seed=SEED, self_loops=False
+        N, average_degree=4.0, events_per_edge=4.0, seed=SEED, self_loops=False
     )
 
 

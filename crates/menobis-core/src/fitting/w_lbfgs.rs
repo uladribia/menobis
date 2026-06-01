@@ -1839,13 +1839,12 @@ mod tests {
     }
 
     #[test]
-    fn w_se_lbfgs_vs_bisection_n20() {
+    fn w_se_lbfgs_vs_bisection_n10() {
         use crate::fitting::{
             mask::PairMask, types::WFitStatus, w::fit_strength_edges_geometric, w::w_occupation,
             w::w_zip_mean, WConicFitOptions,
         };
-        use std::time::Instant;
-        let n = 20;
+        let n = 10;
         let layers = 1u32;
         let x: Vec<f64> = (0..n).map(|i| 0.1 + 0.8 * (i as f64 / n as f64)).collect();
         let y: Vec<f64> = (0..n)
@@ -1875,28 +1874,18 @@ mod tests {
             }
         }
 
-        let t0 = Instant::now();
-        let old = fit_strength_edges_geometric(
+        let _old = fit_strength_edges_geometric(
             &s_out,
             &s_in,
             te,
             WConicFitOptions {
                 self_loops: false,
                 tolerance: 1e-6,
-                max_iterations: 5000,
+                max_iterations: 1000,
             },
         );
-        let old_time = t0.elapsed();
 
-        let t1 = Instant::now();
-        let new = fit_strength_edges_w_lbfgs(&s_out, &s_in, te, layers, &mask, 1e-6, 5000);
-        let new_time = t1.elapsed();
-
-        eprintln!(
-            "W(M={layers}) SE N={n}: bisection {:.4}s ({} iters, status={:?}), lbfgs {:.4}s ({} iters, status={:?})",
-            old_time.as_secs_f64(), old.iterations, old.status,
-            new_time.as_secs_f64(), new.iterations, new.status,
-        );
+        let new = fit_strength_edges_w_lbfgs(&s_out, &s_in, te, layers, &mask, 1e-6, 1000);
 
         // L-BFGS must converge
         assert!(

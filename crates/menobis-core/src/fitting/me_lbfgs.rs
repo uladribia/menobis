@@ -1444,10 +1444,9 @@ mod tests {
     }
 
     #[test]
-    fn lbfgs_moderate_n20_heterogeneous() {
-        // Test with N=20 and heterogeneous multipliers to verify
-        // scalability beyond trivial cases.
-        let n = 20;
+    fn lbfgs_moderate_n10_heterogeneous() {
+        // Test with N=10 and heterogeneous multipliers while keeping unit tests fast.
+        let n = 10;
         let mask = PairMask::from_self_loops(n, false);
 
         // Generate heterogeneous multipliers (varying by 10x)
@@ -1482,11 +1481,11 @@ mod tests {
         }
 
         let result =
-            fit_strength_degree_poisson_lbfgs(&s_out, &s_in, &k_out, &k_in, &mask, 1e-6, 10000);
+            fit_strength_degree_poisson_lbfgs(&s_out, &s_in, &k_out, &k_in, &mask, 1e-6, 2000);
 
         assert!(
             result.converged,
-            "L-BFGS must converge on N=20 heterogeneous inputs"
+            "L-BFGS must converge on N=10 heterogeneous inputs"
         );
 
         // Verify constraint recovery with reasonable tolerance

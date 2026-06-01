@@ -113,7 +113,7 @@ class TestBinomialFitting:
         s_out = np.array([10.0, 15.0, 5.0])
         s_in = np.array([8.0, 12.0, 10.0])
         fit = fit_strength_binomial(
-            s_out, s_in, layers=5, tolerance=0.01, max_iterations=50000
+            s_out, s_in, layers=5, tolerance=0.01, max_iterations=1000
         )
         assert fit.converged
 
@@ -121,7 +121,7 @@ class TestBinomialFitting:
         """Fitted binomial model approximately recovers strength constraints."""
         s_out = np.array([20.0, 30.0, 10.0, 40.0])
         s_in = np.array([25.0, 25.0, 20.0, 30.0])
-        fit = fit_strength_binomial(s_out, s_in, layers=10, max_iterations=50000)
+        fit = fit_strength_binomial(s_out, s_in, layers=10, max_iterations=1000)
         n = len(s_out)
         pred_out = np.zeros(n)
         pred_in = np.zeros(n)

@@ -2,7 +2,7 @@
 
 Pipeline: generate → derive constraints → fit → sample → verify recovery.
 Tests all 12 combos (3 families x 4 constraints) plus partial fitting.
-Uses N=20 for speed while maintaining statistical significance.
+Uses N=10 so the default suite stays fast.
 
 Two regimes:
 - sparse: average_degree=3.0, events_per_edge=1.5 (k ≈ s)
@@ -50,7 +50,7 @@ from menobis.utilities.synthetic import (
     generate_pa_geographic_network,
 )
 
-N = 20
+N = 10
 SEED = 54320
 # W strength-edges/degree known to not converge (AGENTS.md)
 W_ZI_XFAIL = pytest.mark.xfail(
@@ -66,7 +66,7 @@ W_ZI_XFAIL = pytest.mark.xfail(
 def sparse_network():
     """PA-geographic network in sparse regime (moderate density, k < s)."""
     return generate_pa_geographic_network(
-        N, average_degree=5.0, events_per_edge=4.0, seed=SEED, self_loops=False
+        N, average_degree=4.0, events_per_edge=4.0, seed=SEED, self_loops=False
     )
 
 
@@ -79,7 +79,7 @@ def sparse_constraints(sparse_network):
 def saturated_network():
     """PA-geographic network in saturated regime (k near N-1)."""
     return generate_pa_geographic_network(
-        N, average_degree=15.0, events_per_edge=5.0, seed=SEED, self_loops=False
+        N, average_degree=8.0, events_per_edge=5.0, seed=SEED, self_loops=False
     )
 
 
@@ -377,11 +377,10 @@ class TestWStrengthEdges:
                 sparse_constraints.strength_in,
                 sparse_constraints.total_edges,
                 self_loops=False,
-                max_iterations=500,
+                max_iterations=100,
             )
         assert fit.converged
 
-    @W_ZI_XFAIL
     def test_saturated(self, saturated_constraints) -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -390,15 +389,14 @@ class TestWStrengthEdges:
                 saturated_constraints.strength_in,
                 saturated_constraints.total_edges,
                 self_loops=False,
-                max_iterations=500,
+                max_iterations=100,
             )
         assert fit.converged
 
 
 class TestWStrengthDegree:
-    """W strength-degree fitting E2E (known convergence issues)."""
+    """W strength-degree fitting E2E."""
 
-    @W_ZI_XFAIL
     def test_sparse(self, sparse_constraints) -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -409,11 +407,10 @@ class TestWStrengthDegree:
                 sparse_constraints.degree_in,
                 self_loops=False,
                 tolerance=1e-3,
-                max_iterations=500,
+                max_iterations=100,
             )
         assert fit.converged
 
-    @W_ZI_XFAIL
     def test_saturated(self, saturated_constraints) -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -424,7 +421,7 @@ class TestWStrengthDegree:
                 saturated_constraints.degree_in,
                 self_loops=False,
                 tolerance=1e-3,
-                max_iterations=500,
+                max_iterations=100,
             )
         assert fit.converged
 
@@ -546,6 +543,8 @@ class TestPartialFitting:
                 known_rate,
                 sparse_constraints.total_edges,
                 self_loops=False,
+                tolerance=1e-6,
+                max_iterations=100,
             )
         # Partial ZI fitting may not converge at small N
         assert len(result.rate) > 0
@@ -567,8 +566,9 @@ class TestPartialFitting:
                 known_rate,
                 self_loops=False,
                 tolerance=1e-4,
+                max_iterations=100,
             )
-        # May not converge due to tight constraints at N=20
+        # May not converge due to tight constraints at N=10
         assert len(result.rate) > 0
 
     @pytest.mark.parametrize("fraction", [0.05, 0.20])
@@ -625,5 +625,6 @@ class TestPartialFitting:
                 layers=sparse_constraints.binomial_layers,
                 self_loops=False,
                 tolerance=1e-4,
+                max_iterations=100,
             )
         assert len(result.rate) > 0

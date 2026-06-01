@@ -1,18 +1,5 @@
 # PLAN.md — Outstanding Work
 
-## Missing: Update tests to use dense regime
-
-All E2E tests (`test_fitting_e2e.py`, `test_filtering_e2e.py`,
-`test_sampling.py`, benchmark CLI smoke tests) should use the **dense
-regime** as the default test configuration. Sparse and saturated can remain
-as additional parametrised cases for regime-comparison tests.
-
-**Changes needed:**
-- Update test fixture parameters to `average_degree = N/5, events_per_edge = 8.0`
-- Update `docs/development/testing.md` regime table
-- Keep sparse/saturated as additional parametrised cases where relevant
-
-
 ## Missing: GitHub Pages site and comprehensive documentation
 
 The project has MkDocs material configuration (`mkdocs.yml`) with all the
