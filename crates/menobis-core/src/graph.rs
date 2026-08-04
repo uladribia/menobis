@@ -25,6 +25,29 @@ impl OccupiedPair {
     }
 }
 
+/// Lazy sparse view over an occupied-pair edge list.
+///
+/// Carries the node count and the edge slice; adjacency is only built by
+/// the clustering routines that actually need it (O(N + E) memory).
+#[derive(Clone, Copy, Debug)]
+pub struct SparseGraphView<'a> {
+    pub node_count: usize,
+    pub edges: &'a [OccupiedPair],
+}
+
+impl<'a> SparseGraphView<'a> {
+    /// Build a view, deriving the node count from the edges.
+    #[must_use]
+    pub fn from_edges(edges: &'a [OccupiedPair]) -> Self {
+        let node_count = edges
+            .iter()
+            .map(|e| e.source.max(e.target))
+            .max()
+            .map_or(0, |m| m + 1);
+        Self { node_count, edges }
+    }
+}
+
 /// Directed node sequences for occupied origin-destination pairs.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DirectedNodeSequence {
@@ -64,7 +87,16 @@ pub fn directed_degrees(node_count: usize, edges: &[OccupiedPair]) -> DirectedNo
 
 #[cfg(test)]
 mod tests {
-    use super::{directed_degrees, directed_strengths, OccupiedPair};
+    use super::{directed_degrees, directed_strengths, OccupiedPair, SparseGraphView};
+
+    #[test]
+    fn sparse_graph_view_derives_node_count() {
+        let edges = [OccupiedPair::new(0, 1, 3), OccupiedPair::new(2, 4, 1)];
+        let view = SparseGraphView::from_edges(&edges);
+        assert_eq!(view.node_count, 5);
+        assert_eq!(view.edges.len(), 2);
+        assert_eq!(SparseGraphView::from_edges(&[]).node_count, 0);
+    }
 
     #[test]
     fn directed_strengths_conserve_total_weight() {

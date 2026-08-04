@@ -3,6 +3,7 @@
 import numpy as np
 
 import menobis._menobis as _menobis
+from menobis.analysis.common import node_count
 from menobis.analysis.types import NodeStats, OccupationDistribution
 from menobis.data.frames import EdgeTable
 
@@ -20,7 +21,7 @@ def occupation_distribution(edges: EdgeTable) -> OccupationDistribution:
 
 def compute_all_stats(edges: EdgeTable) -> NodeStats:
     """Compute all per-node statistics in a single Rust pass."""
-    nc = _node_count(edges)
+    nc = node_count(edges)
     (s_out, s_in, k_out, k_in, y2_o, y2_i, snn_o, snn_i, knn_o, knn_i) = (
         _menobis.compute_all_node_stats(
             nc,
@@ -42,12 +43,6 @@ def compute_all_stats(edges: EdgeTable) -> NodeStats:
         k_nn_out=np.asarray(knn_o),
         k_nn_in=np.asarray(knn_i),
     )
-
-
-def _node_count(edges: EdgeTable) -> int:
-    if len(edges) == 0:
-        return 0
-    return int(max(edges.source.max(), edges.target.max())) + 1
 
 
 __all__ = [
