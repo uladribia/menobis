@@ -22,7 +22,7 @@ def test_partial_coordinate_strength_cost_available_for_all_families() -> None:
     strength_in = np.array([2.5, 3.5, 3.0])
     known_source = np.array([0], dtype=np.uint64)
     known_target = np.array([1], dtype=np.uint64)
-    known_rate = np.array([0.5])
+    known_occnum = np.array([0.5])
     x = np.array([0.0, 3.0, 0.0])
     y = np.array([0.0, 0.0, 4.0])
     target_cost = 12.0
@@ -33,7 +33,7 @@ def test_partial_coordinate_strength_cost_available_for_all_families() -> None:
             strength_in,
             known_source,
             known_target,
-            known_rate,
+            known_occnum,
             x,
             y,
             target_cost,
@@ -43,7 +43,7 @@ def test_partial_coordinate_strength_cost_available_for_all_families() -> None:
             strength_in,
             known_source,
             known_target,
-            known_rate,
+            known_occnum,
             x,
             y,
             target_cost,
@@ -54,7 +54,7 @@ def test_partial_coordinate_strength_cost_available_for_all_families() -> None:
             strength_in,
             known_source,
             known_target,
-            known_rate,
+            known_occnum,
             x,
             y,
             target_cost,
@@ -64,7 +64,7 @@ def test_partial_coordinate_strength_cost_available_for_all_families() -> None:
             strength_in,
             known_source,
             known_target,
-            known_rate,
+            known_occnum,
             x,
             y,
             target_cost,

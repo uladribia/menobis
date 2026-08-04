@@ -23,3 +23,5 @@ site/
 .DS_Store
 .idea/
 .vscode/
+docs/temp
+.ipynb_checkpoints/

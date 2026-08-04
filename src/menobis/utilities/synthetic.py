@@ -2,7 +2,7 @@
 
 The generator intentionally does *not* draw from an MENoBiS null model. It builds a
 heterogeneous directed binary support with preferential attachment, assigns
-projected XY coordinates, and normalizes geographic degree-driven weights to a
+projected XY coordinates, and normalizes geographic degree-driven occupation scores to a
 fixed total number of events.
 """
 
@@ -18,7 +18,7 @@ from menobis.data.frames import EdgeTable
 
 @dataclass(frozen=True)
 class SyntheticNetwork:
-    """Generated PA geographic weighted directed network."""
+    """Generated PA geographic non-binary directed network."""
 
     edges: EdgeTable
     x: NDArray[np.float64]
@@ -41,7 +41,7 @@ class SyntheticNetwork:
         )
 
     def edge_scores(self) -> NDArray[np.float64]:
-        """Return unnormalized degree-distance weight scores for occupied edges."""
+        """Return unnormalized degree-distance occupation scores for occupied pairs."""
         source = self.edges.source.astype(np.int64)
         target = self.edges.target.astype(np.int64)
         degree_part = (
@@ -86,10 +86,11 @@ def generate_pa_geographic_network(
     origin_degree_exponent: float = 1.0,
     destination_degree_exponent: float = 1.0,
 ) -> SyntheticNetwork:
-    """Generate a PA geographic weighted directed network.
+    """Generate a PA geographic non-binary directed network.
 
     Binary support is created by directed preferential attachment. Positive
-    integer weights are then allocated only on existing edges with probabilities
+    integer occupation numbers are then allocated only on existing edges with
+    probabilities
     proportional to origin out-degree, destination in-degree, and
     ``exp(-distance_decay * distance / distance_scale)``.
 
@@ -97,13 +98,13 @@ def generate_pa_geographic_network(
         node_count: Number of nodes.
         density: Target directed density. Overrides ``average_degree`` when set.
         average_degree: Target mean out-degree when ``density`` is omitted.
-        events_per_edge: Mean positive weight used when ``total_events`` is omitted.
-        total_events: Exact total weight sum. Must be at least the edge count.
+        events_per_edge: Mean positive occupation used when ``total_events`` is omitted.
+        total_events: Exact total events sum. Must be at least the edge count.
         seed: Random seed.
         self_loops: Whether self-loops are allowed in the support.
         coordinate_scale: Width/height of the square coordinate domain.
-        distance_decay: Geographic damping strength for weights.
-        degree_attractiveness: Additive degree offset used in weight scores.
+        distance_decay: Geographic damping strength for occupation scores.
+        degree_attractiveness: Additive degree offset used in occupation scores.
         origin_degree_exponent: Exponent for origin support out-degree.
         destination_degree_exponent: Exponent for destination support in-degree.
 
@@ -146,7 +147,7 @@ def generate_pa_geographic_network(
         * (in_degree[targets] + degree_attractiveness) ** destination_degree_exponent
         * np.exp(-distance_decay * distances / max(distance_scale, 1e-12))
     )
-    weights = _allocate_positive_integer_weights(
+    occ_nums = _allocate_positive_integer_weights(
         scores,
         edge_count=edge_count,
         total_events=total_events,
@@ -157,7 +158,7 @@ def generate_pa_geographic_network(
     edges = EdgeTable(
         source=sources[order].astype(np.uint64),
         target=targets[order].astype(np.uint64),
-        weight=weights[order].astype(np.uint64),
+        occ_num=occ_nums[order].astype(np.uint64),
     )
     return SyntheticNetwork(
         edges=edges,
@@ -183,13 +184,13 @@ def derive_synthetic_constraints(network: SyntheticNetwork) -> SyntheticConstrai
     degree_in = np.zeros(node_count, dtype=np.float64)
     source = network.edges.source.astype(np.int64)
     target = network.edges.target.astype(np.int64)
-    weight = network.edges.weight.astype(np.float64)
-    np.add.at(strength_out, source, weight)
-    np.add.at(strength_in, target, weight)
+    occ_nums = network.edges.occ_num.astype(np.float64)
+    np.add.at(strength_out, source, occ_nums)
+    np.add.at(strength_in, target, occ_nums)
     np.add.at(degree_out, source, 1.0)
     np.add.at(degree_in, target, 1.0)
     distances = network.edge_distances()
-    total_cost = float(np.sum(weight * distances))
+    total_cost = float(np.sum(occ_nums * distances))
     pairs_per_node = node_count if network.self_loops else max(node_count - 1, 1)
     max_strength = float(
         max(strength_out.max(initial=0.0), strength_in.max(initial=0.0))
@@ -212,7 +213,7 @@ def known_pairs_from_network(
     *,
     fraction: float = 0.15,
 ) -> tuple[NDArray[np.uint64], NDArray[np.uint64], NDArray[np.float64]]:
-    """Select deterministic known weighted pairs from strongest observed edges."""
+    """Select deterministic known occupied pairs from strongest observed edges."""
     if not (0.0 <= fraction <= 1.0):
         msg = "fraction must be in [0, 1]"
         raise ValueError(msg)
@@ -222,11 +223,11 @@ def known_pairs_from_network(
     if count == 0:
         empty_u = np.array([], dtype=np.uint64)
         return empty_u, empty_u, np.array([], dtype=np.float64)
-    order = np.argsort(network.edges.weight)[::-1][:count]
+    order = np.argsort(network.edges.occ_num)[::-1][:count]
     return (
         network.edges.source[order].astype(np.uint64),
         network.edges.target[order].astype(np.uint64),
-        network.edges.weight[order].astype(np.float64),
+        network.edges.occ_num[order].astype(np.float64),
     )
 
 
@@ -291,11 +292,11 @@ def _preferential_support(
         remaining = _remaining_pairs(node_count, edges, self_loops=self_loops)
         if not remaining:
             break
-        weights = np.array(
+        scores = np.array(
             [(out_degree[s] + 1.0) * (in_degree[t] + 1.0) for s, t in remaining],
             dtype=np.float64,
         )
-        probabilities = weights / weights.sum()
+        probabilities = scores / scores.sum()
         source, target = remaining[int(rng.choice(len(remaining), p=probabilities))]
         add_edge(source, target)
 

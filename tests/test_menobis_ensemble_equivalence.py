@@ -1,7 +1,8 @@
-"""Ensemble equivalence validation: micro/canonical/grand-canonical convergence.
+"""ME observable-convergence smoke test.
 
-Generates figures in docs/figures/ and validates that the three ensembles
-converge at large T for all higher-order graph statistics.
+This is a loose observable-agreement smoke test, NOT a proof of ensemble
+equivalence. Exact equivalence identities live in
+tests/test_menobis_ensemble_exact.py.
 """
 
 from collections.abc import Callable
@@ -331,7 +332,7 @@ def _plot_convergence(
     plt.close(fig)
 
 
-def test_ensemble_equivalence_convergence() -> None:
+def test_me_observable_convergence_smoke() -> None:
     """Three ensembles converge at large T for all higher-order statistics."""
     results = _run_convergence()
     # Plot generation is intentionally not part of the default test path.

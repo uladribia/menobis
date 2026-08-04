@@ -97,6 +97,7 @@ dependencies = [
 name = "menobis-core"
 version = "1.0.1"
 dependencies = [
+ "libm",
  "rand",
  "rand_distr",
  "rayon",

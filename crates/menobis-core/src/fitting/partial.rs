@@ -1,10 +1,9 @@
 //! Full-pipeline partial-constraint fitting.
 //!
 //! Each function takes raw inputs (sequences, known pairs, options) and returns
-//! a sparse rate table. All mask building, excess computation, balancing, IPF,
+//! a sparse intensity table. All mask building, excess computation, balancing, IPF,
 //! and result assembly happens in Rust.
 
-use super::mask::PairMask;
 use super::support::max_pair_delta;
 use super::{
     balance_sparse_masked_degree_bernoulli, balance_sparse_masked_strength_degree_poisson,
@@ -12,6 +11,7 @@ use super::{
     fit_strength_cost_w_lbfgs_masked, CostFitOptions, FitResult, PartialFitResult,
     StrengthCostFitResult,
 };
+use crate::constraints::mask::PairMask;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -82,25 +82,25 @@ fn assemble_result_sparse(
     n: usize,
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     mask: &PairMask,
-    free_rate_fn: impl Fn(usize, usize) -> f64,
+    free_intensity_fn: impl Fn(usize, usize) -> f64,
     converged: bool,
     iterations: usize,
 ) -> PartialFitResult {
     let mut sources = Vec::new();
     let mut targets = Vec::new();
-    let mut rates = Vec::new();
+    let mut intensities = Vec::new();
     // Known pairs
     for ((&s, &t), &r) in known_src
         .iter()
         .zip(known_tgt.iter())
-        .zip(known_rate.iter())
+        .zip(known_occnum.iter())
     {
         if r > 0.0 {
             sources.push(s);
             targets.push(t);
-            rates.push(r);
+            intensities.push(r);
         }
     }
     // Free pairs: iterate all (i,j) and skip masked
@@ -109,24 +109,24 @@ fn assemble_result_sparse(
             if mask.is_masked(i, j) {
                 continue;
             }
-            let rate = free_rate_fn(i, j);
-            if rate > 0.0 {
+            let intensity = free_intensity_fn(i, j);
+            if intensity > 0.0 {
                 sources.push(i as u64);
                 targets.push(j as u64);
-                rates.push(rate);
+                intensities.push(intensity);
             }
         }
     }
     PartialFitResult {
         sources,
         targets,
-        rates,
+        intensities,
         converged,
         iterations,
     }
 }
 
-/// Full partial strength-Poisson fit: excess → sparse masked IPF → rate table.
+/// Full partial strength-Poisson fit: excess → sparse masked IPF → intensity table.
 ///
 /// Uses `PairMask` for O(N+K) memory instead of O(N²).
 #[must_use]
@@ -136,7 +136,7 @@ pub fn fit_partial_strength(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     self_loops: bool,
     tolerance: f64,
     max_iterations: usize,
@@ -147,14 +147,14 @@ pub fn fit_partial_strength(
     let mask = PairMask::new(n, self_loops, known_src, known_tgt);
 
     let (mut excess_out, mut excess_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -168,7 +168,7 @@ pub fn fit_partial_strength(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -190,7 +190,7 @@ pub fn fit_partial_strength(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
         |i, j| x[i] * y[j],
         fit.converged,
@@ -198,7 +198,7 @@ pub fn fit_partial_strength(
     )
 }
 
-/// Full partial degree-Bernoulli fit: excess → masked IPF → rate table.
+/// Full partial degree-Bernoulli fit: excess → masked IPF → intensity table.
 #[must_use]
 pub fn fit_partial_degree(
     degree_out: &[f64],
@@ -242,12 +242,12 @@ pub fn fit_partial_degree(
     );
     let x = fit.x;
     let y = fit.y;
-    let known_rate_ones: Vec<f64> = vec![1.0; known_src.len()];
+    let known_occnum_ones: Vec<f64> = vec![1.0; known_src.len()];
     assemble_result_sparse(
         n,
         known_src,
         known_tgt,
-        &known_rate_ones,
+        &known_occnum_ones,
         &mask,
         |i, j| {
             let z = x[i] * y[j];
@@ -258,7 +258,7 @@ pub fn fit_partial_degree(
     )
 }
 
-/// Full partial strength-degree fit: excess → masked 4-var IPF → rate table.
+/// Full partial strength-degree fit: excess → masked 4-var IPF → intensity table.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn fit_partial_strength_degree(
@@ -268,7 +268,7 @@ pub fn fit_partial_strength_degree(
     degree_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     self_loops: bool,
     tolerance: f64,
     max_iterations: usize,
@@ -281,14 +281,14 @@ pub fn fit_partial_strength_degree(
     let mask = PairMask::new(n, self_loops, known_src, known_tgt);
 
     let (mut excess_s_out, mut excess_s_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -306,7 +306,7 @@ pub fn fit_partial_strength_degree(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -320,7 +320,7 @@ pub fn fit_partial_strength_degree(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -348,7 +348,7 @@ pub fn fit_partial_strength_degree(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
         |i, j| {
             let u = x[i] * y[j];
@@ -366,7 +366,7 @@ pub fn fit_partial_strength_degree(
     )
 }
 
-/// Full partial strength-edges fit: excess → full fit on excess → rate table.
+/// Full partial strength-edges fit: excess → full fit on excess → intensity table.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn fit_partial_strength_edges(
@@ -374,7 +374,7 @@ pub fn fit_partial_strength_edges(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     target_edges: f64,
     self_loops: bool,
     tolerance: f64,
@@ -387,14 +387,14 @@ pub fn fit_partial_strength_edges(
     let excess_edges = (target_edges - known_src.len() as f64).max(0.0);
 
     let (mut excess_out, mut excess_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -408,7 +408,7 @@ pub fn fit_partial_strength_edges(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -432,7 +432,7 @@ pub fn fit_partial_strength_edges(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
         |i, j| {
             let u = x[i] * y[j];
@@ -694,13 +694,13 @@ fn fit_partial_strength_cost_coordinates_with(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     coord_x: &[f64],
     coord_y: &[f64],
     target_cost: f64,
     self_loops: bool,
     fit_free: impl FnOnce(&[f64], &[f64], f64, &PairMask) -> StrengthCostFitResult,
-    rate: impl Fn(usize, usize, &StrengthCostFitResult) -> f64,
+    intensity: impl Fn(usize, usize, &StrengthCostFitResult) -> f64,
 ) -> PartialFitResult {
     let n = infer_n(strength_out.len(), known_src, known_tgt);
     let s_out = pad_to_n(strength_out, n);
@@ -709,19 +709,19 @@ fn fit_partial_strength_cost_coordinates_with(
     let known_cost: f64 = known_src
         .iter()
         .zip(known_tgt.iter())
-        .zip(known_rate.iter())
+        .zip(known_occnum.iter())
         .map(|((&s, &t), &r)| r * coord_distance(coord_x, coord_y, s as usize, t as usize))
         .sum();
     let excess_cost = (target_cost - known_cost).max(0.0);
     let (mut excess_out, mut excess_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -734,7 +734,7 @@ fn fit_partial_strength_cost_coordinates_with(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -747,9 +747,9 @@ fn fit_partial_strength_cost_coordinates_with(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
-        |i, j| rate(i, j, &fit),
+        |i, j| intensity(i, j, &fit),
         fit.converged,
         fit.iterations,
     )
@@ -763,7 +763,7 @@ pub fn fit_partial_strength_cost_coordinates(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     coord_x: &[f64],
     coord_y: &[f64],
     target_cost: f64,
@@ -776,7 +776,7 @@ pub fn fit_partial_strength_cost_coordinates(
         strength_in,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         coord_x,
         coord_y,
         target_cost,
@@ -808,7 +808,7 @@ pub fn fit_partial_strength_cost_binomial_coordinates(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     coord_x: &[f64],
     coord_y: &[f64],
     target_cost: f64,
@@ -827,7 +827,7 @@ pub fn fit_partial_strength_cost_binomial_coordinates(
         strength_in,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         coord_x,
         coord_y,
         target_cost,
@@ -860,7 +860,7 @@ pub fn fit_partial_strength_cost_w_coordinates(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     coord_x: &[f64],
     coord_y: &[f64],
     target_cost: f64,
@@ -874,7 +874,7 @@ pub fn fit_partial_strength_cost_w_coordinates(
         strength_in,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         coord_x,
         coord_y,
         target_cost,
@@ -908,7 +908,7 @@ pub fn fit_partial_strength_cost_w_coordinates(
 // B (Binomial) partial fits
 // ---------------------------------------------------------------------------
 
-/// Full partial B(M) strength fit: excess → masked IPF → rate table.
+/// Full partial B(M) strength fit: excess → masked IPF → intensity table.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn fit_partial_strength_binomial(
@@ -916,7 +916,7 @@ pub fn fit_partial_strength_binomial(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     layers: u32,
     self_loops: bool,
     tolerance: f64,
@@ -928,14 +928,14 @@ pub fn fit_partial_strength_binomial(
     let mask = PairMask::new(n, self_loops, known_src, known_tgt);
 
     let (mut excess_out, mut excess_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -949,7 +949,7 @@ pub fn fit_partial_strength_binomial(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -973,7 +973,7 @@ pub fn fit_partial_strength_binomial(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
         |i, j| {
             let q = x[i] * y[j];
@@ -984,7 +984,7 @@ pub fn fit_partial_strength_binomial(
     )
 }
 
-/// Full partial B(M) strength-edges fit: excess → L-BFGS → rate table.
+/// Full partial B(M) strength-edges fit: excess → L-BFGS → intensity table.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn fit_partial_strength_edges_binomial(
@@ -992,7 +992,7 @@ pub fn fit_partial_strength_edges_binomial(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     target_edges: f64,
     layers: u32,
     self_loops: bool,
@@ -1006,14 +1006,14 @@ pub fn fit_partial_strength_edges_binomial(
     let excess_edges = (target_edges - known_src.len() as f64).max(0.0);
 
     let (mut excess_out, mut excess_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -1027,7 +1027,7 @@ pub fn fit_partial_strength_edges_binomial(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -1053,7 +1053,7 @@ pub fn fit_partial_strength_edges_binomial(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
         |i, j| {
             let q = x[i] * y[j];
@@ -1070,7 +1070,7 @@ pub fn fit_partial_strength_edges_binomial(
     )
 }
 
-/// Full partial B(M) strength-degree fit: excess → L-BFGS → rate table.
+/// Full partial B(M) strength-degree fit: excess → L-BFGS → intensity table.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn fit_partial_strength_degree_binomial(
@@ -1080,7 +1080,7 @@ pub fn fit_partial_strength_degree_binomial(
     degree_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     layers: u32,
     self_loops: bool,
     tolerance: f64,
@@ -1094,14 +1094,14 @@ pub fn fit_partial_strength_degree_binomial(
     let mask = PairMask::new(n, self_loops, known_src, known_tgt);
 
     let (mut excess_s_out, mut excess_s_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -1119,7 +1119,7 @@ pub fn fit_partial_strength_degree_binomial(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -1133,7 +1133,7 @@ pub fn fit_partial_strength_degree_binomial(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -1163,7 +1163,7 @@ pub fn fit_partial_strength_degree_binomial(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
         |i, j| {
             let q = x[i] * y[j];
@@ -1185,7 +1185,7 @@ pub fn fit_partial_strength_degree_binomial(
 // W (Geometric/NegBin) partial fits
 // ---------------------------------------------------------------------------
 
-/// Full partial W(M) strength fit: excess -> masked IPF -> rate table.
+/// Full partial W(M) strength fit: excess -> masked IPF -> intensity table.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn fit_partial_strength_w(
@@ -1193,7 +1193,7 @@ pub fn fit_partial_strength_w(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     layers: u32,
     self_loops: bool,
     tolerance: f64,
@@ -1205,14 +1205,14 @@ pub fn fit_partial_strength_w(
     let mask = PairMask::new(n, self_loops, known_src, known_tgt);
 
     let (mut excess_out, mut excess_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -1226,7 +1226,7 @@ pub fn fit_partial_strength_w(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -1250,7 +1250,7 @@ pub fn fit_partial_strength_w(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
         |i, j| {
             let q = x[i] * y[j];
@@ -1264,7 +1264,7 @@ pub fn fit_partial_strength_w(
     )
 }
 
-/// Full partial W(M) strength-degree fit: excess -> masked Newton -> rate table.
+/// Full partial W(M) strength-degree fit: excess -> masked Newton -> intensity table.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn fit_partial_strength_degree_w(
@@ -1274,7 +1274,7 @@ pub fn fit_partial_strength_degree_w(
     degree_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     layers: u32,
     self_loops: bool,
     tolerance: f64,
@@ -1288,14 +1288,14 @@ pub fn fit_partial_strength_degree_w(
     let mask = PairMask::new(n, self_loops, known_src, known_tgt);
 
     let (mut excess_s_out, mut excess_s_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -1313,7 +1313,7 @@ pub fn fit_partial_strength_degree_w(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -1327,7 +1327,7 @@ pub fn fit_partial_strength_degree_w(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -1353,7 +1353,7 @@ pub fn fit_partial_strength_degree_w(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
         |i, j| {
             let q = x[i] * y[j];
@@ -1377,7 +1377,7 @@ pub fn fit_partial_strength_degree_w(
     )
 }
 
-/// Full partial W strength-edges fit: excess → L-BFGS → rate table.
+/// Full partial W strength-edges fit: excess → L-BFGS → intensity table.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn fit_partial_strength_edges_w(
@@ -1385,7 +1385,7 @@ pub fn fit_partial_strength_edges_w(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     target_edges: f64,
     layers: u32,
     self_loops: bool,
@@ -1399,14 +1399,14 @@ pub fn fit_partial_strength_edges_w(
     let excess_edges = (target_edges - known_src.len() as f64).max(0.0);
 
     let (mut excess_out, mut excess_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -1420,7 +1420,7 @@ pub fn fit_partial_strength_edges_w(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -1447,7 +1447,7 @@ pub fn fit_partial_strength_edges_w(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
         |i, j| {
             let q = x[i] * y[j];
@@ -1486,4 +1486,78 @@ fn pad_to_n(arr: &[f64], n: usize) -> Vec<f64> {
     let mut v = arr.to_vec();
     v.resize(n, 0.0);
     v
+}
+
+#[cfg(test)]
+mod equivalence_tests {
+    use super::compute_excess;
+    use crate::constraints::fixed_pairs::{compute_fixed_contributions, residualize, FixedPairs};
+
+    /// The shared constraints residualization must agree with the legacy
+    /// `compute_excess` used by the partial-fitting solvers.
+    #[test]
+    fn shared_residualize_equals_compute_excess() {
+        let n = 5;
+        let strength_out = vec![10u64, 20, 30, 40, 50];
+        let strength_in = vec![20u64, 30, 40, 50, 10];
+        let known_src = [0u64, 1, 3];
+        let known_tgt = [1u64, 2, 4];
+        let known_occ = [3u64, 5, 7];
+
+        // Legacy path (f64).
+        let legacy = compute_excess(
+            &strength_out.iter().map(|&v| v as f64).collect::<Vec<_>>(),
+            &strength_in.iter().map(|&v| v as f64).collect::<Vec<_>>(),
+            &known_src,
+            &known_tgt,
+            &known_occ.iter().map(|&v| v as f64).collect::<Vec<_>>(),
+        )
+        .expect("feasible");
+
+        // Shared path (u64).
+        let fixed = FixedPairs::new(n, true, &known_src, &known_tgt, &known_occ)
+            .expect("valid fixed pairs");
+        let contrib = compute_fixed_contributions(n, &fixed, None);
+        let res = residualize(
+            n,
+            &contrib,
+            None,
+            None,
+            Some(&strength_out),
+            Some(&strength_in),
+            None,
+            None,
+            None,
+        )
+        .expect("feasible");
+        let shared_out = res.strength_out.expect("strength_out");
+        let shared_in = res.strength_in.expect("strength_in");
+
+        for i in 0..n {
+            assert_eq!(
+                shared_out[i] as f64, legacy.0[i],
+                "out residual mismatch at node {i}"
+            );
+            assert_eq!(
+                shared_in[i] as f64, legacy.1[i],
+                "in residual mismatch at node {i}"
+            );
+        }
+    }
+
+    #[test]
+    fn shared_mask_matches_partial_mask_semantics() {
+        // The PairMask built from FixedPairs equals the one built directly.
+        use crate::constraints::mask::PairMask;
+        let n = 4;
+        let known_src = [0u64, 2];
+        let known_tgt = [1u64, 3];
+        let fixed = FixedPairs::new(n, false, &known_src, &known_tgt, &[2, 4]).unwrap();
+        let direct = PairMask::new(n, false, &known_src, &known_tgt);
+        for i in 0..n {
+            for j in 0..n {
+                assert_eq!(fixed.mask().is_masked(i, j), direct.is_masked(i, j));
+            }
+        }
+    }
 }

@@ -1,11 +1,11 @@
 //! Clustering coefficients for undirected projections.
 
-use crate::graph::WeightedEdge;
+use crate::graph::OccupiedPair;
 use std::collections::{HashMap, HashSet};
 
 /// Binary clustering coefficient per node.
 #[must_use]
-pub fn clustering_coefficients(node_count: usize, edges: &[WeightedEdge]) -> Vec<f64> {
+pub fn clustering_coefficients(node_count: usize, edges: &[OccupiedPair]) -> Vec<f64> {
     let adj = build_undirected_adjacency(node_count, edges);
     let mut result = vec![0.0_f64; node_count];
 
@@ -29,13 +29,13 @@ pub fn clustering_coefficients(node_count: usize, edges: &[WeightedEdge]) -> Vec
     result
 }
 
-/// Weighted clustering coefficient per node.
+/// Occupation clustering coefficient per node.
 ///
 /// c^w_i = sum_{jk} (w_ij + w_ik) * Theta(ij) * Theta(jk) * Theta(ki)
 ///         / (2 * s_i * (k_i - 1))
 #[must_use]
-pub fn weighted_clustering_coefficients(node_count: usize, edges: &[WeightedEdge]) -> Vec<f64> {
-    let (adj, weights) = build_undirected_adjacency_weighted(node_count, edges);
+pub fn occupation_clustering_coefficients(node_count: usize, edges: &[OccupiedPair]) -> Vec<f64> {
+    let (adj, occ_nums) = build_undirected_adjacency_weighted(node_count, edges);
     let mut result = vec![0.0_f64; node_count];
 
     // Compute strength and degree
@@ -45,7 +45,7 @@ pub fn weighted_clustering_coefficients(node_count: usize, edges: &[WeightedEdge
         k[i] = adj[i].len();
         s[i] = adj[i]
             .iter()
-            .map(|&j| *weights.get(&(i, j)).unwrap_or(&0) as f64)
+            .map(|&j| *occ_nums.get(&(i, j)).unwrap_or(&0) as f64)
             .sum();
     }
 
@@ -56,10 +56,10 @@ pub fn weighted_clustering_coefficients(node_count: usize, edges: &[WeightedEdge
         let neighbors: Vec<usize> = adj[i].iter().copied().collect();
         let mut num = 0.0_f64;
         for (idx, &n1) in neighbors.iter().enumerate() {
-            let w_ij = *weights.get(&(i, n1)).unwrap_or(&0) as f64;
+            let w_ij = *occ_nums.get(&(i, n1)).unwrap_or(&0) as f64;
             for &n2 in &neighbors[idx + 1..] {
                 if adj[n1].contains(&n2) {
-                    let w_ik = *weights.get(&(i, n2)).unwrap_or(&0) as f64;
+                    let w_ik = *occ_nums.get(&(i, n2)).unwrap_or(&0) as f64;
                     num += w_ij + w_ik;
                 }
             }
@@ -70,7 +70,7 @@ pub fn weighted_clustering_coefficients(node_count: usize, edges: &[WeightedEdge
     result
 }
 
-fn build_undirected_adjacency(node_count: usize, edges: &[WeightedEdge]) -> Vec<HashSet<usize>> {
+fn build_undirected_adjacency(node_count: usize, edges: &[OccupiedPair]) -> Vec<HashSet<usize>> {
     let mut adj = vec![HashSet::new(); node_count];
     for e in edges {
         adj[e.source].insert(e.target);
@@ -79,41 +79,41 @@ fn build_undirected_adjacency(node_count: usize, edges: &[WeightedEdge]) -> Vec<
     adj
 }
 
-type UndirectedWeighted = (Vec<HashSet<usize>>, HashMap<(usize, usize), u64>);
+type UndirectedOccupations = (Vec<HashSet<usize>>, HashMap<(usize, usize), u64>);
 
 fn build_undirected_adjacency_weighted(
     node_count: usize,
-    edges: &[WeightedEdge],
-) -> UndirectedWeighted {
+    edges: &[OccupiedPair],
+) -> UndirectedOccupations {
     let mut adj = vec![HashSet::new(); node_count];
-    let mut weights: HashMap<(usize, usize), u64> = HashMap::new();
+    let mut occ_nums: HashMap<(usize, usize), u64> = HashMap::new();
     for e in edges {
         adj[e.source].insert(e.target);
         adj[e.target].insert(e.source);
-        // Keep max weight for undirected projection
-        weights
+        // Keep max occ_num for undirected projection
+        occ_nums
             .entry((e.source, e.target))
-            .and_modify(|w| *w = (*w).max(e.weight))
-            .or_insert(e.weight);
-        weights
+            .and_modify(|w| *w = (*w).max(e.occ_num))
+            .or_insert(e.occ_num);
+        occ_nums
             .entry((e.target, e.source))
-            .and_modify(|w| *w = (*w).max(e.weight))
-            .or_insert(e.weight);
+            .and_modify(|w| *w = (*w).max(e.occ_num))
+            .or_insert(e.occ_num);
     }
-    (adj, weights)
+    (adj, occ_nums)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::WeightedEdge;
+    use crate::graph::OccupiedPair;
 
     #[test]
     fn triangle_has_clustering_one() {
         let edges = [
-            WeightedEdge::new(0, 1, 1),
-            WeightedEdge::new(1, 2, 1),
-            WeightedEdge::new(2, 0, 1),
+            OccupiedPair::new(0, 1, 1),
+            OccupiedPair::new(1, 2, 1),
+            OccupiedPair::new(2, 0, 1),
         ];
         let c = clustering_coefficients(3, &edges);
         for &ci in &c {
@@ -124,9 +124,9 @@ mod tests {
     #[test]
     fn star_has_zero_clustering() {
         let edges = [
-            WeightedEdge::new(0, 1, 1),
-            WeightedEdge::new(0, 2, 1),
-            WeightedEdge::new(0, 3, 1),
+            OccupiedPair::new(0, 1, 1),
+            OccupiedPair::new(0, 2, 1),
+            OccupiedPair::new(0, 3, 1),
         ];
         let c = clustering_coefficients(4, &edges);
         assert_eq!(c[0], 0.0);
@@ -135,11 +135,11 @@ mod tests {
     #[test]
     fn weighted_triangle_positive() {
         let edges = [
-            WeightedEdge::new(0, 1, 2),
-            WeightedEdge::new(1, 2, 3),
-            WeightedEdge::new(2, 0, 4),
+            OccupiedPair::new(0, 1, 2),
+            OccupiedPair::new(1, 2, 3),
+            OccupiedPair::new(2, 0, 4),
         ];
-        let wc = weighted_clustering_coefficients(3, &edges);
+        let wc = occupation_clustering_coefficients(3, &edges);
         for &ci in &wc {
             assert!(ci > 0.0);
         }

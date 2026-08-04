@@ -1,11 +1,18 @@
 """Result types for MENoBiS model fitting, filtering, and partial constraints."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
 
 from menobis.data.frames import ProbabilityTable
+
+if TYPE_CHECKING:
+    from menobis.data.frames import EdgeTable
+    from menobis.models.spec import Constraint, Ensemble, ModelFamily
 
 
 @dataclass(frozen=True)
@@ -204,11 +211,33 @@ class StrengthDegreeFit(FitResult):
 
 
 @dataclass(frozen=True)
+class EdgesEventsFit(FitResult):
+    """Fitted global EDGES_EVENTS multipliers (all families).
+
+    The model is symmetric: every candidate pair shares one zero-inflated
+    distribution with positive-support parameter `q` and global occupation
+    multiplier `lam`.
+    """
+
+    q: float
+    lam: float
+    occupation: float
+    positive_mean: float
+    node_count: int
+    self_loops: bool = True
+    converged: bool = True
+    iterations: int = 0
+    family: str = "poisson"
+    layers: int | None = None
+    diagnostics: OptimizationDiagnostics | None = None
+
+
+@dataclass(frozen=True)
 class DegreeEventsFit(FitResult):
     """Fitting result for degree-events models (all families).
 
     The model factorizes into occupation (Bernoulli via x, y) and
-    positive-weight distribution parameterized by q.
+    positive-occupation distribution parameterized by q.
     """
 
     node: NDArray[np.uint64]
@@ -225,12 +254,42 @@ class DegreeEventsFit(FitResult):
 
 
 @dataclass(frozen=True)
+class SamplingDiagnostics:
+    """Diagnostics for a sampling run."""
+
+    method: str
+    exactness: str
+    iterations: int | None = None
+    accepted: int | None = None
+    total_steps: int | None = None
+    message: str | None = None
+
+
+@dataclass(frozen=True)
+class SamplingResult:
+    """Detailed result of a sampling call.
+
+    ``edges`` is the sampled occupied-pair table. ``exactness`` records the
+    generation-method category (independent, direct, MCMC, approximate...).
+    """
+
+    edges: EdgeTable
+    ensemble: Ensemble
+    family: ModelFamily
+    constraint: Constraint
+    method: str
+    exactness: str
+    seed: int
+    diagnostics: SamplingDiagnostics | None = None
+
+
+@dataclass(frozen=True)
 class PartialFitResult(FitResult):
-    """Rate table from partial-constraint fitting with diagnostics."""
+    """Sparse intensity table from partial-constraint fitting with diagnostics."""
 
     source: NDArray[np.uint64]
     target: NDArray[np.uint64]
-    rate: NDArray[np.float64]
+    intensity: NDArray[np.float64]
     constraint: str = "strength"
     family: str = "poisson"
     self_loops: bool = True
@@ -239,11 +298,11 @@ class PartialFitResult(FitResult):
     diagnostics: OptimizationDiagnostics | None = None
 
     def as_probability_table(self) -> ProbabilityTable:
-        """Convert to ProbabilityTable for sampling (rates as weights)."""
+        """Convert to ProbabilityTable for sampling (intensities as probabilities)."""
         return ProbabilityTable(
             source=self.source,
             target=self.target,
-            probability=self.rate,
+            probability=self.intensity,
         )
 
 
@@ -251,9 +310,12 @@ __all__ = [
     "ConicDiagnostics",
     "DegreeEventsFit",
     "DegreeFit",
+    "EdgesEventsFit",
     "FitResult",
     "OptimizationDiagnostics",
     "PartialFitResult",
+    "SamplingDiagnostics",
+    "SamplingResult",
     "StrengthCostFit",
     "StrengthDegreeFit",
     "StrengthEdgesFit",

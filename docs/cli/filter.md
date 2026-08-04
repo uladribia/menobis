@@ -53,7 +53,7 @@ Each file contains p-values, expected occupation, and occupation probability.
 | `--correction` | `none`, `bonferroni`, or `fdr` |
 | `--detect-absent` | stream absent-pair candidates |
 | `--min-occupation` | absent-edge occupation threshold |
-| `--min-expected` | absent expected-weight threshold |
+| `--min-expected` | absent expected-occupation threshold |
 | `--max-absent` | cap absent output size |
 | `--self-loops/--no-self-loops` | diagonal handling |
 | `--target-edges` | target edge count (strength-edges-poisson) |

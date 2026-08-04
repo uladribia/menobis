@@ -39,4 +39,4 @@ def test_custom_pij_events_poisson_is_reproducible() -> None:
 
     np.testing.assert_array_equal(first.source, second.source)
     np.testing.assert_array_equal(first.target, second.target)
-    np.testing.assert_array_equal(first.weight, second.weight)
+    np.testing.assert_array_equal(first.occ_num, second.occ_num)

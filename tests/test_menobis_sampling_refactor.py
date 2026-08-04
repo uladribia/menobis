@@ -18,9 +18,9 @@ def test_stub_matching_replaces_stub_matching_name() -> None:
         seed=7,
     )
 
-    assert sample.weight.sum() == 3
-    out_strength = np.bincount(sample.source, weights=sample.weight, minlength=2)
-    in_strength = np.bincount(sample.target, weights=sample.weight, minlength=2)
+    assert sample.occ_num.sum() == 3
+    out_strength = np.bincount(sample.source, weights=sample.occ_num, minlength=2)
+    in_strength = np.bincount(sample.target, weights=sample.occ_num, minlength=2)
     assert out_strength.tolist() == [2, 1]
     assert in_strength.tolist() == [1, 2]
 
@@ -34,4 +34,4 @@ def test_negative_binomial_public_name_is_spelled_out() -> None:
         seed=11,
     )
 
-    assert np.all(sample.weight >= 0)
+    assert np.all(sample.occ_num >= 0)

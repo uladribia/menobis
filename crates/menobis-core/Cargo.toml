@@ -13,6 +13,7 @@ path = "src/lib.rs"
 default = []
 
 [dependencies]
+libm.workspace = true
 thiserror.workspace = true
 rand.workspace = true
 rand_distr.workspace = true

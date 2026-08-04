@@ -26,7 +26,7 @@ MENoBiS reads directed edge lists with columns:
 |---|---|
 | `source` | non-negative integer origin node id |
 | `target` | non-negative integer destination node id |
-| `weight` | non-negative integer occupation; zero rows are ignored |
+| `occ_num` | non-negative integer occupation; zero rows are ignored |
 
 Supported formats: CSV, TSV, Parquet, Arrow IPC, GraphML, Matrix Market, Pajek.
 

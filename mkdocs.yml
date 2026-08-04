@@ -48,6 +48,11 @@ nav:
       - Fetching real-world data: development/fetching-data.md
       - Release process: development/release-process.md
       - TODOs: development/todos.md
+      - Architecture: development/architecture.md
+      - Phase 0 migration notes: development/migration-notes.md
+      - Agent specs:
+          - Overview: development/agent-specifications/README.md
+          - Phase 0 refactor: development/agent-specifications/microcanonical-phase-0.md
 
 plugins:
   - search

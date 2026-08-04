@@ -1,29 +1,54 @@
-//! Weighted edge-list graph primitives for MENoBiS.
+//! Occupied-pair graph primitives for MENoBiS.
 
-/// A weighted directed edge.
+use crate::OccNum;
+
+/// An occupied directed pair (i→j) with positive integer occupation number.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct WeightedEdge {
+pub struct OccupiedPair {
     /// Source node identifier.
     pub source: usize,
     /// Target node identifier.
     pub target: usize,
-    /// Positive integer edge weight.
-    pub weight: u64,
+    /// Pair occupation number (t_ij > 0).
+    pub occ_num: OccNum,
 }
 
-impl WeightedEdge {
-    /// Create a weighted edge.
+impl OccupiedPair {
+    /// Create an occupied pair.
     #[must_use]
-    pub const fn new(source: usize, target: usize, weight: u64) -> Self {
+    pub const fn new(source: usize, target: usize, occ_num: OccNum) -> Self {
         Self {
             source,
             target,
-            weight,
+            occ_num,
         }
     }
 }
 
-/// Directed node sequences for weighted origin-destination edges.
+/// Lazy sparse view over an occupied-pair edge list.
+///
+/// Carries the node count and the edge slice; adjacency is only built by
+/// the clustering routines that actually need it (O(N + E) memory).
+#[derive(Clone, Copy, Debug)]
+pub struct SparseGraphView<'a> {
+    pub node_count: usize,
+    pub edges: &'a [OccupiedPair],
+}
+
+impl<'a> SparseGraphView<'a> {
+    /// Build a view, deriving the node count from the edges.
+    #[must_use]
+    pub fn from_edges(edges: &'a [OccupiedPair]) -> Self {
+        let node_count = edges
+            .iter()
+            .map(|e| e.source.max(e.target))
+            .max()
+            .map_or(0, |m| m + 1);
+        Self { node_count, edges }
+    }
+}
+
+/// Directed node sequences for occupied origin-destination pairs.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DirectedNodeSequence {
     /// Outgoing value per node.
@@ -34,13 +59,13 @@ pub struct DirectedNodeSequence {
 
 /// Compute directed incoming and outgoing strengths.
 #[must_use]
-pub fn directed_strengths(node_count: usize, edges: &[WeightedEdge]) -> DirectedNodeSequence {
+pub fn directed_strengths(node_count: usize, edges: &[OccupiedPair]) -> DirectedNodeSequence {
     let mut out = vec![0_u64; node_count];
     let mut incoming = vec![0_u64; node_count];
 
     for edge in edges {
-        out[edge.source] += edge.weight;
-        incoming[edge.target] += edge.weight;
+        out[edge.source] += edge.occ_num;
+        incoming[edge.target] += edge.occ_num;
     }
 
     DirectedNodeSequence { out, incoming }
@@ -48,7 +73,7 @@ pub fn directed_strengths(node_count: usize, edges: &[WeightedEdge]) -> Directed
 
 /// Compute directed incoming and outgoing binary degrees.
 #[must_use]
-pub fn directed_degrees(node_count: usize, edges: &[WeightedEdge]) -> DirectedNodeSequence {
+pub fn directed_degrees(node_count: usize, edges: &[OccupiedPair]) -> DirectedNodeSequence {
     let mut out = vec![0_u64; node_count];
     let mut incoming = vec![0_u64; node_count];
 
@@ -62,11 +87,20 @@ pub fn directed_degrees(node_count: usize, edges: &[WeightedEdge]) -> DirectedNo
 
 #[cfg(test)]
 mod tests {
-    use super::{directed_degrees, directed_strengths, WeightedEdge};
+    use super::{directed_degrees, directed_strengths, OccupiedPair, SparseGraphView};
+
+    #[test]
+    fn sparse_graph_view_derives_node_count() {
+        let edges = [OccupiedPair::new(0, 1, 3), OccupiedPair::new(2, 4, 1)];
+        let view = SparseGraphView::from_edges(&edges);
+        assert_eq!(view.node_count, 5);
+        assert_eq!(view.edges.len(), 2);
+        assert_eq!(SparseGraphView::from_edges(&[]).node_count, 0);
+    }
 
     #[test]
     fn directed_strengths_conserve_total_weight() {
-        let edges = [WeightedEdge::new(0, 1, 3), WeightedEdge::new(1, 2, 4)];
+        let edges = [OccupiedPair::new(0, 1, 3), OccupiedPair::new(1, 2, 4)];
 
         let strengths = directed_strengths(3, &edges);
 
@@ -79,9 +113,9 @@ mod tests {
     #[test]
     fn directed_degrees_count_binary_edges() {
         let edges = [
-            WeightedEdge::new(0, 1, 3),
-            WeightedEdge::new(0, 2, 4),
-            WeightedEdge::new(1, 2, 5),
+            OccupiedPair::new(0, 1, 3),
+            OccupiedPair::new(0, 2, 4),
+            OccupiedPair::new(1, 2, 5),
         ];
 
         let degrees = directed_degrees(3, &edges);

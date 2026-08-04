@@ -4,6 +4,7 @@
 //! Max Entropy NOn Binary Suite network analysis, fitting, and generation.
 
 pub mod clustering;
+pub mod constraints;
 pub mod distribution;
 pub mod filter;
 pub mod fitting;
@@ -11,6 +12,9 @@ pub mod generation;
 pub mod graph;
 pub mod pairs;
 pub mod stats;
+
+/// Canonical scalar type for integer pair occupation numbers t_ij.
+pub type OccNum = u64;
 
 /// Current MENoBiS core version, synchronized with the Python package during releases.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

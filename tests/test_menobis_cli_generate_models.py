@@ -28,7 +28,7 @@ def test_generate_multinomial_json(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code == 0, result.output
-    assert '"weight"' in result.output
+    assert '"occ_num"' in result.output
 
 
 def test_generate_degree_events_me_json(tmp_path: Path) -> None:
@@ -46,7 +46,7 @@ def test_generate_degree_events_me_json(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code == 0, result.output
-    assert '"weight"' in result.output
+    assert '"occ_num"' in result.output
 
 
 def test_generate_strength_edges_me_json(tmp_path: Path) -> None:
@@ -56,7 +56,7 @@ def test_generate_strength_edges_me_json(tmp_path: Path) -> None:
         app, ["generate", "strength-edges-poisson", str(input_path), "--json"]
     )
     assert result.exit_code == 0, result.output
-    assert '"weight"' in result.output
+    assert '"occ_num"' in result.output
 
 
 def test_generate_custom_pij_json(tmp_path: Path) -> None:
@@ -76,4 +76,4 @@ def test_generate_custom_pij_json(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code == 0, result.output
-    assert '"weight"' in result.output
+    assert '"occ_num"' in result.output

@@ -1,6 +1,6 @@
 """Partial-constraint fitting: some p_ij known, rest fitted from ME models.
 
-All heavy logic (mask building, excess computation, IPF, rate assembly)
+All heavy logic (mask building, excess computation, IPF, intensity assembly)
 runs in Rust. Python only validates inputs and wraps results.
 """
 
@@ -65,7 +65,7 @@ def _to_partial_result(
     name: str,
     sources: list[int],
     targets: list[int],
-    rates: list[float],
+    intensities: list[float],
     converged: bool,
     iterations: int,
     *,
@@ -78,7 +78,7 @@ def _to_partial_result(
     return PartialFitResult(
         source=np.array(sources, dtype=np.uint64),
         target=np.array(targets, dtype=np.uint64),
-        rate=np.array(rates, dtype=np.float64),
+        intensity=np.array(intensities, dtype=np.float64),
         constraint=constraint,
         family=family,
         self_loops=self_loops,
@@ -102,7 +102,7 @@ def _fit_partial_strength_poisson(
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
     known_target: NDArray[np.integer],
-    known_rate: NDArray[np.floating],
+    known_occnum: NDArray[np.floating],
     *,
     self_loops: bool = True,
     tolerance: float = 1e-8,
@@ -113,16 +113,16 @@ def _fit_partial_strength_poisson(
     s_in = np.asarray(strength_in, dtype=np.float64)
     k_src = np.asarray(known_source, dtype=np.uint64)
     k_tgt = np.asarray(known_target, dtype=np.uint64)
-    k_rate = np.asarray(known_rate, dtype=np.float64)
-    _validate_known_feasibility(s_out, s_in, k_src, k_tgt, k_rate)
+    k_occ = np.asarray(known_occnum, dtype=np.float64)
+    _validate_known_feasibility(s_out, s_in, k_src, k_tgt, k_occ)
 
-    sources, targets, rates, converged, iters = (
+    sources, targets, intensities, converged, iters = (
         _menobis.fit_partial_strength_poisson_full(
             s_out.tolist(),
             s_in.tolist(),
             k_src.tolist(),
             k_tgt.tolist(),
-            k_rate.tolist(),
+            k_occ.tolist(),
             self_loops,
             tolerance,
             max_iterations,
@@ -132,7 +132,7 @@ def _fit_partial_strength_poisson(
         "fit_partial_strength_poisson",
         sources,
         targets,
-        rates,
+        intensities,
         converged,
         iters,
         constraint="strength",
@@ -156,7 +156,7 @@ def _fit_partial_degree_poisson(
     k_src = np.asarray(known_source, dtype=np.uint64)
     k_tgt = np.asarray(known_target, dtype=np.uint64)
 
-    sources, targets, rates, converged, iters = (
+    sources, targets, intensities, converged, iters = (
         _menobis.fit_partial_degree_poisson_full(
             k_out.tolist(),
             k_in.tolist(),
@@ -171,7 +171,7 @@ def _fit_partial_degree_poisson(
         "fit_partial_degree_poisson",
         sources,
         targets,
-        rates,
+        intensities,
         converged,
         iters,
         constraint="degree",
@@ -186,7 +186,7 @@ def _fit_partial_strength_degree_poisson(
     degree_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
     known_target: NDArray[np.integer],
-    known_rate: NDArray[np.floating],
+    known_occnum: NDArray[np.floating],
     *,
     self_loops: bool = True,
     tolerance: float = 1e-10,
@@ -199,9 +199,9 @@ def _fit_partial_strength_degree_poisson(
     k_in = np.asarray(degree_in, dtype=np.float64)
     k_src = np.asarray(known_source, dtype=np.uint64)
     k_tgt = np.asarray(known_target, dtype=np.uint64)
-    k_rate = np.asarray(known_rate, dtype=np.float64)
+    k_occ = np.asarray(known_occnum, dtype=np.float64)
 
-    sources, targets, rates, converged, iters = (
+    sources, targets, intensities, converged, iters = (
         _menobis.fit_partial_strength_degree_poisson_full(
             s_out.tolist(),
             s_in.tolist(),
@@ -209,7 +209,7 @@ def _fit_partial_strength_degree_poisson(
             k_in.tolist(),
             k_src.tolist(),
             k_tgt.tolist(),
-            k_rate.tolist(),
+            k_occ.tolist(),
             self_loops,
             tolerance,
             max_iterations,
@@ -219,7 +219,7 @@ def _fit_partial_strength_degree_poisson(
         "fit_partial_strength_degree_poisson",
         sources,
         targets,
-        rates,
+        intensities,
         converged,
         iters,
         constraint="strength_degree",
@@ -232,7 +232,7 @@ def _fit_partial_strength_edges_poisson(
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
     known_target: NDArray[np.integer],
-    known_rate: NDArray[np.floating],
+    known_occnum: NDArray[np.floating],
     target_edges: float,
     *,
     self_loops: bool = True,
@@ -244,15 +244,15 @@ def _fit_partial_strength_edges_poisson(
     s_in = np.asarray(strength_in, dtype=np.float64)
     k_src = np.asarray(known_source, dtype=np.uint64)
     k_tgt = np.asarray(known_target, dtype=np.uint64)
-    k_rate = np.asarray(known_rate, dtype=np.float64)
+    k_occ = np.asarray(known_occnum, dtype=np.float64)
 
-    sources, targets, rates, converged, iters = (
+    sources, targets, intensities, converged, iters = (
         _menobis.fit_partial_strength_edges_poisson_full(
             s_out.tolist(),
             s_in.tolist(),
             k_src.tolist(),
             k_tgt.tolist(),
-            k_rate.tolist(),
+            k_occ.tolist(),
             target_edges,
             self_loops,
             tolerance,
@@ -263,7 +263,7 @@ def _fit_partial_strength_edges_poisson(
         "fit_partial_strength_edges_poisson",
         sources,
         targets,
-        rates,
+        intensities,
         converged,
         iters,
         constraint="strength_edges",
@@ -276,7 +276,7 @@ def _fit_partial_strength_cost_poisson_coordinates(
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
     known_target: NDArray[np.integer],
-    known_rate: NDArray[np.floating],
+    known_occnum: NDArray[np.floating],
     x: NDArray[np.floating],
     y: NDArray[np.floating],
     target_cost: float,
@@ -297,16 +297,16 @@ def _fit_partial_strength_cost_poisson_coordinates(
     s_in = np.asarray(strength_in, dtype=np.float64)
     k_src = np.asarray(known_source, dtype=np.uint64)
     k_tgt = np.asarray(known_target, dtype=np.uint64)
-    k_rate = np.asarray(known_rate, dtype=np.float64)
+    k_occ = np.asarray(known_occnum, dtype=np.float64)
     coord_x = np.asarray(x, dtype=np.float64)
     coord_y = np.asarray(y, dtype=np.float64)
-    sources, targets, rates, converged, iters = (
+    sources, targets, intensities, converged, iters = (
         _menobis.fit_partial_strength_cost_poisson_coordinates_full(
             s_out.tolist(),
             s_in.tolist(),
             k_src.tolist(),
             k_tgt.tolist(),
-            k_rate.tolist(),
+            k_occ.tolist(),
             coord_x.tolist(),
             coord_y.tolist(),
             target_cost,
@@ -319,7 +319,7 @@ def _fit_partial_strength_cost_poisson_coordinates(
         "fit_partial_strength_cost_poisson_coordinates",
         sources,
         targets,
-        rates,
+        intensities,
         converged,
         iters,
         constraint="strength_cost",
@@ -332,7 +332,7 @@ def _partial_family_coordinate(
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
     known_target: NDArray[np.integer],
-    known_rate: NDArray[np.floating],
+    known_occnum: NDArray[np.floating],
     x: NDArray[np.floating],
     y: NDArray[np.floating],
     target_cost: float,
@@ -349,7 +349,7 @@ def _partial_family_coordinate(
     s_in = np.asarray(strength_in, dtype=np.float64)
     k_src = np.asarray(known_source, dtype=np.uint64)
     k_tgt = np.asarray(known_target, dtype=np.uint64)
-    k_rate = np.asarray(known_rate, dtype=np.float64)
+    k_occ = np.asarray(known_occnum, dtype=np.float64)
     coord_x = np.asarray(x, dtype=np.float64)
     coord_y = np.asarray(y, dtype=np.float64)
     sources_list, targets_list, rates_list, converged, iterations = native_func(
@@ -357,7 +357,7 @@ def _partial_family_coordinate(
         s_in.tolist(),
         k_src.tolist(),
         k_tgt.tolist(),
-        k_rate.tolist(),
+        k_occ.tolist(),
         coord_x.tolist(),
         coord_y.tolist(),
         float(target_cost),
@@ -374,7 +374,7 @@ def _partial_family_coordinate(
     return PartialFitResult(
         source=np.array(sources_list, dtype=np.uint64),
         target=np.array(targets_list, dtype=np.uint64),
-        rate=np.array(rates_list, dtype=np.float64),
+        intensity=np.array(rates_list, dtype=np.float64),
         constraint="strength_cost",
         family=family,
         self_loops=self_loops,
@@ -393,7 +393,7 @@ def _fit_partial_strength_cost_binomial_coordinates(
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
     known_target: NDArray[np.integer],
-    known_rate: NDArray[np.floating],
+    known_occnum: NDArray[np.floating],
     x: NDArray[np.floating],
     y: NDArray[np.floating],
     target_cost: float,
@@ -407,7 +407,7 @@ def _fit_partial_strength_cost_binomial_coordinates(
     """Fit partial B(M) strength-cost from projected coordinates.
 
     Computes excess strengths and cost, fits B(M) on free pairs, assembles
-    rate table using E[t_ij] = M * x_i * y_j * f / (1 + x_i * y_j * f).
+    intensity table using E[t_ij] = M * x_i * y_j * f / (1 + x_i * y_j * f).
     Only ``coordinate_metric="euclidean"`` is currently implemented.
     """
     _validate_coordinate_metric(coordinate_metric)
@@ -416,7 +416,7 @@ def _fit_partial_strength_cost_binomial_coordinates(
         strength_in,
         known_source,
         known_target,
-        known_rate,
+        known_occnum,
         x,
         y,
         target_cost,
@@ -434,7 +434,7 @@ def _fit_partial_strength_cost_geometric_coordinates(
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
     known_target: NDArray[np.integer],
-    known_rate: NDArray[np.floating],
+    known_occnum: NDArray[np.floating],
     x: NDArray[np.floating],
     y: NDArray[np.floating],
     target_cost: float,
@@ -446,7 +446,7 @@ def _fit_partial_strength_cost_geometric_coordinates(
 ) -> PartialFitResult:
     """Fit partial W geometric strength-cost from projected coordinates.
 
-    Uses W conic solver on excess, assembles rates with W formula.
+    Uses W conic solver on excess, assembles intensities with W formula.
     Only ``coordinate_metric="euclidean"`` is currently implemented.
     """
     _validate_coordinate_metric(coordinate_metric)
@@ -455,7 +455,7 @@ def _fit_partial_strength_cost_geometric_coordinates(
         strength_in,
         known_source,
         known_target,
-        known_rate,
+        known_occnum,
         x,
         y,
         target_cost,
@@ -473,7 +473,7 @@ def _fit_partial_strength_cost_negative_binomial_coordinates(
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
     known_target: NDArray[np.integer],
-    known_rate: NDArray[np.floating],
+    known_occnum: NDArray[np.floating],
     x: NDArray[np.floating],
     y: NDArray[np.floating],
     target_cost: float,
@@ -486,7 +486,7 @@ def _fit_partial_strength_cost_negative_binomial_coordinates(
 ) -> PartialFitResult:
     """Fit partial W negative-binomial strength-cost from projected coordinates.
 
-    Uses W conic solver on excess, assembles rates with W(M) formula.
+    Uses W conic solver on excess, assembles intensities with W(M) formula.
     Only ``coordinate_metric="euclidean"`` is currently implemented.
     """
     _validate_coordinate_metric(coordinate_metric)
@@ -495,7 +495,7 @@ def _fit_partial_strength_cost_negative_binomial_coordinates(
         strength_in,
         known_source,
         known_target,
-        known_rate,
+        known_occnum,
         x,
         y,
         target_cost,
@@ -518,7 +518,7 @@ def _fit_partial_strength_binomial(
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
     known_target: NDArray[np.integer],
-    known_rate: NDArray[np.floating],
+    known_occnum: NDArray[np.floating],
     *,
     layers: int = 10,
     self_loops: bool = True,
@@ -531,15 +531,15 @@ def _fit_partial_strength_binomial(
         np.asarray(strength_in, dtype=np.float64),
         np.asarray(known_source, dtype=np.uint64),
         np.asarray(known_target, dtype=np.uint64),
-        np.asarray(known_rate, dtype=np.float64),
+        np.asarray(known_occnum, dtype=np.float64),
     )
-    sources, targets, rates, converged, iterations = (
+    sources, targets, intensities, converged, iterations = (
         _menobis.fit_partial_strength_binomial_full(
             np.asarray(strength_out, dtype=np.float64).tolist(),
             np.asarray(strength_in, dtype=np.float64).tolist(),
             np.asarray(known_source, dtype=np.uint64).tolist(),
             np.asarray(known_target, dtype=np.uint64).tolist(),
-            np.asarray(known_rate, dtype=np.float64).tolist(),
+            np.asarray(known_occnum, dtype=np.float64).tolist(),
             int(layers),
             self_loops,
             tolerance,
@@ -550,7 +550,7 @@ def _fit_partial_strength_binomial(
         "fit_partial_strength_binomial",
         sources,
         targets,
-        rates,
+        intensities,
         converged,
         iterations,
         constraint="strength",
@@ -564,7 +564,7 @@ def _fit_partial_strength_edges_binomial(
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
     known_target: NDArray[np.integer],
-    known_rate: NDArray[np.floating],
+    known_occnum: NDArray[np.floating],
     target_edges: float,
     *,
     layers: int = 10,
@@ -578,15 +578,15 @@ def _fit_partial_strength_edges_binomial(
         np.asarray(strength_in, dtype=np.float64),
         np.asarray(known_source, dtype=np.uint64),
         np.asarray(known_target, dtype=np.uint64),
-        np.asarray(known_rate, dtype=np.float64),
+        np.asarray(known_occnum, dtype=np.float64),
     )
-    sources, targets, rates, converged, iterations = (
+    sources, targets, intensities, converged, iterations = (
         _menobis.fit_partial_strength_edges_binomial_full(
             np.asarray(strength_out, dtype=np.float64).tolist(),
             np.asarray(strength_in, dtype=np.float64).tolist(),
             np.asarray(known_source, dtype=np.uint64).tolist(),
             np.asarray(known_target, dtype=np.uint64).tolist(),
-            np.asarray(known_rate, dtype=np.float64).tolist(),
+            np.asarray(known_occnum, dtype=np.float64).tolist(),
             float(target_edges),
             int(layers),
             self_loops,
@@ -598,7 +598,7 @@ def _fit_partial_strength_edges_binomial(
         "fit_partial_strength_edges_binomial",
         sources,
         targets,
-        rates,
+        intensities,
         converged,
         iterations,
         constraint="strength-edges",
@@ -614,7 +614,7 @@ def _fit_partial_strength_degree_binomial(
     degree_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
     known_target: NDArray[np.integer],
-    known_rate: NDArray[np.floating],
+    known_occnum: NDArray[np.floating],
     *,
     layers: int = 10,
     self_loops: bool = True,
@@ -627,9 +627,9 @@ def _fit_partial_strength_degree_binomial(
         np.asarray(strength_in, dtype=np.float64),
         np.asarray(known_source, dtype=np.uint64),
         np.asarray(known_target, dtype=np.uint64),
-        np.asarray(known_rate, dtype=np.float64),
+        np.asarray(known_occnum, dtype=np.float64),
     )
-    sources, targets, rates, converged, iterations = (
+    sources, targets, intensities, converged, iterations = (
         _menobis.fit_partial_strength_degree_binomial_full(
             np.asarray(strength_out, dtype=np.float64).tolist(),
             np.asarray(strength_in, dtype=np.float64).tolist(),
@@ -637,7 +637,7 @@ def _fit_partial_strength_degree_binomial(
             np.asarray(degree_in, dtype=np.float64).tolist(),
             np.asarray(known_source, dtype=np.uint64).tolist(),
             np.asarray(known_target, dtype=np.uint64).tolist(),
-            np.asarray(known_rate, dtype=np.float64).tolist(),
+            np.asarray(known_occnum, dtype=np.float64).tolist(),
             int(layers),
             self_loops,
             tolerance,
@@ -648,7 +648,7 @@ def _fit_partial_strength_degree_binomial(
         "fit_partial_strength_degree_binomial",
         sources,
         targets,
-        rates,
+        intensities,
         converged,
         iterations,
         constraint="strength-degree",
@@ -667,7 +667,7 @@ def _fit_partial_strength_geometric(
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
     known_target: NDArray[np.integer],
-    known_rate: NDArray[np.floating],
+    known_occnum: NDArray[np.floating],
     *,
     self_loops: bool = True,
     tolerance: float = 1e-8,
@@ -679,15 +679,15 @@ def _fit_partial_strength_geometric(
         np.asarray(strength_in, dtype=np.float64),
         np.asarray(known_source, dtype=np.uint64),
         np.asarray(known_target, dtype=np.uint64),
-        np.asarray(known_rate, dtype=np.float64),
+        np.asarray(known_occnum, dtype=np.float64),
     )
-    sources, targets, rates, converged, iterations = (
+    sources, targets, intensities, converged, iterations = (
         _menobis.fit_partial_strength_w_full(
             np.asarray(strength_out, dtype=np.float64).tolist(),
             np.asarray(strength_in, dtype=np.float64).tolist(),
             np.asarray(known_source, dtype=np.uint64).tolist(),
             np.asarray(known_target, dtype=np.uint64).tolist(),
-            np.asarray(known_rate, dtype=np.float64).tolist(),
+            np.asarray(known_occnum, dtype=np.float64).tolist(),
             1,  # layers=1 for geometric
             self_loops,
             tolerance,
@@ -698,7 +698,7 @@ def _fit_partial_strength_geometric(
         "fit_partial_strength_geometric",
         sources,
         targets,
-        rates,
+        intensities,
         converged,
         iterations,
         constraint="strength",
@@ -714,7 +714,7 @@ def _fit_partial_strength_degree_geometric(
     degree_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
     known_target: NDArray[np.integer],
-    known_rate: NDArray[np.floating],
+    known_occnum: NDArray[np.floating],
     *,
     self_loops: bool = True,
     tolerance: float = 1e-6,
@@ -726,9 +726,9 @@ def _fit_partial_strength_degree_geometric(
         np.asarray(strength_in, dtype=np.float64),
         np.asarray(known_source, dtype=np.uint64),
         np.asarray(known_target, dtype=np.uint64),
-        np.asarray(known_rate, dtype=np.float64),
+        np.asarray(known_occnum, dtype=np.float64),
     )
-    sources, targets, rates, converged, iterations = (
+    sources, targets, intensities, converged, iterations = (
         _menobis.fit_partial_strength_degree_w_full(
             np.asarray(strength_out, dtype=np.float64).tolist(),
             np.asarray(strength_in, dtype=np.float64).tolist(),
@@ -736,7 +736,7 @@ def _fit_partial_strength_degree_geometric(
             np.asarray(degree_in, dtype=np.float64).tolist(),
             np.asarray(known_source, dtype=np.uint64).tolist(),
             np.asarray(known_target, dtype=np.uint64).tolist(),
-            np.asarray(known_rate, dtype=np.float64).tolist(),
+            np.asarray(known_occnum, dtype=np.float64).tolist(),
             1,  # layers=1 for geometric
             self_loops,
             tolerance,
@@ -747,7 +747,7 @@ def _fit_partial_strength_degree_geometric(
         "fit_partial_strength_degree_geometric",
         sources,
         targets,
-        rates,
+        intensities,
         converged,
         iterations,
         constraint="strength-degree",
@@ -761,7 +761,7 @@ def _fit_partial_strength_edges_geometric(
     strength_in: NDArray[np.floating],
     known_source: NDArray[np.integer],
     known_target: NDArray[np.integer],
-    known_rate: NDArray[np.floating],
+    known_occnum: NDArray[np.floating],
     target_edges: float,
     *,
     self_loops: bool = True,
@@ -774,15 +774,15 @@ def _fit_partial_strength_edges_geometric(
         np.asarray(strength_in, dtype=np.float64),
         np.asarray(known_source, dtype=np.uint64),
         np.asarray(known_target, dtype=np.uint64),
-        np.asarray(known_rate, dtype=np.float64),
+        np.asarray(known_occnum, dtype=np.float64),
     )
-    sources, targets, rates, converged, iterations = (
+    sources, targets, intensities, converged, iterations = (
         _menobis.fit_partial_strength_edges_w_full(
             np.asarray(strength_out, dtype=np.float64).tolist(),
             np.asarray(strength_in, dtype=np.float64).tolist(),
             np.asarray(known_source, dtype=np.uint64).tolist(),
             np.asarray(known_target, dtype=np.uint64).tolist(),
-            np.asarray(known_rate, dtype=np.float64).tolist(),
+            np.asarray(known_occnum, dtype=np.float64).tolist(),
             float(target_edges),
             1,  # layers=1 for geometric
             self_loops,
@@ -794,7 +794,7 @@ def _fit_partial_strength_edges_geometric(
         "fit_partial_strength_edges_geometric",
         sources,
         targets,
-        rates,
+        intensities,
         converged,
         iterations,
         constraint="strength-edges",
@@ -820,12 +820,12 @@ def _fit_from_network_cutoff(
     tolerance: float = 1e-8,
     max_iterations: int = 10000,
 ) -> PartialFitResult:
-    """Split an observed network by weight cutoff and fit partial constraints."""
+    """Split an observed network by occupation cutoff and fit partial constraints."""
     s = directed_strengths(edges)
-    heavy = edges.weight > cutoff
+    heavy = edges.occ_num > cutoff
     known_source = edges.source[heavy]
     known_target = edges.target[heavy]
-    known_rate = edges.weight[heavy].astype(np.float64)
+    known_occnum = edges.occ_num[heavy].astype(np.float64)
 
     if model == "strength":
         return _fit_partial_strength_poisson(
@@ -833,7 +833,7 @@ def _fit_from_network_cutoff(
             s.incoming.astype(np.float64),
             known_source,
             known_target,
-            known_rate,
+            known_occnum,
             self_loops=self_loops,
             tolerance=tolerance,
             max_iterations=max_iterations,
@@ -858,7 +858,7 @@ def _fit_from_network_cutoff(
             k.incoming.astype(np.float64),
             known_source,
             known_target,
-            known_rate,
+            known_occnum,
             self_loops=self_loops,
             tolerance=tolerance,
             max_iterations=max_iterations,
@@ -869,7 +869,7 @@ def _fit_from_network_cutoff(
             s.incoming.astype(np.float64),
             known_source,
             known_target,
-            known_rate,
+            known_occnum,
             float(edges.num_edges),
             self_loops=self_loops,
             tolerance=tolerance,
@@ -884,7 +884,7 @@ def _fit_from_network_cutoff(
         if target_cost is None:
             target_cost = float(
                 np.sum(
-                    edges.weight.astype(np.float64)
+                    edges.occ_num.astype(np.float64)
                     * np.hypot(
                         coord_x[edges.source.astype(np.int64)]
                         - coord_x[edges.target.astype(np.int64)],
@@ -898,7 +898,7 @@ def _fit_from_network_cutoff(
             s.incoming.astype(np.float64),
             known_source,
             known_target,
-            known_rate,
+            known_occnum,
             coord_x,
             coord_y,
             target_cost,

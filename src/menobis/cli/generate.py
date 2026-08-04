@@ -31,14 +31,16 @@ app = Typer(no_args_is_help=True)
 def _emit_edges(sample: EdgeTable, output: Path | None, output_json: bool) -> None:
     if output_json:
         data = [
-            {"source": int(s), "target": int(t), "weight": int(w)}
-            for s, t, w in zip(sample.source, sample.target, sample.weight, strict=True)
+            {"source": int(s), "target": int(t), "occ_num": int(w)}
+            for s, t, w in zip(
+                sample.source, sample.target, sample.occ_num, strict=True
+            )
         ]
         _write_output(json.dumps(data, indent=2), output)
     else:
-        lines = ["source,target,weight"]
+        lines = ["source,target,occ_num"]
         for s_val, t_val, w_val in zip(
-            sample.source, sample.target, sample.weight, strict=True
+            sample.source, sample.target, sample.occ_num, strict=True
         ):
             lines.append(f"{s_val},{t_val},{w_val}")
         _write_output("\n".join(lines) + "\n", output)
@@ -69,8 +71,8 @@ def poisson(
     nc = int(max(edges.source.max(), edges.target.max())) + 1
     s_out = np.zeros(nc, dtype=np.float64)
     s_in = np.zeros(nc, dtype=np.float64)
-    np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
-    np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
+    np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
+    np.add.at(s_in, edges.target, edges.occ_num.astype(np.float64))
     fit = fit_model(
         family=ModelFamily.ME,
         constraint=Constraint.STRENGTH,
@@ -105,8 +107,8 @@ def multinomial(
     nc = int(max(edges.source.max(), edges.target.max())) + 1
     s_out = np.zeros(nc, dtype=np.float64)
     s_in = np.zeros(nc, dtype=np.float64)
-    np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
-    np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
+    np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
+    np.add.at(s_in, edges.target, edges.occ_num.astype(np.float64))
     fit = fit_model(
         family=ModelFamily.ME,
         constraint=Constraint.STRENGTH,
@@ -192,8 +194,8 @@ def strength_degree_me(
     s_in = np.zeros(nc, dtype=np.float64)
     d_out = np.zeros(nc, dtype=np.float64)
     d_in = np.zeros(nc, dtype=np.float64)
-    np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
-    np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
+    np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
+    np.add.at(s_in, edges.target, edges.occ_num.astype(np.float64))
     for src in edges.source:
         d_out[src] += 1
     for tgt in edges.target:
@@ -244,8 +246,8 @@ def strength_edges_me(
     nc = int(max(edges.source.max(), edges.target.max())) + 1
     s_out = np.zeros(nc, dtype=np.float64)
     s_in = np.zeros(nc, dtype=np.float64)
-    np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
-    np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
+    np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
+    np.add.at(s_in, edges.target, edges.occ_num.astype(np.float64))
     if target_edges is None:
         target_edges = float(len(edges))
     fit = fit_model(
@@ -330,8 +332,8 @@ def strength_cost_me_cmd(
     nc = int(max(edges.source.max(), edges.target.max())) + 1
     s_out = np.zeros(nc, dtype=np.float64)
     s_in = np.zeros(nc, dtype=np.float64)
-    np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
-    np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
+    np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
+    np.add.at(s_in, edges.target, edges.occ_num.astype(np.float64))
     coordinate_table = pa_csv.read_csv(coordinates_path)
     coord_x = coordinate_table.column("x").to_numpy().astype(np.float64)
     coord_y = coordinate_table.column("y").to_numpy().astype(np.float64)
@@ -345,7 +347,7 @@ def strength_cost_me_cmd(
                 )
             )
             for s_val, t_val, w_val in zip(
-                edges.source, edges.target, edges.weight, strict=True
+                edges.source, edges.target, edges.occ_num, strict=True
             )
         )
     fit = fit_model(

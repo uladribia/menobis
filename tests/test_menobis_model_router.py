@@ -62,8 +62,8 @@ def test_sample_model_microcanonical_me_strength_uses_stub_matching() -> None:
         seed=9,
     )
     assert sample.total_events == 3
-    s_out = np.bincount(sample.source, weights=sample.weight, minlength=2)
-    s_in = np.bincount(sample.target, weights=sample.weight, minlength=2)
+    s_out = np.bincount(sample.source, weights=sample.occ_num, minlength=2)
+    s_in = np.bincount(sample.target, weights=sample.occ_num, minlength=2)
     assert s_out.tolist() == [2, 1]
     assert s_in.tolist() == [1, 2]
 

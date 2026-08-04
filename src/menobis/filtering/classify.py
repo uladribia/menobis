@@ -59,7 +59,7 @@ def _classify(
             edges=EdgeTable(
                 source=np.asarray(src, dtype=np.uint64),
                 target=np.asarray(tgt, dtype=np.uint64),
-                weight=np.zeros(len(src), dtype=np.uint64),
+                occ_num=np.zeros(len(src), dtype=np.uint64),
             ),
             upper_pvalue=np.ones(len(src), dtype=np.float64),
             lower_pvalue=np.asarray(lower_absent, dtype=np.float64),
@@ -141,7 +141,7 @@ def _slice_filtered(
         edges=EdgeTable(
             source=edges.source[mask],
             target=edges.target[mask],
-            weight=edges.weight[mask],
+            occ_num=edges.occ_num[mask],
         ),
         upper_pvalue=upper[mask],
         lower_pvalue=lower[mask],
@@ -155,7 +155,7 @@ def _empty_filtered() -> FilteredEdges:
         edges=EdgeTable(
             source=np.array([], dtype=np.uint64),
             target=np.array([], dtype=np.uint64),
-            weight=np.array([], dtype=np.uint64),
+            occ_num=np.array([], dtype=np.uint64),
         ),
         upper_pvalue=np.array([], dtype=np.float64),
         lower_pvalue=np.array([], dtype=np.float64),

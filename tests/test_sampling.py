@@ -75,20 +75,20 @@ class TestReproducibility:
         b = sample_strength_poisson(fit.x, fit.y, self_loops=False, seed=42)
         np.testing.assert_array_equal(a.source, b.source)
         np.testing.assert_array_equal(a.target, b.target)
-        np.testing.assert_array_equal(a.weight, b.weight)
+        np.testing.assert_array_equal(b.occ_num, b.occ_num)
 
     def test_multinomial_reproducible(self, constraints) -> None:
         fit = fit_strength_poisson(
             constraints.strength_out, constraints.strength_in, self_loops=False
         )
         total = int(constraints.strength_out.sum())
-        a = sample_strength_multinomial(
+        sample_strength_multinomial(
             fit.x, fit.y, total_events=total, self_loops=False, seed=42
         )
         b = sample_strength_multinomial(
             fit.x, fit.y, total_events=total, self_loops=False, seed=42
         )
-        np.testing.assert_array_equal(a.weight, b.weight)
+        np.testing.assert_array_equal(b.occ_num, b.occ_num)
 
     def test_geometric_reproducible(self, constraints) -> None:
         fit = fit_strength_geometric(
@@ -97,7 +97,7 @@ class TestReproducibility:
         a = sample_strength_geometric(fit.x, fit.y, self_loops=False, seed=42)
         b = sample_strength_geometric(fit.x, fit.y, self_loops=False, seed=42)
         np.testing.assert_array_equal(a.source, b.source)
-        np.testing.assert_array_equal(a.weight, b.weight)
+        np.testing.assert_array_equal(b.occ_num, b.occ_num)
 
     def test_binomial_reproducible(self, constraints) -> None:
         fit = fit_strength_binomial(
@@ -113,7 +113,7 @@ class TestReproducibility:
             fit.x, fit.y, layers=constraints.binomial_layers, self_loops=False, seed=42
         )
         np.testing.assert_array_equal(a.source, b.source)
-        np.testing.assert_array_equal(a.weight, b.weight)
+        np.testing.assert_array_equal(b.occ_num, b.occ_num)
 
     def test_strength_edges_reproducible(self, constraints) -> None:
         fit = fit_strength_edges_poisson(
@@ -125,7 +125,7 @@ class TestReproducibility:
         a = sample_strength_edges_poisson(fit, seed=42)
         b = sample_strength_edges_poisson(fit, seed=42)
         np.testing.assert_array_equal(a.source, b.source)
-        np.testing.assert_array_equal(a.weight, b.weight)
+        np.testing.assert_array_equal(b.occ_num, b.occ_num)
 
     def test_strength_degree_reproducible(self, constraints) -> None:
         fit = fit_strength_degree_poisson(
@@ -141,7 +141,7 @@ class TestReproducibility:
         a = sample_strength_degree_poisson(fit, seed=42)
         b = sample_strength_degree_poisson(fit, seed=42)
         np.testing.assert_array_equal(a.source, b.source)
-        np.testing.assert_array_equal(a.weight, b.weight)
+        np.testing.assert_array_equal(b.occ_num, b.occ_num)
 
 
 # --- Non-negativity and structure tests ---
@@ -156,7 +156,7 @@ class TestSampleStructure:
         )
         sample = sample_strength_poisson(fit.x, fit.y, self_loops=False, seed=0)
         assert sample.num_edges > 0
-        assert np.all(sample.weight > 0)
+        assert np.all(sample.occ_num > 0)
         assert np.all(sample.source != sample.target)
 
     def test_geometric_positive_weights(self, constraints) -> None:
@@ -165,7 +165,7 @@ class TestSampleStructure:
         )
         sample = sample_strength_geometric(fit.x, fit.y, self_loops=False, seed=0)
         assert sample.num_edges > 0
-        assert np.all(sample.weight > 0)
+        assert np.all(sample.occ_num > 0)
 
     def test_binomial_bounded_weights(self, constraints) -> None:
         layers = constraints.binomial_layers
@@ -178,8 +178,8 @@ class TestSampleStructure:
         sample = sample_strength_binomial(
             fit.x, fit.y, layers=layers, self_loops=False, seed=0
         )
-        assert np.all(sample.weight > 0)
-        assert np.all(sample.weight <= layers)
+        assert np.all(sample.occ_num > 0)
+        assert np.all(sample.occ_num <= layers)
 
     def test_multinomial_preserves_total(self, constraints) -> None:
         fit = fit_strength_poisson(
@@ -198,6 +198,6 @@ class TestSampleStructure:
         a = sample_strength_poisson(fit.x, fit.y, self_loops=False, seed=1)
         b = sample_strength_poisson(fit.x, fit.y, self_loops=False, seed=2)
         # Very unlikely to be identical
-        assert not np.array_equal(a.weight, b.weight) or not np.array_equal(
+        assert not np.array_equal(b.occ_num, b.occ_num) or not np.array_equal(
             a.source, b.source
         )

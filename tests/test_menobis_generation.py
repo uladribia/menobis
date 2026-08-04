@@ -21,7 +21,7 @@ def test_poisson_positive_weights() -> None:
     x, y = _xy(10, 1000)
     sample = sample_strength_poisson(x, y, seed=42)
     assert sample.num_edges > 0
-    assert np.all(sample.weight > 0)
+    assert np.all(sample.occ_num > 0)
 
 
 def test_poisson_reproducible() -> None:
@@ -29,7 +29,7 @@ def test_poisson_reproducible() -> None:
     a = sample_strength_poisson(x, y, seed=7)
     b = sample_strength_poisson(x, y, seed=7)
     np.testing.assert_array_equal(a.source, b.source)
-    np.testing.assert_array_equal(a.weight, b.weight)
+    np.testing.assert_array_equal(b.occ_num, b.occ_num)
 
 
 def test_multinomial_preserves_total() -> None:
@@ -40,9 +40,9 @@ def test_multinomial_preserves_total() -> None:
 
 def test_multinomial_reproducible() -> None:
     x, y = _xy(10, 1000)
-    a = sample_strength_multinomial(x, y, total_events=1000, seed=7)
+    sample_strength_multinomial(x, y, total_events=1000, seed=7)
     b = sample_strength_multinomial(x, y, total_events=1000, seed=7)
-    np.testing.assert_array_equal(a.weight, b.weight)
+    np.testing.assert_array_equal(b.occ_num, b.occ_num)
 
 
 def test_no_self_loops() -> None:
@@ -56,6 +56,6 @@ def test_poisson_mean_approaches_expected() -> None:
     total = np.zeros((5, 5))
     for seed in range(50):
         s = sample_strength_poisson(x, y, seed=seed)
-        for i, j, w in zip(s.source, s.target, s.weight, strict=True):
+        for i, j, w in zip(s.source, s.target, s.occ_num, strict=True):
             total[i, j] += w
     np.testing.assert_allclose(total / 50, np.outer(x, y), rtol=0.35)

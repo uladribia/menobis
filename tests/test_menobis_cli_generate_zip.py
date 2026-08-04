@@ -27,4 +27,4 @@ def test_generate_strength_degree_me_json(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0, result.output
-    assert '"weight"' in result.output
+    assert '"occ_num"' in result.output

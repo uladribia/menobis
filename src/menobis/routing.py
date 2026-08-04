@@ -19,7 +19,7 @@ from menobis.models.spec import (
 if TYPE_CHECKING:
     from menobis.data.frames import EdgeTable
     from menobis.filtering.types import FilterResult
-    from menobis.models.types import FitResult
+    from menobis.models.types import FitResult, SamplingResult
 
 
 def route_model(
@@ -72,9 +72,10 @@ def fit_model(
     target_cost: float | None = None,
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
+    node_count: int | None = None,
     known_source: NDArray[Any] | None = None,
     known_target: NDArray[Any] | None = None,
-    known_rate: NDArray[Any] | None = None,
+    known_occnum: NDArray[Any] | None = None,
     layers: int = 1,
     self_loops: bool = True,
     tolerance: float = 1e-8,
@@ -82,11 +83,18 @@ def fit_model(
 ) -> FitResult:
     """Fit a model selected by ensemble, family, and constraint.
 
-    When known_source, known_target, and known_rate are provided, performs
+    When known_source, known_target, and known_occnum are provided, performs
     partial fitting where those pairs are frozen and only the remaining
     pairs are fitted.
+
+    `node_count` is required by the EDGES_EVENTS constraint, which has no
+    per-node sequences.
     """
-    if known_source is not None and known_target is not None and known_rate is not None:
+    if (
+        known_source is not None
+        and known_target is not None
+        and known_occnum is not None
+    ):
         return cast(
             "FitResult",
             _fit_partial(
@@ -102,7 +110,7 @@ def fit_model(
                 coord_y=coord_y,
                 known_source=known_source,
                 known_target=known_target,
-                known_rate=known_rate,
+                known_occnum=known_occnum,
                 layers=layers,
                 self_loops=self_loops,
                 tolerance=tolerance,
@@ -125,6 +133,7 @@ def fit_model(
             target_cost=target_cost,
             coord_x=coord_x,
             coord_y=coord_y,
+            node_count=node_count,
             layers=layers,
             self_loops=self_loops,
             tolerance=tolerance,
@@ -145,10 +154,65 @@ def sample_model(
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
     layers: int = 1,
+    self_loops: bool = True,
     seed: int = 0,
 ) -> EdgeTable:
-    """Sample a network from a fitted model or directly via stub matching."""
-    return cast(
+    """Sample a network from a fitted model or directly via stub matching.
+
+    Returns only the sampled occupied-pair table. Use
+    :func:`sample_model_detailed` for the full result with metadata.
+
+    `self_loops` is only consulted by the direct (microcanonical) sampler;
+    grand-canonical and canonical sampling read it from the fitted model.
+    """
+    return sample_model_detailed(
+        ensemble=ensemble,
+        family=family,
+        constraint=constraint,
+        fit=fit,
+        strength_out=strength_out,
+        strength_in=strength_in,
+        total_events=total_events,
+        coord_x=coord_x,
+        coord_y=coord_y,
+        layers=layers,
+        self_loops=self_loops,
+        seed=seed,
+    ).edges
+
+
+def sample_model_detailed(
+    *,
+    ensemble: Ensemble = Ensemble.GRAND_CANONICAL,
+    family: ModelFamily,
+    constraint: Constraint,
+    fit: FitResult | None = None,
+    strength_out: NDArray[Any] | None = None,
+    strength_in: NDArray[Any] | None = None,
+    total_events: int | None = None,
+    coord_x: NDArray[Any] | None = None,
+    coord_y: NDArray[Any] | None = None,
+    layers: int = 1,
+    self_loops: bool = True,
+    seed: int = 0,
+) -> SamplingResult:
+    """Sample a network and return the detailed :class:`SamplingResult`.
+
+    The result carries the ensemble, family, constraint, generation method,
+    exactness category, seed, and diagnostics.
+    """
+    from menobis.capabilities import SamplingExactness, capability
+    from menobis.models.types import SamplingDiagnostics, SamplingResult
+
+    cap = capability(Verb.SAMPLE, ensemble, family, constraint)
+    if cap is None or not cap.supported:
+        msg = (
+            f"unsupported sampling case: verb=sample ensemble={ensemble!r} "
+            f"family={family!r} constraint={constraint!r}"
+        )
+        raise UnsupportedModelCaseError(msg)
+
+    edges = cast(
         "EdgeTable",
         route_model(
             Verb.SAMPLE,
@@ -162,8 +226,30 @@ def sample_model(
             coord_x=coord_x,
             coord_y=coord_y,
             layers=layers,
+            self_loops=self_loops,
             seed=seed,
         ),
+    )
+
+    if ensemble is Ensemble.MICROCANONICAL:
+        method = "stub_matching"
+        exactness = SamplingExactness.EXACT_DIRECT
+    elif ensemble is Ensemble.CANONICAL:
+        method = "canonical_multinomial"
+        exactness = SamplingExactness.EXACT_DIRECT
+    else:
+        method = "grandcanonical_independent"
+        exactness = SamplingExactness.EXACT_INDEPENDENT
+
+    return SamplingResult(
+        edges=edges,
+        ensemble=ensemble,
+        family=family,
+        constraint=constraint,
+        method=method,
+        exactness=exactness,
+        seed=seed,
+        diagnostics=SamplingDiagnostics(method=method, exactness=exactness),
     )
 
 
@@ -184,8 +270,15 @@ def filter_model(
     max_absent: int | None = None,
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
+    node_count: int | None = None,
+    total_events: int | None = None,
+    target_edges: float | None = None,
 ) -> FilterResult:
-    """Filter edges against a null model selected by family and constraint."""
+    """Filter edges against a null model selected by family and constraint.
+
+    `node_count`, `total_events`, and `target_edges` are required by the
+    EDGES_EVENTS constraint when no fitted model is supplied.
+    """
     return cast(
         "FilterResult",
         route_model(
@@ -205,6 +298,9 @@ def filter_model(
             max_absent=max_absent,
             coord_x=coord_x,
             coord_y=coord_y,
+            node_count=node_count,
+            total_events=total_events,
+            target_edges=target_edges,
         ),
     )
 
@@ -246,6 +342,7 @@ def _fit_model(
     target_cost: float | None = None,
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
+    node_count: int | None = None,
     layers: int = 1,
     self_loops: bool = True,
     tolerance: float = 1e-8,
@@ -309,6 +406,10 @@ def _fit_model(
             Constraint.DEGREE_EVENTS,
             "negative_binomial",
         ): fitting._fit_degree_events_negative_binomial,
+        (Constraint.EDGES_EVENTS, "poisson"): fitting._fit_edges_events,
+        (Constraint.EDGES_EVENTS, "binomial"): fitting._fit_edges_events,
+        (Constraint.EDGES_EVENTS, "geometric"): fitting._fit_edges_events,
+        (Constraint.EDGES_EVENTS, "negative_binomial"): fitting._fit_edges_events,
     }
     key = (constraint, variant)
     if key not in dispatch:
@@ -401,6 +502,28 @@ def _fit_model(
                 total_events,
                 **common,
             )
+        case Constraint.EDGES_EVENTS:
+            if ensemble != Ensemble.GRAND_CANONICAL:
+                msg = "edges_events requires ensemble=GRAND_CANONICAL"
+                raise UnsupportedModelCaseError(msg)
+            if node_count is None:
+                msg = "edges_events requires node_count"
+                raise ValueError(msg)
+            if total_events is None:
+                msg = "edges_events requires total_events"
+                raise ValueError(msg)
+            if target_edges is None:
+                msg = "edges_events requires target_edges"
+                raise ValueError(msg)
+            return dispatch[key](
+                variant,
+                target_edges,
+                total_events,
+                node_count,
+                layers=layers,
+                self_loops=self_loops,
+                max_iterations=max_iterations,
+            )
         case _:
             msg = f"invalid constraint: {constraint!r}"
             raise UnsupportedModelCaseError(msg)
@@ -418,6 +541,7 @@ def _sample_model(
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
     layers: int = 1,
+    self_loops: bool = True,
     seed: int = 0,
 ) -> EdgeTable:
     from menobis.models.generation import (
@@ -425,6 +549,7 @@ def _sample_model(
         _sample_degree_events_geometric,
         _sample_degree_events_negative_binomial,
         _sample_degree_events_poisson,
+        _sample_edges_events,
         _sample_strength_binomial,
         _sample_strength_cost_binomial,
         _sample_strength_cost_geometric,
@@ -444,7 +569,14 @@ def _sample_model(
         _sample_strength_poisson,
         _sample_strength_stub_matching,
     )
-    from menobis.models.types import DegreeEventsFit, StrengthFit
+    from menobis.models.types import (
+        DegreeEventsFit,
+        EdgesEventsFit,
+        StrengthCostFit,
+        StrengthDegreeFit,
+        StrengthEdgesFit,
+        StrengthFit,
+    )
 
     match ensemble:
         case Ensemble.MICROCANONICAL:
@@ -454,6 +586,14 @@ def _sample_model(
             if strength_out is None or strength_in is None:
                 msg = "microcanonical requires strength_out and strength_in"
                 raise ValueError(msg)
+            if not self_loops:
+                msg = (
+                    "microcanonical stub matching without self-loops is not "
+                    "supported yet: naive rejection would bias the uniform "
+                    "stub-matching measure; use the grand-canonical ensemble "
+                    "until the MCMC backend exists"
+                )
+                raise UnsupportedModelCaseError(msg)
             return _sample_strength_stub_matching(
                 np.asarray(strength_out, dtype=np.uint64),
                 np.asarray(strength_in, dtype=np.uint64),
@@ -536,27 +676,59 @@ def _sample_model(
             ),
         }
         return dispatch[variant]()
+    if constraint == Constraint.EDGES_EVENTS:
+        if not isinstance(fit, EdgesEventsFit):
+            msg = (
+                "edges_events sampling requires EdgesEventsFit, got "
+                f"{type(fit).__name__}"
+            )
+            raise TypeError(msg)
+        return _sample_edges_events(
+            fit.node_count,
+            fit.q,
+            fit.occupation,
+            fit.family,
+            layers=fit.layers or 1,
+            self_loops=fit.self_loops,
+            seed=seed,
+        )
     if constraint == Constraint.STRENGTH_EDGES:
+        if not isinstance(fit, StrengthEdgesFit):
+            msg = (
+                "strength_edges sampling requires StrengthEdgesFit, got "
+                f"{type(fit).__name__}"
+            )
+            raise TypeError(msg)
+        edges_fit = fit
         dispatch = {
-            "poisson": lambda: _sample_strength_edges_poisson(fit, seed=seed),
+            "poisson": lambda: _sample_strength_edges_poisson(edges_fit, seed=seed),
             "binomial": lambda: _sample_strength_edges_binomial(
-                fit, layers=fit_layers, seed=seed
+                edges_fit, layers=fit_layers, seed=seed
             ),
-            "geometric": lambda: _sample_strength_edges_geometric(fit, seed=seed),
+            "geometric": lambda: _sample_strength_edges_geometric(edges_fit, seed=seed),
             "negative_binomial": lambda: _sample_strength_edges_negative_binomial(
-                fit, layers=fit_layers, seed=seed
+                edges_fit, layers=fit_layers, seed=seed
             ),
         }
         return dispatch[variant]()
     if constraint == Constraint.STRENGTH_DEGREE:
+        if not isinstance(fit, StrengthDegreeFit):
+            msg = (
+                "strength_degree sampling requires StrengthDegreeFit, got "
+                f"{type(fit).__name__}"
+            )
+            raise TypeError(msg)
+        degree_fit = fit
         dispatch = {
-            "poisson": lambda: _sample_strength_degree_poisson(fit, seed=seed),
+            "poisson": lambda: _sample_strength_degree_poisson(degree_fit, seed=seed),
             "binomial": lambda: _sample_strength_degree_binomial(
-                fit, layers=fit_layers, seed=seed
+                degree_fit, layers=fit_layers, seed=seed
             ),
-            "geometric": lambda: _sample_strength_degree_geometric(fit, seed=seed),
+            "geometric": lambda: _sample_strength_degree_geometric(
+                degree_fit, seed=seed
+            ),
             "negative_binomial": lambda: _sample_strength_degree_negative_binomial(
-                fit, layers=fit_layers, seed=seed
+                degree_fit, layers=fit_layers, seed=seed
             ),
         }
         return dispatch[variant]()
@@ -564,18 +736,25 @@ def _sample_model(
         if coord_x is None or coord_y is None:
             msg = "strength_cost sampling requires coord_x and coord_y"
             raise ValueError(msg)
+        if not isinstance(fit, StrengthCostFit):
+            msg = (
+                "strength_cost sampling requires StrengthCostFit, got "
+                f"{type(fit).__name__}"
+            )
+            raise TypeError(msg)
+        cost_fit = fit
         dispatch = {
             "poisson": lambda: _sample_strength_cost_poisson(
-                fit, coord_x, coord_y, seed=seed
+                cost_fit, coord_x, coord_y, seed=seed
             ),
             "binomial": lambda: _sample_strength_cost_binomial(
-                fit, coord_x, coord_y, layers=fit_layers, seed=seed
+                cost_fit, coord_x, coord_y, layers=fit_layers, seed=seed
             ),
             "geometric": lambda: _sample_strength_cost_geometric(
-                fit, coord_x, coord_y, seed=seed
+                cost_fit, coord_x, coord_y, seed=seed
             ),
             "negative_binomial": lambda: _sample_strength_cost_negative_binomial(
-                fit, coord_x, coord_y, layers=fit_layers, seed=seed
+                cost_fit, coord_x, coord_y, layers=fit_layers, seed=seed
             ),
         }
         return dispatch[variant]()
@@ -592,8 +771,8 @@ def _node_count(edges: EdgeTable) -> int:
 def _strengths(edges: EdgeTable, node_count: int) -> tuple[np.ndarray, np.ndarray]:
     out = np.zeros(node_count, dtype=np.uint64)
     incoming = np.zeros(node_count, dtype=np.uint64)
-    np.add.at(out, edges.source, edges.weight)
-    np.add.at(incoming, edges.target, edges.weight)
+    np.add.at(out, edges.source, edges.occ_num)
+    np.add.at(incoming, edges.target, edges.occ_num)
     return out, incoming
 
 
@@ -615,6 +794,9 @@ def _filter_model(
     max_absent: int | None = None,
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
+    node_count: int | None = None,
+    total_events: int | None = None,
+    target_edges: float | None = None,
 ) -> FilterResult:
     from menobis.filtering import models as filtering
 
@@ -623,17 +805,29 @@ def _filter_model(
         raise UnsupportedModelCaseError(msg)
 
     if fit is None:
-        nc = _node_count(edges)
-        s_out, s_in = _strengths(edges, nc)
-        fit = _fit_model(
-            ensemble=ensemble,
-            family=family,
-            constraint=constraint,
-            strength_out=s_out,
-            strength_in=s_in,
-            layers=layers,
-            self_loops=self_loops,
-        )
+        if constraint == Constraint.EDGES_EVENTS:
+            fit = _fit_model(
+                ensemble=ensemble,
+                family=family,
+                constraint=constraint,
+                node_count=node_count,
+                total_events=total_events,
+                target_edges=target_edges,
+                layers=layers,
+                self_loops=self_loops,
+            )
+        else:
+            nc = _node_count(edges)
+            s_out, s_in = _strengths(edges, nc)
+            fit = _fit_model(
+                ensemble=ensemble,
+                family=family,
+                constraint=constraint,
+                strength_out=s_out,
+                strength_in=s_in,
+                layers=layers,
+                self_loops=self_loops,
+            )
 
     variant = _fit_variant(family, layers if layers is not None else 1)
     kwargs: dict[str, Any] = {
@@ -711,6 +905,10 @@ def _filter_model(
             Constraint.DEGREE_EVENTS,
             "negative_binomial",
         ): filtering._filter_degree_events_negative_binomial,
+        (Constraint.EDGES_EVENTS, "poisson"): filtering._filter_edges_events,
+        (Constraint.EDGES_EVENTS, "binomial"): filtering._filter_edges_events,
+        (Constraint.EDGES_EVENTS, "geometric"): filtering._filter_edges_events,
+        (Constraint.EDGES_EVENTS, "negative_binomial"): filtering._filter_edges_events,
     }
     if constraint == Constraint.STRENGTH_COST:
         if coord_x is None or coord_y is None:
@@ -740,7 +938,7 @@ def _fit_partial(
     coord_y: NDArray[Any] | None,
     known_source: NDArray[Any],
     known_target: NDArray[Any],
-    known_rate: NDArray[Any],
+    known_occnum: NDArray[Any],
     layers: int,
     self_loops: bool,
     tolerance: float,
@@ -776,7 +974,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 self_loops=self_loops,
                 tolerance=tolerance,
                 max_iterations=max_iterations,
@@ -786,7 +984,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 layers=layers,
                 self_loops=self_loops,
                 tolerance=tolerance,
@@ -797,7 +995,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 self_loops=self_loops,
                 tolerance=tolerance,
                 max_iterations=max_iterations,
@@ -807,7 +1005,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 self_loops=self_loops,
                 tolerance=tolerance,
                 max_iterations=max_iterations,
@@ -825,7 +1023,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 target_edges,
                 self_loops=self_loops,
                 tolerance=tolerance,
@@ -836,7 +1034,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 target_edges,
                 layers=layers,
                 self_loops=self_loops,
@@ -848,7 +1046,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 target_edges,
                 self_loops=self_loops,
                 tolerance=tolerance,
@@ -859,7 +1057,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 target_edges,
                 self_loops=self_loops,
                 tolerance=tolerance,
@@ -880,7 +1078,7 @@ def _fit_partial(
                 degree_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 self_loops=self_loops,
                 tolerance=tolerance,
                 max_iterations=max_iterations,
@@ -892,7 +1090,7 @@ def _fit_partial(
                 degree_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 layers=layers,
                 self_loops=self_loops,
                 tolerance=tolerance,
@@ -905,7 +1103,7 @@ def _fit_partial(
                 degree_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 self_loops=self_loops,
                 tolerance=tolerance,
                 max_iterations=max_iterations,
@@ -917,7 +1115,7 @@ def _fit_partial(
                 degree_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 self_loops=self_loops,
                 tolerance=tolerance,
                 max_iterations=max_iterations,
@@ -935,7 +1133,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 coord_x,
                 coord_y,
                 target_cost,
@@ -948,7 +1146,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 coord_x,
                 coord_y,
                 target_cost,
@@ -962,7 +1160,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 coord_x,
                 coord_y,
                 target_cost,
@@ -976,7 +1174,7 @@ def _fit_partial(
                     strength_in,
                     known_source,
                     known_target,
-                    known_rate,
+                    known_occnum,
                     coord_x,
                     coord_y,
                     target_cost,
@@ -1001,4 +1199,5 @@ __all__ = [
     "filter_model",
     "fit_model",
     "sample_model",
+    "sample_model_detailed",
 ]

@@ -45,7 +45,7 @@ pub fn w_log_g(r: f64, layers: u32) -> f64 {
     log_a.exp_m1().ln()
 }
 
-/// Compute independent W expected weight `M exp(-r) / (1 - exp(-r))`.
+/// Compute independent W expected occupation `M exp(-r) / (1 - exp(-r))`.
 #[must_use]
 pub fn w_mean(r: f64, layers: u32) -> f64 {
     if !r.is_finite() || r <= 0.0 || layers == 0 {
@@ -56,7 +56,7 @@ pub fn w_mean(r: f64, layers: u32) -> f64 {
 
 /// Compute zero-inflated W occupation probability.
 ///
-/// `v` is the occupation multiplier and `r` is the positive-weight inverse/log
+/// `v` is the occupation multiplier and `r` is the positive-occupation inverse/log
 /// parameter in `q = exp(-r)`.
 #[must_use]
 pub fn w_occupation(v: f64, r: f64, layers: u32) -> f64 {
@@ -67,7 +67,7 @@ pub fn w_occupation(v: f64, r: f64, layers: u32) -> f64 {
     vg / (1.0 + vg)
 }
 
-/// Compute zero-inflated W expected weight.
+/// Compute zero-inflated W expected occupation.
 #[must_use]
 pub fn w_zip_mean(v: f64, r: f64, layers: u32) -> f64 {
     if !v.is_finite() || v < 0.0 || !r.is_finite() || r <= 0.0 || layers == 0 {
@@ -81,7 +81,7 @@ pub fn w_zip_mean(v: f64, r: f64, layers: u32) -> f64 {
     numerator / denominator
 }
 
-/// Compute positive-weight conditional mean for W degree-events models.
+/// Compute positive-occupation conditional mean for W degree-events models.
 ///
 /// Formula: `M q / ((1 - q) * (1 - (1 - q)^M))`.
 #[must_use]
@@ -94,11 +94,11 @@ pub fn w_positive_mean(q: f64, layers: u32) -> f64 {
     m * q / (one_minus_q * (1.0 - one_minus_q.powf(m)))
 }
 
-use super::mask::PairMask;
 use super::{
     WConicFitOptions, WFitStatus, WProblemMetrics, WStrengthDegreeFitResult,
     WStrengthEdgesFitResult, WStrengthFitResult, WStrengthResiduals,
 };
+use crate::constraints::mask::PairMask;
 
 /// Compute independent W fixed-strength residuals from inverse/log multipliers.
 ///
@@ -269,7 +269,7 @@ pub fn strength_cost_residuals(
 pub fn balance_sparse_masked_strength_w(
     strength_out: &[f64],
     strength_in: &[f64],
-    mask: &super::mask::PairMask,
+    mask: &crate::constraints::mask::PairMask,
     layers: u32,
     tolerance: f64,
     max_iterations: usize,
@@ -277,7 +277,7 @@ pub fn balance_sparse_masked_strength_w(
     let n = strength_out.len();
     let m = f64::from(layers);
     let total: f64 = strength_out.iter().sum();
-    // Initialize: x_i*y_j should give q such that M*q/(1-q) ~ avg weight per pair
+    // Initialize: x_i*y_j should give q such that M*q/(1-q) ~ avg occupation per pair
     // avg_weight = total / n_free, q = avg/(avg+M), sqrt for factorization
     let n_free = mask.n_free().max(1) as f64;
     let avg = total / n_free;

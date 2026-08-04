@@ -16,10 +16,10 @@ class DirectedSequences:
 
 
 @dataclass(frozen=True)
-class WeightDistribution:
-    """Weight distribution P(w)."""
+class OccupationDistribution:
+    """Occupation-number distribution P(t_ij)."""
 
-    weight: NDArray[np.uint64]
+    occ_num: NDArray[np.uint64]
     count: NDArray[np.uint64]
 
 
@@ -52,5 +52,5 @@ __all__ = [
     "ClusteringResult",
     "DirectedSequences",
     "NodeStats",
-    "WeightDistribution",
+    "OccupationDistribution",
 ]

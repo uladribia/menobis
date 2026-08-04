@@ -39,12 +39,12 @@ pub struct StrengthCostFitResult {
     pub iterations: usize,
 }
 
-/// Sparse rate table fitted under partial constraints.
+/// Sparse intensity table fitted under partial constraints.
 #[derive(Clone, Debug)]
 pub struct PartialFitResult {
     pub sources: Vec<u64>,
     pub targets: Vec<u64>,
-    pub rates: Vec<f64>,
+    pub intensities: Vec<f64>,
     pub converged: bool,
     pub iterations: usize,
 }

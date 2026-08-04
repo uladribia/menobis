@@ -3,16 +3,16 @@
 import numpy as np
 import pytest
 
-from menobis.analysis import compute_all_stats, weight_distribution
+from menobis.analysis import compute_all_stats, occupation_distribution
 from menobis.data.frames import normalize_edges
 
 
-def test_weight_distribution() -> None:
+def test_occupation_distribution() -> None:
     edges = normalize_edges(
         np.array([0, 0, 1]), np.array([1, 2, 2]), np.array([3, 3, 5])
     )
-    dist = weight_distribution(edges)
-    np.testing.assert_array_equal(dist.weight, [3, 5])
+    dist = occupation_distribution(edges)
+    np.testing.assert_array_equal(dist.occ_num, [3, 5])
     np.testing.assert_array_equal(dist.count, [2, 1])
 
 

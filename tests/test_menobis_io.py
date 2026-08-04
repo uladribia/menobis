@@ -28,7 +28,7 @@ def test_roundtrip_parquet(tmp_path: Path) -> None:
     original = EdgeTable(
         source=np.array([0, 1], dtype=np.uint64),
         target=np.array([1, 2], dtype=np.uint64),
-        weight=np.array([3, 4], dtype=np.uint64),
+        occ_num=np.array([3, 4], dtype=np.uint64),
     )
     path = tmp_path / "edges.parquet"
     write_edges(original, path)
