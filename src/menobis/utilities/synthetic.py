@@ -18,7 +18,7 @@ from menobis.data.frames import EdgeTable
 
 @dataclass(frozen=True)
 class SyntheticNetwork:
-    """Generated PA geographic weighted directed network."""
+    """Generated PA geographic non-binary directed network."""
 
     edges: EdgeTable
     x: NDArray[np.float64]
@@ -86,7 +86,7 @@ def generate_pa_geographic_network(
     origin_degree_exponent: float = 1.0,
     destination_degree_exponent: float = 1.0,
 ) -> SyntheticNetwork:
-    """Generate a PA geographic weighted directed network.
+    """Generate a PA geographic non-binary directed network.
 
     Binary support is created by directed preferential attachment. Positive
     integer occupation numbers are then allocated only on existing edges with
@@ -213,7 +213,7 @@ def known_pairs_from_network(
     *,
     fraction: float = 0.15,
 ) -> tuple[NDArray[np.uint64], NDArray[np.uint64], NDArray[np.float64]]:
-    """Select deterministic known weighted pairs from strongest observed edges."""
+    """Select deterministic known occupied pairs from strongest observed edges."""
     if not (0.0 <= fraction <= 1.0):
         msg = "fraction must be in [0, 1]"
         raise ValueError(msg)

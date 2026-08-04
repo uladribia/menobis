@@ -25,7 +25,7 @@ impl OccupiedPair {
     }
 }
 
-/// Directed node sequences for weighted origin-destination edges.
+/// Directed node sequences for occupied origin-destination pairs.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DirectedNodeSequence {
     /// Outgoing value per node.

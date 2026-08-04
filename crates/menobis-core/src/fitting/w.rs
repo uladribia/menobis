@@ -56,7 +56,7 @@ pub fn w_mean(r: f64, layers: u32) -> f64 {
 
 /// Compute zero-inflated W occupation probability.
 ///
-/// `v` is the occupation multiplier and `r` is the positive-weight inverse/log
+/// `v` is the occupation multiplier and `r` is the positive-occupation inverse/log
 /// parameter in `q = exp(-r)`.
 #[must_use]
 pub fn w_occupation(v: f64, r: f64, layers: u32) -> f64 {

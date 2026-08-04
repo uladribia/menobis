@@ -28,7 +28,7 @@ PAJEK_SUFFIXES = {".net", ".paj"}
 
 
 def read_edges(path: Path | str) -> EdgeTable:
-    """Read an MENoBiS weighted edge table from a supported file format.
+    """Read an MENoBiS occupied-pair table from a supported file format.
 
     Args:
         path: Input path.

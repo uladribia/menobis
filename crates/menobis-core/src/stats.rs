@@ -1,4 +1,4 @@
-//! Network statistics for weighted directed edge lists.
+//! Network statistics for non-binary directed networks.
 
 use crate::graph::OccupiedPair;
 use std::collections::HashMap;
