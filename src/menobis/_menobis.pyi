@@ -1123,3 +1123,45 @@ def absent_degree_events_negative_binomial(
     min_expected: float,
     max_absent: int | None,
 ) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
+def fit_edges_events(
+    family: str,
+    total_edges: float,
+    total_events: int,
+    n_pairs: int,
+    layers: int,
+    max_iterations: int,
+) -> tuple[float, float, float, float, bool, int]: ...
+def sample_edges_events(
+    node_count: int,
+    q: float,
+    occupation: float,
+    family: str,
+    layers: int,
+    self_loops: bool,
+    seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
+def filter_edges_events(
+    node_count: int,
+    q: float,
+    occupation: float,
+    family: str,
+    layers: int,
+    self_loops: bool,
+    sources: list[int],
+    targets: list[int],
+    occ_nums: list[int],
+) -> tuple[list[float], list[float], list[float], list[float]]: ...
+def absent_edges_events(
+    node_count: int,
+    q: float,
+    occupation: float,
+    family: str,
+    layers: int,
+    self_loops: bool,
+    sources: list[int],
+    targets: list[int],
+    alpha_lower: float,
+    min_occupation: float,
+    min_expected: float,
+    max_absent: int | None,
+) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...

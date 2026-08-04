@@ -59,6 +59,33 @@ def _sample_strength_cost_poisson(
     return _edge_table_from_lists(sources, targets, occ_nums)
 
 
+def _sample_edges_events(
+    node_count: int,
+    q: float,
+    occupation: float,
+    family: str,
+    *,
+    layers: int = 1,
+    self_loops: bool = True,
+    seed: int = 0,
+) -> EdgeTable:
+    """Sample the symmetric EDGES_EVENTS model from fitted multipliers.
+
+    Every candidate pair draws from the same zero-inflated distribution
+    with positive-support parameter `q` and global occupation probability.
+    """
+    sources, targets, occ_nums = _menobis.sample_edges_events(
+        int(node_count),
+        float(q),
+        float(occupation),
+        family,
+        int(layers),
+        bool(self_loops),
+        int(seed),
+    )
+    return _edge_table_from_lists(sources, targets, occ_nums)
+
+
 def _sample_strength_stub_matching(
     strength_out: NDArray[np.integer],
     strength_in: NDArray[np.integer],

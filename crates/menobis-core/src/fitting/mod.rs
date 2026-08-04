@@ -2,6 +2,7 @@
 
 pub mod b;
 pub mod b_lbfgs;
+pub mod edges_events;
 pub mod mask;
 pub mod me;
 pub mod me_lbfgs;
@@ -20,6 +21,7 @@ pub use b::{
     fit_strength_degree_binomial, fit_strength_edges_binomial,
 };
 pub use b_lbfgs::{fit_strength_degree_binomial_lbfgs, fit_strength_edges_binomial_lbfgs};
+pub use edges_events::{fit_edges_events, EdgesEventsFitError, EdgesEventsFitResult};
 pub use me::{
     balance_sparse_masked_strength_degree_poisson, balance_sparse_masked_strength_poisson,
     balance_strength_degree_poisson, balance_strength_edges_poisson, balance_strength_poisson,

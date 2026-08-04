@@ -12,6 +12,7 @@ from menobis.models.types import (
     ConicDiagnostics,
     DegreeEventsFit,
     DegreeFit,
+    EdgesEventsFit,
     OptimizationDiagnostics,
     StrengthCostFit,
     StrengthDegreeFit,
@@ -1685,10 +1686,86 @@ def _fit_degree_events_negative_binomial(
     )
 
 
+def _fit_edges_events(
+    family: str,
+    total_edges: float,
+    total_events: int,
+    node_count: int,
+    *,
+    layers: int = 1,
+    self_loops: bool = True,
+    max_iterations: int = 10000,
+) -> EdgesEventsFit:
+    """Fit the grand-canonical EDGES_EVENTS model for any occupation family.
+
+    Fixes total binary edges E and total events T in expectation over the
+    N candidate pairs. The solution is symmetric: a global occupation
+    multiplier `lam` and a positive-support parameter `q` such that
+    E[t|t>0] = T/E and E[Theta(t>0)] = E/N_pairs.
+
+    Args:
+        family: "poisson", "binomial", "geometric", "negative_binomial".
+        total_edges: Expected binary edge count E.
+        total_events: Expected event count T.
+        node_count: Number of nodes N.
+        layers: Layer count M for B/W families.
+        self_loops: Whether self-loop pairs are candidate pairs.
+        max_iterations: Bisection iteration cap.
+
+    Returns:
+        EdgesEventsFit with q, lam, occupation, positive_mean.
+    """
+    e = float(total_edges)
+    t = float(total_events)
+    n = int(node_count)
+    if n < 1:
+        msg = "node_count must be at least 1"
+        raise ValueError(msg)
+    if not np.isfinite(e) or e <= 0.0:
+        msg = "total_edges must be a positive finite number"
+        raise ValueError(msg)
+    if t < e:
+        msg = "total_events must be >= total_edges"
+        raise ValueError(msg)
+    n_pairs = n * n if self_loops else n * (n - 1)
+    if n_pairs == 0:
+        msg = "node_count too small for the requested self-loop policy"
+        raise ValueError(msg)
+    if e > float(n_pairs):
+        msg = "total_edges cannot exceed the number of candidate pairs"
+        raise ValueError(msg)
+
+    t0 = time.perf_counter()
+    q, lam, occupation, positive_mean, converged, iters = _menobis.fit_edges_events(
+        family, e, int(t), n_pairs, int(layers), max_iterations
+    )
+    _log_fit_result(
+        f"fit_edges_events_{family}", converged, iters, time.perf_counter() - t0, 0
+    )
+    return EdgesEventsFit(
+        q=q,
+        lam=lam,
+        occupation=occupation,
+        positive_mean=positive_mean,
+        node_count=n,
+        self_loops=self_loops,
+        converged=bool(converged),
+        iterations=int(iters),
+        family=family,
+        layers=layers if family in ("binomial", "negative_binomial") else None,
+        diagnostics=OptimizationDiagnostics(
+            converged=bool(converged),
+            status="solved" if converged else "inaccurate",
+            iterations=int(iters),
+        ),
+    )
+
+
 __all__ = [
     "ConicDiagnostics",
     "DegreeEventsFit",
     "DegreeFit",
+    "EdgesEventsFit",
     "OptimizationDiagnostics",
     "StrengthCostFit",
     "StrengthDegreeFit",

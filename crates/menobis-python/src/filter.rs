@@ -319,7 +319,98 @@ pub(crate) fn absent_strength_degree_poisson(
     ))
 }
 
+/// Filter observed pairs against the symmetric EDGES_EVENTS model.
 #[pyfunction]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn filter_edges_events(
+    node_count: usize,
+    q: f64,
+    occupation: f64,
+    family: &str,
+    layers: u32,
+    self_loops: bool,
+    sources: Vec<u64>,
+    targets: Vec<u64>,
+    occ_nums: Vec<u64>,
+) -> PyResult<ObservedFilter> {
+    let occ_family = match family {
+        "poisson" => menobis_core::distribution::OccupationFamily::Poisson,
+        "binomial" => menobis_core::distribution::OccupationFamily::Binomial(layers),
+        "geometric" => menobis_core::distribution::OccupationFamily::Geometric,
+        "negative_binomial" => {
+            menobis_core::distribution::OccupationFamily::NegativeBinomial(layers)
+        }
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "unknown occupation family: {other}"
+            )))
+        }
+    };
+    let result = core_filter_edges_events(
+        node_count, q, occupation, occ_family, self_loops, &sources, &targets, &occ_nums,
+    );
+    Ok((
+        result.upper_pvalues,
+        result.lower_pvalues,
+        result.expected,
+        result.occupation,
+    ))
+}
+
+#[pyfunction]
+#[pyo3(signature = (node_count, q, occupation, family, layers, self_loops, sources, targets, alpha_lower, min_occupation, min_expected, max_absent=None))]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn absent_edges_events(
+    node_count: usize,
+    q: f64,
+    occupation: f64,
+    family: &str,
+    layers: u32,
+    self_loops: bool,
+    sources: Vec<u64>,
+    targets: Vec<u64>,
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> PyResult<AbsentFilter> {
+    let occ_family = match family {
+        "poisson" => menobis_core::distribution::OccupationFamily::Poisson,
+        "binomial" => menobis_core::distribution::OccupationFamily::Binomial(layers),
+        "geometric" => menobis_core::distribution::OccupationFamily::Geometric,
+        "negative_binomial" => {
+            menobis_core::distribution::OccupationFamily::NegativeBinomial(layers)
+        }
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "unknown occupation family: {other}"
+            )))
+        }
+    };
+    let result = core_absent_edges_events(
+        node_count,
+        q,
+        occupation,
+        occ_family,
+        self_loops,
+        &sources,
+        &targets,
+        alpha_lower,
+        min_occupation,
+        min_expected,
+        max_absent,
+    );
+    Ok((
+        result.sources,
+        result.targets,
+        result.lower_pvalues,
+        result.expected,
+        result.occupation,
+    ))
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn filter_degree_events_poisson(
     x: Vec<f64>,
     y: Vec<f64>,

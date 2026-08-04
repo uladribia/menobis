@@ -204,6 +204,28 @@ class StrengthDegreeFit(FitResult):
 
 
 @dataclass(frozen=True)
+class EdgesEventsFit(FitResult):
+    """Fitted global EDGES_EVENTS multipliers (all families).
+
+    The model is symmetric: every candidate pair shares one zero-inflated
+    distribution with positive-support parameter `q` and global occupation
+    multiplier `lam`.
+    """
+
+    q: float
+    lam: float
+    occupation: float
+    positive_mean: float
+    node_count: int
+    self_loops: bool = True
+    converged: bool = True
+    iterations: int = 0
+    family: str = "poisson"
+    layers: int | None = None
+    diagnostics: OptimizationDiagnostics | None = None
+
+
+@dataclass(frozen=True)
 class DegreeEventsFit(FitResult):
     """Fitting result for degree-events models (all families).
 
@@ -251,6 +273,7 @@ __all__ = [
     "ConicDiagnostics",
     "DegreeEventsFit",
     "DegreeFit",
+    "EdgesEventsFit",
     "FitResult",
     "OptimizationDiagnostics",
     "PartialFitResult",

@@ -352,6 +352,32 @@ impl PairDistributionProvider for StrengthEdgesProvider<'_> {
     }
 }
 
+/// Symmetric EDGES_EVENTS provider: every candidate pair shares one
+/// zero-inflated distribution with global occupation and positive parameter q.
+pub struct EdgesEventsProvider {
+    pub node_count: usize,
+    pub q: f64,
+    pub occupation: f64,
+    pub family: OccupationFamily,
+    pub self_loops: bool,
+}
+
+impl PairDistributionProvider for EdgesEventsProvider {
+    fn support(&self) -> CandidateSupport<'_> {
+        CandidateSupport::AllPairs {
+            node_count: self.node_count,
+            self_loops: self.self_loops,
+        }
+    }
+
+    fn distribution(&self, source: usize, target: usize) -> Option<PairDistribution> {
+        if !self.self_loops && source == target {
+            return None;
+        }
+        Some(self.family.zip_distribution(self.occupation, self.q))
+    }
+}
+
 pub struct StrengthDegreeProvider<'a> {
     pub x: &'a [f64],
     pub y: &'a [f64],

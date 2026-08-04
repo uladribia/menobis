@@ -1,5 +1,33 @@
 use super::*;
 
+/// Sample the symmetric EDGES_EVENTS model.
+#[pyfunction]
+pub(crate) fn sample_edges_events(
+    node_count: usize,
+    q: f64,
+    occupation: f64,
+    family: &str,
+    layers: u32,
+    self_loops: bool,
+    seed: u64,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    let occ_family = match family {
+        "poisson" => menobis_core::distribution::OccupationFamily::Poisson,
+        "binomial" => menobis_core::distribution::OccupationFamily::Binomial(layers),
+        "geometric" => menobis_core::distribution::OccupationFamily::Geometric,
+        "negative_binomial" => {
+            menobis_core::distribution::OccupationFamily::NegativeBinomial(layers)
+        }
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "unknown occupation family: {other}"
+            )))
+        }
+    };
+    let sample = core_sample_edges_events(node_count, q, occupation, occ_family, self_loops, seed);
+    Ok((sample.sources, sample.targets, sample.occ_nums))
+}
+
 #[pyfunction]
 pub(crate) fn sample_strength_stub_matching(
     strength_out: Vec<u64>,

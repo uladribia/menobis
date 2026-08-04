@@ -2,10 +2,10 @@
 
 use crate::distribution::{OccupationFamily, PairDistribution};
 use crate::pairs::{
-    chunk_seed, row_ranges, CandidateSupport, DegreeEventsProvider, EuclideanCostProvider,
-    FixedStrengthProvider, NormalizedSparsePoissonProvider, PairDistributionProvider,
-    StrengthCostProvider, StrengthDegreeProvider, StrengthEdgesProvider, PARALLEL_PAIR_THRESHOLD,
-    SPARSE_CHUNK_SIZE,
+    chunk_seed, row_ranges, CandidateSupport, DegreeEventsProvider, EdgesEventsProvider,
+    EuclideanCostProvider, FixedStrengthProvider, NormalizedSparsePoissonProvider,
+    PairDistributionProvider, StrengthCostProvider, StrengthDegreeProvider, StrengthEdgesProvider,
+    PARALLEL_PAIR_THRESHOLD, SPARSE_CHUNK_SIZE,
 };
 use rand::rngs::StdRng;
 use rand::Rng;
@@ -533,6 +533,32 @@ fn sample_strength_cost_coordinates(
         seed,
     )
 }
+/// Sample the symmetric EDGES_EVENTS grand-canonical model.
+///
+/// Every candidate pair shares the zero-inflated distribution with global
+/// occupation probability and positive-support parameter `q`.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn sample_edges_events(
+    node_count: usize,
+    q: f64,
+    occupation: f64,
+    family: OccupationFamily,
+    self_loops: bool,
+    seed: u64,
+) -> SampledNetwork {
+    sample_provider(
+        &EdgesEventsProvider {
+            node_count,
+            q,
+            occupation,
+            family,
+            self_loops,
+        },
+        seed,
+    )
+}
+
 /// Sample degree-events ME: Bernoulli occupation + positive Poisson(q).
 #[must_use]
 pub fn sample_degree_events_poisson(

@@ -774,6 +774,49 @@ pub(crate) fn fit_strength_binomial(
     (result.x, result.y, result.converged, result.iterations)
 }
 
+/// Fit the grand-canonical EDGES_EVENTS model (all families).
+/// Returns (q, lam, occupation, positive_mean, converged, iterations).
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn fit_edges_events(
+    family: &str,
+    total_edges: f64,
+    total_events: u64,
+    n_pairs: u64,
+    layers: u32,
+    max_iterations: usize,
+) -> PyResult<(f64, f64, f64, f64, bool, usize)> {
+    let occ_family = match family {
+        "poisson" => menobis_core::distribution::OccupationFamily::Poisson,
+        "binomial" => menobis_core::distribution::OccupationFamily::Binomial(layers),
+        "geometric" => menobis_core::distribution::OccupationFamily::Geometric,
+        "negative_binomial" => {
+            menobis_core::distribution::OccupationFamily::NegativeBinomial(layers)
+        }
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "unknown occupation family: {other}"
+            )))
+        }
+    };
+    let result = core_fit_edges_events(
+        occ_family,
+        total_edges,
+        total_events,
+        n_pairs,
+        max_iterations,
+    )
+    .map_err(|err| PyValueError::new_err(err.to_string()))?;
+    Ok((
+        result.q,
+        result.lam,
+        result.occupation,
+        result.positive_mean,
+        result.converged,
+        result.iterations,
+    ))
+}
+
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn fit_degree_events_geometric(
@@ -878,7 +921,13 @@ pub(crate) fn fit_partial_strength_poisson_full(
         tolerance,
         max_iterations,
     );
-    (r.sources, r.targets, r.intensities, r.converged, r.iterations)
+    (
+        r.sources,
+        r.targets,
+        r.intensities,
+        r.converged,
+        r.iterations,
+    )
 }
 
 #[pyfunction]
@@ -901,7 +950,13 @@ pub(crate) fn fit_partial_degree_poisson_full(
         tolerance,
         max_iterations,
     );
-    (r.sources, r.targets, r.intensities, r.converged, r.iterations)
+    (
+        r.sources,
+        r.targets,
+        r.intensities,
+        r.converged,
+        r.iterations,
+    )
 }
 
 #[pyfunction]
@@ -930,7 +985,13 @@ pub(crate) fn fit_partial_strength_degree_poisson_full(
         tolerance,
         max_iterations,
     );
-    (r.sources, r.targets, r.intensities, r.converged, r.iterations)
+    (
+        r.sources,
+        r.targets,
+        r.intensities,
+        r.converged,
+        r.iterations,
+    )
 }
 
 #[pyfunction]
@@ -957,7 +1018,13 @@ pub(crate) fn fit_partial_strength_edges_poisson_full(
         tolerance,
         max_iterations,
     );
-    (r.sources, r.targets, r.intensities, r.converged, r.iterations)
+    (
+        r.sources,
+        r.targets,
+        r.intensities,
+        r.converged,
+        r.iterations,
+    )
 }
 
 #[pyfunction]
@@ -996,7 +1063,13 @@ pub(crate) fn fit_partial_strength_cost_poisson_coordinates_full(
         tolerance,
         max_iterations,
     );
-    Ok((r.sources, r.targets, r.intensities, r.converged, r.iterations))
+    Ok((
+        r.sources,
+        r.targets,
+        r.intensities,
+        r.converged,
+        r.iterations,
+    ))
 }
 
 #[pyfunction]
@@ -1037,7 +1110,13 @@ pub(crate) fn fit_partial_strength_cost_binomial_coordinates_full(
         tolerance,
         max_iterations,
     );
-    Ok((r.sources, r.targets, r.intensities, r.converged, r.iterations))
+    Ok((
+        r.sources,
+        r.targets,
+        r.intensities,
+        r.converged,
+        r.iterations,
+    ))
 }
 
 #[pyfunction]
@@ -1078,7 +1157,13 @@ pub(crate) fn fit_partial_strength_cost_w_coordinates_full(
         tolerance,
         max_iterations,
     );
-    Ok((r.sources, r.targets, r.intensities, r.converged, r.iterations))
+    Ok((
+        r.sources,
+        r.targets,
+        r.intensities,
+        r.converged,
+        r.iterations,
+    ))
 }
 
 #[pyfunction]
@@ -1105,7 +1190,13 @@ pub(crate) fn fit_partial_strength_binomial_full(
         tolerance,
         max_iterations,
     );
-    (r.sources, r.targets, r.intensities, r.converged, r.iterations)
+    (
+        r.sources,
+        r.targets,
+        r.intensities,
+        r.converged,
+        r.iterations,
+    )
 }
 
 #[pyfunction]
@@ -1134,7 +1225,13 @@ pub(crate) fn fit_partial_strength_edges_binomial_full(
         tolerance,
         max_iterations,
     );
-    (r.sources, r.targets, r.intensities, r.converged, r.iterations)
+    (
+        r.sources,
+        r.targets,
+        r.intensities,
+        r.converged,
+        r.iterations,
+    )
 }
 
 #[pyfunction]
@@ -1165,7 +1262,13 @@ pub(crate) fn fit_partial_strength_degree_binomial_full(
         tolerance,
         max_iterations,
     );
-    (r.sources, r.targets, r.intensities, r.converged, r.iterations)
+    (
+        r.sources,
+        r.targets,
+        r.intensities,
+        r.converged,
+        r.iterations,
+    )
 }
 
 #[pyfunction]
@@ -1194,7 +1297,13 @@ pub(crate) fn fit_partial_strength_edges_w_full(
         tolerance,
         max_iterations,
     );
-    (r.sources, r.targets, r.intensities, r.converged, r.iterations)
+    (
+        r.sources,
+        r.targets,
+        r.intensities,
+        r.converged,
+        r.iterations,
+    )
 }
 
 #[pyfunction]
@@ -1221,7 +1330,13 @@ pub(crate) fn fit_partial_strength_w_full(
         tolerance,
         max_iterations,
     );
-    (r.sources, r.targets, r.intensities, r.converged, r.iterations)
+    (
+        r.sources,
+        r.targets,
+        r.intensities,
+        r.converged,
+        r.iterations,
+    )
 }
 
 #[pyfunction]
@@ -1252,5 +1367,11 @@ pub(crate) fn fit_partial_strength_degree_w_full(
         tolerance,
         max_iterations,
     );
-    (r.sources, r.targets, r.intensities, r.converged, r.iterations)
+    (
+        r.sources,
+        r.targets,
+        r.intensities,
+        r.converged,
+        r.iterations,
+    )
 }

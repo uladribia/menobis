@@ -2,7 +2,7 @@
 
 use crate::distribution::{OccupationFamily, PairDistribution};
 use crate::pairs::{
-    row_ranges, CandidateSupport, DegreeEventsProvider, EuclideanCostProvider,
+    row_ranges, CandidateSupport, DegreeEventsProvider, EdgesEventsProvider, EuclideanCostProvider,
     FixedStrengthProvider, PairDistributionProvider, SparsePoissonRateMapProvider,
     SparsePoissonRateProvider, StrengthCostProvider, StrengthDegreeProvider, StrengthEdgesProvider,
     PARALLEL_PAIR_THRESHOLD, SPARSE_CHUNK_SIZE,
@@ -562,7 +562,68 @@ pub fn absent_strength_degree_poisson(
     )
 }
 
+/// Filter observed pairs against the symmetric EDGES_EVENTS model.
 #[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn filter_edges_events(
+    node_count: usize,
+    q: f64,
+    occupation: f64,
+    family: OccupationFamily,
+    self_loops: bool,
+    sources: &[u64],
+    targets: &[u64],
+    occ_nums: &[u64],
+) -> ObservedFilterResult {
+    filter_observed_provider(
+        sources,
+        targets,
+        occ_nums,
+        &EdgesEventsProvider {
+            node_count,
+            q,
+            occupation,
+            family,
+            self_loops,
+        },
+    )
+}
+
+/// Detect absent pairs under the symmetric EDGES_EVENTS model.
+#[allow(clippy::too_many_arguments)]
+#[must_use]
+pub fn absent_edges_events(
+    node_count: usize,
+    q: f64,
+    occupation: f64,
+    family: OccupationFamily,
+    self_loops: bool,
+    sources: &[u64],
+    targets: &[u64],
+    alpha_lower: f64,
+    min_occupation: f64,
+    min_expected: f64,
+    max_absent: Option<usize>,
+) -> AbsentFilterResult {
+    detect_absent_provider(
+        &EdgesEventsProvider {
+            node_count,
+            q,
+            occupation,
+            family,
+            self_loops,
+        },
+        sources,
+        targets,
+        AbsentFilterOptions {
+            alpha_lower,
+            min_occupation,
+            min_expected,
+            max_absent,
+        },
+    )
+}
+
 pub fn filter_degree_events_poisson(
     x: &[f64],
     y: &[f64],

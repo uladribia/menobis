@@ -72,6 +72,7 @@ def fit_model(
     target_cost: float | None = None,
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
+    node_count: int | None = None,
     known_source: NDArray[Any] | None = None,
     known_target: NDArray[Any] | None = None,
     known_occnum: NDArray[Any] | None = None,
@@ -85,6 +86,9 @@ def fit_model(
     When known_source, known_target, and known_occnum are provided, performs
     partial fitting where those pairs are frozen and only the remaining
     pairs are fitted.
+
+    `node_count` is required by the EDGES_EVENTS constraint, which has no
+    per-node sequences.
     """
     if (
         known_source is not None
@@ -129,6 +133,7 @@ def fit_model(
             target_cost=target_cost,
             coord_x=coord_x,
             coord_y=coord_y,
+            node_count=node_count,
             layers=layers,
             self_loops=self_loops,
             tolerance=tolerance,
@@ -188,8 +193,15 @@ def filter_model(
     max_absent: int | None = None,
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
+    node_count: int | None = None,
+    total_events: int | None = None,
+    target_edges: float | None = None,
 ) -> FilterResult:
-    """Filter edges against a null model selected by family and constraint."""
+    """Filter edges against a null model selected by family and constraint.
+
+    `node_count`, `total_events`, and `target_edges` are required by the
+    EDGES_EVENTS constraint when no fitted model is supplied.
+    """
     return cast(
         "FilterResult",
         route_model(
@@ -209,6 +221,9 @@ def filter_model(
             max_absent=max_absent,
             coord_x=coord_x,
             coord_y=coord_y,
+            node_count=node_count,
+            total_events=total_events,
+            target_edges=target_edges,
         ),
     )
 
@@ -250,6 +265,7 @@ def _fit_model(
     target_cost: float | None = None,
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
+    node_count: int | None = None,
     layers: int = 1,
     self_loops: bool = True,
     tolerance: float = 1e-8,
@@ -313,6 +329,10 @@ def _fit_model(
             Constraint.DEGREE_EVENTS,
             "negative_binomial",
         ): fitting._fit_degree_events_negative_binomial,
+        (Constraint.EDGES_EVENTS, "poisson"): fitting._fit_edges_events,
+        (Constraint.EDGES_EVENTS, "binomial"): fitting._fit_edges_events,
+        (Constraint.EDGES_EVENTS, "geometric"): fitting._fit_edges_events,
+        (Constraint.EDGES_EVENTS, "negative_binomial"): fitting._fit_edges_events,
     }
     key = (constraint, variant)
     if key not in dispatch:
@@ -405,6 +425,28 @@ def _fit_model(
                 total_events,
                 **common,
             )
+        case Constraint.EDGES_EVENTS:
+            if ensemble != Ensemble.GRAND_CANONICAL:
+                msg = "edges_events requires ensemble=GRAND_CANONICAL"
+                raise UnsupportedModelCaseError(msg)
+            if node_count is None:
+                msg = "edges_events requires node_count"
+                raise ValueError(msg)
+            if total_events is None:
+                msg = "edges_events requires total_events"
+                raise ValueError(msg)
+            if target_edges is None:
+                msg = "edges_events requires target_edges"
+                raise ValueError(msg)
+            return dispatch[key](
+                variant,
+                target_edges,
+                total_events,
+                node_count,
+                layers=layers,
+                self_loops=self_loops,
+                max_iterations=max_iterations,
+            )
         case _:
             msg = f"invalid constraint: {constraint!r}"
             raise UnsupportedModelCaseError(msg)
@@ -429,6 +471,7 @@ def _sample_model(
         _sample_degree_events_geometric,
         _sample_degree_events_negative_binomial,
         _sample_degree_events_poisson,
+        _sample_edges_events,
         _sample_strength_binomial,
         _sample_strength_cost_binomial,
         _sample_strength_cost_geometric,
@@ -450,6 +493,7 @@ def _sample_model(
     )
     from menobis.models.types import (
         DegreeEventsFit,
+        EdgesEventsFit,
         StrengthCostFit,
         StrengthDegreeFit,
         StrengthEdgesFit,
@@ -546,6 +590,22 @@ def _sample_model(
             ),
         }
         return dispatch[variant]()
+    if constraint == Constraint.EDGES_EVENTS:
+        if not isinstance(fit, EdgesEventsFit):
+            msg = (
+                "edges_events sampling requires EdgesEventsFit, got "
+                f"{type(fit).__name__}"
+            )
+            raise TypeError(msg)
+        return _sample_edges_events(
+            fit.node_count,
+            fit.q,
+            fit.occupation,
+            fit.family,
+            layers=fit.layers or 1,
+            self_loops=fit.self_loops,
+            seed=seed,
+        )
     if constraint == Constraint.STRENGTH_EDGES:
         if not isinstance(fit, StrengthEdgesFit):
             msg = (
@@ -648,6 +708,9 @@ def _filter_model(
     max_absent: int | None = None,
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
+    node_count: int | None = None,
+    total_events: int | None = None,
+    target_edges: float | None = None,
 ) -> FilterResult:
     from menobis.filtering import models as filtering
 
@@ -656,17 +719,29 @@ def _filter_model(
         raise UnsupportedModelCaseError(msg)
 
     if fit is None:
-        nc = _node_count(edges)
-        s_out, s_in = _strengths(edges, nc)
-        fit = _fit_model(
-            ensemble=ensemble,
-            family=family,
-            constraint=constraint,
-            strength_out=s_out,
-            strength_in=s_in,
-            layers=layers,
-            self_loops=self_loops,
-        )
+        if constraint == Constraint.EDGES_EVENTS:
+            fit = _fit_model(
+                ensemble=ensemble,
+                family=family,
+                constraint=constraint,
+                node_count=node_count,
+                total_events=total_events,
+                target_edges=target_edges,
+                layers=layers,
+                self_loops=self_loops,
+            )
+        else:
+            nc = _node_count(edges)
+            s_out, s_in = _strengths(edges, nc)
+            fit = _fit_model(
+                ensemble=ensemble,
+                family=family,
+                constraint=constraint,
+                strength_out=s_out,
+                strength_in=s_in,
+                layers=layers,
+                self_loops=self_loops,
+            )
 
     variant = _fit_variant(family, layers if layers is not None else 1)
     kwargs: dict[str, Any] = {
@@ -744,6 +819,10 @@ def _filter_model(
             Constraint.DEGREE_EVENTS,
             "negative_binomial",
         ): filtering._filter_degree_events_negative_binomial,
+        (Constraint.EDGES_EVENTS, "poisson"): filtering._filter_edges_events,
+        (Constraint.EDGES_EVENTS, "binomial"): filtering._filter_edges_events,
+        (Constraint.EDGES_EVENTS, "geometric"): filtering._filter_edges_events,
+        (Constraint.EDGES_EVENTS, "negative_binomial"): filtering._filter_edges_events,
     }
     if constraint == Constraint.STRENGTH_COST:
         if coord_x is None or coord_y is None:

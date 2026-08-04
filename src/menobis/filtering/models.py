@@ -15,6 +15,7 @@ from menobis.filtering.classify import (
 from menobis.filtering.types import Correction, FilterResult, Tail
 from menobis.models.types import (
     DegreeEventsFit,
+    EdgesEventsFit,
     StrengthCostFit,
     StrengthDegreeFit,
     StrengthEdgesFit,
@@ -256,6 +257,65 @@ def _filter_strength_degree_poisson(
             edges.source.tolist(),
             edges.target.tolist(),
             fit.self_loops,
+            _lower_alpha(alpha, tail),
+            min_occupation,
+            min_expected,
+            max_absent,
+        )
+    return _classify(
+        edges,
+        np.asarray(upper, dtype=np.float64),
+        np.asarray(lower, dtype=np.float64),
+        np.asarray(expected, dtype=np.float64),
+        np.asarray(occupation, dtype=np.float64),
+        absent,
+        alpha=alpha,
+        tail=tail,
+        correction=correction,
+    )
+
+
+def _filter_edges_events(
+    edges: EdgeTable,
+    fit: EdgesEventsFit,
+    *,
+    alpha: float = 0.05,
+    tail: Tail = "two-sided",
+    correction: Correction = "none",
+    detect_absent: bool = False,
+    min_occupation: float = 0.5,
+    min_expected: float = 0.0,
+    max_absent: int | None = None,
+) -> FilterResult:
+    """Filter edges against the symmetric EDGES_EVENTS null model.
+
+    Every candidate pair shares the same zero-inflated distribution with
+    positive-support parameter `fit.q` and global occupation probability.
+    """
+    family = fit.family
+    layers = fit.layers or 1
+    upper, lower, expected, occupation = _menobis.filter_edges_events(
+        fit.node_count,
+        fit.q,
+        fit.occupation,
+        family,
+        layers,
+        fit.self_loops,
+        edges.source.tolist(),
+        edges.target.tolist(),
+        edges.occ_num.tolist(),
+    )
+    absent = None
+    if detect_absent:
+        absent = _menobis.absent_edges_events(
+            fit.node_count,
+            fit.q,
+            fit.occupation,
+            family,
+            layers,
+            fit.self_loops,
+            edges.source.tolist(),
+            edges.target.tolist(),
             _lower_alpha(alpha, tail),
             min_occupation,
             min_expected,

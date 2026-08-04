@@ -35,6 +35,7 @@ class Constraint(StrEnum):
     STRENGTH_EDGES = "strength_edges"
     STRENGTH_DEGREE = "strength_degree"
     DEGREE_EVENTS = "degree_events"
+    EDGES_EVENTS = "edges_events"
 
 
 class UnsupportedModelCaseError(ValueError):
