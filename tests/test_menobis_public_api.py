@@ -238,6 +238,7 @@ def test_routing_exports() -> None:
         "filter_model",
         "fit_model",
         "sample_model",
+        "sample_model_detailed",
     }
     assert set(menobis.routing.__all__) == expected
 

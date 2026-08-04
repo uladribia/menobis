@@ -19,7 +19,7 @@ from menobis.models.spec import (
 if TYPE_CHECKING:
     from menobis.data.frames import EdgeTable
     from menobis.filtering.types import FilterResult
-    from menobis.models.types import FitResult
+    from menobis.models.types import FitResult, SamplingResult
 
 
 def route_model(
@@ -154,10 +154,65 @@ def sample_model(
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
     layers: int = 1,
+    self_loops: bool = True,
     seed: int = 0,
 ) -> EdgeTable:
-    """Sample a network from a fitted model or directly via stub matching."""
-    return cast(
+    """Sample a network from a fitted model or directly via stub matching.
+
+    Returns only the sampled occupied-pair table. Use
+    :func:`sample_model_detailed` for the full result with metadata.
+
+    `self_loops` is only consulted by the direct (microcanonical) sampler;
+    grand-canonical and canonical sampling read it from the fitted model.
+    """
+    return sample_model_detailed(
+        ensemble=ensemble,
+        family=family,
+        constraint=constraint,
+        fit=fit,
+        strength_out=strength_out,
+        strength_in=strength_in,
+        total_events=total_events,
+        coord_x=coord_x,
+        coord_y=coord_y,
+        layers=layers,
+        self_loops=self_loops,
+        seed=seed,
+    ).edges
+
+
+def sample_model_detailed(
+    *,
+    ensemble: Ensemble = Ensemble.GRAND_CANONICAL,
+    family: ModelFamily,
+    constraint: Constraint,
+    fit: FitResult | None = None,
+    strength_out: NDArray[Any] | None = None,
+    strength_in: NDArray[Any] | None = None,
+    total_events: int | None = None,
+    coord_x: NDArray[Any] | None = None,
+    coord_y: NDArray[Any] | None = None,
+    layers: int = 1,
+    self_loops: bool = True,
+    seed: int = 0,
+) -> SamplingResult:
+    """Sample a network and return the detailed :class:`SamplingResult`.
+
+    The result carries the ensemble, family, constraint, generation method,
+    exactness category, seed, and diagnostics.
+    """
+    from menobis.capabilities import SamplingExactness, capability
+    from menobis.models.types import SamplingDiagnostics, SamplingResult
+
+    cap = capability(Verb.SAMPLE, ensemble, family, constraint)
+    if cap is None or not cap.supported:
+        msg = (
+            f"unsupported sampling case: verb=sample ensemble={ensemble!r} "
+            f"family={family!r} constraint={constraint!r}"
+        )
+        raise UnsupportedModelCaseError(msg)
+
+    edges = cast(
         "EdgeTable",
         route_model(
             Verb.SAMPLE,
@@ -171,8 +226,30 @@ def sample_model(
             coord_x=coord_x,
             coord_y=coord_y,
             layers=layers,
+            self_loops=self_loops,
             seed=seed,
         ),
+    )
+
+    if ensemble is Ensemble.MICROCANONICAL:
+        method = "stub_matching"
+        exactness = SamplingExactness.EXACT_DIRECT
+    elif ensemble is Ensemble.CANONICAL:
+        method = "canonical_multinomial"
+        exactness = SamplingExactness.EXACT_DIRECT
+    else:
+        method = "grandcanonical_independent"
+        exactness = SamplingExactness.EXACT_INDEPENDENT
+
+    return SamplingResult(
+        edges=edges,
+        ensemble=ensemble,
+        family=family,
+        constraint=constraint,
+        method=method,
+        exactness=exactness,
+        seed=seed,
+        diagnostics=SamplingDiagnostics(method=method, exactness=exactness),
     )
 
 
@@ -464,6 +541,7 @@ def _sample_model(
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
     layers: int = 1,
+    self_loops: bool = True,
     seed: int = 0,
 ) -> EdgeTable:
     from menobis.models.generation import (
@@ -508,6 +586,14 @@ def _sample_model(
             if strength_out is None or strength_in is None:
                 msg = "microcanonical requires strength_out and strength_in"
                 raise ValueError(msg)
+            if not self_loops:
+                msg = (
+                    "microcanonical stub matching without self-loops is not "
+                    "supported yet: naive rejection would bias the uniform "
+                    "stub-matching measure; use the grand-canonical ensemble "
+                    "until the MCMC backend exists"
+                )
+                raise UnsupportedModelCaseError(msg)
             return _sample_strength_stub_matching(
                 np.asarray(strength_out, dtype=np.uint64),
                 np.asarray(strength_in, dtype=np.uint64),
@@ -1113,4 +1199,5 @@ __all__ = [
     "filter_model",
     "fit_model",
     "sample_model",
+    "sample_model_detailed",
 ]

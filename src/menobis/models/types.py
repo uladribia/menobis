@@ -1,11 +1,18 @@
 """Result types for MENoBiS model fitting, filtering, and partial constraints."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
 
 from menobis.data.frames import ProbabilityTable
+
+if TYPE_CHECKING:
+    from menobis.data.frames import EdgeTable
+    from menobis.models.spec import Constraint, Ensemble, ModelFamily
 
 
 @dataclass(frozen=True)
@@ -247,6 +254,36 @@ class DegreeEventsFit(FitResult):
 
 
 @dataclass(frozen=True)
+class SamplingDiagnostics:
+    """Diagnostics for a sampling run."""
+
+    method: str
+    exactness: str
+    iterations: int | None = None
+    accepted: int | None = None
+    total_steps: int | None = None
+    message: str | None = None
+
+
+@dataclass(frozen=True)
+class SamplingResult:
+    """Detailed result of a sampling call.
+
+    ``edges`` is the sampled occupied-pair table. ``exactness`` records the
+    generation-method category (independent, direct, MCMC, approximate...).
+    """
+
+    edges: EdgeTable
+    ensemble: Ensemble
+    family: ModelFamily
+    constraint: Constraint
+    method: str
+    exactness: str
+    seed: int
+    diagnostics: SamplingDiagnostics | None = None
+
+
+@dataclass(frozen=True)
 class PartialFitResult(FitResult):
     """Sparse intensity table from partial-constraint fitting with diagnostics."""
 
@@ -277,6 +314,8 @@ __all__ = [
     "FitResult",
     "OptimizationDiagnostics",
     "PartialFitResult",
+    "SamplingDiagnostics",
+    "SamplingResult",
     "StrengthCostFit",
     "StrengthDegreeFit",
     "StrengthEdgesFit",
