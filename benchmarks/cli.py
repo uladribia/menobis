@@ -262,7 +262,7 @@ def _compute_partial_precision(
 
     fit_src = np.asarray(fit.source, dtype=np.int64)
     fit_tgt = np.asarray(fit.target, dtype=np.int64)
-    fit_rate = np.asarray(fit.rate, dtype=np.float64)
+    fit_rate = np.asarray(fit.intensity, dtype=np.float64)
 
     # Build a lookup set of free (source, target) pairs
     free_pairs: set[tuple[int, int]] = set()

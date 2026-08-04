@@ -528,7 +528,7 @@ class TestPartialFitting:
         )
         assert result.converged
         assert len(result.source) > 0
-        assert len(result.rate) == len(result.source)
+        assert len(result.intensity) == len(result.source)
 
     @pytest.mark.parametrize("fraction", [0.05, 0.20])
     def test_partial_me_strength_edges(
@@ -551,7 +551,7 @@ class TestPartialFitting:
                 max_iterations=100,
             )
         # Partial ZI fitting may not converge at small N
-        assert len(result.rate) > 0
+        assert len(result.intensity) > 0
 
     @pytest.mark.parametrize("fraction", [0.05, 0.20])
     def test_partial_me_strength_degree(
@@ -575,7 +575,7 @@ class TestPartialFitting:
                 max_iterations=100,
             )
         # May not converge due to tight constraints at N=10
-        assert len(result.rate) > 0
+        assert len(result.intensity) > 0
 
     @pytest.mark.parametrize("fraction", [0.05, 0.20])
     def test_partial_me_strength_cost(
@@ -596,7 +596,7 @@ class TestPartialFitting:
             self_loops=False,
         )
         assert result.converged
-        assert len(result.rate) > 0
+        assert len(result.intensity) > 0
 
     @pytest.mark.parametrize("fraction", [0.05, 0.20])
     def test_partial_b_strength(
@@ -615,7 +615,7 @@ class TestPartialFitting:
             self_loops=False,
         )
         assert result.converged
-        assert len(result.rate) > 0
+        assert len(result.intensity) > 0
 
     @pytest.mark.parametrize("fraction", [0.05, 0.20])
     def test_partial_b_strength_degree(
@@ -639,4 +639,4 @@ class TestPartialFitting:
                 tolerance=1e-4,
                 max_iterations=100,
             )
-        assert len(result.rate) > 0
+        assert len(result.intensity) > 0

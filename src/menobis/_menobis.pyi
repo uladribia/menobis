@@ -192,7 +192,7 @@ def sample_strength_poisson(
 def sample_degree_events_poisson(
     x: list[float],
     y: list[float],
-    positive_weight_rate: float,
+    positive_intensity: float,
     self_loops: bool,
     seed: int,
 ) -> tuple[list[int], list[int], list[int]]: ...
@@ -317,7 +317,7 @@ def absent_strength_degree_poisson(
 def filter_degree_events_poisson(
     x: list[float],
     y: list[float],
-    positive_weight_rate: float,
+    positive_intensity: float,
     sources: list[int],
     targets: list[int],
     weights: list[int],
@@ -325,7 +325,7 @@ def filter_degree_events_poisson(
 def absent_degree_events_poisson(
     x: list[float],
     y: list[float],
-    positive_weight_rate: float,
+    positive_intensity: float,
     sources: list[int],
     targets: list[int],
     self_loops: bool,
@@ -471,7 +471,7 @@ def sample_strength_degree_binomial(
 def sample_degree_events_binomial(
     x: list[float],
     y: list[float],
-    positive_weight_rate: float,
+    positive_intensity: float,
     layers: int,
     self_loops: bool,
     seed: int,
@@ -551,7 +551,7 @@ def absent_strength_degree_binomial(
 def filter_degree_events_binomial(
     x: list[float],
     y: list[float],
-    positive_weight_rate: float,
+    positive_intensity: float,
     layers: int,
     sources: list[int],
     targets: list[int],
@@ -560,7 +560,7 @@ def filter_degree_events_binomial(
 def absent_degree_events_binomial(
     x: list[float],
     y: list[float],
-    positive_weight_rate: float,
+    positive_intensity: float,
     layers: int,
     sources: list[int],
     targets: list[int],
@@ -767,14 +767,14 @@ def sample_strength_degree_negative_binomial(
 def sample_degree_events_geometric(
     x: list[float],
     y: list[float],
-    positive_weight_rate: float,
+    positive_intensity: float,
     self_loops: bool,
     seed: int,
 ) -> tuple[list[int], list[int], list[int]]: ...
 def sample_degree_events_negative_binomial(
     x: list[float],
     y: list[float],
-    positive_weight_rate: float,
+    positive_intensity: float,
     layers: int,
     self_loops: bool,
     seed: int,
@@ -868,7 +868,7 @@ def filter_strength_degree_negative_binomial(
 def filter_degree_events_geometric(
     x: list[float],
     y: list[float],
-    positive_weight_rate: float,
+    positive_intensity: float,
     sources: list[int],
     targets: list[int],
     weights: list[int],
@@ -876,7 +876,7 @@ def filter_degree_events_geometric(
 def filter_degree_events_negative_binomial(
     x: list[float],
     y: list[float],
-    positive_weight_rate: float,
+    positive_intensity: float,
     layers: int,
     sources: list[int],
     targets: list[int],
@@ -1101,7 +1101,7 @@ def absent_strength_degree_negative_binomial(
 def absent_degree_events_geometric(
     x: list[float],
     y: list[float],
-    positive_weight_rate: float,
+    positive_intensity: float,
     sources: list[int],
     targets: list[int],
     self_loops: bool,
@@ -1113,7 +1113,7 @@ def absent_degree_events_geometric(
 def absent_degree_events_negative_binomial(
     x: list[float],
     y: list[float],
-    positive_weight_rate: float,
+    positive_intensity: float,
     layers: int,
     sources: list[int],
     targets: list[int],

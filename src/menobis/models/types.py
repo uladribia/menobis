@@ -226,11 +226,11 @@ class DegreeEventsFit(FitResult):
 
 @dataclass(frozen=True)
 class PartialFitResult(FitResult):
-    """Rate table from partial-constraint fitting with diagnostics."""
+    """Sparse intensity table from partial-constraint fitting with diagnostics."""
 
     source: NDArray[np.uint64]
     target: NDArray[np.uint64]
-    rate: NDArray[np.float64]
+    intensity: NDArray[np.float64]
     constraint: str = "strength"
     family: str = "poisson"
     self_loops: bool = True
@@ -239,11 +239,11 @@ class PartialFitResult(FitResult):
     diagnostics: OptimizationDiagnostics | None = None
 
     def as_probability_table(self) -> ProbabilityTable:
-        """Convert to ProbabilityTable for sampling (rates as intensities)."""
+        """Convert to ProbabilityTable for sampling (intensities as probabilities)."""
         return ProbabilityTable(
             source=self.source,
             target=self.target,
-            probability=self.rate,
+            probability=self.intensity,
         )
 
 

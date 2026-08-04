@@ -1,7 +1,7 @@
 //! Full-pipeline partial-constraint fitting.
 //!
 //! Each function takes raw inputs (sequences, known pairs, options) and returns
-//! a sparse rate table. All mask building, excess computation, balancing, IPF,
+//! a sparse intensity table. All mask building, excess computation, balancing, IPF,
 //! and result assembly happens in Rust.
 
 use super::mask::PairMask;
@@ -84,13 +84,13 @@ fn assemble_result_sparse(
     known_tgt: &[u64],
     known_occnum: &[f64],
     mask: &PairMask,
-    free_rate_fn: impl Fn(usize, usize) -> f64,
+    free_intensity_fn: impl Fn(usize, usize) -> f64,
     converged: bool,
     iterations: usize,
 ) -> PartialFitResult {
     let mut sources = Vec::new();
     let mut targets = Vec::new();
-    let mut rates = Vec::new();
+    let mut intensities = Vec::new();
     // Known pairs
     for ((&s, &t), &r) in known_src
         .iter()
@@ -100,7 +100,7 @@ fn assemble_result_sparse(
         if r > 0.0 {
             sources.push(s);
             targets.push(t);
-            rates.push(r);
+            intensities.push(r);
         }
     }
     // Free pairs: iterate all (i,j) and skip masked
@@ -109,24 +109,24 @@ fn assemble_result_sparse(
             if mask.is_masked(i, j) {
                 continue;
             }
-            let rate = free_rate_fn(i, j);
-            if rate > 0.0 {
+            let intensity = free_intensity_fn(i, j);
+            if intensity > 0.0 {
                 sources.push(i as u64);
                 targets.push(j as u64);
-                rates.push(rate);
+                intensities.push(intensity);
             }
         }
     }
     PartialFitResult {
         sources,
         targets,
-        rates,
+        intensities,
         converged,
         iterations,
     }
 }
 
-/// Full partial strength-Poisson fit: excess → sparse masked IPF → rate table.
+/// Full partial strength-Poisson fit: excess → sparse masked IPF → intensity table.
 ///
 /// Uses `PairMask` for O(N+K) memory instead of O(N²).
 #[must_use]
@@ -198,7 +198,7 @@ pub fn fit_partial_strength(
     )
 }
 
-/// Full partial degree-Bernoulli fit: excess → masked IPF → rate table.
+/// Full partial degree-Bernoulli fit: excess → masked IPF → intensity table.
 #[must_use]
 pub fn fit_partial_degree(
     degree_out: &[f64],
@@ -258,7 +258,7 @@ pub fn fit_partial_degree(
     )
 }
 
-/// Full partial strength-degree fit: excess → masked 4-var IPF → rate table.
+/// Full partial strength-degree fit: excess → masked 4-var IPF → intensity table.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn fit_partial_strength_degree(
@@ -366,7 +366,7 @@ pub fn fit_partial_strength_degree(
     )
 }
 
-/// Full partial strength-edges fit: excess → full fit on excess → rate table.
+/// Full partial strength-edges fit: excess → full fit on excess → intensity table.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn fit_partial_strength_edges(
@@ -700,7 +700,7 @@ fn fit_partial_strength_cost_coordinates_with(
     target_cost: f64,
     self_loops: bool,
     fit_free: impl FnOnce(&[f64], &[f64], f64, &PairMask) -> StrengthCostFitResult,
-    rate: impl Fn(usize, usize, &StrengthCostFitResult) -> f64,
+    intensity: impl Fn(usize, usize, &StrengthCostFitResult) -> f64,
 ) -> PartialFitResult {
     let n = infer_n(strength_out.len(), known_src, known_tgt);
     let s_out = pad_to_n(strength_out, n);
@@ -749,7 +749,7 @@ fn fit_partial_strength_cost_coordinates_with(
         known_tgt,
         known_occnum,
         &mask,
-        |i, j| rate(i, j, &fit),
+        |i, j| intensity(i, j, &fit),
         fit.converged,
         fit.iterations,
     )
@@ -908,7 +908,7 @@ pub fn fit_partial_strength_cost_w_coordinates(
 // B (Binomial) partial fits
 // ---------------------------------------------------------------------------
 
-/// Full partial B(M) strength fit: excess → masked IPF → rate table.
+/// Full partial B(M) strength fit: excess → masked IPF → intensity table.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn fit_partial_strength_binomial(
@@ -984,7 +984,7 @@ pub fn fit_partial_strength_binomial(
     )
 }
 
-/// Full partial B(M) strength-edges fit: excess → L-BFGS → rate table.
+/// Full partial B(M) strength-edges fit: excess → L-BFGS → intensity table.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn fit_partial_strength_edges_binomial(
@@ -1070,7 +1070,7 @@ pub fn fit_partial_strength_edges_binomial(
     )
 }
 
-/// Full partial B(M) strength-degree fit: excess → L-BFGS → rate table.
+/// Full partial B(M) strength-degree fit: excess → L-BFGS → intensity table.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn fit_partial_strength_degree_binomial(
@@ -1185,7 +1185,7 @@ pub fn fit_partial_strength_degree_binomial(
 // W (Geometric/NegBin) partial fits
 // ---------------------------------------------------------------------------
 
-/// Full partial W(M) strength fit: excess -> masked IPF -> rate table.
+/// Full partial W(M) strength fit: excess -> masked IPF -> intensity table.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn fit_partial_strength_w(
@@ -1264,7 +1264,7 @@ pub fn fit_partial_strength_w(
     )
 }
 
-/// Full partial W(M) strength-degree fit: excess -> masked Newton -> rate table.
+/// Full partial W(M) strength-degree fit: excess -> masked Newton -> intensity table.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn fit_partial_strength_degree_w(
@@ -1377,7 +1377,7 @@ pub fn fit_partial_strength_degree_w(
     )
 }
 
-/// Full partial W strength-edges fit: excess → L-BFGS → rate table.
+/// Full partial W strength-edges fit: excess → L-BFGS → intensity table.
 #[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn fit_partial_strength_edges_w(
