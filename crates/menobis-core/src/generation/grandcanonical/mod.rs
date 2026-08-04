@@ -15,7 +15,6 @@ use rayon::prelude::*;
 
 use super::output::{merge_samples, SampledNetwork};
 
-
 #[derive(Clone, Copy, Debug)]
 struct PairDraw {
     source: u64,
@@ -794,4 +793,3 @@ pub fn sample_degree_events_negative_binomial(
         seed,
     )
 }
-

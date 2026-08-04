@@ -13,9 +13,7 @@ pub mod grandcanonical;
 pub mod microcanonical;
 pub mod output;
 
-pub use canonical::{
-    sample_custom_multinomial, sample_strength_multinomial,
-};
+pub use canonical::{sample_custom_multinomial, sample_strength_multinomial};
 pub use grandcanonical::{
     sample_custom_poisson, sample_degree_events_binomial, sample_degree_events_geometric,
     sample_degree_events_negative_binomial, sample_degree_events_poisson, sample_edges_events,

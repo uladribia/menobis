@@ -61,4 +61,3 @@ pub fn sample_strength_stub_matching(
     let _ = n; // used only in assert context
     result
 }
-

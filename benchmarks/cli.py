@@ -36,6 +36,8 @@ CONSTRAINTS: tuple[str, ...] = (
     "strength-cost",
     "strength-edges",
     "strength-degree",
+    "degree-events",
+    "edges-events",
 )
 REGIMES: tuple[str, ...] = ("sparse", "dense", "saturated")
 
@@ -154,6 +156,8 @@ _CONSTRAINT_MAP = {
     "strength-cost": Constraint.STRENGTH_COST,
     "strength-edges": Constraint.STRENGTH_EDGES,
     "strength-degree": Constraint.STRENGTH_DEGREE,
+    "degree-events": Constraint.DEGREE_EVENTS,
+    "edges-events": Constraint.EDGES_EVENTS,
 }
 
 
@@ -189,6 +193,16 @@ def _fit_case(
         kwargs["coord_x"] = network.x
         kwargs["coord_y"] = network.y
         kwargs["target_cost"] = c.total_cost
+    if constraint == "degree-events":
+        kwargs["degree_out"] = c.degree_out
+        kwargs["degree_in"] = c.degree_in
+        kwargs["total_events"] = c.total_events
+    if constraint == "edges-events":
+        kwargs.pop("strength_out")
+        kwargs.pop("strength_in")
+        kwargs["target_edges"] = c.total_edges
+        kwargs["total_events"] = c.total_events
+        kwargs["node_count"] = len(c.strength_out)
     if family == "b":
         kwargs["layers"] = c.binomial_layers
 

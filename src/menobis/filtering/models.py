@@ -1,7 +1,5 @@
 """Public filtering wrappers for MENoBiS null models."""
 
-import math
-
 import numpy as np
 from numpy.typing import NDArray
 
@@ -1138,19 +1136,3 @@ def _strengths(edges: EdgeTable, node_count: int) -> tuple[np.ndarray, np.ndarra
     np.add.at(out, edges.source, edges.occ_num)
     np.add.at(incoming, edges.target, edges.occ_num)
     return out, incoming
-
-
-def _solve_ztp_rate(mean: float) -> float:
-    """Solve for the positive-edge Poisson rate given the mean."""
-    if mean <= 1.0:
-        return 0.0
-    low, high = 0.0, max(mean, 1.0)
-    while high / (1.0 - math.exp(-high)) < mean:
-        high *= 2.0
-    for _ in range(100):
-        mid = 0.5 * (low + high)
-        if mid / (1.0 - math.exp(-mid)) < mean:
-            low = mid
-        else:
-            high = mid
-    return 0.5 * (low + high)
