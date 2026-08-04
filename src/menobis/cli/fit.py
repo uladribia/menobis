@@ -3,13 +3,20 @@
 import json
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 
 import numpy as np
 import typer
 from typer import Option, Typer
 
 from menobis.data.io import read_edges
+from menobis.models.types import (
+    DegreeFit,
+    StrengthCostFit,
+    StrengthDegreeFit,
+    StrengthEdgesFit,
+    StrengthFit,
+)
 from menobis.routing import (
     Constraint,
     ModelFamily,
@@ -19,7 +26,7 @@ from menobis.routing import (
 app = Typer(no_args_is_help=True)
 
 
-def _write_json_to_output(data: dict | list, path: Path | None) -> None:
+def _write_json_to_output(data: dict | list | str, path: Path | None) -> None:
     output = json.dumps(data, indent=2)
     if path:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -58,14 +65,17 @@ def strength_me(
     s_in = np.zeros(nc, dtype=np.float64)
     np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
     np.add.at(s_in, edges.target, edges.occ_num.astype(np.float64))
-    result = fit_model(
-        family=ModelFamily.ME,
-        constraint=Constraint.STRENGTH,
-        strength_out=s_out,
-        strength_in=s_in,
-        self_loops=self_loops,
-        tolerance=tolerance,
-        max_iterations=max_iterations,
+    result = cast(
+        "StrengthFit",
+        fit_model(
+            family=ModelFamily.ME,
+            constraint=Constraint.STRENGTH,
+            strength_out=s_out,
+            strength_in=s_in,
+            self_loops=self_loops,
+            tolerance=tolerance,
+            max_iterations=max_iterations,
+        ),
     )
 
     if output_json:
@@ -115,15 +125,18 @@ def strength_geometric(
     s_in = np.zeros(nc, dtype=np.float64)
     np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
     np.add.at(s_in, edges.target, edges.occ_num.astype(np.float64))
-    result = fit_model(
-        family=ModelFamily.W,
-        constraint=Constraint.STRENGTH,
-        strength_out=s_out,
-        strength_in=s_in,
-        layers=1,
-        self_loops=self_loops,
-        tolerance=tolerance,
-        max_iterations=max_iterations,
+    result = cast(
+        "StrengthFit",
+        fit_model(
+            family=ModelFamily.W,
+            constraint=Constraint.STRENGTH,
+            strength_out=s_out,
+            strength_in=s_in,
+            layers=1,
+            self_loops=self_loops,
+            tolerance=tolerance,
+            max_iterations=max_iterations,
+        ),
     )
 
     if not output_json:
@@ -185,15 +198,18 @@ def strength_negative_binomial(
     s_in = np.zeros(nc, dtype=np.float64)
     np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
     np.add.at(s_in, edges.target, edges.occ_num.astype(np.float64))
-    result = fit_model(
-        family=ModelFamily.W,
-        constraint=Constraint.STRENGTH,
-        strength_out=s_out,
-        strength_in=s_in,
-        layers=layers,
-        self_loops=self_loops,
-        tolerance=tolerance,
-        max_iterations=max_iterations,
+    result = cast(
+        "StrengthFit",
+        fit_model(
+            family=ModelFamily.W,
+            constraint=Constraint.STRENGTH,
+            strength_out=s_out,
+            strength_in=s_in,
+            layers=layers,
+            self_loops=self_loops,
+            tolerance=tolerance,
+            max_iterations=max_iterations,
+        ),
     )
 
     if not output_json:
@@ -244,13 +260,16 @@ def degree_bernoulli(
         d_out[src] += 1
     for tgt in edges.target:
         d_in[tgt] += 1
-    result = fit_model(
-        family=ModelFamily.ME,
-        constraint=Constraint.DEGREE_EVENTS,
-        degree_out=d_out,
-        degree_in=d_in,
-        total_events=int(edges.occ_num.sum()),
-        self_loops=self_loops,
+    result = cast(
+        "DegreeFit",
+        fit_model(
+            family=ModelFamily.ME,
+            constraint=Constraint.DEGREE_EVENTS,
+            degree_out=d_out,
+            degree_in=d_in,
+            total_events=int(edges.occ_num.sum()),
+            self_loops=self_loops,
+        ),
     )
 
     if output_json:
@@ -298,14 +317,17 @@ def strength_degree_me(
         d_out[src] += 1
     for tgt in edges.target:
         d_in[tgt] += 1
-    result = fit_model(
-        family=ModelFamily.ME,
-        constraint=Constraint.STRENGTH_DEGREE,
-        strength_out=s_out,
-        strength_in=s_in,
-        degree_out=d_out,
-        degree_in=d_in,
-        self_loops=self_loops,
+    result = cast(
+        "StrengthDegreeFit",
+        fit_model(
+            family=ModelFamily.ME,
+            constraint=Constraint.STRENGTH_DEGREE,
+            strength_out=s_out,
+            strength_in=s_in,
+            degree_out=d_out,
+            degree_in=d_in,
+            self_loops=self_loops,
+        ),
     )
 
     if output_json:
@@ -375,13 +397,16 @@ def strength_edges_me(
     np.add.at(s_in, edges.target, edges.occ_num.astype(np.float64))
     if target_edges is None:
         target_edges = float(len(edges))
-    result = fit_model(
-        family=ModelFamily.ME,
-        constraint=Constraint.STRENGTH_EDGES,
-        strength_out=s_out,
-        strength_in=s_in,
-        target_edges=target_edges,
-        self_loops=self_loops,
+    result = cast(
+        "StrengthEdgesFit",
+        fit_model(
+            family=ModelFamily.ME,
+            constraint=Constraint.STRENGTH_EDGES,
+            strength_out=s_out,
+            strength_in=s_in,
+            target_edges=target_edges,
+            self_loops=self_loops,
+        ),
     )
 
     if output_json:
@@ -449,15 +474,18 @@ def strength_cost_me(
                 edges.source, edges.target, edges.occ_num, strict=True
             )
         )
-    result = fit_model(
-        family=ModelFamily.ME,
-        constraint=Constraint.STRENGTH_COST,
-        strength_out=s_out,
-        strength_in=s_in,
-        coord_x=coord_x,
-        coord_y=coord_y,
-        target_cost=target_cost,
-        self_loops=self_loops,
+    result = cast(
+        "StrengthCostFit",
+        fit_model(
+            family=ModelFamily.ME,
+            constraint=Constraint.STRENGTH_COST,
+            strength_out=s_out,
+            strength_in=s_in,
+            coord_x=coord_x,
+            coord_y=coord_y,
+            target_cost=target_cost,
+            self_loops=self_loops,
+        ),
     )
 
     if output_json:

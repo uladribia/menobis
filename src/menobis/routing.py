@@ -448,7 +448,13 @@ def _sample_model(
         _sample_strength_poisson,
         _sample_strength_stub_matching,
     )
-    from menobis.models.types import DegreeEventsFit, StrengthFit
+    from menobis.models.types import (
+        DegreeEventsFit,
+        StrengthCostFit,
+        StrengthDegreeFit,
+        StrengthEdgesFit,
+        StrengthFit,
+    )
 
     match ensemble:
         case Ensemble.MICROCANONICAL:
@@ -541,26 +547,42 @@ def _sample_model(
         }
         return dispatch[variant]()
     if constraint == Constraint.STRENGTH_EDGES:
+        if not isinstance(fit, StrengthEdgesFit):
+            msg = (
+                "strength_edges sampling requires StrengthEdgesFit, got "
+                f"{type(fit).__name__}"
+            )
+            raise TypeError(msg)
+        edges_fit = fit
         dispatch = {
-            "poisson": lambda: _sample_strength_edges_poisson(fit, seed=seed),
+            "poisson": lambda: _sample_strength_edges_poisson(edges_fit, seed=seed),
             "binomial": lambda: _sample_strength_edges_binomial(
-                fit, layers=fit_layers, seed=seed
+                edges_fit, layers=fit_layers, seed=seed
             ),
-            "geometric": lambda: _sample_strength_edges_geometric(fit, seed=seed),
+            "geometric": lambda: _sample_strength_edges_geometric(edges_fit, seed=seed),
             "negative_binomial": lambda: _sample_strength_edges_negative_binomial(
-                fit, layers=fit_layers, seed=seed
+                edges_fit, layers=fit_layers, seed=seed
             ),
         }
         return dispatch[variant]()
     if constraint == Constraint.STRENGTH_DEGREE:
+        if not isinstance(fit, StrengthDegreeFit):
+            msg = (
+                "strength_degree sampling requires StrengthDegreeFit, got "
+                f"{type(fit).__name__}"
+            )
+            raise TypeError(msg)
+        degree_fit = fit
         dispatch = {
-            "poisson": lambda: _sample_strength_degree_poisson(fit, seed=seed),
+            "poisson": lambda: _sample_strength_degree_poisson(degree_fit, seed=seed),
             "binomial": lambda: _sample_strength_degree_binomial(
-                fit, layers=fit_layers, seed=seed
+                degree_fit, layers=fit_layers, seed=seed
             ),
-            "geometric": lambda: _sample_strength_degree_geometric(fit, seed=seed),
+            "geometric": lambda: _sample_strength_degree_geometric(
+                degree_fit, seed=seed
+            ),
             "negative_binomial": lambda: _sample_strength_degree_negative_binomial(
-                fit, layers=fit_layers, seed=seed
+                degree_fit, layers=fit_layers, seed=seed
             ),
         }
         return dispatch[variant]()
@@ -568,18 +590,25 @@ def _sample_model(
         if coord_x is None or coord_y is None:
             msg = "strength_cost sampling requires coord_x and coord_y"
             raise ValueError(msg)
+        if not isinstance(fit, StrengthCostFit):
+            msg = (
+                "strength_cost sampling requires StrengthCostFit, got "
+                f"{type(fit).__name__}"
+            )
+            raise TypeError(msg)
+        cost_fit = fit
         dispatch = {
             "poisson": lambda: _sample_strength_cost_poisson(
-                fit, coord_x, coord_y, seed=seed
+                cost_fit, coord_x, coord_y, seed=seed
             ),
             "binomial": lambda: _sample_strength_cost_binomial(
-                fit, coord_x, coord_y, layers=fit_layers, seed=seed
+                cost_fit, coord_x, coord_y, layers=fit_layers, seed=seed
             ),
             "geometric": lambda: _sample_strength_cost_geometric(
-                fit, coord_x, coord_y, seed=seed
+                cost_fit, coord_x, coord_y, seed=seed
             ),
             "negative_binomial": lambda: _sample_strength_cost_negative_binomial(
-                fit, coord_x, coord_y, layers=fit_layers, seed=seed
+                cost_fit, coord_x, coord_y, layers=fit_layers, seed=seed
             ),
         }
         return dispatch[variant]()
