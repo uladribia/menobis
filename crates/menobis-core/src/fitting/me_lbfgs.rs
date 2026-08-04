@@ -28,8 +28,8 @@
 
 use rayon::prelude::*;
 
-use super::mask::PairMask;
 use super::{StrengthDegreeFitResult, StrengthEdgesFitResult};
+use crate::constraints::mask::PairMask;
 
 // ---------------------------------------------------------------------------
 // Mass-Preserving Heuristic Regularization

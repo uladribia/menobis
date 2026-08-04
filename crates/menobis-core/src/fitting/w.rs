@@ -94,11 +94,11 @@ pub fn w_positive_mean(q: f64, layers: u32) -> f64 {
     m * q / (one_minus_q * (1.0 - one_minus_q.powf(m)))
 }
 
-use super::mask::PairMask;
 use super::{
     WConicFitOptions, WFitStatus, WProblemMetrics, WStrengthDegreeFitResult,
     WStrengthEdgesFitResult, WStrengthFitResult, WStrengthResiduals,
 };
+use crate::constraints::mask::PairMask;
 
 /// Compute independent W fixed-strength residuals from inverse/log multipliers.
 ///
@@ -269,7 +269,7 @@ pub fn strength_cost_residuals(
 pub fn balance_sparse_masked_strength_w(
     strength_out: &[f64],
     strength_in: &[f64],
-    mask: &super::mask::PairMask,
+    mask: &crate::constraints::mask::PairMask,
     layers: u32,
     tolerance: f64,
     max_iterations: usize,

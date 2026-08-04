@@ -4,6 +4,7 @@ use menobis_core::clustering::{
     clustering_coefficients as core_clustering,
     occupation_clustering_coefficients as core_occupation_clustering,
 };
+use menobis_core::constraints::mask::PairMask;
 use menobis_core::filter::{
     absent_custom_poisson as core_absent_custom_poisson,
     absent_degree_events_binomial as core_absent_degree_events_binomial,
@@ -52,7 +53,6 @@ use menobis_core::filter::{
     filter_strength_poisson as core_filter_strength_poisson,
 };
 use menobis_core::fitting::edges_events::fit_edges_events as core_fit_edges_events;
-use menobis_core::fitting::mask::PairMask;
 use menobis_core::fitting::{
     balance_degree_bernoulli, balance_sparse_masked_degree_bernoulli,
     balance_sparse_masked_strength_binomial, balance_sparse_masked_strength_degree_poisson,

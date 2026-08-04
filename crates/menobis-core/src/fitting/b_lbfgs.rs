@@ -16,8 +16,8 @@
 
 use rayon::prelude::*;
 
-use super::mask::PairMask;
 use super::{StrengthDegreeFitResult, StrengthEdgesFitResult};
+use crate::constraints::mask::PairMask;
 
 // ---------------------------------------------------------------------------
 // Regularization (same structure as ME, adapted for B bounds: s <= M*N_max)

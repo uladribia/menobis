@@ -5,12 +5,12 @@
 
 use rayon::prelude::*;
 
-use super::mask::PairMask;
 use super::me::fit_strength_cost_poisson_coordinates;
 use super::support::coord_distance;
 use super::types::{WFitStatus, WProblemMetrics};
 use super::w::{w_g, w_mean, w_occupation};
 use super::{CostFitOptions, StrengthCostFitResult, WStrengthEdgesFitResult};
+use crate::constraints::mask::PairMask;
 
 /// How pair costs are provided to the W Newton solver.
 enum CostMode<'a> {
@@ -1840,9 +1840,10 @@ mod tests {
 
     #[test]
     fn w_se_lbfgs_vs_bisection_n10() {
+        use crate::constraints::mask::PairMask;
         use crate::fitting::{
-            mask::PairMask, types::WFitStatus, w::fit_strength_edges_geometric, w::w_occupation,
-            w::w_zip_mean, WConicFitOptions,
+            types::WFitStatus, w::fit_strength_edges_geometric, w::w_occupation, w::w_zip_mean,
+            WConicFitOptions,
         };
         let n = 10;
         let layers = 1u32;

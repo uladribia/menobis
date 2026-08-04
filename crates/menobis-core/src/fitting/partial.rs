@@ -4,7 +4,6 @@
 //! a sparse intensity table. All mask building, excess computation, balancing, IPF,
 //! and result assembly happens in Rust.
 
-use super::mask::PairMask;
 use super::support::max_pair_delta;
 use super::{
     balance_sparse_masked_degree_bernoulli, balance_sparse_masked_strength_degree_poisson,
@@ -12,6 +11,7 @@ use super::{
     fit_strength_cost_w_lbfgs_masked, CostFitOptions, FitResult, PartialFitResult,
     StrengthCostFitResult,
 };
+use crate::constraints::mask::PairMask;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -1486,4 +1486,78 @@ fn pad_to_n(arr: &[f64], n: usize) -> Vec<f64> {
     let mut v = arr.to_vec();
     v.resize(n, 0.0);
     v
+}
+
+#[cfg(test)]
+mod equivalence_tests {
+    use super::compute_excess;
+    use crate::constraints::fixed_pairs::{compute_fixed_contributions, residualize, FixedPairs};
+
+    /// The shared constraints residualization must agree with the legacy
+    /// `compute_excess` used by the partial-fitting solvers.
+    #[test]
+    fn shared_residualize_equals_compute_excess() {
+        let n = 5;
+        let strength_out = vec![10u64, 20, 30, 40, 50];
+        let strength_in = vec![20u64, 30, 40, 50, 10];
+        let known_src = [0u64, 1, 3];
+        let known_tgt = [1u64, 2, 4];
+        let known_occ = [3u64, 5, 7];
+
+        // Legacy path (f64).
+        let legacy = compute_excess(
+            &strength_out.iter().map(|&v| v as f64).collect::<Vec<_>>(),
+            &strength_in.iter().map(|&v| v as f64).collect::<Vec<_>>(),
+            &known_src,
+            &known_tgt,
+            &known_occ.iter().map(|&v| v as f64).collect::<Vec<_>>(),
+        )
+        .expect("feasible");
+
+        // Shared path (u64).
+        let fixed = FixedPairs::new(n, true, &known_src, &known_tgt, &known_occ)
+            .expect("valid fixed pairs");
+        let contrib = compute_fixed_contributions(n, &fixed, None);
+        let res = residualize(
+            n,
+            &contrib,
+            None,
+            None,
+            Some(&strength_out),
+            Some(&strength_in),
+            None,
+            None,
+            None,
+        )
+        .expect("feasible");
+        let shared_out = res.strength_out.expect("strength_out");
+        let shared_in = res.strength_in.expect("strength_in");
+
+        for i in 0..n {
+            assert_eq!(
+                shared_out[i] as f64, legacy.0[i],
+                "out residual mismatch at node {i}"
+            );
+            assert_eq!(
+                shared_in[i] as f64, legacy.1[i],
+                "in residual mismatch at node {i}"
+            );
+        }
+    }
+
+    #[test]
+    fn shared_mask_matches_partial_mask_semantics() {
+        // The PairMask built from FixedPairs equals the one built directly.
+        use crate::constraints::mask::PairMask;
+        let n = 4;
+        let known_src = [0u64, 2];
+        let known_tgt = [1u64, 3];
+        let fixed = FixedPairs::new(n, false, &known_src, &known_tgt, &[2, 4]).unwrap();
+        let direct = PairMask::new(n, false, &known_src, &known_tgt);
+        for i in 0..n {
+            for j in 0..n {
+                assert_eq!(fixed.mask().is_masked(i, j), direct.is_masked(i, j));
+            }
+        }
+    }
 }

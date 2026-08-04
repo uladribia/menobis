@@ -1,8 +1,8 @@
 //! Binary and binomial fitting routines.
 
-use super::mask::PairMask;
 use super::support::{max_pair_delta, peel_b_strength_saturation, peel_degree_saturation};
 use super::{FitResult, StrengthDegreeFitResult, StrengthEdgesFitResult};
+use crate::constraints::mask::PairMask;
 
 /// IPF balancing for masked Bernoulli fixed-degree constraints.
 ///

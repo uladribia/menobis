@@ -9,9 +9,9 @@
 //! Both use IPF + gamma bisection, same structure as ME strength-cost
 //! but with family-specific E[t_ij] and IPF update equations.
 
-use super::mask::PairMask;
 use super::support::coord_distance;
 use super::{CostFitOptions, FitResult, StrengthCostFitResult};
+use crate::constraints::mask::PairMask;
 
 // ===========================================================================
 // B (Binomial M) strength-cost coordinate fitting
@@ -391,7 +391,7 @@ mod tests {
         let cx = vec![0.0, 3.0, 0.0];
         let cy = vec![0.0, 0.0, 4.0];
         let layers = 3_u32;
-        let mask = crate::fitting::mask::PairMask::from_self_loops(3, true);
+        let mask = crate::constraints::mask::PairMask::from_self_loops(3, true);
         let fit = balance_b_strength_cost_coordinates(
             &s_out, &s_in, &cx, &cy, 0.0, layers, &mask, 1e-4, 5000, None, None,
         );

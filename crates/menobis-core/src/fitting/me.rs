@@ -1,9 +1,9 @@
 //! Multi-edge (ME/Poisson-family) fitting routines.
 
 use super::b::binary_probability;
-use super::mask::PairMask;
 use super::support::{coord_distance, max_abs_delta, max_pair_delta};
 use super::{FitResult, StrengthCostFitResult, StrengthDegreeFitResult, StrengthEdgesFitResult};
+use crate::constraints::mask::PairMask;
 
 /// Fit exact grand-canonical ME fixed-strength-and-edge-count zero-inflated constraints.
 ///
@@ -643,7 +643,7 @@ mod tests {
         balance_sparse_masked_strength_degree_poisson, balance_sparse_masked_strength_poisson,
         me_sd_expected_weight, me_sd_occupation, me_sd_pair_statistics_from_values,
     };
-    use crate::fitting::mask::PairMask;
+    use crate::constraints::mask::PairMask;
 
     #[test]
     #[allow(clippy::needless_range_loop)]

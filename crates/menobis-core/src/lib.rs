@@ -4,6 +4,7 @@
 //! Max Entropy NOn Binary Suite network analysis, fitting, and generation.
 
 pub mod clustering;
+pub mod constraints;
 pub mod distribution;
 pub mod filter;
 pub mod fitting;
