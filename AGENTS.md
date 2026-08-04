@@ -4,7 +4,7 @@ Guidance for coding agents and contributors working on the MENoBiS modernization
 
 ## Mission
 
-Prepare the first public release of **MENoBIs**, in a well documented and well organized code, that minimizes public API exposure.
+Work **MENoBIs**, in a well documented and well organized code, that minimizes public API exposure.
 The core is on RUST (all heavy operations) while light functions that handle verifications, orchestration, data preparation and formats are in python.
 Be clear about equations and mathematical details. In your edits, yo DO NOT need to have backwards compatilibty.
 MENoBiS is an experimental package undergoing a full rewrite. Agents must never introduce shims, re-export facades, deprecated aliases, or compatibility layers. 
@@ -73,7 +73,7 @@ Use:
 
 ## Expected checks
 
-Agents should run the smallest relevant checks first, then broader checks before handoff.
+Agents should run the smallest relevant checks first, then broader checks before final handoff per stage.
 Select well (to preserve tokens) when full test loop is to be executed, and when only partial checks are needed based on code change depth.
 
 Target commands:
@@ -118,19 +118,19 @@ Additional MENoBiS defaults:
 
 ## Model implementation policy
 
-MENoBiS implements three weight-distribution families: ME (Poisson), B (Binomial),
-and W (Geometric / Negative Binomial). These share mathematical structure but
-have distinct expectation equations. As such, they should share the maximum number of common abstractions via factory methods for fitting, analysis, filtering and sampling.
-The only cases where factory methods are difficult to abstract is the speciffic fitting logic per constraint-family (that should happen in RUST).
+MENoBiS implements three occupation number-distribution families: ME (MultiEdge), B (Aggregated binary),
+and W (Weighted). These share mathematical structure but
+have distinct expectation equations. Furthermore, those can be sampled via Canonical, Grandcanonical or Microcanonical ensembles. As such, they should share the maximum number of common abstractions via factory methods for fitting, analysis, filtering and sampling.
+The only cases where factory methods are difficult to abstract is the speciffic fitting logic per constraint-family (that should happen in RUST) for soft constraints, and the microcanonical sampling (which must also be implemented in RUST).
 Python public API surface should be minimize. At its core, only 3 public methods are relevant: fit_model, filter_model and sample_model, all routed via route_model.
-Partial and full fitters, samplers and filters should share signature (only the `known_*` should be empty in the case of no partial case).
+Partial and full fitters, samplers and filters should share signature (only the mask should be empty in the case of no partial case).
 
 ### Mandatory separation and reuse rules
 
-1. **Every family must have its own solver implementation.** Never implement B
+1. **Every family must have its own solver and detailed sampler implementation.** Never implement B
    or W by calling the ME solver and relabeling the output. Each family has a
-   different `E[t_ij]` formula; the code must reflect that.
-2. **Unified entry point in python**: A single function should route the choice ensemble (grand canonical, canonical (ME only), microcanonical (ME with strengths only)), plus type ME/W/B, plus constraint to the different public API python endpoints that defer to rust for each case. Failing with custom errors if the choice is not supported. 
+   different `E[t_ij]` and sampling graph formula; the code must reflect that.
+2. **Unified entry point in python**: A single function should route the choice ensemble (grand canonical, canonical, microcanonical), plus type ME/W/B, plus constraint (by hard-soft choice) to the different public API python endpoints that defer to rust for each case. Failing with custom errors if the choice is not supported. 
 3. **Shared infrastructure must be factored into reusable Rust abstractions.**
    Cost providers, IPF balancing loops, gamma search, mask handling, excess
    computation, speciffic formula details, and rate-table assembly are shared across families and must live
@@ -156,8 +156,8 @@ When implementing or modifying a fitting kernel:
   with small N=10 case.
 - The formulation follows a clear ontology:
   - There are three cases that induce different statistics: ME, B and W.
-  - B and W cases only implement the "grand canonical" ensemble, for which all node-pair `ij` statistics are independent.
-  - ME implements additionally the "canonical" ensemble, based on multinomial statistics, and, exceptionally, the "microcanonical ensemble" only for fixed strength via stub matching.
+  - B and W cases only implement for now the "grand canonical" ensemble, for which all node-pair `ij` statistics are independent. In the future, we aim to implement the microcanonical ensemble for all via biased rejection sampling.
+  - ME implements additionally the "canonical" ensemble, based on multinomial statistics, and, exceptionally, the "microcanonical ensemble" only for fixed strength via stub matching (as of now).
   - All "grand canonical" ensembles contemplate two kinds of constraints, some of which are implemented in MENoBiS (others can be added in the future)
     - Those that depend linearly on the occupation number $E[t_ij]$, like strength sequence, strength plus average cost. In this case, the statistics are independent.
     - Those that additionally depend on the occupation probability $E[\Theta(t_ij>0)] $, like fixed total binary edges E, fixed degree sequence. In this case, the statistics are always Zero Inflated.
