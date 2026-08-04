@@ -39,7 +39,7 @@ use super::{StrengthDegreeFitResult, StrengthEdgesFitResult};
 ///
 /// For a Zero-Inflated Poisson model, boundary conditions force parameters
 /// to ±∞:
-/// - k_i ≈ s_i implies q→0 (no conditional weight surplus)
+/// - k_i ≈ s_i implies q→0 (no conditional occ_num surplus)
 /// - k_i ≈ N_max implies v→∞ (full saturation)
 ///
 /// This function slightly pulls boundary nodes inward and redistributes
@@ -1141,7 +1141,7 @@ mod tests {
         let log_q = q.ln();
         let log_v = v.ln();
 
-        let (ln_z, occ, weight) = zip_pair_statistics(log_q, log_v);
+        let (ln_z, occ, occ_num) = zip_pair_statistics(log_q, log_v);
 
         let exp_q = q.exp();
         let expected_z = 1.0 + v * (exp_q - 1.0);
@@ -1150,7 +1150,7 @@ mod tests {
 
         assert!((ln_z - expected_z.ln()).abs() < 1e-14);
         assert!((occ - expected_occ).abs() < 1e-14);
-        assert!((weight - expected_weight).abs() < 1e-14);
+        assert!((occ_num - expected_weight).abs() < 1e-14);
     }
 
     #[test]
@@ -1159,12 +1159,12 @@ mod tests {
         let log_q = 100.0_f64.ln();
         let log_v = 1e5_f64.ln();
 
-        let (ln_z, occ, weight) = zip_pair_statistics(log_q, log_v);
+        let (ln_z, occ, occ_num) = zip_pair_statistics(log_q, log_v);
 
         assert!(ln_z.is_finite());
         assert!(occ.is_finite());
         assert!((occ - 1.0).abs() < 1e-10); // near saturation
-        assert!((weight - 100.0).abs() < 1e-10); // E[t] ≈ q when saturated
+        assert!((occ_num - 100.0).abs() < 1e-10); // E[t] ≈ q when saturated
     }
 
     #[test]

@@ -145,7 +145,7 @@ class TestSampleModel:
             total_events=60,
             seed=7,
         )
-        assert edges.weight.sum() == 60
+        assert edges.occ_num.sum() == 60
 
 
 class TestFilterModel:
@@ -157,7 +157,7 @@ class TestFilterModel:
         edges = EdgeTable(
             source=np.array([0, 1, 2]),
             target=np.array([1, 2, 0]),
-            weight=np.array([5, 10, 3]),
+            occ_num=np.array([5, 10, 3]),
         )
         result = filter_model(
             edges, family=ModelFamily.ME, constraint=Constraint.STRENGTH
@@ -170,7 +170,7 @@ class TestFilterModel:
         edges = EdgeTable(
             source=np.array([0, 1, 2]),
             target=np.array([1, 2, 0]),
-            weight=np.array([2, 3, 1]),
+            occ_num=np.array([2, 3, 1]),
         )
         result = filter_model(
             edges, family=ModelFamily.B, constraint=Constraint.STRENGTH
@@ -183,7 +183,7 @@ class TestFilterModel:
         edges = EdgeTable(
             source=np.array([0, 1]),
             target=np.array([1, 0]),
-            weight=np.array([5, 3]),
+            occ_num=np.array([5, 3]),
         )
         # STRENGTH_COST needs target_cost for fit_model, so auto-fit fails
         with pytest.raises(ValueError):

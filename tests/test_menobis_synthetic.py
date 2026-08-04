@@ -59,7 +59,7 @@ def test_pa_geographic_weights_follow_degree_distance_scores() -> None:
     )
 
     score = network.edge_scores()
-    weights = network.edges.weight.astype(np.float64)
+    weights = network.edges.occ_num.astype(np.float64)
     assert np.all(score > 0.0)
     assert np.corrcoef(score, weights)[0, 1] > 0.35
 

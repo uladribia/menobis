@@ -56,7 +56,7 @@ def custom_rates(
     ] = 0.5,
     min_expected: Annotated[
         float,
-        Option("--min-expected", help="Optional absent expected-weight threshold."),
+        Option("--min-expected", help="Optional absent expected-occupation threshold."),
     ] = 0.0,
     max_absent: Annotated[
         int | None, Option("--max-absent", help="Maximum absent pairs to output.")
@@ -143,7 +143,7 @@ def strength_edges(
     ] = 0.5,
     min_expected: Annotated[
         float,
-        Option("--min-expected", help="Absent expected-weight threshold."),
+        Option("--min-expected", help="Absent expected-occupation threshold."),
     ] = 0.0,
     max_absent: Annotated[
         int | None, Option("--max-absent", help="Maximum absent pairs to output.")
@@ -157,8 +157,8 @@ def strength_edges(
     nc = int(max(edges.source.max(), edges.target.max())) + 1
     s_out = np.zeros(nc, dtype=np.float64)
     s_in = np.zeros(nc, dtype=np.float64)
-    np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
-    np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
+    np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
+    np.add.at(s_in, edges.target, edges.occ_num.astype(np.float64))
     fit = fit_model(
         family=ModelFamily.ME,
         constraint=Constraint.STRENGTH_EDGES,
@@ -211,7 +211,7 @@ def strength_cost(
     ] = 0.5,
     min_expected: Annotated[
         float,
-        Option("--min-expected", help="Absent expected-weight threshold."),
+        Option("--min-expected", help="Absent expected-occupation threshold."),
     ] = 0.0,
     max_absent: Annotated[
         int | None, Option("--max-absent", help="Maximum absent pairs to output.")
@@ -228,8 +228,8 @@ def strength_cost(
     nc = int(max(edges.source.max(), edges.target.max())) + 1
     s_out = np.zeros(nc, dtype=np.float64)
     s_in = np.zeros(nc, dtype=np.float64)
-    np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
-    np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
+    np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
+    np.add.at(s_in, edges.target, edges.occ_num.astype(np.float64))
     fit = fit_model(
         family=ModelFamily.ME,
         constraint=Constraint.STRENGTH_COST,
@@ -279,7 +279,7 @@ def strength_degree(
     ] = 0.5,
     min_expected: Annotated[
         float,
-        Option("--min-expected", help="Absent expected-weight threshold."),
+        Option("--min-expected", help="Absent expected-occupation threshold."),
     ] = 0.0,
     max_absent: Annotated[
         int | None, Option("--max-absent", help="Maximum absent pairs to output.")
@@ -295,8 +295,8 @@ def strength_degree(
     s_in = np.zeros(nc, dtype=np.float64)
     d_out = np.zeros(nc, dtype=np.float64)
     d_in = np.zeros(nc, dtype=np.float64)
-    np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
-    np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
+    np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
+    np.add.at(s_in, edges.target, edges.occ_num.astype(np.float64))
     for src in edges.source:
         d_out[src] += 1
     for tgt in edges.target:
@@ -347,7 +347,7 @@ def degree_events(
     ] = 0.5,
     min_expected: Annotated[
         float,
-        Option("--min-expected", help="Absent expected-weight threshold."),
+        Option("--min-expected", help="Absent expected-occupation threshold."),
     ] = 0.0,
     max_absent: Annotated[
         int | None, Option("--max-absent", help="Maximum absent pairs to output.")
@@ -370,7 +370,7 @@ def degree_events(
         constraint=Constraint.DEGREE_EVENTS,
         degree_out=d_out,
         degree_in=d_in,
-        total_events=int(edges.weight.sum()),
+        total_events=int(edges.occ_num.sum()),
         self_loops=self_loops,
     )
     result = filter_model(
@@ -399,11 +399,11 @@ def _write_outputs(result: FilterResult, output_prefix: Path) -> None:
 
 
 def _write_filtered(filtered: FilteredEdges, path: Path) -> None:
-    lines = ["source,target,weight,upper_pvalue,lower_pvalue,expected,occupation"]
+    lines = ["source,target,occ_num,upper_pvalue,lower_pvalue,expected,occupation"]
     for row in zip(
         filtered.edges.source,
         filtered.edges.target,
-        filtered.edges.weight,
+        filtered.edges.occ_num,
         filtered.upper_pvalue,
         filtered.lower_pvalue,
         filtered.expected,

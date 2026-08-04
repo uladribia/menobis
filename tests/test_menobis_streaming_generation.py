@@ -22,8 +22,8 @@ def test_factorized_poisson_generation_smoke() -> None:
 
     sample = sample_strength_poisson(x, y, seed=123)
 
-    assert len(sample.source) == len(sample.target) == len(sample.weight)
-    assert np.all(sample.weight >= 1)
+    assert len(sample.source) == len(sample.target) == len(sample.occ_num)
+    assert np.all(sample.occ_num >= 1)
 
 
 def test_factorized_multinomial_generation_smoke() -> None:
@@ -34,8 +34,8 @@ def test_factorized_multinomial_generation_smoke() -> None:
 
     sample = sample_strength_multinomial(x, y, total_events=100, seed=123)
 
-    assert int(sample.weight.sum()) == 100
-    assert len(sample.source) == len(sample.target) == len(sample.weight)
+    assert int(sample.occ_num.sum()) == 100
+    assert len(sample.source) == len(sample.target) == len(sample.occ_num)
 
 
 def test_strength_cost_generation_smoke() -> None:
@@ -58,5 +58,5 @@ def test_strength_cost_generation_smoke() -> None:
         seed=123,
     )
 
-    assert len(sample.source) == len(sample.target) == len(sample.weight)
-    assert np.all(sample.weight >= 1)
+    assert len(sample.source) == len(sample.target) == len(sample.occ_num)
+    assert np.all(sample.occ_num >= 1)

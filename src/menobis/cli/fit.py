@@ -56,8 +56,8 @@ def strength_me(
     nc = int(max(edges.source.max(), edges.target.max())) + 1
     s_out = np.zeros(nc, dtype=np.float64)
     s_in = np.zeros(nc, dtype=np.float64)
-    np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
-    np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
+    np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
+    np.add.at(s_in, edges.target, edges.occ_num.astype(np.float64))
     result = fit_model(
         family=ModelFamily.ME,
         constraint=Constraint.STRENGTH,
@@ -113,8 +113,8 @@ def strength_geometric(
     nc = int(max(edges.source.max(), edges.target.max())) + 1
     s_out = np.zeros(nc, dtype=np.float64)
     s_in = np.zeros(nc, dtype=np.float64)
-    np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
-    np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
+    np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
+    np.add.at(s_in, edges.target, edges.occ_num.astype(np.float64))
     result = fit_model(
         family=ModelFamily.W,
         constraint=Constraint.STRENGTH,
@@ -183,8 +183,8 @@ def strength_negative_binomial(
     nc = int(max(edges.source.max(), edges.target.max())) + 1
     s_out = np.zeros(nc, dtype=np.float64)
     s_in = np.zeros(nc, dtype=np.float64)
-    np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
-    np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
+    np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
+    np.add.at(s_in, edges.target, edges.occ_num.astype(np.float64))
     result = fit_model(
         family=ModelFamily.W,
         constraint=Constraint.STRENGTH,
@@ -249,7 +249,7 @@ def degree_bernoulli(
         constraint=Constraint.DEGREE_EVENTS,
         degree_out=d_out,
         degree_in=d_in,
-        total_events=int(edges.weight.sum()),
+        total_events=int(edges.occ_num.sum()),
         self_loops=self_loops,
     )
 
@@ -292,8 +292,8 @@ def strength_degree_me(
     s_in = np.zeros(nc, dtype=np.float64)
     d_out = np.zeros(nc, dtype=np.float64)
     d_in = np.zeros(nc, dtype=np.float64)
-    np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
-    np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
+    np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
+    np.add.at(s_in, edges.target, edges.occ_num.astype(np.float64))
     for src in edges.source:
         d_out[src] += 1
     for tgt in edges.target:
@@ -371,8 +371,8 @@ def strength_edges_me(
     nc = int(max(edges.source.max(), edges.target.max())) + 1
     s_out = np.zeros(nc, dtype=np.float64)
     s_in = np.zeros(nc, dtype=np.float64)
-    np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
-    np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
+    np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
+    np.add.at(s_in, edges.target, edges.occ_num.astype(np.float64))
     if target_edges is None:
         target_edges = float(len(edges))
     result = fit_model(
@@ -431,8 +431,8 @@ def strength_cost_me(
     nc = int(max(edges.source.max(), edges.target.max())) + 1
     s_out = np.zeros(nc, dtype=np.float64)
     s_in = np.zeros(nc, dtype=np.float64)
-    np.add.at(s_out, edges.source, edges.weight.astype(np.float64))
-    np.add.at(s_in, edges.target, edges.weight.astype(np.float64))
+    np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
+    np.add.at(s_in, edges.target, edges.occ_num.astype(np.float64))
     coordinate_table = pa_csv.read_csv(coordinates_path)
     coord_x = coordinate_table.column("x").to_numpy().astype(np.float64)
     coord_y = coordinate_table.column("y").to_numpy().astype(np.float64)
@@ -446,7 +446,7 @@ def strength_cost_me(
                 )
             )
             for s_val, t_val, w_val in zip(
-                edges.source, edges.target, edges.weight, strict=True
+                edges.source, edges.target, edges.occ_num, strict=True
             )
         )
     result = fit_model(

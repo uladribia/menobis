@@ -1,24 +1,24 @@
-//! Weighted edge-list graph primitives for MENoBiS.
+//! Occupied-pair graph primitives for MENoBiS.
 
-/// A weighted directed edge.
+/// An occupied directed pair (i→j) with positive integer occupation number.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct WeightedEdge {
+pub struct OccupiedPair {
     /// Source node identifier.
     pub source: usize,
     /// Target node identifier.
     pub target: usize,
-    /// Positive integer edge weight.
-    pub weight: u64,
+    /// Pair occupation number (t_ij > 0).
+    pub occ_num: u64,
 }
 
-impl WeightedEdge {
-    /// Create a weighted edge.
+impl OccupiedPair {
+    /// Create an occupied pair.
     #[must_use]
-    pub const fn new(source: usize, target: usize, weight: u64) -> Self {
+    pub const fn new(source: usize, target: usize, occ_num: u64) -> Self {
         Self {
             source,
             target,
-            weight,
+            occ_num,
         }
     }
 }
@@ -34,13 +34,13 @@ pub struct DirectedNodeSequence {
 
 /// Compute directed incoming and outgoing strengths.
 #[must_use]
-pub fn directed_strengths(node_count: usize, edges: &[WeightedEdge]) -> DirectedNodeSequence {
+pub fn directed_strengths(node_count: usize, edges: &[OccupiedPair]) -> DirectedNodeSequence {
     let mut out = vec![0_u64; node_count];
     let mut incoming = vec![0_u64; node_count];
 
     for edge in edges {
-        out[edge.source] += edge.weight;
-        incoming[edge.target] += edge.weight;
+        out[edge.source] += edge.occ_num;
+        incoming[edge.target] += edge.occ_num;
     }
 
     DirectedNodeSequence { out, incoming }
@@ -48,7 +48,7 @@ pub fn directed_strengths(node_count: usize, edges: &[WeightedEdge]) -> Directed
 
 /// Compute directed incoming and outgoing binary degrees.
 #[must_use]
-pub fn directed_degrees(node_count: usize, edges: &[WeightedEdge]) -> DirectedNodeSequence {
+pub fn directed_degrees(node_count: usize, edges: &[OccupiedPair]) -> DirectedNodeSequence {
     let mut out = vec![0_u64; node_count];
     let mut incoming = vec![0_u64; node_count];
 
@@ -62,11 +62,11 @@ pub fn directed_degrees(node_count: usize, edges: &[WeightedEdge]) -> DirectedNo
 
 #[cfg(test)]
 mod tests {
-    use super::{directed_degrees, directed_strengths, WeightedEdge};
+    use super::{directed_degrees, directed_strengths, OccupiedPair};
 
     #[test]
     fn directed_strengths_conserve_total_weight() {
-        let edges = [WeightedEdge::new(0, 1, 3), WeightedEdge::new(1, 2, 4)];
+        let edges = [OccupiedPair::new(0, 1, 3), OccupiedPair::new(1, 2, 4)];
 
         let strengths = directed_strengths(3, &edges);
 
@@ -79,9 +79,9 @@ mod tests {
     #[test]
     fn directed_degrees_count_binary_edges() {
         let edges = [
-            WeightedEdge::new(0, 1, 3),
-            WeightedEdge::new(0, 2, 4),
-            WeightedEdge::new(1, 2, 5),
+            OccupiedPair::new(0, 1, 3),
+            OccupiedPair::new(0, 2, 4),
+            OccupiedPair::new(1, 2, 5),
         ];
 
         let degrees = directed_degrees(3, &edges);

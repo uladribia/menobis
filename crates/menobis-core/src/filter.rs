@@ -1,6 +1,6 @@
 //! Statistical filtering kernels for fitted MENoBiS null models.
 
-use crate::distribution::{PairDistribution, WeightFamily};
+use crate::distribution::{OccupationFamily, PairDistribution};
 use crate::pairs::{
     row_ranges, CandidateSupport, DegreeEventsProvider, EuclideanCostProvider,
     FixedStrengthProvider, PairDistributionProvider, SparsePoissonRateMapProvider,
@@ -42,13 +42,13 @@ pub struct AbsentFilterOptions {
 pub fn filter_observed_provider<P>(
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
     provider: &P,
 ) -> ObservedFilterResult
 where
     P: PairDistributionProvider,
 {
-    filter_observed_with(sources, targets, weights, |i, j| {
+    filter_observed_with(sources, targets, occ_nums, |i, j| {
         provider
             .distribution(i, j)
             .unwrap_or(PairDistribution::Poisson { rate: 0.0 })
@@ -59,7 +59,7 @@ where
 pub fn filter_observed_with<F>(
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
     provider: F,
 ) -> ObservedFilterResult
 where
@@ -68,12 +68,12 @@ where
     let rows: Vec<(f64, f64, f64, f64)> = sources
         .par_iter()
         .zip(targets.par_iter())
-        .zip(weights.par_iter())
-        .map(|((&source, &target), &weight)| {
+        .zip(occ_nums.par_iter())
+        .map(|((&source, &target), &occ_num)| {
             let dist = provider(source as usize, target as usize);
             let occ = dist.occupation_probability();
-            let raw_upper = dist.upper_pvalue(weight);
-            let raw_lower = dist.lower_pvalue(weight);
+            let raw_upper = dist.upper_pvalue(occ_num);
+            let raw_lower = dist.lower_pvalue(occ_num);
             let upper = if occ > 0.0 {
                 (raw_upper / occ).min(1.0)
             } else {
@@ -273,14 +273,14 @@ pub fn filter_strength_poisson(
     y: &[f64],
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     filter_observed_provider(
         sources,
         targets,
-        weights,
+        occ_nums,
         &FixedStrengthProvider {
-            family: WeightFamily::Poisson,
+            family: OccupationFamily::Poisson,
             x,
             y,
             self_loops: true,
@@ -303,7 +303,7 @@ pub fn absent_strength_poisson(
 ) -> AbsentFilterResult {
     detect_absent_provider(
         &FixedStrengthProvider {
-            family: WeightFamily::Poisson,
+            family: OccupationFamily::Poisson,
             x,
             y,
             self_loops,
@@ -326,7 +326,7 @@ pub fn filter_custom_poisson(
     rates: &[f64],
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     let rate_map: HashMap<(usize, usize), f64> = rate_sources
         .iter()
@@ -337,7 +337,7 @@ pub fn filter_custom_poisson(
     filter_observed_provider(
         sources,
         targets,
-        weights,
+        occ_nums,
         &SparsePoissonRateMapProvider {
             sources: rate_sources,
             targets: rate_targets,
@@ -383,14 +383,14 @@ pub fn filter_strength_edges_poisson(
     lam: f64,
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     filter_observed_provider(
         sources,
         targets,
-        weights,
+        occ_nums,
         &StrengthEdgesProvider {
-            family: WeightFamily::Poisson,
+            family: OccupationFamily::Poisson,
             x,
             y,
             lambda: lam,
@@ -415,7 +415,7 @@ pub fn absent_strength_edges_poisson(
 ) -> AbsentFilterResult {
     detect_absent_provider(
         &StrengthEdgesProvider {
-            family: WeightFamily::Poisson,
+            family: OccupationFamily::Poisson,
             x,
             y,
             lambda: lam,
@@ -442,7 +442,7 @@ pub fn filter_strength_cost_poisson_coordinates(
     coord_y: &[f64],
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     let costs = EuclideanCostProvider {
         x: coord_x,
@@ -451,9 +451,9 @@ pub fn filter_strength_cost_poisson_coordinates(
     filter_observed_provider(
         sources,
         targets,
-        weights,
+        occ_nums,
         &StrengthCostProvider {
-            family: WeightFamily::Poisson,
+            family: OccupationFamily::Poisson,
             x,
             y,
             gamma,
@@ -485,7 +485,7 @@ pub fn absent_strength_cost_poisson_coordinates(
     };
     detect_absent_provider(
         &StrengthCostProvider {
-            family: WeightFamily::Poisson,
+            family: OccupationFamily::Poisson,
             x,
             y,
             gamma,
@@ -510,14 +510,14 @@ pub fn filter_strength_degree_poisson(
     w: &[f64],
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     filter_observed_provider(
         sources,
         targets,
-        weights,
+        occ_nums,
         &StrengthDegreeProvider {
-            family: WeightFamily::Poisson,
+            family: OccupationFamily::Poisson,
             x,
             y,
             z,
@@ -544,7 +544,7 @@ pub fn absent_strength_degree_poisson(
 ) -> AbsentFilterResult {
     detect_absent_provider(
         &StrengthDegreeProvider {
-            family: WeightFamily::Poisson,
+            family: OccupationFamily::Poisson,
             x,
             y,
             z,
@@ -566,20 +566,20 @@ pub fn absent_strength_degree_poisson(
 pub fn filter_degree_events_poisson(
     x: &[f64],
     y: &[f64],
-    positive_weight_rate: f64,
+    positive_intensity: f64,
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     filter_observed_provider(
         sources,
         targets,
-        weights,
+        occ_nums,
         &DegreeEventsProvider {
-            family: WeightFamily::Poisson,
+            family: OccupationFamily::Poisson,
             x,
             y,
-            positive_weight_rate,
+            positive_intensity,
             self_loops: true,
         },
     )
@@ -590,7 +590,7 @@ pub fn filter_degree_events_poisson(
 pub fn absent_degree_events_poisson(
     x: &[f64],
     y: &[f64],
-    positive_weight_rate: f64,
+    positive_intensity: f64,
     sources: &[u64],
     targets: &[u64],
     self_loops: bool,
@@ -601,10 +601,10 @@ pub fn absent_degree_events_poisson(
 ) -> AbsentFilterResult {
     detect_absent_provider(
         &DegreeEventsProvider {
-            family: WeightFamily::Poisson,
+            family: OccupationFamily::Poisson,
             x,
             y,
-            positive_weight_rate,
+            positive_intensity,
             self_loops,
         },
         sources,
@@ -626,14 +626,14 @@ pub fn filter_strength_geometric(
     y: &[f64],
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     filter_observed_provider(
         sources,
         targets,
-        weights,
+        occ_nums,
         &FixedStrengthProvider {
-            family: WeightFamily::Geometric,
+            family: OccupationFamily::Geometric,
             x,
             y,
             self_loops: true,
@@ -656,7 +656,7 @@ pub fn absent_strength_geometric(
 ) -> AbsentFilterResult {
     detect_absent_provider(
         &FixedStrengthProvider {
-            family: WeightFamily::Geometric,
+            family: OccupationFamily::Geometric,
             x,
             y,
             self_loops,
@@ -681,14 +681,14 @@ pub fn filter_strength_binomial(
     layers: u32,
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     filter_observed_provider(
         sources,
         targets,
-        weights,
+        occ_nums,
         &FixedStrengthProvider {
-            family: WeightFamily::Binomial(layers),
+            family: OccupationFamily::Binomial(layers),
             x,
             y,
             self_loops: true,
@@ -712,7 +712,7 @@ pub fn absent_strength_binomial(
 ) -> AbsentFilterResult {
     detect_absent_provider(
         &FixedStrengthProvider {
-            family: WeightFamily::Binomial(layers),
+            family: OccupationFamily::Binomial(layers),
             x,
             y,
             self_loops,
@@ -737,14 +737,14 @@ pub fn filter_strength_negative_binomial(
     layers: u32,
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     filter_observed_provider(
         sources,
         targets,
-        weights,
+        occ_nums,
         &FixedStrengthProvider {
-            family: WeightFamily::NegativeBinomial(layers),
+            family: OccupationFamily::NegativeBinomial(layers),
             x,
             y,
             self_loops: true,
@@ -768,7 +768,7 @@ pub fn absent_strength_negative_binomial(
 ) -> AbsentFilterResult {
     detect_absent_provider(
         &FixedStrengthProvider {
-            family: WeightFamily::NegativeBinomial(layers),
+            family: OccupationFamily::NegativeBinomial(layers),
             x,
             y,
             self_loops,
@@ -793,10 +793,10 @@ fn filter_strength_cost_coordinates_family(
     gamma: f64,
     coord_x: &[f64],
     coord_y: &[f64],
-    family: WeightFamily,
+    family: OccupationFamily,
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     let costs = EuclideanCostProvider {
         x: coord_x,
@@ -805,7 +805,7 @@ fn filter_strength_cost_coordinates_family(
     filter_observed_provider(
         sources,
         targets,
-        weights,
+        occ_nums,
         &StrengthCostProvider {
             family,
             x,
@@ -824,7 +824,7 @@ fn absent_strength_cost_coordinates_family(
     gamma: f64,
     coord_x: &[f64],
     coord_y: &[f64],
-    family: WeightFamily,
+    family: OccupationFamily,
     observed_sources: &[u64],
     observed_targets: &[u64],
     self_loops: bool,
@@ -868,7 +868,7 @@ pub fn filter_strength_cost_binomial_coordinates(
     layers: u32,
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     filter_strength_cost_coordinates_family(
         x,
@@ -876,10 +876,10 @@ pub fn filter_strength_cost_binomial_coordinates(
         gamma,
         coord_x,
         coord_y,
-        WeightFamily::Binomial(layers),
+        OccupationFamily::Binomial(layers),
         sources,
         targets,
-        weights,
+        occ_nums,
     )
 }
 
@@ -906,7 +906,7 @@ pub fn absent_strength_cost_binomial_coordinates(
         gamma,
         coord_x,
         coord_y,
-        WeightFamily::Binomial(layers),
+        OccupationFamily::Binomial(layers),
         observed_sources,
         observed_targets,
         self_loops,
@@ -927,7 +927,7 @@ pub fn filter_strength_cost_geometric_coordinates(
     coord_y: &[f64],
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     filter_strength_cost_coordinates_family(
         x,
@@ -935,10 +935,10 @@ pub fn filter_strength_cost_geometric_coordinates(
         gamma,
         coord_x,
         coord_y,
-        WeightFamily::Geometric,
+        OccupationFamily::Geometric,
         sources,
         targets,
-        weights,
+        occ_nums,
     )
 }
 
@@ -964,7 +964,7 @@ pub fn absent_strength_cost_geometric_coordinates(
         gamma,
         coord_x,
         coord_y,
-        WeightFamily::Geometric,
+        OccupationFamily::Geometric,
         observed_sources,
         observed_targets,
         self_loops,
@@ -985,7 +985,7 @@ pub fn filter_strength_cost_negative_binomial_coordinates(
     layers: u32,
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     filter_strength_cost_coordinates_family(
         x,
@@ -993,10 +993,10 @@ pub fn filter_strength_cost_negative_binomial_coordinates(
         gamma,
         coord_x,
         coord_y,
-        WeightFamily::NegativeBinomial(layers),
+        OccupationFamily::NegativeBinomial(layers),
         sources,
         targets,
-        weights,
+        occ_nums,
     )
 }
 
@@ -1023,7 +1023,7 @@ pub fn absent_strength_cost_negative_binomial_coordinates(
         gamma,
         coord_x,
         coord_y,
-        WeightFamily::NegativeBinomial(layers),
+        OccupationFamily::NegativeBinomial(layers),
         observed_sources,
         observed_targets,
         self_loops,
@@ -1042,14 +1042,14 @@ pub fn filter_strength_edges_binomial(
     layers: u32,
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     filter_observed_provider(
         sources,
         targets,
-        weights,
+        occ_nums,
         &StrengthEdgesProvider {
-            family: WeightFamily::Binomial(layers),
+            family: OccupationFamily::Binomial(layers),
             x,
             y,
             lambda: lam,
@@ -1075,7 +1075,7 @@ pub fn absent_strength_edges_binomial(
 ) -> AbsentFilterResult {
     detect_absent_provider(
         &StrengthEdgesProvider {
-            family: WeightFamily::Binomial(layers),
+            family: OccupationFamily::Binomial(layers),
             x,
             y,
             lambda: lam,
@@ -1102,14 +1102,14 @@ pub fn filter_strength_degree_binomial(
     layers: u32,
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     filter_observed_provider(
         sources,
         targets,
-        weights,
+        occ_nums,
         &StrengthDegreeProvider {
-            family: WeightFamily::Binomial(layers),
+            family: OccupationFamily::Binomial(layers),
             x,
             y,
             z,
@@ -1137,7 +1137,7 @@ pub fn absent_strength_degree_binomial(
 ) -> AbsentFilterResult {
     detect_absent_provider(
         &StrengthDegreeProvider {
-            family: WeightFamily::Binomial(layers),
+            family: OccupationFamily::Binomial(layers),
             x,
             y,
             z,
@@ -1159,21 +1159,21 @@ pub fn absent_strength_degree_binomial(
 pub fn filter_degree_events_binomial(
     x: &[f64],
     y: &[f64],
-    positive_weight_rate: f64,
+    positive_intensity: f64,
     layers: u32,
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     filter_observed_provider(
         sources,
         targets,
-        weights,
+        occ_nums,
         &DegreeEventsProvider {
-            family: WeightFamily::Binomial(layers),
+            family: OccupationFamily::Binomial(layers),
             x,
             y,
-            positive_weight_rate,
+            positive_intensity,
             self_loops: true,
         },
     )
@@ -1184,7 +1184,7 @@ pub fn filter_degree_events_binomial(
 pub fn absent_degree_events_binomial(
     x: &[f64],
     y: &[f64],
-    positive_weight_rate: f64,
+    positive_intensity: f64,
     layers: u32,
     sources: &[u64],
     targets: &[u64],
@@ -1196,10 +1196,10 @@ pub fn absent_degree_events_binomial(
 ) -> AbsentFilterResult {
     detect_absent_provider(
         &DegreeEventsProvider {
-            family: WeightFamily::Binomial(layers),
+            family: OccupationFamily::Binomial(layers),
             x,
             y,
-            positive_weight_rate,
+            positive_intensity,
             self_loops,
         },
         sources,
@@ -1224,14 +1224,14 @@ pub fn filter_strength_edges_geometric(
     lam: f64,
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     filter_observed_provider(
         sources,
         targets,
-        weights,
+        occ_nums,
         &StrengthEdgesProvider {
-            family: WeightFamily::Geometric,
+            family: OccupationFamily::Geometric,
             x,
             y,
             lambda: lam,
@@ -1248,14 +1248,14 @@ pub fn filter_strength_edges_negative_binomial(
     layers: u32,
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     filter_observed_provider(
         sources,
         targets,
-        weights,
+        occ_nums,
         &StrengthEdgesProvider {
-            family: WeightFamily::NegativeBinomial(layers),
+            family: OccupationFamily::NegativeBinomial(layers),
             x,
             y,
             lambda: lam,
@@ -1272,14 +1272,14 @@ pub fn filter_strength_degree_geometric(
     w: &[f64],
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     filter_observed_provider(
         sources,
         targets,
-        weights,
+        occ_nums,
         &StrengthDegreeProvider {
-            family: WeightFamily::Geometric,
+            family: OccupationFamily::Geometric,
             x,
             y,
             z,
@@ -1299,14 +1299,14 @@ pub fn filter_strength_degree_negative_binomial(
     layers: u32,
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     filter_observed_provider(
         sources,
         targets,
-        weights,
+        occ_nums,
         &StrengthDegreeProvider {
-            family: WeightFamily::NegativeBinomial(layers),
+            family: OccupationFamily::NegativeBinomial(layers),
             x,
             y,
             z,
@@ -1320,20 +1320,20 @@ pub fn filter_strength_degree_negative_binomial(
 pub fn filter_degree_events_geometric(
     x: &[f64],
     y: &[f64],
-    positive_weight_rate: f64,
+    positive_intensity: f64,
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     filter_observed_provider(
         sources,
         targets,
-        weights,
+        occ_nums,
         &DegreeEventsProvider {
-            family: WeightFamily::Geometric,
+            family: OccupationFamily::Geometric,
             x,
             y,
-            positive_weight_rate,
+            positive_intensity,
             self_loops: true,
         },
     )
@@ -1343,21 +1343,21 @@ pub fn filter_degree_events_geometric(
 pub fn filter_degree_events_negative_binomial(
     x: &[f64],
     y: &[f64],
-    positive_weight_rate: f64,
+    positive_intensity: f64,
     layers: u32,
     sources: &[u64],
     targets: &[u64],
-    weights: &[u64],
+    occ_nums: &[u64],
 ) -> ObservedFilterResult {
     filter_observed_provider(
         sources,
         targets,
-        weights,
+        occ_nums,
         &DegreeEventsProvider {
-            family: WeightFamily::NegativeBinomial(layers),
+            family: OccupationFamily::NegativeBinomial(layers),
             x,
             y,
-            positive_weight_rate,
+            positive_intensity,
             self_loops: true,
         },
     )
@@ -1379,7 +1379,7 @@ pub fn absent_strength_edges_geometric(
 ) -> AbsentFilterResult {
     detect_absent_provider(
         &StrengthEdgesProvider {
-            family: WeightFamily::Geometric,
+            family: OccupationFamily::Geometric,
             x,
             y,
             lambda: lam,
@@ -1413,7 +1413,7 @@ pub fn absent_strength_edges_negative_binomial(
 ) -> AbsentFilterResult {
     detect_absent_provider(
         &StrengthEdgesProvider {
-            family: WeightFamily::NegativeBinomial(layers),
+            family: OccupationFamily::NegativeBinomial(layers),
             x,
             y,
             lambda: lam,
@@ -1447,7 +1447,7 @@ pub fn absent_strength_degree_geometric(
 ) -> AbsentFilterResult {
     detect_absent_provider(
         &StrengthDegreeProvider {
-            family: WeightFamily::Geometric,
+            family: OccupationFamily::Geometric,
             x,
             y,
             z,
@@ -1483,7 +1483,7 @@ pub fn absent_strength_degree_negative_binomial(
 ) -> AbsentFilterResult {
     detect_absent_provider(
         &StrengthDegreeProvider {
-            family: WeightFamily::NegativeBinomial(layers),
+            family: OccupationFamily::NegativeBinomial(layers),
             x,
             y,
             z,
@@ -1506,7 +1506,7 @@ pub fn absent_strength_degree_negative_binomial(
 pub fn absent_degree_events_geometric(
     x: &[f64],
     y: &[f64],
-    positive_weight_rate: f64,
+    positive_intensity: f64,
     sources: &[u64],
     targets: &[u64],
     self_loops: bool,
@@ -1517,10 +1517,10 @@ pub fn absent_degree_events_geometric(
 ) -> AbsentFilterResult {
     detect_absent_provider(
         &DegreeEventsProvider {
-            family: WeightFamily::Geometric,
+            family: OccupationFamily::Geometric,
             x,
             y,
-            positive_weight_rate,
+            positive_intensity,
             self_loops,
         },
         sources,
@@ -1539,7 +1539,7 @@ pub fn absent_degree_events_geometric(
 pub fn absent_degree_events_negative_binomial(
     x: &[f64],
     y: &[f64],
-    positive_weight_rate: f64,
+    positive_intensity: f64,
     layers: u32,
     sources: &[u64],
     targets: &[u64],
@@ -1551,10 +1551,10 @@ pub fn absent_degree_events_negative_binomial(
 ) -> AbsentFilterResult {
     detect_absent_provider(
         &DegreeEventsProvider {
-            family: WeightFamily::NegativeBinomial(layers),
+            family: OccupationFamily::NegativeBinomial(layers),
             x,
             y,
-            positive_weight_rate,
+            positive_intensity,
             self_loops,
         },
         sources,

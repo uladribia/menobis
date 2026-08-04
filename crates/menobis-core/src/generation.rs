@@ -1,6 +1,6 @@
 //! Seeded network generation for node-factorized models.
 
-use crate::distribution::{PairDistribution, WeightFamily};
+use crate::distribution::{OccupationFamily, PairDistribution};
 use crate::pairs::{
     chunk_seed, row_ranges, CandidateSupport, DegreeEventsProvider, EuclideanCostProvider,
     FixedStrengthProvider, NormalizedSparsePoissonProvider, PairDistributionProvider,
@@ -13,12 +13,12 @@ use rand::SeedableRng;
 use rand_distr::{Binomial, Distribution};
 use rayon::prelude::*;
 
-/// Sparse edge output from a generation run.
+/// Sparse network output from a generation run.
 #[derive(Clone, Debug, Default)]
-pub struct SampledEdges {
+pub struct SampledNetwork {
     pub sources: Vec<u64>,
     pub targets: Vec<u64>,
-    pub weights: Vec<u64>,
+    pub occ_nums: Vec<u64>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -33,21 +33,21 @@ enum SamplingModel<'a> {
     FixedStrength {
         x: &'a [f64],
         y: &'a [f64],
-        family: WeightFamily,
+        family: OccupationFamily,
         self_loops: bool,
     },
     DegreeEvents {
         x: &'a [f64],
         y: &'a [f64],
-        positive_weight_rate: f64,
-        family: WeightFamily,
+        positive_intensity: f64,
+        family: OccupationFamily,
         self_loops: bool,
     },
     StrengthEdges {
         x: &'a [f64],
         y: &'a [f64],
         lambda: f64,
-        family: WeightFamily,
+        family: OccupationFamily,
         self_loops: bool,
     },
     StrengthDegree {
@@ -55,47 +55,47 @@ enum SamplingModel<'a> {
         y: &'a [f64],
         z: &'a [f64],
         w: &'a [f64],
-        family: WeightFamily,
+        family: OccupationFamily,
         self_loops: bool,
     },
 }
 
-fn merge_samples(chunks: Vec<SampledEdges>) -> SampledEdges {
+fn merge_samples(chunks: Vec<SampledNetwork>) -> SampledNetwork {
     let total_edges = chunks.iter().map(|chunk| chunk.sources.len()).sum();
-    let mut result = SampledEdges {
+    let mut result = SampledNetwork {
         sources: Vec::with_capacity(total_edges),
         targets: Vec::with_capacity(total_edges),
-        weights: Vec::with_capacity(total_edges),
+        occ_nums: Vec::with_capacity(total_edges),
     };
     for mut chunk in chunks {
         result.sources.append(&mut chunk.sources);
         result.targets.append(&mut chunk.targets);
-        result.weights.append(&mut chunk.weights);
+        result.occ_nums.append(&mut chunk.occ_nums);
     }
     result
 }
 
-fn push_sampled_pair(result: &mut SampledEdges, pair: PairDraw, rng: &mut StdRng) {
-    let weight = pair.distribution.sample(rng);
-    if weight > 0 {
+fn push_sampled_pair(result: &mut SampledNetwork, pair: PairDraw, rng: &mut StdRng) {
+    let occ_num = pair.distribution.sample(rng);
+    if occ_num > 0 {
         result.sources.push(pair.source);
         result.targets.push(pair.target);
-        result.weights.push(weight);
+        result.occ_nums.push(occ_num);
     }
 }
 
-fn sample_independent_pairs<I>(pairs: I, rng: &mut StdRng) -> SampledEdges
+fn sample_independent_pairs<I>(pairs: I, rng: &mut StdRng) -> SampledNetwork
 where
     I: IntoIterator<Item = PairDraw>,
 {
-    let mut result = SampledEdges::default();
+    let mut result = SampledNetwork::default();
     for pair in pairs {
         push_sampled_pair(&mut result, pair, rng);
     }
     result
 }
 
-fn sample_model(model: SamplingModel<'_>, seed: u64) -> SampledEdges {
+fn sample_model(model: SamplingModel<'_>, seed: u64) -> SampledNetwork {
     match model {
         SamplingModel::FixedStrength {
             x,
@@ -114,14 +114,14 @@ fn sample_model(model: SamplingModel<'_>, seed: u64) -> SampledEdges {
         SamplingModel::DegreeEvents {
             x,
             y,
-            positive_weight_rate,
+            positive_intensity,
             family,
             self_loops,
         } => sample_provider(
             &DegreeEventsProvider {
                 x,
                 y,
-                positive_weight_rate,
+                positive_intensity,
                 family,
                 self_loops,
             },
@@ -164,7 +164,7 @@ fn sample_model(model: SamplingModel<'_>, seed: u64) -> SampledEdges {
     }
 }
 
-fn sample_provider<P>(provider: &P, seed: u64) -> SampledEdges
+fn sample_provider<P>(provider: &P, seed: u64) -> SampledNetwork
 where
     P: PairDistributionProvider,
 {
@@ -186,7 +186,7 @@ fn sample_sparse_provider<P>(
     sources: &[u64],
     targets: &[u64],
     seed: u64,
-) -> SampledEdges
+) -> SampledNetwork
 where
     P: PairDistributionProvider,
 {
@@ -205,7 +205,7 @@ where
         return sample_independent_pairs(pairs, &mut StdRng::seed_from_u64(seed));
     }
 
-    let chunks: Vec<SampledEdges> = (0..sources.len())
+    let chunks: Vec<SampledNetwork> = (0..sources.len())
         .step_by(SPARSE_CHUNK_SIZE)
         .map(|start| (start, (start + SPARSE_CHUNK_SIZE).min(sources.len())))
         .collect::<Vec<_>>()
@@ -213,7 +213,7 @@ where
         .enumerate()
         .map(|(chunk_index, (start, end))| {
             let mut rng = StdRng::seed_from_u64(chunk_seed(seed, chunk_index));
-            let mut result = SampledEdges::default();
+            let mut result = SampledNetwork::default();
             for index in start..end {
                 if let Some(distribution) = provider.distribution_at(
                     index,
@@ -237,7 +237,7 @@ where
     merge_samples(chunks)
 }
 
-fn sample_all_pairs_by_rows<F>(n: usize, self_loops: bool, seed: u64, pair_fn: F) -> SampledEdges
+fn sample_all_pairs_by_rows<F>(n: usize, self_loops: bool, seed: u64, pair_fn: F) -> SampledNetwork
 where
     F: Fn(usize, usize) -> Option<PairDistribution> + Sync,
 {
@@ -248,7 +248,7 @@ where
     };
     if candidate_pairs < PARALLEL_PAIR_THRESHOLD {
         let mut rng = StdRng::seed_from_u64(seed);
-        let mut result = SampledEdges::default();
+        let mut result = SampledNetwork::default();
         for i in 0..n {
             for j in 0..n {
                 if !self_loops && i == j {
@@ -270,12 +270,12 @@ where
         return result;
     }
 
-    let chunks: Vec<SampledEdges> = row_ranges(n)
+    let chunks: Vec<SampledNetwork> = row_ranges(n)
         .into_par_iter()
         .enumerate()
         .map(|(chunk_index, (start, end))| {
             let mut rng = StdRng::seed_from_u64(chunk_seed(seed, chunk_index));
-            let mut result = SampledEdges::default();
+            let mut result = SampledNetwork::default();
             for i in start..end {
                 for j in 0..n {
                     if !self_loops && i == j {
@@ -308,10 +308,10 @@ pub fn sample_custom_poisson(
     probabilities: &[f64],
     total_events: u64,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     let p_sum: f64 = probabilities.iter().sum();
     if p_sum <= 0.0 {
-        return SampledEdges::default();
+        return SampledNetwork::default();
     }
     sample_provider(
         &NormalizedSparsePoissonProvider {
@@ -333,7 +333,7 @@ pub fn sample_custom_multinomial(
     probabilities: &[f64],
     total_events: u64,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     let mut rng = StdRng::seed_from_u64(seed);
     sparse_multinomial_sample(sources, targets, probabilities, total_events, &mut rng)
 }
@@ -342,7 +342,7 @@ pub fn sample_custom_multinomial(
 ///
 /// Creates `s_out[i]` outgoing stubs for each node `i` and `s_in[j]` incoming
 /// stubs for each node `j`, then pairs them by random shuffle. This produces
-/// an unbiased uniform sample from the space of all integer-weight directed
+/// an unbiased uniform sample from the space of all integer-occupation directed
 /// graphs with the exact given strength sequence and self-loops allowed.
 ///
 /// **Important**: this uniform sampling property only holds when self-loops are
@@ -353,7 +353,7 @@ pub fn sample_strength_stub_matching(
     strength_out: &[u64],
     strength_in: &[u64],
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     let n = strength_out.len();
     let total_out: u64 = strength_out.iter().sum();
     let total_in: u64 = strength_in.iter().sum();
@@ -384,19 +384,19 @@ pub fn sample_strength_stub_matching(
     use rand::seq::SliceRandom;
     in_stubs.shuffle(&mut rng);
 
-    // Count edge weights from stub pairings.
+    // Count pair occupations from stub matchings.
     let mut weight_map = std::collections::HashMap::new();
     for (&src, &tgt) in out_stubs.iter().zip(in_stubs.iter()) {
         *weight_map.entry((src, tgt)).or_insert(0u64) += 1;
     }
 
-    let mut result = SampledEdges::default();
+    let mut result = SampledNetwork::default();
     let mut pairs: Vec<_> = weight_map.into_iter().collect();
     pairs.sort_unstable();
     for ((src, tgt), w) in pairs {
         result.sources.push(src);
         result.targets.push(tgt);
-        result.weights.push(w);
+        result.occ_nums.push(w);
     }
     let _ = n; // used only in assert context
     result
@@ -404,12 +404,17 @@ pub fn sample_strength_stub_matching(
 
 /// Sample from independent Poisson(x_i * y_j) for all (i, j).
 #[must_use]
-pub fn sample_strength_poisson(x: &[f64], y: &[f64], self_loops: bool, seed: u64) -> SampledEdges {
+pub fn sample_strength_poisson(
+    x: &[f64],
+    y: &[f64],
+    self_loops: bool,
+    seed: u64,
+) -> SampledNetwork {
     sample_model(
         SamplingModel::FixedStrength {
             x,
             y,
-            family: WeightFamily::Poisson,
+            family: OccupationFamily::Poisson,
             self_loops,
         },
         seed,
@@ -423,12 +428,12 @@ pub fn sample_strength_geometric(
     y: &[f64],
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     sample_model(
         SamplingModel::FixedStrength {
             x,
             y,
-            family: WeightFamily::Geometric,
+            family: OccupationFamily::Geometric,
             self_loops,
         },
         seed,
@@ -443,12 +448,12 @@ pub fn sample_strength_binomial(
     layers: u32,
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     sample_model(
         SamplingModel::FixedStrength {
             x,
             y,
-            family: WeightFamily::Binomial(layers),
+            family: OccupationFamily::Binomial(layers),
             self_loops,
         },
         seed,
@@ -463,12 +468,12 @@ pub fn sample_strength_negative_binomial(
     layers: u32,
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     sample_model(
         SamplingModel::FixedStrength {
             x,
             y,
-            family: WeightFamily::NegativeBinomial(layers),
+            family: OccupationFamily::NegativeBinomial(layers),
             self_loops,
         },
         seed,
@@ -488,14 +493,14 @@ pub fn sample_strength_cost_poisson_coordinates(
     coord_y: &[f64],
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     sample_strength_cost_coordinates(
         x,
         y,
         gamma,
         coord_x,
         coord_y,
-        WeightFamily::Poisson,
+        OccupationFamily::Poisson,
         self_loops,
         seed,
     )
@@ -508,10 +513,10 @@ fn sample_strength_cost_coordinates(
     gamma: f64,
     coord_x: &[f64],
     coord_y: &[f64],
-    family: WeightFamily,
+    family: OccupationFamily,
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     let costs = EuclideanCostProvider {
         x: coord_x,
         y: coord_y,
@@ -533,16 +538,16 @@ fn sample_strength_cost_coordinates(
 pub fn sample_degree_events_poisson(
     x: &[f64],
     y: &[f64],
-    positive_weight_rate: f64,
+    positive_intensity: f64,
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     sample_model(
         SamplingModel::DegreeEvents {
             x,
             y,
-            positive_weight_rate,
-            family: WeightFamily::Poisson,
+            positive_intensity,
+            family: OccupationFamily::Poisson,
             self_loops,
         },
         seed,
@@ -558,14 +563,14 @@ pub fn sample_strength_degree_poisson(
     w: &[f64],
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     sample_model(
         SamplingModel::StrengthDegree {
             x,
             y,
             z,
             w,
-            family: WeightFamily::Poisson,
+            family: OccupationFamily::Poisson,
             self_loops,
         },
         seed,
@@ -580,13 +585,13 @@ pub fn sample_strength_edges_poisson(
     lam: f64,
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     sample_model(
         SamplingModel::StrengthEdges {
             x,
             y,
             lambda: lam,
-            family: WeightFamily::Poisson,
+            family: OccupationFamily::Poisson,
             self_loops,
         },
         seed,
@@ -605,14 +610,14 @@ pub fn sample_strength_cost_binomial_coordinates(
     layers: u32,
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     sample_strength_cost_coordinates(
         x,
         y,
         gamma,
         coord_x,
         coord_y,
-        WeightFamily::Binomial(layers),
+        OccupationFamily::Binomial(layers),
         self_loops,
         seed,
     )
@@ -627,14 +632,14 @@ pub fn sample_strength_cost_geometric_coordinates(
     coord_y: &[f64],
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     sample_strength_cost_coordinates(
         x,
         y,
         gamma,
         coord_x,
         coord_y,
-        WeightFamily::Geometric,
+        OccupationFamily::Geometric,
         self_loops,
         seed,
     )
@@ -651,14 +656,14 @@ pub fn sample_strength_cost_negative_binomial_coordinates(
     layers: u32,
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     sample_strength_cost_coordinates(
         x,
         y,
         gamma,
         coord_x,
         coord_y,
-        WeightFamily::NegativeBinomial(layers),
+        OccupationFamily::NegativeBinomial(layers),
         self_loops,
         seed,
     )
@@ -672,13 +677,13 @@ pub fn sample_strength_edges_binomial(
     layers: u32,
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     sample_model(
         SamplingModel::StrengthEdges {
             x,
             y,
             lambda: lam,
-            family: WeightFamily::Binomial(layers),
+            family: OccupationFamily::Binomial(layers),
             self_loops,
         },
         seed,
@@ -695,14 +700,14 @@ pub fn sample_strength_degree_binomial(
     layers: u32,
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     sample_model(
         SamplingModel::StrengthDegree {
             x,
             y,
             z,
             w,
-            family: WeightFamily::Binomial(layers),
+            family: OccupationFamily::Binomial(layers),
             self_loops,
         },
         seed,
@@ -714,17 +719,17 @@ pub fn sample_strength_degree_binomial(
 pub fn sample_degree_events_binomial(
     x: &[f64],
     y: &[f64],
-    positive_weight_rate: f64,
+    positive_intensity: f64,
     layers: u32,
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     sample_model(
         SamplingModel::DegreeEvents {
             x,
             y,
-            positive_weight_rate,
-            family: WeightFamily::Binomial(layers),
+            positive_intensity,
+            family: OccupationFamily::Binomial(layers),
             self_loops,
         },
         seed,
@@ -739,13 +744,13 @@ pub fn sample_strength_edges_geometric(
     lam: f64,
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     sample_model(
         SamplingModel::StrengthEdges {
             x,
             y,
             lambda: lam,
-            family: WeightFamily::Geometric,
+            family: OccupationFamily::Geometric,
             self_loops,
         },
         seed,
@@ -761,13 +766,13 @@ pub fn sample_strength_edges_negative_binomial(
     layers: u32,
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     sample_model(
         SamplingModel::StrengthEdges {
             x,
             y,
             lambda: lam,
-            family: WeightFamily::NegativeBinomial(layers),
+            family: OccupationFamily::NegativeBinomial(layers),
             self_loops,
         },
         seed,
@@ -783,14 +788,14 @@ pub fn sample_strength_degree_geometric(
     w: &[f64],
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     sample_model(
         SamplingModel::StrengthDegree {
             x,
             y,
             z,
             w,
-            family: WeightFamily::Geometric,
+            family: OccupationFamily::Geometric,
             self_loops,
         },
         seed,
@@ -807,14 +812,14 @@ pub fn sample_strength_degree_negative_binomial(
     layers: u32,
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     sample_model(
         SamplingModel::StrengthDegree {
             x,
             y,
             z,
             w,
-            family: WeightFamily::NegativeBinomial(layers),
+            family: OccupationFamily::NegativeBinomial(layers),
             self_loops,
         },
         seed,
@@ -826,16 +831,16 @@ pub fn sample_strength_degree_negative_binomial(
 pub fn sample_degree_events_geometric(
     x: &[f64],
     y: &[f64],
-    positive_weight_rate: f64,
+    positive_intensity: f64,
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     sample_model(
         SamplingModel::DegreeEvents {
             x,
             y,
-            positive_weight_rate,
-            family: WeightFamily::Geometric,
+            positive_intensity,
+            family: OccupationFamily::Geometric,
             self_loops,
         },
         seed,
@@ -847,17 +852,17 @@ pub fn sample_degree_events_geometric(
 pub fn sample_degree_events_negative_binomial(
     x: &[f64],
     y: &[f64],
-    positive_weight_rate: f64,
+    positive_intensity: f64,
     layers: u32,
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     sample_model(
         SamplingModel::DegreeEvents {
             x,
             y,
-            positive_weight_rate,
-            family: WeightFamily::NegativeBinomial(layers),
+            positive_intensity,
+            family: OccupationFamily::NegativeBinomial(layers),
             self_loops,
         },
         seed,
@@ -872,11 +877,11 @@ pub fn sample_strength_multinomial(
     total_events: u64,
     self_loops: bool,
     seed: u64,
-) -> SampledEdges {
+) -> SampledNetwork {
     let mut rng = StdRng::seed_from_u64(seed);
     let n = x.len();
     let y_sum: f64 = y.iter().sum();
-    let mut result = SampledEdges::default();
+    let mut result = SampledNetwork::default();
 
     let row_rates: Vec<f64> = x
         .iter()
@@ -903,11 +908,11 @@ pub fn sample_strength_multinomial(
         return result;
     }
 
-    let chunks: Vec<SampledEdges> = row_events
+    let chunks: Vec<SampledNetwork> = row_events
         .par_iter()
         .enumerate()
         .map(|(i, &t_i)| {
-            let mut local = SampledEdges::default();
+            let mut local = SampledNetwork::default();
             let mut row_rng = StdRng::seed_from_u64(chunk_seed(seed, i));
             append_multinomial_row(&mut local, i, t_i, y, self_loops, &mut row_rng);
             local
@@ -917,7 +922,7 @@ pub fn sample_strength_multinomial(
 }
 
 fn append_multinomial_row(
-    result: &mut SampledEdges,
+    result: &mut SampledNetwork,
     i: usize,
     total_events: u64,
     y: &[f64],
@@ -936,7 +941,7 @@ fn append_multinomial_row(
         if count > 0 {
             result.sources.push(i as u64);
             result.targets.push(j as u64);
-            result.weights.push(count);
+            result.occ_nums.push(count);
         }
     }
 }
@@ -947,7 +952,7 @@ fn sparse_multinomial_sample(
     rates: &[f64],
     total: u64,
     rng: &mut StdRng,
-) -> SampledEdges {
+) -> SampledNetwork {
     if rates.len() < SPARSE_CHUNK_SIZE || total == 0 {
         return sparse_multinomial_sample_serial(sources, targets, rates, total, rng);
     }
@@ -961,7 +966,7 @@ fn sparse_multinomial_sample(
         .collect();
     let chunk_events = multinomial_sample(&chunk_rates, total, rng);
     let base_seed = rng.random::<u64>();
-    let chunks: Vec<SampledEdges> = ranges
+    let chunks: Vec<SampledNetwork> = ranges
         .into_par_iter()
         .zip(chunk_events.into_par_iter())
         .enumerate()
@@ -985,8 +990,8 @@ fn sparse_multinomial_sample_serial(
     rates: &[f64],
     total: u64,
     rng: &mut StdRng,
-) -> SampledEdges {
-    let mut result = SampledEdges::default();
+) -> SampledNetwork {
+    let mut result = SampledNetwork::default();
     let rate_sum: f64 = rates.iter().sum();
     if rate_sum == 0.0 || total == 0 {
         return result;
@@ -1012,7 +1017,7 @@ fn sparse_multinomial_sample_serial(
         if count > 0 {
             result.sources.push(source);
             result.targets.push(target);
-            result.weights.push(count);
+            result.occ_nums.push(count);
         }
         remaining -= count;
         remaining_rate -= rate;
@@ -1022,7 +1027,7 @@ fn sparse_multinomial_sample_serial(
         if let Some((source, target)) = last_positive {
             result.sources.push(source);
             result.targets.push(target);
-            result.weights.push(remaining);
+            result.occ_nums.push(remaining);
         }
     }
     result
@@ -1093,7 +1098,7 @@ mod tests {
         let b = sample_strength_poisson(&x, &y, true, 42);
         assert_eq!(a.sources, b.sources);
         assert_eq!(a.targets, b.targets);
-        assert_eq!(a.weights, b.weights);
+        assert_eq!(a.occ_nums, b.occ_nums);
     }
 
     #[test]
@@ -1102,7 +1107,7 @@ mod tests {
         let y = vec![4.0, 6.0, 1.0];
         let total = 1000;
         let edges = sample_strength_multinomial(&x, &y, total, true, 42);
-        let sum: u64 = edges.weights.iter().sum();
+        let sum: u64 = edges.occ_nums.iter().sum();
         assert_eq!(sum, total);
     }
 
@@ -1116,8 +1121,8 @@ mod tests {
         let b = sample_strength_degree_poisson(&dx, &dy, &ex, &ey, true, 42);
         assert_eq!(a.sources, b.sources);
         assert_eq!(a.targets, b.targets);
-        assert_eq!(a.weights, b.weights);
-        assert!(a.weights.iter().all(|&w| w > 0));
+        assert_eq!(a.occ_nums, b.occ_nums);
+        assert!(a.occ_nums.iter().all(|&w| w > 0));
     }
 
     #[test]
@@ -1125,7 +1130,7 @@ mod tests {
         let s_out = vec![10, 20, 30];
         let s_in = vec![15, 25, 20];
         let edges = sample_strength_stub_matching(&s_out, &s_in, 42);
-        let total: u64 = edges.weights.iter().sum();
+        let total: u64 = edges.occ_nums.iter().sum();
         assert_eq!(total, 60);
         let mut actual_out = vec![0u64; 3];
         let mut actual_in = vec![0u64; 3];
@@ -1133,7 +1138,7 @@ mod tests {
             .sources
             .iter()
             .zip(edges.targets.iter())
-            .zip(edges.weights.iter())
+            .zip(edges.occ_nums.iter())
         {
             actual_out[src as usize] += w;
             actual_in[tgt as usize] += w;
@@ -1157,6 +1162,6 @@ mod tests {
         let x = vec![0.5; 100];
         let y = vec![0.5; 100];
         let edges = super::sample_degree_events_poisson(&x, &y, 0.0, true, 42);
-        assert!(edges.weights.iter().all(|&w| w >= 1));
+        assert!(edges.occ_nums.iter().all(|&w| w >= 1));
     }
 }

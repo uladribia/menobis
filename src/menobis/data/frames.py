@@ -27,24 +27,24 @@ class ProbabilityTable:
 
 @dataclass(frozen=True)
 class EdgeTable:
-    """Canonical MENoBiS weighted edge table stored as numpy arrays."""
+    """Canonical MENoBiS occupied-pair table stored as numpy arrays."""
 
     source: NDArray[np.uint64]
     target: NDArray[np.uint64]
-    weight: NDArray[np.uint64]
+    occ_num: NDArray[np.uint64]
 
     @property
     def num_edges(self) -> int:
-        """Number of edges with positive weight."""
+        """Number of occupied pairs."""
         return len(self.source)
 
     @property
     def total_events(self) -> int:
-        """Total weight sum."""
-        return int(self.weight.sum())
+        """Total occupation-number sum."""
+        return int(self.occ_num.sum())
 
     def __len__(self) -> int:
-        """Number of edges."""
+        """Number of occupied pairs."""
         return len(self.source)
 
 
@@ -81,44 +81,44 @@ def normalize_probabilities(
 def normalize_edges(
     source: NDArray[np.integer],
     target: NDArray[np.integer],
-    weight: NDArray[np.integer],
+    occ_num: NDArray[np.integer],
 ) -> EdgeTable:
     """Validate and normalize raw edge arrays.
 
-    Drops zero-weight edges, rejects negative or fractional weights.
+    Drops zero-occupation pairs, rejects negative or fractional occupation numbers.
 
     Args:
         source: Source node ids.
         target: Target node ids.
-        weight: Edge weights.
+        occ_num: Pair occupation numbers.
 
     Returns:
         Normalized EdgeTable.
 
     Raises:
-        ValueError: If arrays have different lengths or weights are invalid.
+        ValueError: If arrays have different lengths or occupation numbers are invalid.
     """
-    if len(source) != len(target) or len(source) != len(weight):
-        msg = "source, target, and weight arrays must have the same length"
+    if len(source) != len(target) or len(source) != len(occ_num):
+        msg = "source, target, and occ_num arrays must have the same length"
         raise ValueError(msg)
 
-    raw_weight = np.asarray(weight)
-    if not np.issubdtype(raw_weight.dtype, np.integer) and not np.all(
-        np.equal(raw_weight, np.floor(raw_weight))
+    raw_occ = np.asarray(occ_num)
+    if not np.issubdtype(raw_occ.dtype, np.integer) and not np.all(
+        np.equal(raw_occ, np.floor(raw_occ))
     ):
-        msg = "edge weights must be non-negative integers"
+        msg = "occupation numbers must be non-negative integers"
         raise ValueError(msg)
 
-    w = raw_weight.astype(np.int64)
+    w = raw_occ.astype(np.int64)
     if np.any(w < 0):
-        msg = "edge weights must be non-negative integers"
+        msg = "occupation numbers must be non-negative integers"
         raise ValueError(msg)
 
     mask = w > 0
     return EdgeTable(
         source=np.asarray(source, dtype=np.uint64)[mask],
         target=np.asarray(target, dtype=np.uint64)[mask],
-        weight=np.asarray(w, dtype=np.uint64)[mask],
+        occ_num=np.asarray(w, dtype=np.uint64)[mask],
     )
 
 

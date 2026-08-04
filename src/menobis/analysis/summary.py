@@ -14,7 +14,7 @@ def directed_strengths(edges: EdgeTable) -> DirectedSequences:
     """Compute directed in/out strength sequences."""
     nc = _node_count(edges)
     s_out, s_in = _menobis.directed_strengths(
-        nc, edges.source.tolist(), edges.target.tolist(), edges.weight.tolist()
+        nc, edges.source.tolist(), edges.target.tolist(), edges.occ_num.tolist()
     )
     return DirectedSequences(
         node=np.arange(nc, dtype=np.uint64),
@@ -27,7 +27,7 @@ def directed_degrees(edges: EdgeTable) -> DirectedSequences:
     """Compute directed in/out binary degrees."""
     nc = _node_count(edges)
     k_out, k_in = _menobis.directed_degrees(
-        nc, edges.source.tolist(), edges.target.tolist(), edges.weight.tolist()
+        nc, edges.source.tolist(), edges.target.tolist(), edges.occ_num.tolist()
     )
     return DirectedSequences(
         node=np.arange(nc, dtype=np.uint64),

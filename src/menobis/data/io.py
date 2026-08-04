@@ -92,7 +92,7 @@ def write_edges(edges: EdgeTable, path: Path | str) -> None:
         {
             "source": pa.array(edges.source, type=pa.uint64()),
             "target": pa.array(edges.target, type=pa.uint64()),
-            "weight": pa.array(edges.weight, type=pa.uint64()),
+            "occ_num": pa.array(edges.occ_num, type=pa.uint64()),
         }
     )
 
@@ -132,10 +132,11 @@ def _read_ipc(path: Path) -> EdgeTable:
 
 
 def _arrow_to_edges(table: pa.Table) -> EdgeTable:
+    occ_col = "occ_num" if "occ_num" in table.column_names else "weight"
     return normalize_edges(
         source=table.column("source").to_numpy(),
         target=table.column("target").to_numpy(),
-        weight=table.column("weight").to_numpy(),
+        occ_num=table.column(occ_col).to_numpy(),
     )
 
 
@@ -154,7 +155,7 @@ def _read_graphml(path: Path) -> EdgeTable:
         t = _parse_non_negative_integer(edge.attrib["target"])
         w = 1
         for data in edge.findall(f"{namespace}data"):
-            if key_to_name.get(data.attrib.get("key", "")) == "weight":
+            if key_to_name.get(data.attrib.get("key", "")) in {"occ_num", "weight"}:
                 w = _parse_non_negative_integer(data.text or "")
                 break
         sources.append(s)
@@ -179,7 +180,7 @@ def _read_matrix_market(path: Path) -> EdgeTable:
             dimensions_seen = True
             continue
         if len(parts) < 3:
-            msg = "Matrix Market coordinate entries must contain source target weight"
+            msg = "Matrix Market coordinate entries must contain source target value"
             raise ValueError(msg)
         sources.append(_parse_positive_integer(parts[0]) - 1)
         targets.append(_parse_positive_integer(parts[1]) - 1)

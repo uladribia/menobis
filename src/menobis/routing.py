@@ -74,7 +74,7 @@ def fit_model(
     coord_y: NDArray[Any] | None = None,
     known_source: NDArray[Any] | None = None,
     known_target: NDArray[Any] | None = None,
-    known_rate: NDArray[Any] | None = None,
+    known_occnum: NDArray[Any] | None = None,
     layers: int = 1,
     self_loops: bool = True,
     tolerance: float = 1e-8,
@@ -82,11 +82,15 @@ def fit_model(
 ) -> FitResult:
     """Fit a model selected by ensemble, family, and constraint.
 
-    When known_source, known_target, and known_rate are provided, performs
+    When known_source, known_target, and known_occnum are provided, performs
     partial fitting where those pairs are frozen and only the remaining
     pairs are fitted.
     """
-    if known_source is not None and known_target is not None and known_rate is not None:
+    if (
+        known_source is not None
+        and known_target is not None
+        and known_occnum is not None
+    ):
         return cast(
             "FitResult",
             _fit_partial(
@@ -102,7 +106,7 @@ def fit_model(
                 coord_y=coord_y,
                 known_source=known_source,
                 known_target=known_target,
-                known_rate=known_rate,
+                known_occnum=known_occnum,
                 layers=layers,
                 self_loops=self_loops,
                 tolerance=tolerance,
@@ -592,8 +596,8 @@ def _node_count(edges: EdgeTable) -> int:
 def _strengths(edges: EdgeTable, node_count: int) -> tuple[np.ndarray, np.ndarray]:
     out = np.zeros(node_count, dtype=np.uint64)
     incoming = np.zeros(node_count, dtype=np.uint64)
-    np.add.at(out, edges.source, edges.weight)
-    np.add.at(incoming, edges.target, edges.weight)
+    np.add.at(out, edges.source, edges.occ_num)
+    np.add.at(incoming, edges.target, edges.occ_num)
     return out, incoming
 
 
@@ -740,7 +744,7 @@ def _fit_partial(
     coord_y: NDArray[Any] | None,
     known_source: NDArray[Any],
     known_target: NDArray[Any],
-    known_rate: NDArray[Any],
+    known_occnum: NDArray[Any],
     layers: int,
     self_loops: bool,
     tolerance: float,
@@ -776,7 +780,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 self_loops=self_loops,
                 tolerance=tolerance,
                 max_iterations=max_iterations,
@@ -786,7 +790,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 layers=layers,
                 self_loops=self_loops,
                 tolerance=tolerance,
@@ -797,7 +801,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 self_loops=self_loops,
                 tolerance=tolerance,
                 max_iterations=max_iterations,
@@ -807,7 +811,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 self_loops=self_loops,
                 tolerance=tolerance,
                 max_iterations=max_iterations,
@@ -825,7 +829,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 target_edges,
                 self_loops=self_loops,
                 tolerance=tolerance,
@@ -836,7 +840,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 target_edges,
                 layers=layers,
                 self_loops=self_loops,
@@ -848,7 +852,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 target_edges,
                 self_loops=self_loops,
                 tolerance=tolerance,
@@ -859,7 +863,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 target_edges,
                 self_loops=self_loops,
                 tolerance=tolerance,
@@ -880,7 +884,7 @@ def _fit_partial(
                 degree_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 self_loops=self_loops,
                 tolerance=tolerance,
                 max_iterations=max_iterations,
@@ -892,7 +896,7 @@ def _fit_partial(
                 degree_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 layers=layers,
                 self_loops=self_loops,
                 tolerance=tolerance,
@@ -905,7 +909,7 @@ def _fit_partial(
                 degree_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 self_loops=self_loops,
                 tolerance=tolerance,
                 max_iterations=max_iterations,
@@ -917,7 +921,7 @@ def _fit_partial(
                 degree_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 self_loops=self_loops,
                 tolerance=tolerance,
                 max_iterations=max_iterations,
@@ -935,7 +939,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 coord_x,
                 coord_y,
                 target_cost,
@@ -948,7 +952,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 coord_x,
                 coord_y,
                 target_cost,
@@ -962,7 +966,7 @@ def _fit_partial(
                 strength_in,
                 known_source,
                 known_target,
-                known_rate,
+                known_occnum,
                 coord_x,
                 coord_y,
                 target_cost,
@@ -976,7 +980,7 @@ def _fit_partial(
                     strength_in,
                     known_source,
                     known_target,
-                    known_rate,
+                    known_occnum,
                     coord_x,
                     coord_y,
                     target_cost,

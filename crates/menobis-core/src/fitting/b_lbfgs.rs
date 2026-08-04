@@ -1052,7 +1052,7 @@ mod tests {
         let log_q = q.ln();
         let log_v = v.ln();
 
-        let (ln_z, occ, weight) = b_zip_pair_statistics(log_q, log_v, m);
+        let (ln_z, occ, occ_num) = b_zip_pair_statistics(log_q, log_v, m);
 
         let g = (1.0 + q).powi(3) - 1.0;
         let expected_z = 1.0 + v * g;
@@ -1061,7 +1061,7 @@ mod tests {
 
         assert!((ln_z - expected_z.ln()).abs() < 1e-13);
         assert!((occ - expected_occ).abs() < 1e-13);
-        assert!((weight - expected_weight).abs() < 1e-13);
+        assert!((occ_num - expected_weight).abs() < 1e-13);
     }
 
     #[test]

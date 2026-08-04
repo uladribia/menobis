@@ -149,7 +149,7 @@ fn me_sd_pair_statistics_from_values(q: f64, v: f64) -> (f64, f64) {
     (occupation, expected_weight)
 }
 
-/// ME strength-degree expected weight:
+/// ME strength-degree expected occ_num:
 /// E[t_ij] = v * q * exp(q) / (1 + v * (exp(q) - 1))
 /// where q = x_i * y_j, v = z_i * w_j
 #[cfg(test)]
@@ -656,10 +656,10 @@ mod tests {
         let expected_occupation = v * (exp_q - 1.0) / (1.0 + v * (exp_q - 1.0));
         let expected_weight = v * q * exp_q / (1.0 + v * (exp_q - 1.0));
 
-        let (occupation, weight) = me_sd_pair_statistics_from_values(q, v);
+        let (occupation, occ_num) = me_sd_pair_statistics_from_values(q, v);
 
         assert!((occupation - expected_occupation).abs() < 1e-14);
-        assert!((weight - expected_weight).abs() < 1e-14);
+        assert!((occ_num - expected_weight).abs() < 1e-14);
         assert!((me_sd_occupation(q, v) - expected_occupation).abs() < 1e-14);
         assert!((me_sd_expected_weight(q, v) - expected_weight).abs() < 1e-14);
     }
@@ -682,11 +682,11 @@ mod tests {
                 let q = x[i] * y[j];
                 let v = z[i] * w[j];
                 let occupation = me_sd_occupation(q, v);
-                let weight = me_sd_expected_weight(q, v);
+                let occ_num = me_sd_expected_weight(q, v);
                 k_out[i] += occupation;
                 k_in[j] += occupation;
-                s_out[i] += weight;
-                s_in[j] += weight;
+                s_out[i] += occ_num;
+                s_in[j] += occ_num;
             }
         }
 
@@ -730,11 +730,11 @@ mod tests {
                 let q = x[i] * y[j];
                 let v = z[i] * w[j];
                 let occupation = me_sd_occupation(q, v);
-                let weight = me_sd_expected_weight(q, v);
+                let occ_num = me_sd_expected_weight(q, v);
                 k_out[i] += occupation;
                 k_in[j] += occupation;
-                s_out[i] += weight;
-                s_in[j] += weight;
+                s_out[i] += occ_num;
+                s_in[j] += occ_num;
             }
         }
 

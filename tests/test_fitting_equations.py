@@ -15,9 +15,9 @@ import pytest
 
 
 class TestMEFormulas:
-    """Verify ME/Poisson expected weight and occupation formulas."""
+    """Verify ME/Poisson expected occupation formulas."""
 
-    def test_non_zero_inflated_expected_weight(self) -> None:
+    def test_non_zero_inflated_expected_occ_num(self) -> None:
         """ME non-ZI: E[t_ij] = q_ij = x_i * y_j."""
         x = np.array([0.5, 1.0, 2.0, 0.3, 1.5])
         y = np.array([0.4, 0.8, 1.2, 0.6, 1.0])
@@ -42,18 +42,18 @@ class TestMEFormulas:
         # occ = 0.3443 / 1.3443 = 0.2562...
         assert expected_occ == pytest.approx(0.25617, rel=1e-3)
 
-    def test_zero_inflated_expected_weight(self) -> None:
+    def test_zero_inflated_expected_occ_num(self) -> None:
         """E[t_ij] = v * q * exp(q) / (1 + v*G(q))."""
         q, v = 0.4, 0.7
         exp_q = math.exp(q)
         g = exp_q - 1.0
-        expected_weight = v * q * exp_q / (1.0 + v * g)
+        expected_occ_num = v * q * exp_q / (1.0 + v * g)
         # v*q*exp(q) = 0.7*0.4*1.4918 = 0.4177
         # denom = 1 + 0.7*0.4918 = 1.3443
-        # weight = 0.4177/1.3443 = 0.3107...
-        assert expected_weight == pytest.approx(0.3107, rel=1e-3)
+        # occ_num = 0.4177/1.3443 = 0.3107...
+        assert expected_occ_num == pytest.approx(0.3107, rel=1e-3)
 
-    def test_conditional_weight_given_positive(self) -> None:
+    def test_conditional_occnum_given_positive(self) -> None:
         """E[t|t>0] = q*exp(q)/(exp(q)-1) = q/(1-exp(-q))."""
         q = 0.4
         conditional = q / (1.0 - math.exp(-q))
@@ -67,9 +67,9 @@ class TestMEFormulas:
 
 
 class TestBFormulas:
-    """Verify B/Binomial expected weight and occupation formulas."""
+    """Verify B/Binomial expected occupation formulas."""
 
-    def test_non_zero_inflated_expected_weight(self) -> None:
+    def test_non_zero_inflated_expected_occ_num(self) -> None:
         """B non-ZI: E[t_ij] = M*q/(1+q)."""
         q, m = 0.5, 10
         expected = m * q / (1.0 + q)
@@ -92,17 +92,17 @@ class TestBFormulas:
         # occ = 1.35647/2.35647 = 0.57564
         assert occ == pytest.approx(0.57564, rel=1e-3)
 
-    def test_zero_inflated_expected_weight(self) -> None:
+    def test_zero_inflated_expected_occ_num(self) -> None:
         """E[t_ij] = v * M * q * (1+q)^(M-1) / (1 + v*G_B(q))."""
         q, v, m = 0.3, 0.5, 5
         g = (1.0 + q) ** m - 1.0
-        weight = v * m * q * (1.0 + q) ** (m - 1) / (1.0 + v * g)
+        occ_num = v * m * q * (1.0 + q) ** (m - 1) / (1.0 + v * g)
         # numerator: 0.5*5*0.3*(1.3)^4 = 0.75*2.8561 = 2.1421
         # denom: 1 + 0.5*2.71293 = 2.35647
-        # weight = 2.1421/2.35647 = 0.90903
-        assert weight == pytest.approx(0.90903, rel=1e-3)
+        # occ_num = 2.1421/2.35647 = 0.90903
+        assert occ_num == pytest.approx(0.90903, rel=1e-3)
 
-    def test_conditional_weight_given_positive(self) -> None:
+    def test_conditional_occnum_given_positive(self) -> None:
         """E[t|t>0] = M*q*(1+q)^(M-1) / ((1+q)^M - 1)."""
         q, m = 0.3, 5
         g = (1.0 + q) ** m - 1.0
@@ -115,9 +115,9 @@ class TestBFormulas:
 
 
 class TestWFormulas:
-    """Verify W/Geometric/NegBin expected weight and occupation formulas."""
+    """Verify W/Geometric/NegBin expected occupation and occupation formulas."""
 
-    def test_non_zero_inflated_expected_weight(self) -> None:
+    def test_non_zero_inflated_expected_occ_num(self) -> None:
         """W non-ZI: E[t_ij] = M*q/(1-q) with q in (0,1)."""
         q, m = 0.3, 1
         expected = m * q / (1.0 - q)
@@ -147,17 +147,17 @@ class TestWFormulas:
         # occ = 1.1493/2.1493 = 0.5347
         assert occ == pytest.approx(0.5347, rel=1e-3)
 
-    def test_zero_inflated_expected_weight(self) -> None:
+    def test_zero_inflated_expected_occ_num(self) -> None:
         """E[t_ij] = v * M * q * (1-q)^(-M-1) / (1 + v*G_W(q))."""
         q, v, m = 0.3, 0.6, 3
         g = (1.0 - q) ** (-m) - 1.0
-        weight = v * m * q * (1.0 - q) ** (-m - 1) / (1.0 + v * g)
+        occ_num = v * m * q * (1.0 - q) ** (-m - 1) / (1.0 + v * g)
         # numerator: 0.6*3*0.3*(0.7)^(-4) = 0.54*4.1650 = 2.2491
         # denom: 1 + 0.6*1.9155 = 2.1493
-        # weight = 2.2491/2.1493 = 1.0465
-        assert weight == pytest.approx(1.0465, rel=1e-3)
+        # occ_num = 2.2491/2.1493 = 1.0465
+        assert occ_num == pytest.approx(1.0465, rel=1e-3)
 
-    def test_conditional_weight_given_positive(self) -> None:
+    def test_conditional_occnum_given_positive(self) -> None:
         """E[t|t>0] = M*q*(1-q)^(-M-1) / ((1-q)^(-M) - 1)."""
         q, m = 0.3, 3
         g = (1.0 - q) ** (-m) - 1.0

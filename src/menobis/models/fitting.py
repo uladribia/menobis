@@ -220,8 +220,8 @@ def _validate_strength_degree_constraints(
     """Validate coupled strength-degree model constraints.
 
     Every node must have strength greater than or equal to degree because MENoBiS
-    accepts only positive integer edge weights. A node with degree ``k`` has at
-    least ``k`` unit-weight edges and therefore strength at least ``k``.
+    accepts only positive integer occupation numbers. A node with degree ``k`` has at
+    least ``k`` unit-occupation edges and therefore strength at least ``k``.
 
     Args:
         strength_out: Outgoing strength per node.
@@ -1556,7 +1556,7 @@ def _fit_degree_events_geometric(
     Args:
         degree_out: Outgoing degree per node.
         degree_in: Incoming degree per node.
-        total_events: Total weight T.
+        total_events: Total events T.
         self_loops: Whether self-loops are allowed.
         tolerance: Convergence tolerance for IPF.
         max_iterations: Maximum IPF iterations.
@@ -1628,7 +1628,7 @@ def _fit_degree_events_negative_binomial(
     Args:
         degree_out: Outgoing degree per node.
         degree_in: Incoming degree per node.
-        total_events: Total weight T.
+        total_events: Total events T.
         layers: Number of negative binomial layers M.
         self_loops: Whether self-loops are allowed.
         tolerance: Convergence tolerance for IPF.

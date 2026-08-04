@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from menobis.analysis import clustering_coefficient, weighted_clustering_coefficient
+from menobis.analysis import clustering_coefficient, occupation_clustering_coefficient
 from menobis.data.frames import normalize_edges
 
 
@@ -28,6 +28,6 @@ def test_weighted_clustering_triangle() -> None:
     edges = normalize_edges(
         np.array([0, 1, 2]), np.array([1, 2, 0]), np.array([2, 3, 4])
     )
-    wc = weighted_clustering_coefficient(edges)
+    wc = occupation_clustering_coefficient(edges)
     for v in wc.values:
         assert v > 0

@@ -82,7 +82,7 @@ fn assemble_result_sparse(
     n: usize,
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     mask: &PairMask,
     free_rate_fn: impl Fn(usize, usize) -> f64,
     converged: bool,
@@ -95,7 +95,7 @@ fn assemble_result_sparse(
     for ((&s, &t), &r) in known_src
         .iter()
         .zip(known_tgt.iter())
-        .zip(known_rate.iter())
+        .zip(known_occnum.iter())
     {
         if r > 0.0 {
             sources.push(s);
@@ -136,7 +136,7 @@ pub fn fit_partial_strength(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     self_loops: bool,
     tolerance: f64,
     max_iterations: usize,
@@ -147,14 +147,14 @@ pub fn fit_partial_strength(
     let mask = PairMask::new(n, self_loops, known_src, known_tgt);
 
     let (mut excess_out, mut excess_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -168,7 +168,7 @@ pub fn fit_partial_strength(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -190,7 +190,7 @@ pub fn fit_partial_strength(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
         |i, j| x[i] * y[j],
         fit.converged,
@@ -242,12 +242,12 @@ pub fn fit_partial_degree(
     );
     let x = fit.x;
     let y = fit.y;
-    let known_rate_ones: Vec<f64> = vec![1.0; known_src.len()];
+    let known_occnum_ones: Vec<f64> = vec![1.0; known_src.len()];
     assemble_result_sparse(
         n,
         known_src,
         known_tgt,
-        &known_rate_ones,
+        &known_occnum_ones,
         &mask,
         |i, j| {
             let z = x[i] * y[j];
@@ -268,7 +268,7 @@ pub fn fit_partial_strength_degree(
     degree_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     self_loops: bool,
     tolerance: f64,
     max_iterations: usize,
@@ -281,14 +281,14 @@ pub fn fit_partial_strength_degree(
     let mask = PairMask::new(n, self_loops, known_src, known_tgt);
 
     let (mut excess_s_out, mut excess_s_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -306,7 +306,7 @@ pub fn fit_partial_strength_degree(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -320,7 +320,7 @@ pub fn fit_partial_strength_degree(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -348,7 +348,7 @@ pub fn fit_partial_strength_degree(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
         |i, j| {
             let u = x[i] * y[j];
@@ -374,7 +374,7 @@ pub fn fit_partial_strength_edges(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     target_edges: f64,
     self_loops: bool,
     tolerance: f64,
@@ -387,14 +387,14 @@ pub fn fit_partial_strength_edges(
     let excess_edges = (target_edges - known_src.len() as f64).max(0.0);
 
     let (mut excess_out, mut excess_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -408,7 +408,7 @@ pub fn fit_partial_strength_edges(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -432,7 +432,7 @@ pub fn fit_partial_strength_edges(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
         |i, j| {
             let u = x[i] * y[j];
@@ -694,7 +694,7 @@ fn fit_partial_strength_cost_coordinates_with(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     coord_x: &[f64],
     coord_y: &[f64],
     target_cost: f64,
@@ -709,19 +709,19 @@ fn fit_partial_strength_cost_coordinates_with(
     let known_cost: f64 = known_src
         .iter()
         .zip(known_tgt.iter())
-        .zip(known_rate.iter())
+        .zip(known_occnum.iter())
         .map(|((&s, &t), &r)| r * coord_distance(coord_x, coord_y, s as usize, t as usize))
         .sum();
     let excess_cost = (target_cost - known_cost).max(0.0);
     let (mut excess_out, mut excess_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -734,7 +734,7 @@ fn fit_partial_strength_cost_coordinates_with(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -747,7 +747,7 @@ fn fit_partial_strength_cost_coordinates_with(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
         |i, j| rate(i, j, &fit),
         fit.converged,
@@ -763,7 +763,7 @@ pub fn fit_partial_strength_cost_coordinates(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     coord_x: &[f64],
     coord_y: &[f64],
     target_cost: f64,
@@ -776,7 +776,7 @@ pub fn fit_partial_strength_cost_coordinates(
         strength_in,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         coord_x,
         coord_y,
         target_cost,
@@ -808,7 +808,7 @@ pub fn fit_partial_strength_cost_binomial_coordinates(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     coord_x: &[f64],
     coord_y: &[f64],
     target_cost: f64,
@@ -827,7 +827,7 @@ pub fn fit_partial_strength_cost_binomial_coordinates(
         strength_in,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         coord_x,
         coord_y,
         target_cost,
@@ -860,7 +860,7 @@ pub fn fit_partial_strength_cost_w_coordinates(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     coord_x: &[f64],
     coord_y: &[f64],
     target_cost: f64,
@@ -874,7 +874,7 @@ pub fn fit_partial_strength_cost_w_coordinates(
         strength_in,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         coord_x,
         coord_y,
         target_cost,
@@ -916,7 +916,7 @@ pub fn fit_partial_strength_binomial(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     layers: u32,
     self_loops: bool,
     tolerance: f64,
@@ -928,14 +928,14 @@ pub fn fit_partial_strength_binomial(
     let mask = PairMask::new(n, self_loops, known_src, known_tgt);
 
     let (mut excess_out, mut excess_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -949,7 +949,7 @@ pub fn fit_partial_strength_binomial(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -973,7 +973,7 @@ pub fn fit_partial_strength_binomial(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
         |i, j| {
             let q = x[i] * y[j];
@@ -992,7 +992,7 @@ pub fn fit_partial_strength_edges_binomial(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     target_edges: f64,
     layers: u32,
     self_loops: bool,
@@ -1006,14 +1006,14 @@ pub fn fit_partial_strength_edges_binomial(
     let excess_edges = (target_edges - known_src.len() as f64).max(0.0);
 
     let (mut excess_out, mut excess_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -1027,7 +1027,7 @@ pub fn fit_partial_strength_edges_binomial(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -1053,7 +1053,7 @@ pub fn fit_partial_strength_edges_binomial(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
         |i, j| {
             let q = x[i] * y[j];
@@ -1080,7 +1080,7 @@ pub fn fit_partial_strength_degree_binomial(
     degree_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     layers: u32,
     self_loops: bool,
     tolerance: f64,
@@ -1094,14 +1094,14 @@ pub fn fit_partial_strength_degree_binomial(
     let mask = PairMask::new(n, self_loops, known_src, known_tgt);
 
     let (mut excess_s_out, mut excess_s_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -1119,7 +1119,7 @@ pub fn fit_partial_strength_degree_binomial(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -1133,7 +1133,7 @@ pub fn fit_partial_strength_degree_binomial(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -1163,7 +1163,7 @@ pub fn fit_partial_strength_degree_binomial(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
         |i, j| {
             let q = x[i] * y[j];
@@ -1193,7 +1193,7 @@ pub fn fit_partial_strength_w(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     layers: u32,
     self_loops: bool,
     tolerance: f64,
@@ -1205,14 +1205,14 @@ pub fn fit_partial_strength_w(
     let mask = PairMask::new(n, self_loops, known_src, known_tgt);
 
     let (mut excess_out, mut excess_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -1226,7 +1226,7 @@ pub fn fit_partial_strength_w(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -1250,7 +1250,7 @@ pub fn fit_partial_strength_w(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
         |i, j| {
             let q = x[i] * y[j];
@@ -1274,7 +1274,7 @@ pub fn fit_partial_strength_degree_w(
     degree_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     layers: u32,
     self_loops: bool,
     tolerance: f64,
@@ -1288,14 +1288,14 @@ pub fn fit_partial_strength_degree_w(
     let mask = PairMask::new(n, self_loops, known_src, known_tgt);
 
     let (mut excess_s_out, mut excess_s_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -1313,7 +1313,7 @@ pub fn fit_partial_strength_degree_w(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -1327,7 +1327,7 @@ pub fn fit_partial_strength_degree_w(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -1353,7 +1353,7 @@ pub fn fit_partial_strength_degree_w(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
         |i, j| {
             let q = x[i] * y[j];
@@ -1385,7 +1385,7 @@ pub fn fit_partial_strength_edges_w(
     strength_in: &[f64],
     known_src: &[u64],
     known_tgt: &[u64],
-    known_rate: &[f64],
+    known_occnum: &[f64],
     target_edges: f64,
     layers: u32,
     self_loops: bool,
@@ -1399,14 +1399,14 @@ pub fn fit_partial_strength_edges_w(
     let excess_edges = (target_edges - known_src.len() as f64).max(0.0);
 
     let (mut excess_out, mut excess_in) =
-        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_rate) {
+        match compute_excess(&s_out, &s_in, known_src, known_tgt, known_occnum) {
             Some(v) => v,
             None => {
                 return assemble_result_sparse(
                     n,
                     known_src,
                     known_tgt,
-                    known_rate,
+                    known_occnum,
                     &mask,
                     |_, _| 0.0,
                     false,
@@ -1420,7 +1420,7 @@ pub fn fit_partial_strength_edges_w(
             n,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             &mask,
             |_, _| 0.0,
             true,
@@ -1447,7 +1447,7 @@ pub fn fit_partial_strength_edges_w(
         n,
         known_src,
         known_tgt,
-        known_rate,
+        known_occnum,
         &mask,
         |i, j| {
             let q = x[i] * y[j];

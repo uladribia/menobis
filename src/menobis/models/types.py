@@ -208,7 +208,7 @@ class DegreeEventsFit(FitResult):
     """Fitting result for degree-events models (all families).
 
     The model factorizes into occupation (Bernoulli via x, y) and
-    positive-weight distribution parameterized by q.
+    positive-occupation distribution parameterized by q.
     """
 
     node: NDArray[np.uint64]
@@ -239,7 +239,7 @@ class PartialFitResult(FitResult):
     diagnostics: OptimizationDiagnostics | None = None
 
     def as_probability_table(self) -> ProbabilityTable:
-        """Convert to ProbabilityTable for sampling (rates as weights)."""
+        """Convert to ProbabilityTable for sampling (rates as intensities)."""
         return ProbabilityTable(
             source=self.source,
             target=self.target,

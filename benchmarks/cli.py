@@ -198,7 +198,7 @@ def _fit_case(
         indices = rng.choice(network.edges.num_edges, size=n_known, replace=False)
         kwargs["known_source"] = network.edges.source[indices].astype(np.uint64)
         kwargs["known_target"] = network.edges.target[indices].astype(np.uint64)
-        kwargs["known_rate"] = network.edges.weight[indices].astype(np.float64)
+        kwargs["known_occnum"] = network.edges.occ_num[indices].astype(np.float64)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -248,7 +248,7 @@ def _compute_partial_precision(
 
     The partial fit returns expected rates for free (fitted) pairs.
     Known pairs are edges present in network.edges but not in the free-pair
-    list; they contribute their observed weights directly.
+    list; they contribute their observed occupation numbers directly.
     """
     result: dict[str, float | None] = {
         "max_s_out_err": None,
@@ -291,7 +291,7 @@ def _compute_partial_precision(
     for i_edge in range(len(network.edges)):
         s = int(network.edges.source[i_edge])
         t = int(network.edges.target[i_edge])
-        w = float(network.edges.weight[i_edge])
+        w = float(network.edges.occ_num[i_edge])
         if (s, t) not in free_pairs:
             s_out[s] += w
             s_in[t] += w
@@ -313,7 +313,7 @@ def _compute_partial_precision(
         total_edges += float(np.sum(1.0 - np.exp(-fit_rate)))
         result["edge_count_err"] = abs(total_edges - c.total_edges)
 
-    # Cost: free + known pairs, each weighted by Euclidean distance
+    # Cost: free + known pairs, each priced by Euclidean distance
     if constraint == "strength-cost":
         total_cost = 0.0
         for i in range(len(fit_src)):
@@ -340,7 +340,7 @@ def _compute_partial_precision(
                     float(network.y[s]) - float(network.y[t]),
                 )
             )
-            total_cost += float(network.edges.weight[i_edge]) * d
+            total_cost += float(network.edges.occ_num[i_edge]) * d
         result["cost_err"] = abs(total_cost - c.total_cost)
 
     return result
@@ -410,20 +410,20 @@ def _compute_precision(
             if q <= 0.0:
                 continue
 
-            # Compute expected weight and occupation based on family + constraint
+            # Compute expected occ_num and occupation based on family + constraint
             if constraint == "strength" or constraint == "strength-cost":
                 # Non-ZI: independent statistics
                 if "binomial" in family or "Binomial" in str(type(fit)):
-                    weight = m * q / (1.0 + q)
+                    occ_num = m * q / (1.0 + q)
                     occ = 1.0  # not ZI
                 elif "geometric" in family or "Geometric" in str(type(fit)):
                     if q >= 1.0:
                         continue
-                    weight = m * q / (1.0 - q)
+                    occ_num = m * q / (1.0 - q)
                     occ = 1.0
                 else:
                     # ME/Poisson
-                    weight = q
+                    occ_num = q
                     occ = 1.0
             elif constraint == "strength-edges":
                 # ZI with scalar lam
@@ -433,21 +433,21 @@ def _compute_precision(
                     g = (1.0 + q) ** layers - 1.0
                     den = 1.0 + lam * g
                     occ = lam * g / den
-                    weight = lam * m * q * (1.0 + q) ** (layers - 1) / den
+                    occ_num = lam * m * q * (1.0 + q) ** (layers - 1) / den
                 elif "geometric" in family or "Geometric" in str(type(fit)):
                     if q >= 1.0:
                         continue
                     g = (1.0 - q) ** (-layers) - 1.0
                     den = 1.0 + lam * g
                     occ = lam * g / den
-                    weight = lam * m * q * (1.0 - q) ** (-layers - 1) / den
+                    occ_num = lam * m * q * (1.0 - q) ** (-layers - 1) / den
                 else:
                     # ME
                     exp_q = np.exp(q)
                     g = exp_q - 1.0
                     den = 1.0 + lam * g
                     occ = lam * g / den
-                    weight = lam * q * exp_q / den
+                    occ_num = lam * q * exp_q / den
             elif constraint == "strength-degree":
                 # ZI with per-node z/w
                 if z is None or w is None:
@@ -459,26 +459,26 @@ def _compute_precision(
                     g = (1.0 + q) ** layers - 1.0
                     den = 1.0 + v * g
                     occ = v * g / den
-                    weight = v * m * q * (1.0 + q) ** (layers - 1) / den
+                    occ_num = v * m * q * (1.0 + q) ** (layers - 1) / den
                 elif "geometric" in family or "Geometric" in str(type(fit)):
                     if q >= 1.0:
                         continue
                     g = (1.0 - q) ** (-layers) - 1.0
                     den = 1.0 + v * g
                     occ = v * g / den
-                    weight = v * m * q * (1.0 - q) ** (-layers - 1) / den
+                    occ_num = v * m * q * (1.0 - q) ** (-layers - 1) / den
                 else:
                     # ME
                     exp_q = np.exp(q)
                     g = exp_q - 1.0
                     den = 1.0 + v * g
                     occ = v * g / den
-                    weight = v * q * exp_q / den
+                    occ_num = v * q * exp_q / den
             else:
                 continue
 
-            s_out[i] += weight
-            s_in[j] += weight
+            s_out[i] += occ_num
+            s_in[j] += occ_num
             k_out[i] += occ
             k_in[j] += occ
             total_edges += occ
@@ -486,7 +486,7 @@ def _compute_precision(
                 d = float(
                     np.hypot(network.x[i] - network.x[j], network.y[i] - network.y[j])
                 )
-                total_cost += weight * d
+                total_cost += occ_num * d
 
     # Compute errors
     max_s = max(c.strength_out.max(), c.strength_in.max(), 1.0)

@@ -11,7 +11,7 @@ def clustering_coefficient(edges: EdgeTable) -> ClusteringResult:
     """Compute binary clustering coefficient per node (Rust kernel)."""
     nc = _node_count(edges)
     values = _menobis.clustering_coefficients(
-        nc, edges.source.tolist(), edges.target.tolist(), edges.weight.tolist()
+        nc, edges.source.tolist(), edges.target.tolist(), edges.occ_num.tolist()
     )
     return ClusteringResult(
         node=np.arange(nc, dtype=np.uint64),
@@ -19,11 +19,11 @@ def clustering_coefficient(edges: EdgeTable) -> ClusteringResult:
     )
 
 
-def weighted_clustering_coefficient(edges: EdgeTable) -> ClusteringResult:
-    """Compute weighted clustering coefficient per node (Rust kernel)."""
+def occupation_clustering_coefficient(edges: EdgeTable) -> ClusteringResult:
+    """Compute occupation-based clustering coefficient per node (Rust kernel)."""
     nc = _node_count(edges)
-    values = _menobis.weighted_clustering_coefficients(
-        nc, edges.source.tolist(), edges.target.tolist(), edges.weight.tolist()
+    values = _menobis.occupation_clustering_coefficients(
+        nc, edges.source.tolist(), edges.target.tolist(), edges.occ_num.tolist()
     )
     return ClusteringResult(
         node=np.arange(nc, dtype=np.uint64),
@@ -40,5 +40,5 @@ def _node_count(edges: EdgeTable) -> int:
 __all__ = [
     "ClusteringResult",
     "clustering_coefficient",
-    "weighted_clustering_coefficient",
+    "occupation_clustering_coefficient",
 ]

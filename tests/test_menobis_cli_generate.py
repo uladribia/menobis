@@ -31,7 +31,7 @@ def test_generate_poisson_to_file(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     content = output_path.read_text()
     assert "source" in content
-    assert "weight" in content
+    assert "occ_num" in content
 
 
 def test_generate_poisson_json(tmp_path: Path) -> None:
@@ -44,4 +44,4 @@ def test_generate_poisson_json(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0, result.output
-    assert '"weight"' in result.output
+    assert '"occ_num"' in result.output

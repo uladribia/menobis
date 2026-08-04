@@ -2,8 +2,8 @@
 
 use crate::distribution::{
     strength_degree_binomial_occupation, strength_degree_distribution,
-    strength_edges_binomial_occupation, strength_edges_distribution, PairDistribution,
-    WeightFamily,
+    strength_edges_binomial_occupation, strength_edges_distribution, OccupationFamily,
+    PairDistribution,
 };
 use std::collections::HashMap;
 /// Provider of pair-level cost values.
@@ -82,13 +82,13 @@ fn splitmix64(mut value: u64) -> u64 {
     z ^ (z >> 31)
 }
 
-/// Generic fixed-strength provider parameterized by weight family.
+/// Generic fixed-strength provider parameterized by occupation family.
 ///
 /// Computes `xy = x[source] * y[target]` and delegates to `family.distribution(xy)`.
 pub struct FixedStrengthProvider<'a> {
     pub x: &'a [f64],
     pub y: &'a [f64],
-    pub family: WeightFamily,
+    pub family: OccupationFamily,
     pub self_loops: bool,
 }
 
@@ -114,7 +114,7 @@ pub struct StrengthCostProvider<'a, C: PairCostProvider + ?Sized> {
     pub y: &'a [f64],
     pub gamma: f64,
     pub costs: &'a C,
-    pub family: WeightFamily,
+    pub family: OccupationFamily,
     pub self_loops: bool,
 }
 
@@ -258,8 +258,8 @@ impl PairDistributionProvider for SparsePoissonRateMapProvider<'_> {
 pub struct DegreeEventsProvider<'a> {
     pub x: &'a [f64],
     pub y: &'a [f64],
-    pub positive_weight_rate: f64,
-    pub family: WeightFamily,
+    pub positive_intensity: f64,
+    pub family: OccupationFamily,
     pub self_loops: bool,
 }
 
@@ -279,7 +279,7 @@ impl PairDistributionProvider for DegreeEventsProvider<'_> {
         let occupation = z / (1.0 + z);
         Some(
             self.family
-                .zip_distribution(occupation, self.positive_weight_rate),
+                .zip_distribution(occupation, self.positive_intensity),
         )
     }
 }
@@ -288,7 +288,7 @@ pub struct StrengthEdgesProvider<'a> {
     pub x: &'a [f64],
     pub y: &'a [f64],
     pub lambda: f64,
-    pub family: WeightFamily,
+    pub family: OccupationFamily,
     pub self_loops: bool,
 }
 
@@ -308,8 +308,8 @@ impl PairDistributionProvider for StrengthEdgesProvider<'_> {
         let yj = self.y[target];
         let xy = xi * yj;
         match self.family {
-            WeightFamily::Poisson => Some(strength_edges_distribution(xi, yj, self.lambda)),
-            WeightFamily::Binomial(m) => {
+            OccupationFamily::Poisson => Some(strength_edges_distribution(xi, yj, self.lambda)),
+            OccupationFamily::Binomial(m) => {
                 let occ = strength_edges_binomial_occupation(xy, self.lambda, m);
                 Some(PairDistribution::ZeroInflatedBinomial {
                     occupation: occ,
@@ -317,7 +317,7 @@ impl PairDistributionProvider for StrengthEdgesProvider<'_> {
                     layers: m,
                 })
             }
-            WeightFamily::Geometric => {
+            OccupationFamily::Geometric => {
                 // G_1(q) = q/(1-q), occupation = lam*G / (1+lam*G)
                 let q = xy.clamp(0.0, 1.0 - 1e-15);
                 let g = q / (1.0 - q);
@@ -332,7 +332,7 @@ impl PairDistributionProvider for StrengthEdgesProvider<'_> {
                     xy: q,
                 })
             }
-            WeightFamily::NegativeBinomial(m) => {
+            OccupationFamily::NegativeBinomial(m) => {
                 // G_M(q) = (1-q)^{-M} - 1
                 let q = xy.clamp(0.0, 1.0 - 1e-15);
                 let g = (1.0 - q).powi(-(m as i32)) - 1.0;
@@ -357,7 +357,7 @@ pub struct StrengthDegreeProvider<'a> {
     pub y: &'a [f64],
     pub z: &'a [f64],
     pub w: &'a [f64],
-    pub family: WeightFamily,
+    pub family: OccupationFamily,
     pub self_loops: bool,
 }
 
@@ -378,13 +378,13 @@ impl PairDistributionProvider for StrengthDegreeProvider<'_> {
         let xy = xi * yj;
         let vij = self.z[source] * self.w[target];
         match self.family {
-            WeightFamily::Poisson => Some(strength_degree_distribution(
+            OccupationFamily::Poisson => Some(strength_degree_distribution(
                 xi,
                 yj,
                 self.z[source],
                 self.w[target],
             )),
-            WeightFamily::Binomial(m) => {
+            OccupationFamily::Binomial(m) => {
                 let occ = strength_degree_binomial_occupation(xy, vij, m);
                 Some(PairDistribution::ZeroInflatedBinomial {
                     occupation: occ,
@@ -392,7 +392,7 @@ impl PairDistributionProvider for StrengthDegreeProvider<'_> {
                     layers: m,
                 })
             }
-            WeightFamily::Geometric => {
+            OccupationFamily::Geometric => {
                 // G_1(q) = q/(1-q), occupation = v*G/(1+v*G)
                 let q = xy.clamp(0.0, 1.0 - 1e-15);
                 let g = q / (1.0 - q);
@@ -403,7 +403,7 @@ impl PairDistributionProvider for StrengthDegreeProvider<'_> {
                     xy: q,
                 })
             }
-            WeightFamily::NegativeBinomial(m) => {
+            OccupationFamily::NegativeBinomial(m) => {
                 let q = xy.clamp(0.0, 1.0 - 1e-15);
                 let g = (1.0 - q).powi(-(m as i32)) - 1.0;
                 let den = 1.0 + vij * g;

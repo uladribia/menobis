@@ -1,9 +1,9 @@
 //! Pair-level null distributions shared by generation and filtering.
 //!
-//! Taxonomy: `WeightFamily` selects the pair-level weight distribution.
+//! Taxonomy: `OccupationFamily` selects the pair-level occ_num distribution.
 //! `PairDistribution` is the concrete distribution for one `(i,j)` pair.
 //! Zero-inflated variants combine a Bernoulli occupation draw with a
-//! positive-weight conditional distribution.
+//! positive-occ_num conditional distribution.
 
 use rand::rngs::StdRng;
 use rand::Rng;
@@ -12,12 +12,12 @@ use rand_distr::{Bernoulli, Binomial, Distribution, Geometric, Poisson};
 const POSITIVE_POISSON_REJECTION_MIN_RATE: f64 = 0.05;
 
 // ---------------------------------------------------------------------------
-// Weight family enum — selects the distribution type
+// Occupation family enum — selects the distribution type
 // ---------------------------------------------------------------------------
 
-/// Weight distribution family for ME null models.
+/// Occupation distribution family for ME null models.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum WeightFamily {
+pub enum OccupationFamily {
     /// Poisson(λ). E[t] = λ.
     Poisson,
     /// Geometric(1−p). E[t] = p/(1−p).
@@ -28,7 +28,7 @@ pub enum WeightFamily {
     NegativeBinomial(u32),
 }
 
-impl WeightFamily {
+impl OccupationFamily {
     /// Build a `PairDistribution` from multiplier product `xy = x_i * y_j`.
     #[must_use]
     pub fn distribution(self, xy: f64) -> PairDistribution {
@@ -41,7 +41,7 @@ impl WeightFamily {
     }
 
     /// Build a zero-inflated `PairDistribution` from occupation probability
-    /// and the positive-weight rate parameter.
+    /// and the positive-occ_num rate parameter.
     #[must_use]
     pub fn zip_distribution(self, occupation: f64, rate: f64) -> PairDistribution {
         match self {
@@ -63,9 +63,9 @@ impl WeightFamily {
         }
     }
 
-    /// Expected weight E[t_ij] given multiplier product xy.
+    /// Expected occ_num E[t_ij] given multiplier product xy.
     #[must_use]
-    pub fn expected_weight(self, xy: f64) -> f64 {
+    pub fn expected_occ_num(self, xy: f64) -> f64 {
         self.distribution(xy).expected()
     }
 }
@@ -79,7 +79,7 @@ impl WeightFamily {
 pub enum PairDistribution {
     /// Independent Poisson. E[t] = rate.
     Poisson { rate: f64 },
-    /// Zero-inflated Poisson (Bernoulli occupation + positive Poisson positive weight).
+    /// Zero-inflated Poisson (Bernoulli occupation + positive Poisson positive occ_num).
     ZeroInflatedPoisson { occupation: f64, rate: f64 },
     /// Geometric with param xy. E[t] = xy/(1−xy).
     Geometric { xy: f64 },
@@ -87,15 +87,15 @@ pub enum PairDistribution {
     Binomial { xy: f64, layers: u32 },
     /// NegativeBinomial(M, 1−xy). E[t] = M·xy/(1−xy).
     NegativeBinomial { xy: f64, layers: u32 },
-    /// Zero-inflated binomial: Bernoulli occupation + positive binomial(M, p) positive weight.
+    /// Zero-inflated binomial: Bernoulli occupation + positive binomial(M, p) positive occ_num.
     ZeroInflatedBinomial {
         occupation: f64,
         xy: f64,
         layers: u32,
     },
-    /// Zero-inflated geometric: Bernoulli occupation + positive geometric positive weight.
+    /// Zero-inflated geometric: Bernoulli occupation + positive geometric positive occ_num.
     ZeroInflatedGeometric { occupation: f64, xy: f64 },
-    /// Zero-inflated negative binomial: Bernoulli occupation + positive negative binomial(M) positive weight.
+    /// Zero-inflated negative binomial: Bernoulli occupation + positive negative binomial(M) positive occ_num.
     ZeroInflatedNegativeBinomial {
         occupation: f64,
         xy: f64,
@@ -104,7 +104,7 @@ pub enum PairDistribution {
 }
 
 impl PairDistribution {
-    /// Expected edge weight.
+    /// Expected edge occ_num.
     #[must_use]
     pub fn expected(self) -> f64 {
         match self {
@@ -188,45 +188,45 @@ impl PairDistribution {
         }
     }
 
-    /// Inclusive lower-tail probability `P(T <= weight)`.
+    /// Inclusive lower-tail probability `P(T <= occ_num)`.
     #[must_use]
-    pub fn lower_pvalue(self, weight: u64) -> f64 {
+    pub fn lower_pvalue(self, occ_num: u64) -> f64 {
         match self {
-            Self::Poisson { rate } => poisson_cdf(weight, rate),
+            Self::Poisson { rate } => poisson_cdf(occ_num, rate),
             Self::ZeroInflatedPoisson { occupation, rate } => {
                 let p = occupation.clamp(0.0, 1.0);
-                if weight == 0 {
+                if occ_num == 0 {
                     1.0 - p
                 } else {
-                    (1.0 - p) + p * positive_edge_poisson_cdf(weight, rate)
+                    (1.0 - p) + p * positive_edge_poisson_cdf(occ_num, rate)
                 }
             }
-            Self::Geometric { xy } => geometric_cdf(weight, xy),
-            Self::Binomial { xy, layers } => binomial_cdf(weight, xy / (1.0 + xy), layers),
-            Self::NegativeBinomial { xy, layers } => negative_binomial_cdf(weight, xy, layers),
+            Self::Geometric { xy } => geometric_cdf(occ_num, xy),
+            Self::Binomial { xy, layers } => binomial_cdf(occ_num, xy / (1.0 + xy), layers),
+            Self::NegativeBinomial { xy, layers } => negative_binomial_cdf(occ_num, xy, layers),
             Self::ZeroInflatedBinomial {
                 occupation,
                 xy,
                 layers,
             } => {
                 let p = occupation.clamp(0.0, 1.0);
-                if weight == 0 {
+                if occ_num == 0 {
                     1.0 - p
                 } else {
                     let bin_p = (xy / (1.0 + xy)).clamp(0.0, 1.0);
-                    (1.0 - p) + p * positive_binomial_cdf(weight, bin_p, layers)
+                    (1.0 - p) + p * positive_binomial_cdf(occ_num, bin_p, layers)
                 }
             }
             Self::ZeroInflatedGeometric { occupation, xy } => {
                 let p = occupation.clamp(0.0, 1.0);
-                if weight == 0 {
+                if occ_num == 0 {
                     1.0 - p
                 } else {
                     // positive geometric CDF: P(K<=k|K>=1) = (Geo_CDF(k) - Geo_PMF(0)) / (1 - Geo_PMF(0))
                     // Geo_CDF(k) = 1 - q^{k+1}, Geo_PMF(0) = 1-q, so
                     // positive geometric_CDF(k) = (1 - q^{k+1} - (1-q)) / q = (q - q^{k+1})/q = 1 - q^k
                     let q = xy.clamp(0.0, 1.0 - 1e-15);
-                    let ztg_cdf = 1.0 - q.powi(weight as i32);
+                    let ztg_cdf = 1.0 - q.powi(occ_num as i32);
                     (1.0 - p) + p * ztg_cdf
                 }
             }
@@ -236,13 +236,13 @@ impl PairDistribution {
                 layers,
             } => {
                 let p = occupation.clamp(0.0, 1.0);
-                if weight == 0 {
+                if occ_num == 0 {
                     1.0 - p
                 } else {
                     // positive negative binomial CDF: (negative_binomial_cdf(k) - negative_binomial_pmf(0)) / (1 - negative_binomial_pmf(0))
                     let q = xy.clamp(0.0, 1.0 - 1e-15);
                     let p0 = (1.0 - q).powi(layers as i32);
-                    let nb_cdf = negative_binomial_cdf(weight, q, layers);
+                    let nb_cdf = negative_binomial_cdf(occ_num, q, layers);
                     let ztnb_cdf = if p0 >= 1.0 {
                         1.0
                     } else {
@@ -255,23 +255,23 @@ impl PairDistribution {
         .clamp(0.0, 1.0)
     }
 
-    /// Inclusive upper-tail probability `P(T >= weight)`.
+    /// Inclusive upper-tail probability `P(T >= occ_num)`.
     #[must_use]
-    pub fn upper_pvalue(self, weight: u64) -> f64 {
-        if weight == 0 {
+    pub fn upper_pvalue(self, occ_num: u64) -> f64 {
+        if occ_num == 0 {
             return 1.0;
         }
         match self {
-            Self::Poisson { rate } => poisson_sf_inclusive(weight, rate),
+            Self::Poisson { rate } => poisson_sf_inclusive(occ_num, rate),
             Self::ZeroInflatedPoisson { occupation, rate } => {
-                occupation.clamp(0.0, 1.0) * positive_edge_poisson_sf_inclusive(weight, rate)
+                occupation.clamp(0.0, 1.0) * positive_edge_poisson_sf_inclusive(occ_num, rate)
             }
-            Self::Geometric { xy } => (1.0 - geometric_cdf(weight - 1, xy)).clamp(0.0, 1.0),
+            Self::Geometric { xy } => (1.0 - geometric_cdf(occ_num - 1, xy)).clamp(0.0, 1.0),
             Self::Binomial { xy, layers } => {
-                (1.0 - binomial_cdf(weight - 1, xy / (1.0 + xy), layers)).clamp(0.0, 1.0)
+                (1.0 - binomial_cdf(occ_num - 1, xy / (1.0 + xy), layers)).clamp(0.0, 1.0)
             }
             Self::NegativeBinomial { xy, layers } => {
-                (1.0 - negative_binomial_cdf(weight - 1, xy, layers)).clamp(0.0, 1.0)
+                (1.0 - negative_binomial_cdf(occ_num - 1, xy, layers)).clamp(0.0, 1.0)
             }
             Self::ZeroInflatedBinomial {
                 occupation,
@@ -280,13 +280,13 @@ impl PairDistribution {
             } => {
                 let p = occupation.clamp(0.0, 1.0);
                 let bin_p = (xy / (1.0 + xy)).clamp(0.0, 1.0);
-                (p * positive_binomial_sf_inclusive(weight, bin_p, layers)).clamp(0.0, 1.0)
+                (p * positive_binomial_sf_inclusive(occ_num, bin_p, layers)).clamp(0.0, 1.0)
             }
             Self::ZeroInflatedGeometric { occupation, xy } => {
                 // P(K>=k|K>=1) = 1 - positive geometric_CDF(k-1) = q^{k-1}
                 let p = occupation.clamp(0.0, 1.0);
                 let q = xy.clamp(0.0, 1.0 - 1e-15);
-                (p * q.powi((weight - 1) as i32)).clamp(0.0, 1.0)
+                (p * q.powi((occ_num - 1) as i32)).clamp(0.0, 1.0)
             }
             Self::ZeroInflatedNegativeBinomial {
                 occupation,
@@ -299,7 +299,7 @@ impl PairDistribution {
                 if p0 >= 1.0 {
                     return 0.0;
                 }
-                let nb_cdf_prev = negative_binomial_cdf(weight - 1, q, layers);
+                let nb_cdf_prev = negative_binomial_cdf(occ_num - 1, q, layers);
                 let ztnb_sf = (1.0 - (nb_cdf_prev - p0) / (1.0 - p0)).clamp(0.0, 1.0);
                 (p * ztnb_sf).clamp(0.0, 1.0)
             }
@@ -422,13 +422,13 @@ pub fn positive_edge_poisson_mean(rate: f64) -> f64 {
 }
 
 #[must_use]
-pub fn poisson_cdf(weight: u64, rate: f64) -> f64 {
+pub fn poisson_cdf(occ_num: u64, rate: f64) -> f64 {
     if rate <= 0.0 {
         return 1.0;
     }
     let mut term = (-rate).exp();
     let mut sum = term;
-    for k in 1..=weight {
+    for k in 1..=occ_num {
         term *= rate / k as f64;
         sum += term;
         if term == 0.0 {
@@ -439,36 +439,36 @@ pub fn poisson_cdf(weight: u64, rate: f64) -> f64 {
 }
 
 #[must_use]
-pub fn poisson_sf_inclusive(weight: u64, rate: f64) -> f64 {
-    if weight == 0 {
+pub fn poisson_sf_inclusive(occ_num: u64, rate: f64) -> f64 {
+    if occ_num == 0 {
         1.0
     } else {
-        (1.0 - poisson_cdf(weight - 1, rate)).clamp(0.0, 1.0)
+        (1.0 - poisson_cdf(occ_num - 1, rate)).clamp(0.0, 1.0)
     }
 }
 
 #[must_use]
-pub fn positive_edge_poisson_cdf(weight: u64, rate: f64) -> f64 {
-    if weight == 0 {
+pub fn positive_edge_poisson_cdf(occ_num: u64, rate: f64) -> f64 {
+    if occ_num == 0 {
         return 0.0;
     }
     if rate <= 0.0 {
         return 1.0;
     }
-    let numerator = poisson_cdf(weight, rate) - (-rate).exp();
+    let numerator = poisson_cdf(occ_num, rate) - (-rate).exp();
     let denominator = 1.0 - (-rate).exp();
     (numerator / denominator).clamp(0.0, 1.0)
 }
 
 #[must_use]
-pub fn positive_edge_poisson_sf_inclusive(weight: u64, rate: f64) -> f64 {
-    if weight <= 1 && rate <= 0.0 {
+pub fn positive_edge_poisson_sf_inclusive(occ_num: u64, rate: f64) -> f64 {
+    if occ_num <= 1 && rate <= 0.0 {
         return 1.0;
     }
     if rate <= 0.0 {
         return 0.0;
     }
-    let numerator = poisson_sf_inclusive(weight, rate);
+    let numerator = poisson_sf_inclusive(occ_num, rate);
     let denominator = 1.0 - (-rate).exp();
     (numerator / denominator).clamp(0.0, 1.0)
 }
@@ -477,12 +477,12 @@ pub fn positive_edge_poisson_sf_inclusive(weight: u64, rate: f64) -> f64 {
 // Geometric helpers
 // ---------------------------------------------------------------------------
 
-fn geometric_cdf(weight: u64, xy: f64) -> f64 {
+fn geometric_cdf(occ_num: u64, xy: f64) -> f64 {
     let xy = xy.clamp(0.0, 1.0);
     if xy <= 0.0 {
         return 1.0;
     }
-    (1.0 - xy.powi((weight + 1) as i32)).clamp(0.0, 1.0)
+    (1.0 - xy.powi((occ_num + 1) as i32)).clamp(0.0, 1.0)
 }
 
 fn sample_geometric(xy: f64, rng: &mut StdRng) -> u64 {
@@ -497,13 +497,13 @@ fn sample_geometric(xy: f64, rng: &mut StdRng) -> u64 {
 // Binomial helpers
 // ---------------------------------------------------------------------------
 
-fn binomial_cdf(weight: u64, p: f64, layers: u32) -> f64 {
+fn binomial_cdf(occ_num: u64, p: f64, layers: u32) -> f64 {
     let p = p.clamp(0.0, 1.0);
     if p <= 0.0 {
         return 1.0;
     }
     if p >= 1.0 {
-        return if weight >= u64::from(layers) {
+        return if occ_num >= u64::from(layers) {
             1.0
         } else {
             0.0
@@ -512,7 +512,7 @@ fn binomial_cdf(weight: u64, p: f64, layers: u32) -> f64 {
     let n = layers;
     let mut sum = 0.0;
     let mut log_binom = 0.0_f64;
-    for k in 0..=weight.min(u64::from(n)) {
+    for k in 0..=occ_num.min(u64::from(n)) {
         let log_pmf =
             log_binom + (k as f64) * p.ln() + ((u64::from(n) - k) as f64) * (1.0 - p).ln();
         sum += log_pmf.exp();
@@ -535,7 +535,7 @@ fn sample_binomial(xy: f64, layers: u32, rng: &mut StdRng) -> u64 {
 // Negative binomial helpers
 // ---------------------------------------------------------------------------
 
-fn negative_binomial_cdf(weight: u64, xy: f64, layers: u32) -> f64 {
+fn negative_binomial_cdf(occ_num: u64, xy: f64, layers: u32) -> f64 {
     let xy = xy.clamp(0.0, 1.0 - 1e-15);
     let p_success = 1.0 - xy;
     if p_success >= 1.0 || xy <= 0.0 {
@@ -546,7 +546,7 @@ fn negative_binomial_cdf(weight: u64, xy: f64, layers: u32) -> f64 {
     let mut log_coeff = 0.0_f64;
     let log_p = p_success.ln();
     let log_q = xy.ln();
-    for k in 0..=weight {
+    for k in 0..=occ_num {
         let log_pmf = log_coeff + r * log_p + (k as f64) * log_q;
         sum += log_pmf.exp();
         if sum >= 1.0 {
@@ -577,25 +577,25 @@ fn sample_negative_binomial(xy: f64, layers: u32, rng: &mut StdRng) -> u64 {
 // ---------------------------------------------------------------------------
 
 /// positive binomial CDF: P(T <= k | T > 0) = (Bin_CDF(k) - Bin_PMF(0)) / (1 - Bin_PMF(0)).
-fn positive_binomial_cdf(weight: u64, p: f64, layers: u32) -> f64 {
-    if weight == 0 {
+fn positive_binomial_cdf(occ_num: u64, p: f64, layers: u32) -> f64 {
+    if occ_num == 0 {
         return 0.0;
     }
     let p0 = (1.0 - p).powi(layers as i32);
     if p0 >= 1.0 {
         return 1.0;
     }
-    let num = binomial_cdf(weight, p, layers) - p0;
+    let num = binomial_cdf(occ_num, p, layers) - p0;
     let den = 1.0 - p0;
     (num / den).clamp(0.0, 1.0)
 }
 
 /// positive binomial survival: P(T >= k | T > 0).
-fn positive_binomial_sf_inclusive(weight: u64, p: f64, layers: u32) -> f64 {
-    if weight <= 1 {
+fn positive_binomial_sf_inclusive(occ_num: u64, p: f64, layers: u32) -> f64 {
+    if occ_num <= 1 {
         return 1.0;
     }
-    (1.0 - positive_binomial_cdf(weight - 1, p, layers)).clamp(0.0, 1.0)
+    (1.0 - positive_binomial_cdf(occ_num - 1, p, layers)).clamp(0.0, 1.0)
 }
 
 /// Sample from positive-edge Bin(M, p) by rejection.
@@ -829,7 +829,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(42);
         for _ in 0..1000 {
             let w = dist.sample(&mut rng);
-            assert!(w <= 5, "weight {w} exceeds layers 5");
+            assert!(w <= 5, "occ_num {w} exceeds layers 5");
         }
     }
 
@@ -889,7 +889,7 @@ mod tests {
         assert!(has_zero, "expected some zeros from ZeroInflatedGeometric");
         assert!(
             has_positive,
-            "expected some positive weights from ZeroInflatedGeometric"
+            "expected some positive occupations from ZeroInflatedGeometric"
         );
     }
 
@@ -953,16 +953,16 @@ mod tests {
 
     #[test]
     fn weight_family_builds_correct_distribution() {
-        let dist = WeightFamily::Poisson.distribution(2.0);
+        let dist = OccupationFamily::Poisson.distribution(2.0);
         assert!((dist.expected() - 2.0).abs() < 1e-12);
 
-        let dist = WeightFamily::Geometric.distribution(0.5);
+        let dist = OccupationFamily::Geometric.distribution(0.5);
         assert!((dist.expected() - 1.0).abs() < 1e-12);
 
-        let dist = WeightFamily::Binomial(10).distribution(0.5);
+        let dist = OccupationFamily::Binomial(10).distribution(0.5);
         assert!((dist.expected() - 10.0 / 3.0).abs() < 1e-10);
 
-        let dist = WeightFamily::NegativeBinomial(3).distribution(0.4);
+        let dist = OccupationFamily::NegativeBinomial(3).distribution(0.4);
         assert!((dist.expected() - 2.0).abs() < 1e-12);
     }
 }

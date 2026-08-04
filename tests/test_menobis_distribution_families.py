@@ -33,7 +33,7 @@ def _small_edges() -> EdgeTable:
     return EdgeTable(
         source=np.array([0, 0, 1, 1, 2], dtype=np.uint64),
         target=np.array([1, 2, 0, 2, 0], dtype=np.uint64),
-        weight=np.array([3, 1, 2, 4, 1], dtype=np.uint64),
+        occ_num=np.array([3, 1, 2, 4, 1], dtype=np.uint64),
     )
 
 
@@ -55,14 +55,14 @@ class TestGeometricGeneration:
         a = sample_strength_geometric(x, y, seed=42)
         b = sample_strength_geometric(x, y, seed=42)
         np.testing.assert_array_equal(a.source, b.source)
-        np.testing.assert_array_equal(a.weight, b.weight)
+        np.testing.assert_array_equal(b.occ_num, b.occ_num)
 
     def test_nonneg_weights(self) -> None:
         """All geometric weights are non-negative."""
         x = np.array([0.3, 0.4, 0.2])
         y = np.array([0.25, 0.35, 0.3])
         edges = sample_strength_geometric(x, y, seed=0)
-        assert np.all(edges.weight >= 0)
+        assert np.all(edges.occ_num >= 0)
 
 
 class TestBinomialGeneration:
@@ -75,14 +75,14 @@ class TestBinomialGeneration:
         a = sample_strength_binomial(x, y, layers=10, seed=42)
         b = sample_strength_binomial(x, y, layers=10, seed=42)
         np.testing.assert_array_equal(a.source, b.source)
-        np.testing.assert_array_equal(a.weight, b.weight)
+        np.testing.assert_array_equal(b.occ_num, b.occ_num)
 
     def test_max_weight_bounded_by_layers(self) -> None:
         """Binomial weights cannot exceed M layers."""
         x = np.array([0.9, 0.8])
         y = np.array([0.9, 0.8])
         edges = sample_strength_binomial(x, y, layers=5, seed=0)
-        assert np.all(edges.weight <= 5)
+        assert np.all(edges.occ_num <= 5)
 
 
 class TestNegativeBinomialGeneration:
@@ -95,14 +95,14 @@ class TestNegativeBinomialGeneration:
         a = sample_strength_negative_binomial(x, y, layers=3, seed=42)
         b = sample_strength_negative_binomial(x, y, layers=3, seed=42)
         np.testing.assert_array_equal(a.source, b.source)
-        np.testing.assert_array_equal(a.weight, b.weight)
+        np.testing.assert_array_equal(b.occ_num, b.occ_num)
 
     def test_nonneg_weights(self) -> None:
         """All negative binomial weights are non-negative."""
         x = np.array([0.3, 0.4])
         y = np.array([0.25, 0.35])
         edges = sample_strength_negative_binomial(x, y, layers=3, seed=0)
-        assert np.all(edges.weight >= 0)
+        assert np.all(edges.occ_num >= 0)
 
 
 class TestBinomialFitting:

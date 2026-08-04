@@ -1,6 +1,6 @@
 //! Network statistics for weighted directed edge lists.
 
-use crate::graph::WeightedEdge;
+use crate::graph::OccupiedPair;
 use std::collections::HashMap;
 
 /// All per-node statistics computed in a single pass.
@@ -19,16 +19,16 @@ pub struct NodeStats {
     pub k_nn_in: Vec<f64>,
 }
 
-/// Weight distribution entry.
+/// Occupation-number distribution entry.
 #[derive(Clone, Debug)]
-pub struct WeightDistribution {
-    pub weights: Vec<u64>,
+pub struct OccupationDistribution {
+    pub occ_nums: Vec<u64>,
     pub counts: Vec<u64>,
 }
 
 /// Compute all per-node statistics in a single pass over edges.
 #[must_use]
-pub fn compute_all_node_stats(node_count: usize, edges: &[WeightedEdge]) -> NodeStats {
+pub fn compute_all_node_stats(node_count: usize, edges: &[OccupiedPair]) -> NodeStats {
     let mut s_out = vec![0_u64; node_count];
     let mut s_in = vec![0_u64; node_count];
     let mut k_out = vec![0_u64; node_count];
@@ -37,12 +37,12 @@ pub fn compute_all_node_stats(node_count: usize, edges: &[WeightedEdge]) -> Node
     let mut sum_w2_in = vec![0_u64; node_count];
 
     for e in edges {
-        s_out[e.source] += e.weight;
-        s_in[e.target] += e.weight;
+        s_out[e.source] += e.occ_num;
+        s_in[e.target] += e.occ_num;
         k_out[e.source] += 1;
         k_in[e.target] += 1;
-        sum_w2_out[e.source] += e.weight * e.weight;
-        sum_w2_in[e.target] += e.weight * e.weight;
+        sum_w2_out[e.source] += e.occ_num * e.occ_num;
+        sum_w2_in[e.target] += e.occ_num * e.occ_num;
     }
 
     // Y2
@@ -72,8 +72,8 @@ pub fn compute_all_node_stats(node_count: usize, edges: &[WeightedEdge]) -> Node
     let mut weighted_k_out_sum_in = vec![0.0_f64; node_count]; // for k_nn_in
 
     for e in edges {
-        weighted_s_in_sum_out[e.source] += e.weight as f64 * s_in[e.target] as f64;
-        weighted_s_out_sum_in[e.target] += e.weight as f64 * s_out[e.source] as f64;
+        weighted_s_in_sum_out[e.source] += e.occ_num as f64 * s_in[e.target] as f64;
+        weighted_s_out_sum_in[e.target] += e.occ_num as f64 * s_out[e.source] as f64;
         weighted_k_in_sum_out[e.source] += k_in[e.target] as f64;
         weighted_k_out_sum_in[e.target] += k_out[e.source] as f64;
     }
@@ -130,17 +130,17 @@ pub fn compute_all_node_stats(node_count: usize, edges: &[WeightedEdge]) -> Node
     }
 }
 
-/// Compute the weight distribution P(w).
+/// Compute the occupation-number distribution P(t_ij).
 #[must_use]
-pub fn weight_distribution(edges: &[WeightedEdge]) -> WeightDistribution {
+pub fn occupation_distribution(edges: &[OccupiedPair]) -> OccupationDistribution {
     let mut counts: HashMap<u64, u64> = HashMap::new();
     for e in edges {
-        *counts.entry(e.weight).or_insert(0) += 1;
+        *counts.entry(e.occ_num).or_insert(0) += 1;
     }
     let mut pairs: Vec<(u64, u64)> = counts.into_iter().collect();
-    pairs.sort_unstable_by_key(|&(w, _)| w);
-    WeightDistribution {
-        weights: pairs.iter().map(|&(w, _)| w).collect(),
+    pairs.sort_unstable_by_key(|&(occ, _)| occ);
+    OccupationDistribution {
+        occ_nums: pairs.iter().map(|&(occ, _)| occ).collect(),
         counts: pairs.iter().map(|&(_, c)| c).collect(),
     }
 }
@@ -148,14 +148,14 @@ pub fn weight_distribution(edges: &[WeightedEdge]) -> WeightDistribution {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::WeightedEdge;
+    use crate::graph::OccupiedPair;
 
     #[test]
     fn all_stats_on_small_graph() {
         let edges = [
-            WeightedEdge::new(0, 1, 3),
-            WeightedEdge::new(0, 2, 4),
-            WeightedEdge::new(1, 2, 5),
+            OccupiedPair::new(0, 1, 3),
+            OccupiedPair::new(0, 2, 4),
+            OccupiedPair::new(1, 2, 5),
         ];
 
         let stats = compute_all_node_stats(3, &edges);
@@ -169,16 +169,16 @@ mod tests {
     }
 
     #[test]
-    fn weight_distribution_counts() {
+    fn occupation_distribution_counts() {
         let edges = [
-            WeightedEdge::new(0, 1, 3),
-            WeightedEdge::new(0, 2, 3),
-            WeightedEdge::new(1, 2, 5),
+            OccupiedPair::new(0, 1, 3),
+            OccupiedPair::new(0, 2, 3),
+            OccupiedPair::new(1, 2, 5),
         ];
 
-        let dist = weight_distribution(&edges);
+        let dist = occupation_distribution(&edges);
 
-        assert_eq!(dist.weights, vec![3, 5]);
+        assert_eq!(dist.occ_nums, vec![3, 5]);
         assert_eq!(dist.counts, vec![2, 1]);
     }
 }

@@ -5,9 +5,9 @@ pub(crate) fn directed_strengths(
     node_count: usize,
     sources: Vec<usize>,
     targets: Vec<usize>,
-    weights: Vec<u64>,
+    occ_nums: Vec<u64>,
 ) -> PyResult<(Vec<u64>, Vec<u64>)> {
-    let edges = build_edges(node_count, sources, targets, weights)?;
+    let edges = build_edges(node_count, sources, targets, occ_nums)?;
     let s = core_directed_strengths(node_count, &edges);
     Ok((s.out, s.incoming))
 }
@@ -17,9 +17,9 @@ pub(crate) fn directed_degrees(
     node_count: usize,
     sources: Vec<usize>,
     targets: Vec<usize>,
-    weights: Vec<u64>,
+    occ_nums: Vec<u64>,
 ) -> PyResult<(Vec<u64>, Vec<u64>)> {
-    let edges = build_edges(node_count, sources, targets, weights)?;
+    let edges = build_edges(node_count, sources, targets, occ_nums)?;
     let d = core_directed_degrees(node_count, &edges);
     Ok((d.out, d.incoming))
 }
@@ -33,7 +33,7 @@ pub(crate) fn compute_all_node_stats(
     node_count: usize,
     sources: Vec<usize>,
     targets: Vec<usize>,
-    weights: Vec<u64>,
+    occ_nums: Vec<u64>,
 ) -> PyResult<(
     Vec<u64>,
     Vec<u64>,
@@ -46,7 +46,7 @@ pub(crate) fn compute_all_node_stats(
     Vec<f64>,
     Vec<f64>,
 )> {
-    let edges = build_edges(node_count, sources, targets, weights)?;
+    let edges = build_edges(node_count, sources, targets, occ_nums)?;
     let s = core_compute_all_stats(node_count, &edges);
     Ok((
         s.strength_out,
@@ -62,15 +62,15 @@ pub(crate) fn compute_all_node_stats(
     ))
 }
 
-/// Compute the weight distribution P(w).
-/// Returns (weights, counts).
+/// Compute the occupation-number distribution P(t_ij).
+/// Returns (occ_nums, counts).
 #[pyfunction]
-pub(crate) fn weight_distribution(
+pub(crate) fn occupation_distribution(
     sources: Vec<usize>,
     targets: Vec<usize>,
-    weights: Vec<u64>,
+    occ_nums: Vec<u64>,
 ) -> PyResult<(Vec<u64>, Vec<u64>)> {
-    // node_count doesn't matter for weight distribution, just need valid edges
+    // node_count doesn't matter for occupation distribution, just need valid edges
     let max_node = sources
         .iter()
         .chain(targets.iter())
@@ -78,9 +78,9 @@ pub(crate) fn weight_distribution(
         .max()
         .unwrap_or(0)
         + 1;
-    let edges = build_edges(max_node, sources, targets, weights)?;
-    let dist = core_weight_distribution(&edges);
-    Ok((dist.weights, dist.counts))
+    let edges = build_edges(max_node, sources, targets, occ_nums)?;
+    let dist = core_occupation_distribution(&edges);
+    Ok((dist.occ_nums, dist.counts))
 }
 
 #[pyfunction]
@@ -93,19 +93,19 @@ pub(crate) fn clustering_coefficients(
     node_count: usize,
     sources: Vec<usize>,
     targets: Vec<usize>,
-    weights: Vec<u64>,
+    occ_nums: Vec<u64>,
 ) -> PyResult<Vec<f64>> {
-    let edges = build_edges(node_count, sources, targets, weights)?;
+    let edges = build_edges(node_count, sources, targets, occ_nums)?;
     Ok(core_clustering(node_count, &edges))
 }
 
 #[pyfunction]
-pub(crate) fn weighted_clustering_coefficients(
+pub(crate) fn occupation_clustering_coefficients(
     node_count: usize,
     sources: Vec<usize>,
     targets: Vec<usize>,
-    weights: Vec<u64>,
+    occ_nums: Vec<u64>,
 ) -> PyResult<Vec<f64>> {
-    let edges = build_edges(node_count, sources, targets, weights)?;
-    Ok(core_weighted_clustering(node_count, &edges))
+    let edges = build_edges(node_count, sources, targets, occ_nums)?;
+    Ok(core_occupation_clustering(node_count, &edges))
 }

@@ -439,7 +439,7 @@ class TestSamplingRecovery:
             self_loops=False,
         )
         sample = _sample_strength_poisson(fit.x, fit.y, self_loops=False, seed=42)
-        assert np.all(sample.weight > 0)
+        assert np.all(sample.occ_num > 0)
         assert np.all(sample.source != sample.target)
 
     def test_b_strength_sample_positive_weights(self, sparse_constraints) -> None:
@@ -456,7 +456,7 @@ class TestSamplingRecovery:
             self_loops=False,
             seed=42,
         )
-        assert np.all(sample.weight > 0)
+        assert np.all(sample.occ_num > 0)
 
     def test_w_strength_sample_positive_weights(self, sparse_constraints) -> None:
         fit = _fit_strength_geometric(
@@ -465,7 +465,7 @@ class TestSamplingRecovery:
             self_loops=False,
         )
         sample = _sample_strength_geometric(fit.x, fit.y, self_loops=False, seed=42)
-        assert np.all(sample.weight > 0)
+        assert np.all(sample.occ_num > 0)
 
     def test_me_strength_edges_sample(self, sparse_constraints) -> None:
         fit = _fit_strength_edges_poisson(
@@ -476,7 +476,7 @@ class TestSamplingRecovery:
         )
         sample = _sample_strength_edges_poisson(fit, seed=42)
         assert sample.num_edges > 0
-        assert np.all(sample.weight > 0)
+        assert np.all(sample.occ_num > 0)
 
     def test_me_strength_degree_sample(self, sparse_constraints) -> None:
         fit = _fit_strength_degree_poisson(
@@ -491,7 +491,7 @@ class TestSamplingRecovery:
             pytest.skip("solver did not converge")
         sample = _sample_strength_degree_poisson(fit, seed=42)
         assert sample.num_edges > 0
-        assert np.all(sample.weight > 0)
+        assert np.all(sample.occ_num > 0)
 
 
 # --- Partial fitting tests ---
@@ -508,20 +508,22 @@ class TestPartialFitting:
         return (
             network.edges.source[indices].astype(np.uint64),
             network.edges.target[indices].astype(np.uint64),
-            network.edges.weight[indices].astype(np.float64),
+            network.edges.occ_num[indices].astype(np.float64),
         )
 
     @pytest.mark.parametrize("fraction", [0.05, 0.20])
     def test_partial_me_strength(
         self, sparse_network, sparse_constraints, fraction
     ) -> None:
-        known_src, known_tgt, known_rate = self._freeze_pairs(sparse_network, fraction)
+        known_src, known_tgt, known_occnum = self._freeze_pairs(
+            sparse_network, fraction
+        )
         result = _fit_partial_strength_poisson(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             self_loops=False,
         )
         assert result.converged
@@ -532,7 +534,9 @@ class TestPartialFitting:
     def test_partial_me_strength_edges(
         self, sparse_network, sparse_constraints, fraction
     ) -> None:
-        known_src, known_tgt, known_rate = self._freeze_pairs(sparse_network, fraction)
+        known_src, known_tgt, known_occnum = self._freeze_pairs(
+            sparse_network, fraction
+        )
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             result = _fit_partial_strength_edges_poisson(
@@ -540,7 +544,7 @@ class TestPartialFitting:
                 sparse_constraints.strength_in,
                 known_src,
                 known_tgt,
-                known_rate,
+                known_occnum,
                 sparse_constraints.total_edges,
                 self_loops=False,
                 tolerance=1e-6,
@@ -553,7 +557,9 @@ class TestPartialFitting:
     def test_partial_me_strength_degree(
         self, sparse_network, sparse_constraints, fraction
     ) -> None:
-        known_src, known_tgt, known_rate = self._freeze_pairs(sparse_network, fraction)
+        known_src, known_tgt, known_occnum = self._freeze_pairs(
+            sparse_network, fraction
+        )
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             result = _fit_partial_strength_degree_poisson(
@@ -563,7 +569,7 @@ class TestPartialFitting:
                 sparse_constraints.degree_in,
                 known_src,
                 known_tgt,
-                known_rate,
+                known_occnum,
                 self_loops=False,
                 tolerance=1e-4,
                 max_iterations=100,
@@ -575,13 +581,15 @@ class TestPartialFitting:
     def test_partial_me_strength_cost(
         self, sparse_network, sparse_constraints, fraction
     ) -> None:
-        known_src, known_tgt, known_rate = self._freeze_pairs(sparse_network, fraction)
+        known_src, known_tgt, known_occnum = self._freeze_pairs(
+            sparse_network, fraction
+        )
         result = _fit_partial_strength_cost_poisson_coordinates(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             sparse_network.x,
             sparse_network.y,
             sparse_constraints.total_cost,
@@ -594,13 +602,15 @@ class TestPartialFitting:
     def test_partial_b_strength(
         self, sparse_network, sparse_constraints, fraction
     ) -> None:
-        known_src, known_tgt, known_rate = self._freeze_pairs(sparse_network, fraction)
+        known_src, known_tgt, known_occnum = self._freeze_pairs(
+            sparse_network, fraction
+        )
         result = _fit_partial_strength_binomial(
             sparse_constraints.strength_out,
             sparse_constraints.strength_in,
             known_src,
             known_tgt,
-            known_rate,
+            known_occnum,
             layers=sparse_constraints.binomial_layers,
             self_loops=False,
         )
@@ -611,7 +621,9 @@ class TestPartialFitting:
     def test_partial_b_strength_degree(
         self, sparse_network, sparse_constraints, fraction
     ) -> None:
-        known_src, known_tgt, known_rate = self._freeze_pairs(sparse_network, fraction)
+        known_src, known_tgt, known_occnum = self._freeze_pairs(
+            sparse_network, fraction
+        )
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             result = _fit_partial_strength_degree_binomial(
@@ -621,7 +633,7 @@ class TestPartialFitting:
                 sparse_constraints.degree_in,
                 known_src,
                 known_tgt,
-                known_rate,
+                known_occnum,
                 layers=sparse_constraints.binomial_layers,
                 self_loops=False,
                 tolerance=1e-4,

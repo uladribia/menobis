@@ -19,7 +19,7 @@ def test_fixed_strength_filter_flags_heavy_edge() -> None:
     edges = EdgeTable(
         source=np.array([0, 0, 1, 1], dtype=np.uint64),
         target=np.array([0, 1, 0, 1], dtype=np.uint64),
-        weight=np.array([1, 40, 1, 1], dtype=np.uint64),
+        occ_num=np.array([1, 40, 1, 1], dtype=np.uint64),
     )
 
     result = filter_model(
@@ -41,7 +41,7 @@ def test_fixed_strength_absent_edges_are_separate() -> None:
     edges = EdgeTable(
         source=np.array([0, 1], dtype=np.uint64),
         target=np.array([0, 1], dtype=np.uint64),
-        weight=np.array([20, 20], dtype=np.uint64),
+        occ_num=np.array([20, 20], dtype=np.uint64),
     )
 
     result = filter_model(
@@ -62,7 +62,7 @@ def test_custom_rates_filter_accepts_occupation_numbers() -> None:
     edges = EdgeTable(
         source=np.array([0], dtype=np.uint64),
         target=np.array([1], dtype=np.uint64),
-        weight=np.array([10], dtype=np.uint64),
+        occ_num=np.array([10], dtype=np.uint64),
     )
     rates = ProbabilityTable(
         source=np.array([0, 1], dtype=np.uint64),
@@ -89,7 +89,7 @@ def test_strength_edges_filter_accepts_fitted_model() -> None:
     edges = EdgeTable(
         source=np.array([0, 1], dtype=np.uint64),
         target=np.array([1, 0], dtype=np.uint64),
-        weight=np.array([20, 1], dtype=np.uint64),
+        occ_num=np.array([20, 1], dtype=np.uint64),
     )
 
     result = filter_strength_edges_poisson(edges, fit, alpha=0.05)

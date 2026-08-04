@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from menobis.analysis import compute_all_stats, weight_distribution
+from menobis.analysis import compute_all_stats, occupation_distribution
 from menobis.data import normalize_edges
 
 LEGACY_PARENT = "HEAD^"
@@ -39,8 +39,8 @@ def test_modern_stats_match_archived_legacy_analyzer_fixture() -> None:
     np.testing.assert_allclose(stats.s_nn_out, np.array([5.0, 7.0, 5.0]))
     np.testing.assert_allclose(stats.s_nn_in, np.array([5.0, 5.0, 31 / 7]))
 
-    weights = weight_distribution(_legacy_fixture_edges())
-    np.testing.assert_array_equal(weights.weight, np.array([2, 3, 4, 5]))
+    weights = occupation_distribution(_legacy_fixture_edges())
+    np.testing.assert_array_equal(weights.occ_num, np.array([2, 3, 4, 5]))
     np.testing.assert_array_equal(weights.count, np.ones(4, dtype=np.uint64))
 
 

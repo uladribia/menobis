@@ -2,7 +2,7 @@
 
 use menobis_core::clustering::{
     clustering_coefficients as core_clustering,
-    weighted_clustering_coefficients as core_weighted_clustering,
+    occupation_clustering_coefficients as core_occupation_clustering,
 };
 use menobis_core::filter::{
     absent_custom_poisson as core_absent_custom_poisson,
@@ -116,11 +116,11 @@ use menobis_core::generation::{
 };
 use menobis_core::graph::{
     directed_degrees as core_directed_degrees, directed_strengths as core_directed_strengths,
-    WeightedEdge,
+    OccupiedPair,
 };
 use menobis_core::stats::{
     compute_all_node_stats as core_compute_all_stats,
-    weight_distribution as core_weight_distribution,
+    occupation_distribution as core_occupation_distribution,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -179,24 +179,24 @@ fn build_edges(
     node_count: usize,
     sources: Vec<usize>,
     targets: Vec<usize>,
-    weights: Vec<u64>,
-) -> PyResult<Vec<WeightedEdge>> {
-    if sources.len() != targets.len() || sources.len() != weights.len() {
+    occ_nums: Vec<u64>,
+) -> PyResult<Vec<OccupiedPair>> {
+    if sources.len() != targets.len() || sources.len() != occ_nums.len() {
         return Err(PyValueError::new_err(
-            "sources, targets, and weights must have the same length",
+            "sources, targets, and occ_nums must have the same length",
         ));
     }
     let mut edges = Vec::with_capacity(sources.len());
-    for ((source, target), weight) in sources.into_iter().zip(targets).zip(weights) {
+    for ((source, target), occ) in sources.into_iter().zip(targets).zip(occ_nums) {
         if source >= node_count || target >= node_count {
             return Err(PyValueError::new_err(
                 "edge endpoint is outside the declared node count",
             ));
         }
-        if weight == 0 {
+        if occ == 0 {
             continue;
         }
-        edges.push(WeightedEdge::new(source, target, weight));
+        edges.push(OccupiedPair::new(source, target, occ));
     }
     Ok(edges)
 }
@@ -218,7 +218,7 @@ fn _menobis(module: &Bound<'_, PyModule>) -> PyResult<()> {
     add_pyfunction!(module, stats::directed_strengths)?;
     add_pyfunction!(module, stats::directed_degrees)?;
     add_pyfunction!(module, stats::compute_all_node_stats)?;
-    add_pyfunction!(module, stats::weight_distribution)?;
+    add_pyfunction!(module, stats::occupation_distribution)?;
     add_pyfunction!(module, fitting::fit_masked_degree_bernoulli)?;
     add_pyfunction!(module, fitting::fit_masked_strength_degree_poisson)?;
     add_pyfunction!(module, fitting::fit_masked_strength_poisson)?;
@@ -343,6 +343,6 @@ fn _menobis(module: &Bound<'_, PyModule>) -> PyResult<()> {
     add_pyfunction!(module, filter::absent_strength_negative_binomial)?;
     add_pyfunction!(module, stats::benjamini_hochberg)?;
     add_pyfunction!(module, stats::clustering_coefficients)?;
-    add_pyfunction!(module, stats::weighted_clustering_coefficients)?;
+    add_pyfunction!(module, stats::occupation_clustering_coefficients)?;
     Ok(())
 }

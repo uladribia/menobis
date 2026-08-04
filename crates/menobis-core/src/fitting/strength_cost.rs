@@ -17,7 +17,7 @@ use super::{CostFitOptions, FitResult, StrengthCostFitResult};
 // B (Binomial M) strength-cost coordinate fitting
 // ===========================================================================
 
-/// B expected weight: E[t_ij] = M * x_i * y_j * f_ij / (1 + x_i * y_j * f_ij)
+/// B expected occupation: E[t_ij] = M * x_i * y_j * f_ij / (1 + x_i * y_j * f_ij)
 #[inline]
 fn b_expected(x_i: f64, y_j: f64, f_ij: f64, layers: u32) -> f64 {
     let z = x_i * y_j * f_ij;

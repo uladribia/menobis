@@ -20,7 +20,7 @@ pub(crate) struct SaturationPeeling {
 /// candidate partners (N with self-loops, N-1 without). For such nodes, all
 /// outgoing (or incoming) edges are deterministically occupied.
 ///
-/// `contribution_per_pair` is the known weight each saturated pair contributes
+/// `contribution_per_pair` is the known occupation number each saturated pair contributes
 /// to the partner's constraint (1.0 for degree models, M for B strength).
 #[must_use]
 #[allow(clippy::needless_range_loop)]
@@ -109,7 +109,7 @@ pub(crate) fn peel_degree_saturation(
 
 /// Detect B-strength-saturated nodes (strength = M * capacity) and peel.
 ///
-/// Each pair from a saturated node contributes weight M to partner constraints.
+/// Each pair from a saturated node contributes occupation number M to partner constraints.
 #[must_use]
 #[allow(clippy::needless_range_loop)]
 pub(crate) fn peel_b_strength_saturation(

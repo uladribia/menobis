@@ -19,7 +19,7 @@ pub(crate) fn sample_strength_stub_matching(
         ));
     }
     let sample = core_sample_strength_stub_matching(&strength_out, &strength_in, seed);
-    Ok((sample.sources, sample.targets, sample.weights))
+    Ok((sample.sources, sample.targets, sample.occ_nums))
 }
 
 #[pyfunction]
@@ -36,7 +36,7 @@ pub(crate) fn sample_custom_poisson(
         ));
     }
     let sample = core_sample_custom_poisson(&sources, &targets, &probabilities, total_events, seed);
-    Ok((sample.sources, sample.targets, sample.weights))
+    Ok((sample.sources, sample.targets, sample.occ_nums))
 }
 
 #[pyfunction]
@@ -54,7 +54,7 @@ pub(crate) fn sample_custom_multinomial(
     }
     let sample =
         core_sample_custom_multinomial(&sources, &targets, &probabilities, total_events, seed);
-    Ok((sample.sources, sample.targets, sample.weights))
+    Ok((sample.sources, sample.targets, sample.occ_nums))
 }
 
 #[pyfunction]
@@ -69,7 +69,7 @@ pub(crate) fn sample_strength_edges_poisson(
         return Err(PyValueError::new_err("x and y must have same length"));
     }
     let sample = core_sample_strength_edges_poisson(&x, &y, lam, self_loops, seed);
-    Ok((sample.sources, sample.targets, sample.weights))
+    Ok((sample.sources, sample.targets, sample.occ_nums))
 }
 
 #[pyfunction]
@@ -94,7 +94,7 @@ pub(crate) fn sample_strength_cost_poisson_coordinates(
     let sample = core_sample_strength_cost_poisson_coordinates(
         &x, &y, gamma, &coord_x, &coord_y, self_loops, seed,
     );
-    Ok((sample.sources, sample.targets, sample.weights))
+    Ok((sample.sources, sample.targets, sample.occ_nums))
 }
 
 #[pyfunction]
@@ -105,7 +105,7 @@ pub(crate) fn sample_strength_poisson(
     seed: u64,
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let edges = core_sample_strength_poisson(&x, &y, self_loops, seed);
-    (edges.sources, edges.targets, edges.weights)
+    (edges.sources, edges.targets, edges.occ_nums)
 }
 
 #[pyfunction]
@@ -116,7 +116,7 @@ pub(crate) fn sample_strength_geometric(
     seed: u64,
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let edges = core_sample_strength_geometric(&x, &y, self_loops, seed);
-    (edges.sources, edges.targets, edges.weights)
+    (edges.sources, edges.targets, edges.occ_nums)
 }
 
 #[pyfunction]
@@ -128,7 +128,7 @@ pub(crate) fn sample_strength_binomial(
     seed: u64,
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let edges = core_sample_strength_binomial(&x, &y, layers, self_loops, seed);
-    (edges.sources, edges.targets, edges.weights)
+    (edges.sources, edges.targets, edges.occ_nums)
 }
 
 #[pyfunction]
@@ -151,7 +151,7 @@ pub(crate) fn sample_strength_cost_binomial_coordinates(
     let edges = core_sample_strength_cost_binomial_coordinates(
         &x, &y, gamma, &coord_x, &coord_y, layers, self_loops, seed,
     );
-    Ok((edges.sources, edges.targets, edges.weights))
+    Ok((edges.sources, edges.targets, edges.occ_nums))
 }
 
 #[pyfunction]
@@ -173,7 +173,7 @@ pub(crate) fn sample_strength_cost_geometric_coordinates(
     let edges = core_sample_strength_cost_geometric_coordinates(
         &x, &y, gamma, &coord_x, &coord_y, self_loops, seed,
     );
-    Ok((edges.sources, edges.targets, edges.weights))
+    Ok((edges.sources, edges.targets, edges.occ_nums))
 }
 
 #[pyfunction]
@@ -196,7 +196,7 @@ pub(crate) fn sample_strength_cost_negative_binomial_coordinates(
     let edges = core_sample_strength_cost_negative_binomial_coordinates(
         &x, &y, gamma, &coord_x, &coord_y, layers, self_loops, seed,
     );
-    Ok((edges.sources, edges.targets, edges.weights))
+    Ok((edges.sources, edges.targets, edges.occ_nums))
 }
 
 #[pyfunction]
@@ -209,7 +209,7 @@ pub(crate) fn sample_strength_edges_binomial(
     seed: u64,
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let edges = core_sample_strength_edges_binomial(&x, &y, lam, layers, self_loops, seed);
-    (edges.sources, edges.targets, edges.weights)
+    (edges.sources, edges.targets, edges.occ_nums)
 }
 
 #[pyfunction]
@@ -223,7 +223,7 @@ pub(crate) fn sample_strength_degree_binomial(
     seed: u64,
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let edges = core_sample_strength_degree_binomial(&x, &y, &z, &w, layers, self_loops, seed);
-    (edges.sources, edges.targets, edges.weights)
+    (edges.sources, edges.targets, edges.occ_nums)
 }
 
 #[pyfunction]
@@ -237,7 +237,7 @@ pub(crate) fn sample_degree_events_binomial(
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let edges =
         core_sample_degree_events_binomial(&x, &y, positive_weight_rate, layers, self_loops, seed);
-    (edges.sources, edges.targets, edges.weights)
+    (edges.sources, edges.targets, edges.occ_nums)
 }
 
 #[pyfunction]
@@ -249,7 +249,7 @@ pub(crate) fn sample_strength_edges_geometric(
     seed: u64,
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let edges = core_sample_strength_edges_geometric(&x, &y, lam, self_loops, seed);
-    (edges.sources, edges.targets, edges.weights)
+    (edges.sources, edges.targets, edges.occ_nums)
 }
 
 #[pyfunction]
@@ -262,7 +262,7 @@ pub(crate) fn sample_strength_edges_negative_binomial(
     seed: u64,
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let edges = core_sample_strength_edges_negative_binomial(&x, &y, lam, layers, self_loops, seed);
-    (edges.sources, edges.targets, edges.weights)
+    (edges.sources, edges.targets, edges.occ_nums)
 }
 
 #[pyfunction]
@@ -275,7 +275,7 @@ pub(crate) fn sample_strength_degree_geometric(
     seed: u64,
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let edges = core_sample_strength_degree_geometric(&x, &y, &z, &w, self_loops, seed);
-    (edges.sources, edges.targets, edges.weights)
+    (edges.sources, edges.targets, edges.occ_nums)
 }
 
 #[pyfunction]
@@ -290,7 +290,7 @@ pub(crate) fn sample_strength_degree_negative_binomial(
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let edges =
         core_sample_strength_degree_negative_binomial(&x, &y, &z, &w, layers, self_loops, seed);
-    (edges.sources, edges.targets, edges.weights)
+    (edges.sources, edges.targets, edges.occ_nums)
 }
 
 #[pyfunction]
@@ -302,7 +302,7 @@ pub(crate) fn sample_degree_events_geometric(
     seed: u64,
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let edges = core_sample_degree_events_geometric(&x, &y, positive_weight_rate, self_loops, seed);
-    (edges.sources, edges.targets, edges.weights)
+    (edges.sources, edges.targets, edges.occ_nums)
 }
 
 #[pyfunction]
@@ -322,7 +322,7 @@ pub(crate) fn sample_degree_events_negative_binomial(
         self_loops,
         seed,
     );
-    (edges.sources, edges.targets, edges.weights)
+    (edges.sources, edges.targets, edges.occ_nums)
 }
 
 #[pyfunction]
@@ -334,7 +334,7 @@ pub(crate) fn sample_strength_negative_binomial(
     seed: u64,
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let edges = core_sample_strength_negative_binomial(&x, &y, layers, self_loops, seed);
-    (edges.sources, edges.targets, edges.weights)
+    (edges.sources, edges.targets, edges.occ_nums)
 }
 
 #[pyfunction]
@@ -349,7 +349,7 @@ pub(crate) fn sample_degree_events_poisson(
         return Err(PyValueError::new_err("x and y must have same length"));
     }
     let sample = core_sample_degree_events_poisson(&x, &y, positive_weight_rate, self_loops, seed);
-    Ok((sample.sources, sample.targets, sample.weights))
+    Ok((sample.sources, sample.targets, sample.occ_nums))
 }
 
 #[pyfunction]
@@ -372,7 +372,7 @@ pub(crate) fn sample_strength_degree_poisson(
     let sample = core_sample_strength_degree_poisson(
         &degree_x, &degree_y, &excess_x, &excess_y, self_loops, seed,
     );
-    Ok((sample.sources, sample.targets, sample.weights))
+    Ok((sample.sources, sample.targets, sample.occ_nums))
 }
 
 #[pyfunction]
@@ -384,5 +384,5 @@ pub(crate) fn sample_strength_multinomial(
     seed: u64,
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let edges = core_sample_strength_multinomial(&x, &y, total_events, self_loops, seed);
-    (edges.sources, edges.targets, edges.weights)
+    (edges.sources, edges.targets, edges.occ_nums)
 }

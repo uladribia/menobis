@@ -43,7 +43,7 @@ def _filter_strength_poisson(
         fit.y.tolist(),
         edges.source.tolist(),
         edges.target.tolist(),
-        edges.weight.tolist(),
+        edges.occ_num.tolist(),
     )
     absent = None
     if detect_absent:
@@ -94,7 +94,7 @@ def _filter_custom_poisson(
         rates.probability.tolist(),
         edges.source.tolist(),
         edges.target.tolist(),
-        edges.weight.tolist(),
+        edges.occ_num.tolist(),
     )
     absent = None
     if detect_absent:
@@ -141,7 +141,7 @@ def _filter_strength_edges_poisson(
         fit.lam,
         edges.source.tolist(),
         edges.target.tolist(),
-        edges.weight.tolist(),
+        edges.occ_num.tolist(),
     )
     absent = None
     if detect_absent:
@@ -193,7 +193,7 @@ def _filter_strength_cost_poisson(
         np.asarray(coord_y, dtype=np.float64).tolist(),
         edges.source.tolist(),
         edges.target.tolist(),
-        edges.weight.tolist(),
+        edges.occ_num.tolist(),
     )
     absent = None
     if detect_absent:
@@ -244,7 +244,7 @@ def _filter_strength_degree_poisson(
         fit.w.tolist(),
         edges.source.tolist(),
         edges.target.tolist(),
-        edges.weight.tolist(),
+        edges.occ_num.tolist(),
     )
     absent = None
     if detect_absent:
@@ -293,7 +293,7 @@ def _filter_degree_events_poisson(
         fit.q,
         edges.source.tolist(),
         edges.target.tolist(),
-        edges.weight.tolist(),
+        edges.occ_num.tolist(),
     )
     absent = None
     if detect_absent:
@@ -343,7 +343,7 @@ def _filter_strength_geometric(
         fit.y.tolist(),
         edges.source.tolist(),
         edges.target.tolist(),
-        edges.weight.tolist(),
+        edges.occ_num.tolist(),
     )
     absent = None
     if detect_absent:
@@ -394,7 +394,7 @@ def _filter_strength_binomial(
         layers,
         edges.source.tolist(),
         edges.target.tolist(),
-        edges.weight.tolist(),
+        edges.occ_num.tolist(),
     )
     absent = None
     if detect_absent:
@@ -443,7 +443,7 @@ def _filter_strength_negative_binomial(
         layers,
         edges.source.tolist(),
         edges.target.tolist(),
-        edges.weight.tolist(),
+        edges.occ_num.tolist(),
     )
     absent = None
     if detect_absent:
@@ -497,7 +497,7 @@ def _filter_strength_cost_binomial(
         layers,
         edges.source.tolist(),
         edges.target.tolist(),
-        edges.weight.tolist(),
+        edges.occ_num.tolist(),
     )
     absent = None
     if detect_absent:
@@ -550,7 +550,7 @@ def _filter_strength_edges_binomial(
         layers,
         edges.source.tolist(),
         edges.target.tolist(),
-        edges.weight.tolist(),
+        edges.occ_num.tolist(),
     )
     absent = None
     if detect_absent:
@@ -602,7 +602,7 @@ def _filter_strength_degree_binomial(
         layers,
         edges.source.tolist(),
         edges.target.tolist(),
-        edges.weight.tolist(),
+        edges.occ_num.tolist(),
     )
     absent = None
     if detect_absent:
@@ -654,7 +654,7 @@ def _filter_degree_events_binomial(
         layers,
         edges.source.tolist(),
         edges.target.tolist(),
-        edges.weight.tolist(),
+        edges.occ_num.tolist(),
     )
     absent = None
     if detect_absent:
@@ -707,7 +707,7 @@ def _filter_strength_cost_geometric(
         np.asarray(coord_y, dtype=np.float64).tolist(),
         edges.source.tolist(),
         edges.target.tolist(),
-        edges.weight.tolist(),
+        edges.occ_num.tolist(),
     )
     absent = None
     if detect_absent:
@@ -760,7 +760,7 @@ def _filter_strength_cost_negative_binomial(
         layers,
         edges.source.tolist(),
         edges.target.tolist(),
-        edges.weight.tolist(),
+        edges.occ_num.tolist(),
     )
     absent = None
     if detect_absent:
@@ -824,7 +824,7 @@ def _filter_strength_edges_geometric(
             fit.lam,
             edges.source.tolist(),
             edges.target.tolist(),
-            edges.weight.tolist(),
+            edges.occ_num.tolist(),
         ),
         absent,
         alpha=alpha,
@@ -871,7 +871,7 @@ def _filter_strength_edges_negative_binomial(
             layers,
             edges.source.tolist(),
             edges.target.tolist(),
-            edges.weight.tolist(),
+            edges.occ_num.tolist(),
         ),
         absent,
         alpha=alpha,
@@ -917,7 +917,7 @@ def _filter_strength_degree_geometric(
             fit.w.tolist(),
             edges.source.tolist(),
             edges.target.tolist(),
-            edges.weight.tolist(),
+            edges.occ_num.tolist(),
         ),
         absent,
         alpha=alpha,
@@ -966,7 +966,7 @@ def _filter_strength_degree_negative_binomial(
             layers,
             edges.source.tolist(),
             edges.target.tolist(),
-            edges.weight.tolist(),
+            edges.occ_num.tolist(),
         ),
         absent,
         alpha=alpha,
@@ -1010,7 +1010,7 @@ def _filter_degree_events_geometric(
             fit.q,
             edges.source.tolist(),
             edges.target.tolist(),
-            edges.weight.tolist(),
+            edges.occ_num.tolist(),
         ),
         absent,
         alpha=alpha,
@@ -1057,7 +1057,7 @@ def _filter_degree_events_negative_binomial(
             layers,
             edges.source.tolist(),
             edges.target.tolist(),
-            edges.weight.tolist(),
+            edges.occ_num.tolist(),
         ),
         absent,
         alpha=alpha,
@@ -1075,8 +1075,8 @@ def _node_count(edges: EdgeTable) -> int:
 def _strengths(edges: EdgeTable, node_count: int) -> tuple[np.ndarray, np.ndarray]:
     out = np.zeros(node_count, dtype=np.uint64)
     incoming = np.zeros(node_count, dtype=np.uint64)
-    np.add.at(out, edges.source, edges.weight)
-    np.add.at(incoming, edges.target, edges.weight)
+    np.add.at(out, edges.source, edges.occ_num)
+    np.add.at(incoming, edges.target, edges.occ_num)
     return out, incoming
 
 
