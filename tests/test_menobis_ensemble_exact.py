@@ -30,7 +30,7 @@ from menobis.models.generation import (
 def _enumerate_marginal_matrices(
     n: int, s_out: np.ndarray, s_in: np.ndarray
 ) -> list[np.ndarray]:
-    """Enumerate all n×n non-negative integer matrices with the given margins."""
+    """Enumerate all n-by-n non-negative integer matrices with the given margins."""
     total = int(s_out.sum())
     assert int(s_in.sum()) == total
 
