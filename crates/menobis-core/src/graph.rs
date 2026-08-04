@@ -1,5 +1,7 @@
 //! Occupied-pair graph primitives for MENoBiS.
 
+use crate::OccNum;
+
 /// An occupied directed pair (i→j) with positive integer occupation number.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct OccupiedPair {
@@ -8,13 +10,13 @@ pub struct OccupiedPair {
     /// Target node identifier.
     pub target: usize,
     /// Pair occupation number (t_ij > 0).
-    pub occ_num: u64,
+    pub occ_num: OccNum,
 }
 
 impl OccupiedPair {
     /// Create an occupied pair.
     #[must_use]
-    pub const fn new(source: usize, target: usize, occ_num: u64) -> Self {
+    pub const fn new(source: usize, target: usize, occ_num: OccNum) -> Self {
         Self {
             source,
             target,

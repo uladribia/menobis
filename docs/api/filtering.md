@@ -44,9 +44,9 @@ result = filter_model(
 | `alpha` | `0.05` | significance level |
 | `tail` | `two-sided` | `upper`, `lower`, or `two-sided` |
 | `correction` | `none` | `none`, `bonferroni`, or `fdr` |
-| `detect_absent` | `False` | scan zero-weight candidate pairs |
+| `detect_absent` | `False` | scan zero-occupation candidate pairs |
 | `min_occupation` | `0.5` | absent-pair occupation threshold |
-| `min_expected` | `0.0` | absent-pair expected-weight threshold |
+| `min_expected` | `0.0` | absent-pair expected-occupation threshold |
 | `max_absent` | `None` | cap absent output |
 
 ## Result shape

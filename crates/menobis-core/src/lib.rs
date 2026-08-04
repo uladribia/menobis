@@ -12,6 +12,9 @@ pub mod graph;
 pub mod pairs;
 pub mod stats;
 
+/// Canonical scalar type for integer pair occupation numbers t_ij.
+pub type OccNum = u64;
+
 /// Current MENoBiS core version, synchronized with the Python package during releases.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

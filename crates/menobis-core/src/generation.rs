@@ -18,7 +18,7 @@ use rayon::prelude::*;
 pub struct SampledNetwork {
     pub sources: Vec<u64>,
     pub targets: Vec<u64>,
-    pub occ_nums: Vec<u64>,
+    pub occ_nums: Vec<crate::OccNum>,
 }
 
 #[derive(Clone, Copy, Debug)]

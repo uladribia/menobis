@@ -25,7 +25,7 @@ and filtering. Python should reach these through PyO3 wrappers only.
 
 | Type | Description |
 |---|---|
-| `WeightFamily` | ME Poisson, B Binomial(M), W Geometric/NegativeBinomial(M) selector |
+| `OccupationFamily` | ME Poisson, B Binomial(M), W Geometric/NegativeBinomial(M) selector |
 | `PairDistribution` | Concrete pair law with sampling, expectation, occupation, p-values |
 | `PairDistributionProvider` | Computes a pair distribution on demand |
 | `CandidateSupport` | All-pairs or sparse-pairs support declaration |

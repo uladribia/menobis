@@ -63,14 +63,14 @@ result = filter_model(
 
 | Type | Module | Meaning |
 |---|---|---|
-| `EdgeTable` | `menobis.data.frames` | sparse `source`, `target`, `weight` arrays |
+| `EdgeTable` | `menobis.data.frames` | sparse `source`, `target`, `occ_num` arrays |
 | `ProbabilityTable` | `menobis.data.frames` | sparse custom probabilities/rates |
 | `FitResult` | `menobis.models` | base fit protocol with diagnostics |
 | `StrengthFit` | `menobis.models` | strength multipliers `x`, `y` |
 | `StrengthCostFit` | `menobis.models` | `x`, `y`, and `gamma` |
 | `StrengthEdgesFit` | `menobis.models` | `x`, `y`, and global edge multiplier |
 | `StrengthDegreeFit` | `menobis.models` | strength and degree multipliers |
-| `DegreeEventsFit` | `menobis.models` | degree occupation plus positive-weight parameter |
+| `DegreeEventsFit` | `menobis.models` | degree occupation plus positive-occupation intensity |
 | `FilterResult` | `menobis.filtering` | upper/lower/compatible/absent classifications |
 
 ## Analysis helpers
@@ -80,9 +80,9 @@ result = filter_model(
 | `directed_strengths(edges)` | out/in strengths |
 | `directed_degrees(edges)` | out/in binary degrees |
 | `compute_all_stats(edges)` | strengths, degrees, Y2, nearest-neighbour stats |
-| `weight_distribution(edges)` | occupation-count histogram |
+| `occupation_distribution(edges)` | occupation-count histogram |
 | `clustering_coefficient(edges)` | binary clustering |
-| `weighted_clustering_coefficient(edges)` | occupation-weighted clustering helper |
+| `occupation_clustering_coefficient(edges)` | occupation-weighted clustering helper |
 
 ## Synthetic fixtures
 

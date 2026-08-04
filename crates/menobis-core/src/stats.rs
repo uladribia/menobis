@@ -22,7 +22,7 @@ pub struct NodeStats {
 /// Occupation-number distribution entry.
 #[derive(Clone, Debug)]
 pub struct OccupationDistribution {
-    pub occ_nums: Vec<u64>,
+    pub occ_nums: Vec<crate::OccNum>,
     pub counts: Vec<u64>,
 }
 
