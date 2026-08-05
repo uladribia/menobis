@@ -69,6 +69,7 @@ benchmark tooling, packaging, and the next microcanonical phases.
 | W fallback performance | the exact DP is O(ET²); optimise via convolution, W-specific recurrences, or saddle-point proposals for larger systems (spec 04 §23.2) |
 | W large-dense hard regime | e.g. E=2000, T=16000, M=8: p_acc ≈ 4×10⁻⁴ exceeds the scaled-rejection work budget → clean error today; needs a better backend |
 | Conditioned-GC validation breadth | add larger systems and near-boundary regimes to `tests/test_menobis_conditioned_grandcanonical_identity.py` |
+| Observable convergence across families/constraints | test the convergence of network observables — y2 (second occupation moment), average weighted neighbour strength, leading entropy per event, and related quantities — across all families (ME/B/W) and all constraints (strength, strength-cost, strength-edges, strength-degree, degree-events, edges-events), for grand-canonical vs canonical vs microcanonical ensembles. Validate ensemble equivalence where the theory predicts it and document deviations (sparse limits, W convergence boundary, B saturation). See `docs/development/agent-specifications/00_intro.md` §13 |
 
 ### Pending — next phases (roadmap, `00_intro.md` §2)
 
