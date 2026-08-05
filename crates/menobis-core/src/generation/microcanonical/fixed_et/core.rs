@@ -99,11 +99,13 @@ fn sample_positive_occupations<F: FixedETOccupancy>(
         }
     }
 
-    let rej = family.estimate_rejection(t, e);
-    if rej <= REJECTION_THRESHOLD {
-        if let Ok(counts) = family.try_rejection(t, e, MAX_REJECTION_ATTEMPTS, rng) {
-            return Ok(counts);
-        }
+    // Always try the cheap exact rejection path first (≤20 attempts).
+    // Rejection is exact on acceptance, and each attempt costs far less than
+    // building the DP table.  The estimate-based routing is therefore only a
+    // performance hint for which path is *likely* to win; it never changes
+    // correctness.
+    if let Ok(counts) = family.try_rejection(t, e, MAX_REJECTION_ATTEMPTS, rng) {
+        return Ok(counts);
     }
     match family.sample_exact(t, e, rng) {
         Ok(counts) => Ok(counts),
@@ -111,6 +113,7 @@ fn sample_positive_occupations<F: FixedETOccupancy>(
             // The exact DP table would be too large.  Fall back to the
             // rejection proposal with an attempt budget scaled by the
             // estimated acceptance probability, bounded by total work.
+            let rej = family.estimate_rejection(t, e);
             scaled_rejection_fallback(family, t, e, rej, rng)
         }
         Err(e) => Err(e),

@@ -907,6 +907,9 @@ def _sample_fixed_et_edges_events(
     if not (len(k_src) == len(k_tgt) == len(k_occ)):
         msg = "known_source, known_target, known_occnum must have same length"
         raise ValueError(msg)
+    if family == "B" and (k_occ > layers).any():
+        msg = f"B fixed occupation exceeds layer capacity M={layers}"
+        raise ValueError(msg)
 
     # Fixed contributions to E and T
     e_fixed = int((k_occ > 0).sum())
