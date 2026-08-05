@@ -16,11 +16,11 @@ use rand::Rng;
 
 use super::core::{FixedETOccupancy, MAX_DP_CELLS};
 use super::errors::FixedETError;
-use super::support::sample_uniform_support;
+use crate::generation::microcanonical::support::uniform_edges::{sample_uniform_support, shuffle_slice};
 use crate::OccNum;
 
 /// W (Weighted / NegativeBinomial) family with M layers.
-pub(crate) struct WFamily {
+pub struct WFamily {
     pub layers: OccNum,
 }
 
@@ -248,7 +248,7 @@ fn sample_w_dp(
         k -= 1;
     }
     debug_assert_eq!(remaining, 0);
-    super::support::shuffle_slice(&mut occupations, rng);
+    shuffle_slice(&mut occupations, rng);
     Ok(occupations)
 }
 

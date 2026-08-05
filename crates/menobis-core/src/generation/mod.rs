@@ -30,6 +30,9 @@ pub use microcanonical::{
     sample_b_fixed_et, sample_b_fixed_et_explicit, sample_me_fixed_et, sample_me_fixed_et_explicit,
     sample_strength_stub_matching, sample_w_fixed_et, sample_w_fixed_et_explicit,
 };
+pub use microcanonical::fixed_kt::core::{sample_fixed_kt_core, FixedKTConfig};
+pub use microcanonical::fixed_kt::sampler::FixedDegreeMcmcConfig;
+pub use microcanonical::fixed_kt::diagnostics::FixedDegreeDiagnostics;
 pub use output::SampledNetwork;
 
 #[cfg(test)]

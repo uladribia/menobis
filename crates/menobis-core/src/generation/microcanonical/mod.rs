@@ -5,6 +5,8 @@
 //! - `fixed_et`: fixed-(E,T) samplers for ME, B, and W families.
 
 pub mod fixed_et;
+pub mod fixed_kt;
+pub mod support;
 
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
@@ -16,6 +18,10 @@ pub use fixed_et::{
     sample_b_fixed_et, sample_b_fixed_et_explicit, sample_me_fixed_et, sample_me_fixed_et_explicit,
     sample_w_fixed_et, sample_w_fixed_et_explicit,
 };
+pub use fixed_kt::core::sample_fixed_kt_core;
+pub use fixed_kt::sampler::FixedDegreeMcmcConfig;
+pub use fixed_kt::diagnostics::FixedDegreeDiagnostics;
+pub use fixed_kt::core::FixedKTConfig;
 
 pub fn sample_strength_stub_matching(
     strength_out: &[u64],

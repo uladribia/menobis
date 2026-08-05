@@ -647,3 +647,36 @@ def _sample_degree_events_negative_binomial(
         seed,
     )
     return _edge_table_from_lists(sources, targets, occ_nums)
+
+
+def _sample_degree_events_fixed_kt(
+    *,
+    family: str,
+    degree_out: list[int],
+    degree_in: list[int],
+    total_events: int,
+    layers: int = 1,
+    seed: int = 0,
+    self_loops: bool = False,
+    burn_in_sweeps: int = 50,
+    sweeps_per_sample: int = 10,
+) -> EdgeTable:
+    """Sample microcanonical DEGREE_EVENTS via MCMC support + occupation allocator."""
+    import menobis._menobis as _menobis
+
+    sources, targets, occ_nums = _menobis.sample_degree_events_fixed_kt(
+        family,
+        degree_out,
+        degree_in,
+        total_events,
+        layers,
+        burn_in_sweeps,
+        sweeps_per_sample,
+        seed,
+        self_loops,
+    )
+    return EdgeTable(
+        source=np.asarray(sources, dtype=np.uint64),
+        target=np.asarray(targets, dtype=np.uint64),
+        occ_num=np.asarray(occ_nums, dtype=np.uint64),
+    )

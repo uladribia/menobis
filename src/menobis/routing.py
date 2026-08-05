@@ -150,6 +150,8 @@ def sample_model(
     fit: FitResult | None = None,
     strength_out: NDArray[Any] | None = None,
     strength_in: NDArray[Any] | None = None,
+    degree_out: NDArray[Any] | None = None,
+    degree_in: NDArray[Any] | None = None,
     total_events: int | None = None,
     target_edges: int | None = None,
     coord_x: NDArray[Any] | None = None,
@@ -161,6 +163,8 @@ def sample_model(
     layers: int = 1,
     self_loops: bool = True,
     seed: int = 0,
+    burn_in_sweeps: int = 50,
+    sweeps_per_sample: int = 10,
 ) -> EdgeTable:
     """Sample a network from a fitted model or directly via stub matching.
 
@@ -177,6 +181,8 @@ def sample_model(
         fit=fit,
         strength_out=strength_out,
         strength_in=strength_in,
+        degree_out=degree_out,
+        degree_in=degree_in,
         total_events=total_events,
         target_edges=target_edges,
         coord_x=coord_x,
@@ -188,6 +194,8 @@ def sample_model(
         layers=layers,
         self_loops=self_loops,
         seed=seed,
+        burn_in_sweeps=burn_in_sweeps,
+        sweeps_per_sample=sweeps_per_sample,
     ).edges
 
 
@@ -199,6 +207,8 @@ def sample_model_detailed(
     fit: FitResult | None = None,
     strength_out: NDArray[Any] | None = None,
     strength_in: NDArray[Any] | None = None,
+    degree_out: NDArray[Any] | None = None,
+    degree_in: NDArray[Any] | None = None,
     total_events: int | None = None,
     target_edges: int | None = None,
     coord_x: NDArray[Any] | None = None,
@@ -210,6 +220,8 @@ def sample_model_detailed(
     layers: int = 1,
     self_loops: bool = True,
     seed: int = 0,
+    burn_in_sweeps: int = 50,
+    sweeps_per_sample: int = 10,
 ) -> SamplingResult:
     """Sample a network and return the detailed :class:`SamplingResult`.
 
@@ -254,9 +266,13 @@ def sample_model_detailed(
     if ensemble is Ensemble.MICROCANONICAL:
         if constraint is Constraint.EDGES_EVENTS:
             method = "microcanonical_fixed_et"
+            exactness = SamplingExactness.EXACT_DIRECT
+        elif constraint is Constraint.DEGREE_EVENTS:
+            method = "microcanonical_fixed_kt"
+            exactness = SamplingExactness.EXACT_STATIONARY_MCMC
         else:
             method = "stub_matching"
-        exactness = SamplingExactness.EXACT_DIRECT
+            exactness = SamplingExactness.EXACT_DIRECT
     elif ensemble is Ensemble.CANONICAL:
         method = "canonical_multinomial"
         exactness = SamplingExactness.EXACT_DIRECT
@@ -596,6 +612,7 @@ def _sample_model(
         _sample_strength_negative_binomial,
         _sample_strength_poisson,
         _sample_strength_stub_matching,
+        _sample_degree_events_fixed_kt,
     )
     from menobis.models.types import (
         DegreeEventsFit,
@@ -657,6 +674,29 @@ def _sample_model(
                         "until the MCMC backend exists"
                     )
                     raise UnsupportedModelCaseError(msg)
+            if constraint is Constraint.DEGREE_EVENTS:
+                if degree_out is None or degree_in is None:
+                    msg = "microcanonical DEGREE_EVENTS requires degree_out and degree_in"
+                    raise ValueError(msg)
+                if total_events is None:
+                    msg = "microcanonical DEGREE_EVENTS requires total_events"
+                    raise ValueError(msg)
+                fam = (
+                    "ME"
+                    if family == ModelFamily.ME
+                    else ("B" if family == ModelFamily.B else "W")
+                )
+                return _sample_degree_events_fixed_kt(
+                    family=fam,
+                    degree_out=np.asarray(degree_out, dtype=np.uint32).tolist(),
+                    degree_in=np.asarray(degree_in, dtype=np.uint32).tolist(),
+                    total_events=int(total_events),
+                    layers=int(layers),
+                    seed=seed,
+                    self_loops=bool(self_loops),
+                    burn_in_sweeps=burn_in_sweeps,
+                    sweeps_per_sample=sweeps_per_sample,
+                )
                 return _sample_strength_stub_matching(
                     np.asarray(strength_out, dtype=np.uint64),
                     np.asarray(strength_in, dtype=np.uint64),
@@ -1439,3 +1479,36 @@ __all__ = [
     "sample_model",
     "sample_model_detailed",
 ]
+
+
+def _sample_degree_events_fixed_kt(
+    *,
+    family: str,
+    degree_out: list[int],
+    degree_in: list[int],
+    total_events: int,
+    layers: int = 1,
+    seed: int = 0,
+    self_loops: bool = False,
+    burn_in_sweeps: int = 50,
+    sweeps_per_sample: int = 10,
+) -> EdgeTable:
+    """Sample microcanonical DEGREE_EVENTS via MCMC support + occupation allocator."""
+    import menobis._menobis as _menobis
+
+    sources, targets, occ_nums = _menobis.sample_degree_events_fixed_kt(
+        family,
+        degree_out,
+        degree_in,
+        total_events,
+        layers,
+        burn_in_sweeps,
+        sweeps_per_sample,
+        seed,
+        self_loops,
+    )
+    return EdgeTable(
+        source=np.asarray(sources, dtype=np.uint64),
+        target=np.asarray(targets, dtype=np.uint64),
+        occ_num=np.asarray(occ_nums, dtype=np.uint64),
+    )

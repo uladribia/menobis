@@ -94,6 +94,9 @@ use menobis_core::fitting::{
 use menobis_core::generation::{
     sample_b_fixed_et as core_sample_b_fixed_et,
     sample_b_fixed_et_explicit as core_sample_b_fixed_et_explicit,
+    sample_fixed_kt_core as core_sample_fixed_kt,
+    FixedKTConfig as CoreFixedKTConfig,
+    FixedDegreeMcmcConfig as CoreFixedDegreeMcmcConfig,
     sample_custom_multinomial as core_sample_custom_multinomial,
     sample_custom_poisson as core_sample_custom_poisson,
     sample_degree_events_binomial as core_sample_degree_events_binomial,
@@ -363,5 +366,6 @@ fn _menobis(module: &Bound<'_, PyModule>) -> PyResult<()> {
     add_pyfunction!(module, stats::benjamini_hochberg)?;
     add_pyfunction!(module, stats::clustering_coefficients)?;
     add_pyfunction!(module, stats::occupation_clustering_coefficients)?;
+    add_pyfunction!(module, generation::sample_degree_events_fixed_kt)?;
     Ok(())
 }

@@ -9,7 +9,7 @@ use rand::Rng;
 
 use super::super::super::output::SampledNetwork;
 use super::errors::FixedETError;
-use super::support::sample_uniform_support;
+use crate::generation::microcanonical::support::uniform_edges::sample_uniform_support;
 use crate::OccNum;
 
 // ---------------------------------------------------------------------------
@@ -82,7 +82,7 @@ pub trait FixedETOccupancy {
 // ---------------------------------------------------------------------------
 
 /// Draw `E` positive integers summing to `T` with the family-specific law.
-fn sample_positive_occupations<F: FixedETOccupancy>(
+pub(crate) fn sample_positive_occupations<F: FixedETOccupancy>(
     family: &F,
     t: OccNum,
     e: usize,
