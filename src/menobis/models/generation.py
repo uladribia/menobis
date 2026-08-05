@@ -664,7 +664,7 @@ def _sample_degree_events_fixed_kt(
     """Sample microcanonical DEGREE_EVENTS via MCMC support + occupation allocator."""
     import menobis._menobis as _menobis
 
-    sources, targets, occ_nums = _menobis.sample_degree_events_fixed_kt(
+    sources, targets, occ_nums = _menobis.sample_degree_events_fixed_kt(  # type: ignore
         family,
         degree_out,
         degree_in,
