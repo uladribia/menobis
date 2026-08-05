@@ -19,9 +19,9 @@ pub use fixed_et::{
     sample_w_fixed_et, sample_w_fixed_et_explicit,
 };
 pub use fixed_kt::core::sample_fixed_kt_core;
-pub use fixed_kt::sampler::FixedDegreeMcmcConfig;
-pub use fixed_kt::diagnostics::FixedDegreeDiagnostics;
 pub use fixed_kt::core::FixedKTConfig;
+pub use fixed_kt::diagnostics::FixedDegreeDiagnostics;
+pub use fixed_kt::sampler::FixedDegreeMcmcConfig;
 
 pub fn sample_strength_stub_matching(
     strength_out: &[u64],

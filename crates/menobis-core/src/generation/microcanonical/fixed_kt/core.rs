@@ -20,7 +20,7 @@ use crate::generation::microcanonical::fixed_et::core::{
 use crate::OccNum;
 
 /// Configuration for fixed-\((\mathbf k,T)\) sampling.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct FixedKTConfig {
     pub mcmc: FixedDegreeMcmcConfig,
     pub self_loops: bool,
@@ -29,15 +29,6 @@ pub struct FixedKTConfig {
 impl FixedKTConfig {
     pub fn new(mcmc: FixedDegreeMcmcConfig, self_loops: bool) -> Self {
         Self { mcmc, self_loops }
-    }
-}
-
-impl Default for FixedKTConfig {
-    fn default() -> Self {
-        Self {
-            mcmc: FixedDegreeMcmcConfig::default(),
-            self_loops: false,
-        }
     }
 }
 
@@ -63,11 +54,8 @@ pub fn sample_fixed_kt_core<F: FixedETOccupancy>(
     config: &FixedKTConfig,
 ) -> Result<SampledNetwork, FixedKTError> {
     // ---- Step 1: Validate degree sequences ----
-    let seq = DirectedDegreeSequence::new(
-        out_degrees.to_vec(),
-        in_degrees.to_vec(),
-        config.self_loops,
-    )?;
+    let seq =
+        DirectedDegreeSequence::new(out_degrees.to_vec(), in_degrees.to_vec(), config.self_loops)?;
 
     let e = seq.edge_count;
 
@@ -130,10 +118,7 @@ pub fn sample_fixed_kt_core<F: FixedETOccupancy>(
     };
 
     debug_assert_eq!(result.sources.len(), e);
-    debug_assert_eq!(
-        result.occ_nums.iter().copied().sum::<OccNum>(),
-        total
-    );
+    debug_assert_eq!(result.occ_nums.iter().copied().sum::<OccNum>(), total);
 
     Ok(result)
 }
@@ -141,8 +126,8 @@ pub fn sample_fixed_kt_core<F: FixedETOccupancy>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generation::microcanonical::fixed_et::me::MeFamily;
     use crate::generation::microcanonical::fixed_et::b::BFamily;
+    use crate::generation::microcanonical::fixed_et::me::MeFamily;
     use crate::generation::microcanonical::fixed_et::w::WFamily;
 
     #[test]
@@ -175,8 +160,8 @@ mod tests {
         let mut out = vec![0u32; n];
         out[0] = (n - 1) as u32;
         let mut inp = vec![0u32; n];
-        for i in 1..n {
-            inp[i] = 1;
+        for item in inp.iter_mut().skip(1) {
+            *item = 1;
         }
         let config = FixedKTConfig {
             mcmc: FixedDegreeMcmcConfig {
@@ -188,7 +173,7 @@ mod tests {
         };
         let t = (n as OccNum - 1) * 3;
         let result = sample_fixed_kt_core(&MeFamily, &out, &inp, t, &config).unwrap();
-        assert_eq!(result.sources.len(), (n - 1) as usize);
+        assert_eq!(result.sources.len(), n - 1);
         assert_eq!(result.occ_nums.iter().sum::<OccNum>(), t);
         let mut support_out = vec![0u32; n];
         for &s in &result.sources {
@@ -209,14 +194,7 @@ mod tests {
             },
             self_loops: false,
         };
-        let result = sample_fixed_kt_core(
-            &BFamily { layers: 4 },
-            &out,
-            &inp,
-            6,
-            &config,
-        )
-        .unwrap();
+        let result = sample_fixed_kt_core(&BFamily { layers: 4 }, &out, &inp, 6, &config).unwrap();
         assert_eq!(result.sources.len(), 4);
         assert_eq!(result.occ_nums.iter().sum::<OccNum>(), 6);
     }
@@ -233,14 +211,7 @@ mod tests {
             },
             self_loops: false,
         };
-        let result = sample_fixed_kt_core(
-            &WFamily { layers: 2 },
-            &out,
-            &inp,
-            10,
-            &config,
-        )
-        .unwrap();
+        let result = sample_fixed_kt_core(&WFamily { layers: 2 }, &out, &inp, 10, &config).unwrap();
         assert_eq!(result.sources.len(), 4);
         assert_eq!(result.occ_nums.iter().sum::<OccNum>(), 10);
     }

@@ -122,7 +122,10 @@ mod tests {
         // N=20, each node out=1, in=1 → E=20, max=1, rho_max=1/20=0.05 < 0.1
         let out = vec![1u32; 20];
         let inp = vec![1u32; 20];
-        assert_eq!(classify_heterogeneity(&out, &inp), DegreeHeterogeneity::Light);
+        assert_eq!(
+            classify_heterogeneity(&out, &inp),
+            DegreeHeterogeneity::Light
+        );
     }
 
     #[test]

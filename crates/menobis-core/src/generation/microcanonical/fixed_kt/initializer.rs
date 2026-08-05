@@ -4,11 +4,11 @@
 //! out-degree / in-degree sequence pair.
 //!
 //! Algorithm:
+//!
 //! 1. Sort nodes by residual out-degree descending.
-//! 2. For the node with highest residual out-degree:
-//!    a. Select the `d_out` distinct target nodes with the largest residual
-//!       in-degrees, skipping self-loops and already-occupied pairs.
-//!    b. Add directed edges.
+//! 2. For the node with highest residual out-degree, select the `d_out`
+//!    distinct target nodes with the largest residual in-degrees, skipping
+//!    self-loops and already-occupied pairs, then add directed edges.
 //! 3. If construction fails, retry with randomized target selection
 //!    (shuffle among tied in-degrees). This resolves cases where the
 //!    deterministic tie-breaking makes sub-optimal choices.
@@ -78,7 +78,7 @@ fn try_construct(
     let mut edge_set: HashSet<(u64, u64)> = HashSet::new();
     let mut edges: Vec<(u64, u64)> =
         Vec::with_capacity(out_degrees.iter().map(|&d| d as usize).sum());
-    let mut rng = rng_seed.map(|s| rand::rngs::StdRng::seed_from_u64(s));
+    let mut rng = rng_seed.map(rand::rngs::StdRng::seed_from_u64);
 
     // Active nodes with residual out-degree > 0
     let mut active: Vec<usize> = (0..n).filter(|&i| out_rem[i] > 0).collect();
@@ -96,9 +96,7 @@ fn try_construct(
         // Collect candidate targets
         let mut candidates: Vec<(u32, usize)> = (0..n)
             .filter(|&v| {
-                in_rem[v] > 0
-                    && (self_loops || u != v)
-                    && !edge_set.contains(&(u as u64, v as u64))
+                in_rem[v] > 0 && (self_loops || u != v) && !edge_set.contains(&(u as u64, v as u64))
             })
             .map(|v| (in_rem[v], v))
             .collect();
@@ -111,7 +109,7 @@ fn try_construct(
         }
 
         // Sort candidates by in-degree descending
-        candidates.sort_by(|a, b| b.0.cmp(&a.0));
+        candidates.sort_by_key(|c| std::cmp::Reverse(c.0));
 
         if let Some(ref mut rng) = rng {
             // Randomize among equal in-degrees (Fisher-Yates shuffle within ties)
@@ -166,8 +164,8 @@ mod tests {
         let state = greedy_directed_initialize(&out, &inp, false).unwrap();
         assert_eq!(state.edge_count(), 4);
         assert_eq!(state.out_degree_sequence(), out);
-        for i in 0..4 {
-            assert_eq!(state.in_degree(i), inp[i] as usize);
+        for (i, &d) in inp.iter().enumerate() {
+            assert_eq!(state.in_degree(i), d as usize);
         }
     }
 
@@ -177,14 +175,14 @@ mod tests {
         let mut out = vec![0u32; n];
         out[0] = (n - 1) as u32;
         let mut inp = vec![0u32; n];
-        for i in 1..n {
-            inp[i] = 1;
+        for item in inp.iter_mut().skip(1) {
+            *item = 1;
         }
         let state = greedy_directed_initialize(&out, &inp, false).unwrap();
-        assert_eq!(state.edge_count(), (n - 1) as usize);
+        assert_eq!(state.edge_count(), n - 1);
         assert_eq!(state.out_degree_sequence(), out);
-        for i in 0..n {
-            assert_eq!(state.in_degree(i), inp[i] as usize);
+        for (i, &d) in inp.iter().enumerate() {
+            assert_eq!(state.in_degree(i), d as usize);
         }
     }
 
@@ -220,8 +218,8 @@ mod tests {
         let inp = vec![1u32, 2, 1];
         let state = greedy_directed_initialize(&out, &inp, false).unwrap();
         assert_eq!(state.out_degree_sequence(), out);
-        for i in 0..3 {
-            assert_eq!(state.in_degree(i), inp[i] as usize);
+        for (i, &d) in inp.iter().enumerate() {
+            assert_eq!(state.in_degree(i), d as usize);
         }
     }
 

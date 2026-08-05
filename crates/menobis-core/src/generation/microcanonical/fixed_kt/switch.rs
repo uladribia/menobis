@@ -59,10 +59,8 @@ pub fn directed_switch_step(
     // Validation checks (cheapest first)
 
     // 1. Self-loops
-    if !self_loops {
-        if a == d || c == b {
-            return SwitchOutcome::Hold;
-        }
+    if !self_loops && (a == d || c == b) {
+        return SwitchOutcome::Hold;
     }
 
     // 2. Duplicate candidates (a==c && d==b) or (a==b && ...)

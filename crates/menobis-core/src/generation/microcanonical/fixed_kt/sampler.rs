@@ -141,7 +141,9 @@ pub fn sample_fixed_degree_support(
 ) -> Result<(DegreeSupportState, FixedDegreeDiagnostics), FixedKTError> {
     let n = out_degrees.len();
     if n == 0 {
-        return Err(FixedKTError::InvalidResidual("empty degree sequence".into()));
+        return Err(FixedKTError::InvalidResidual(
+            "empty degree sequence".into(),
+        ));
     }
 
     // Heterogeneity classification
@@ -213,8 +215,7 @@ mod tests {
             sweeps_per_sample: 5,
             seed: 42,
         };
-        let (state, diag) =
-            sample_fixed_degree_support(&out, &inp, false, &config).unwrap();
+        let (state, diag) = sample_fixed_degree_support(&out, &inp, false, &config).unwrap();
         assert_eq!(state.edge_count(), 4);
         assert_eq!(state.out_degree_sequence(), out);
         assert!(diag.acceptance_rate() >= 0.0);
@@ -226,17 +227,16 @@ mod tests {
         let mut out = vec![0u32; n];
         out[0] = (n - 1) as u32;
         let mut inp = vec![0u32; n];
-        for i in 1..n {
-            inp[i] = 1;
+        for item in inp.iter_mut().skip(1) {
+            *item = 1;
         }
         let config = FixedDegreeMcmcConfig {
             burn_in_sweeps: 10,
             sweeps_per_sample: 5,
             seed: 99,
         };
-        let (state, _diag) =
-            sample_fixed_degree_support(&out, &inp, false, &config).unwrap();
-        assert_eq!(state.edge_count(), (n - 1) as usize);
+        let (state, _diag) = sample_fixed_degree_support(&out, &inp, false, &config).unwrap();
+        assert_eq!(state.edge_count(), n - 1);
         assert_eq!(state.out_degree_sequence(), out);
     }
 
@@ -253,8 +253,7 @@ mod tests {
             sweeps_per_sample: 2,
             seed: 7,
         };
-        let (state, diag) =
-            sample_fixed_degree_support(&out, &inp, false, &config).unwrap();
+        let (state, diag) = sample_fixed_degree_support(&out, &inp, false, &config).unwrap();
         assert_eq!(state.edge_count(), n * (n - 1) - n);
         assert_eq!(diag.representation, RepresentationMode::Complement);
     }
@@ -268,10 +267,8 @@ mod tests {
             sweeps_per_sample: 2,
             seed: 42,
         };
-        let (state_a, _) =
-            sample_fixed_degree_support(&out, &inp, false, &config).unwrap();
-        let (state_b, _) =
-            sample_fixed_degree_support(&out, &inp, false, &config).unwrap();
+        let (state_a, _) = sample_fixed_degree_support(&out, &inp, false, &config).unwrap();
+        let (state_b, _) = sample_fixed_degree_support(&out, &inp, false, &config).unwrap();
         assert_eq!(state_a.edges, state_b.edges);
     }
 }

@@ -207,7 +207,7 @@ def _build_registry() -> dict[
         result_kind="sampled_network",
     )
     # Microcanonical ME/B/W fixed (k,T): MCMC support + occupation allocator, no fit.
-    for fam, ml in [(ModelFamily.ME, 1), (ModelFamily.B, 1), (ModelFamily.W, 1)]:
+    for fam in [ModelFamily.ME, ModelFamily.B, ModelFamily.W]:
         req_args = {"degree_out", "degree_in", "total_events"}
         if fam is not ModelFamily.ME:
             req_args.add("layers")
@@ -218,7 +218,9 @@ def _build_registry() -> dict[
             requires_fit=False,
             backend="microcanonical_fixed_kt",
             required_arguments=frozenset(req_args),
-            optional_arguments=frozenset({"seed", "self_loops", "burn_in_sweeps", "sweeps_per_sample"}),
+            optional_arguments=frozenset(
+                {"seed", "self_loops", "burn_in_sweeps", "sweeps_per_sample"}
+            ),
             supports_self_loops=True,
             supports_no_self_loops=True,
             result_kind="sampled_network",

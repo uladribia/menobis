@@ -102,8 +102,8 @@ impl DirectedDegreeSequence {
         // Quick check: degree sum zero consistency
         if edge_count == 0 {
             // All degrees must be zero
-            let all_zero = out_degrees.iter().all(|&d| d == 0)
-                && in_degrees.iter().all(|&d| d == 0);
+            let all_zero =
+                out_degrees.iter().all(|&d| d == 0) && in_degrees.iter().all(|&d| d == 0);
             if !all_zero {
                 return Err(FixedKTError::InvalidResidual(
                     "zero edge count but non-zero degrees".into(),
@@ -180,11 +180,11 @@ mod tests {
         let mut out = vec![0u32; n];
         out[0] = (n - 1) as u32;
         let mut inp = vec![0u32; n];
-        for i in 1..n {
-            inp[i] = 1;
+        for item in inp.iter_mut().skip(1) {
+            *item = 1;
         }
         let seq = DirectedDegreeSequence::new(out, inp, false).unwrap();
-        assert_eq!(seq.edge_count, (n - 1) as usize);
+        assert_eq!(seq.edge_count, n - 1);
     }
 
     #[test]

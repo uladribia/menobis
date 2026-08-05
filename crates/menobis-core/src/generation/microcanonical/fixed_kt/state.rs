@@ -27,7 +27,8 @@ impl DegreeSupportState {
     pub fn new(node_count: usize, edges: Vec<(u64, u64)>, self_loops: bool) -> Self {
         let m = edges.len();
         let mut edge_positions = HashMap::with_capacity(m);
-        let mut out_adjacency: Vec<HashSet<u64>> = (0..node_count).map(|_| HashSet::new()).collect();
+        let mut out_adjacency: Vec<HashSet<u64>> =
+            (0..node_count).map(|_| HashSet::new()).collect();
 
         for (idx, &(src, tgt)) in edges.iter().enumerate() {
             debug_assert!(
@@ -42,10 +43,7 @@ impl DegreeSupportState {
             out_adjacency[src as usize].insert(tgt);
         }
         debug_assert_eq!(edge_positions.len(), m);
-        debug_assert_eq!(
-            out_adjacency.iter().map(|s| s.len()).sum::<usize>(),
-            m
-        );
+        debug_assert_eq!(out_adjacency.iter().map(|s| s.len()).sum::<usize>(), m);
 
         Self {
             node_count,
@@ -88,7 +86,10 @@ impl DegreeSupportState {
     /// Panics if the pair is not present in debug mode.
     #[inline]
     pub fn remove(&mut self, pair: &(u64, u64)) {
-        let idx = self.edge_positions.remove(pair).expect("removing non-existent edge");
+        let idx = self
+            .edge_positions
+            .remove(pair)
+            .expect("removing non-existent edge");
         let last = self.edges.pop().unwrap();
         if idx < self.edges.len() {
             self.edges[idx] = last;
@@ -106,7 +107,10 @@ impl DegreeSupportState {
     /// Compute the in-degree of a node by scanning edges (for debug validation).
     #[inline]
     pub fn in_degree(&self, node: usize) -> usize {
-        self.edges.iter().filter(|&&(_, tgt)| tgt as usize == node).count()
+        self.edges
+            .iter()
+            .filter(|&&(_, tgt)| tgt as usize == node)
+            .count()
     }
 
     /// Compute the full out-degree sequence.
@@ -138,7 +142,12 @@ impl DegreeSupportState {
 
 impl std::fmt::Display for DegreeSupportState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "DegreeSupportState(n={}, E={})", self.node_count, self.edges.len())
+        write!(
+            f,
+            "DegreeSupportState(n={}, E={})",
+            self.node_count,
+            self.edges.len()
+        )
     }
 }
 

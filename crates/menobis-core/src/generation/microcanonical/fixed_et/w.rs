@@ -16,7 +16,9 @@ use rand::Rng;
 
 use super::core::{FixedETOccupancy, MAX_DP_CELLS};
 use super::errors::FixedETError;
-use crate::generation::microcanonical::support::uniform_edges::{sample_uniform_support, shuffle_slice};
+use crate::generation::microcanonical::support::uniform_edges::{
+    sample_uniform_support, shuffle_slice,
+};
 use crate::OccNum;
 
 /// W (Weighted / NegativeBinomial) family with M layers.

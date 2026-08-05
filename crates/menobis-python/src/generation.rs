@@ -552,12 +552,6 @@ pub(crate) fn sample_strength_degree_poisson(
     Ok((sample.sources, sample.targets, sample.occ_nums))
 }
 
-
-
-/// Exact microcanonical sampler with fixed out-degree, in-degree, and total events.
-///
-/// Supports ME, B, and W families.  Uses a directed double-edge-switch MCMC
-/// for the support and reuses the existing fixed-(E,T) occupation allocators.
 /// Exact microcanonical sampler with fixed out-degree, in-degree, and total events.
 ///
 /// Supports ME, B, and W families.  Uses a directed double-edge-switch MCMC
@@ -575,8 +569,8 @@ pub(crate) fn sample_degree_events_fixed_kt(
     seed: u64,
     self_loops: bool,
 ) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
-    use menobis_core::generation::microcanonical::fixed_et::me::MeFamily;
     use menobis_core::generation::microcanonical::fixed_et::b::BFamily;
+    use menobis_core::generation::microcanonical::fixed_et::me::MeFamily;
     use menobis_core::generation::microcanonical::fixed_et::w::WFamily;
 
     let config = CoreFixedKTConfig {
@@ -588,12 +582,30 @@ pub(crate) fn sample_degree_events_fixed_kt(
         self_loops,
     };
     let result = match family {
-        "ME" => core_sample_fixed_kt(&MeFamily, &degree_out, &degree_in, total_events as u64, &config),
-        "B" => core_sample_fixed_kt(&BFamily { layers: layers as u64 }, &degree_out, &degree_in, total_events as u64, &config),
-        "W" => core_sample_fixed_kt(&WFamily { layers: layers as u64 }, &degree_out, &degree_in, total_events as u64, &config),
-        other => return Err(PyValueError::new_err(format!(
-            "unknown family: {other}. Use ME, B, or W"
-        ))),
+        "ME" => core_sample_fixed_kt(&MeFamily, &degree_out, &degree_in, total_events, &config),
+        "B" => core_sample_fixed_kt(
+            &BFamily {
+                layers: layers as u64,
+            },
+            &degree_out,
+            &degree_in,
+            total_events,
+            &config,
+        ),
+        "W" => core_sample_fixed_kt(
+            &WFamily {
+                layers: layers as u64,
+            },
+            &degree_out,
+            &degree_in,
+            total_events,
+            &config,
+        ),
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "unknown family: {other}. Use ME, B, or W"
+            )))
+        }
     };
     match result {
         Ok(sample) => Ok((sample.sources, sample.targets, sample.occ_nums)),
