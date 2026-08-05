@@ -59,6 +59,32 @@ result = filter_model(
 )
 ```
 
+## Microcanonical fixed-(E,T) sampling
+
+The `EDGES_EVENTS` constraint supports the microcanonical ensemble (exact
+`E` occupied pairs and `T` total occupation) for all three families with no
+fitting step:
+
+```python
+net = sample_model(
+    ensemble=Ensemble.MICROCANONICAL,
+    family=ModelFamily.B,
+    constraint=Constraint.EDGES_EVENTS,
+    node_count=100,
+    target_edges=500,   # exact E
+    total_events=1500,  # exact T
+    layers=4,           # B/W only
+    self_loops=False,
+    seed=42,
+)
+# net has exactly 500 occupied pairs summing to 1500 events
+```
+
+Fixed pairs are frozen via `known_source`, `known_target`, `known_occnum`;
+their contribution is subtracted from `E`/`T`, the residual is sampled, and
+they are merged back. See
+[Microcanonical fixed-(E,T) sampling](../concepts/microcanonical.md).
+
 ## Common data/result types
 
 | Type | Module | Meaning |

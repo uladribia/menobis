@@ -28,6 +28,7 @@ nav:
       - Choose a null model: concepts/choose-null-model.md
       - Equations: concepts/equations.md
       - Partial constraints: concepts/partial-constraints.md
+      - Microcanonical fixed-(E,T): concepts/microcanonical.md
       - Solvers and scaling: concepts/solvers-and-scaling.md
       - Filtering statistics: concepts/filtering.md
   - Reference:
