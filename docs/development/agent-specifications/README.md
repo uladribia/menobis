@@ -15,6 +15,12 @@ These documents are intentionally more detailed than end-user documentation. The
 
 | Document | Status | Description |
 |---|---|---|
+| `00_intro.md` | Final | Microcanonical framework overview: ontology, notation, and project conventions |
+| `01_phase1_me_fixed_et_design.md` | Final | Design specification for the ME fixed-(E,T) microcanonical sampler |
+| `02_phase1_me_fixed_et_implementation.md` | Final | Implementation details and test protocol for the ME fixed-(E,T) sampler |
+| `03_phase2_b_fixed_et.md` | Final | B (BinaryLayers) family fixed-(E,T) design and implementation |
+| `04_phase2_w_fixed_et.md` | Final | W (Weighted/NegativeBinomial) family fixed-(E,T) design and implementation |
+| `05_phase3_fixed_kt_plan.md` | Draft | Plan for fixed-degree-sequence microcanonical sampling (ME/B/W, directed) |
 | `microcanonical-phase-0.md` | Final | Foundation refactor: terminology migration, shared abstractions, generation split, filtering adaptation, and benchmark baseline before the general microcanonical engine |
 
 ## Conventions

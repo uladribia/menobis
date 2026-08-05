@@ -15,11 +15,13 @@ use rand::Rng;
 
 use super::core::{FixedETOccupancy, MAX_DP_CELLS};
 use super::errors::FixedETError;
-use super::support::sample_uniform_support;
+use crate::generation::microcanonical::support::uniform_edges::{
+    sample_uniform_support, shuffle_slice,
+};
 use crate::OccNum;
 
 /// B (BinaryLayers) family with M layers.
-pub(crate) struct BFamily {
+pub struct BFamily {
     pub layers: OccNum,
 }
 
@@ -265,7 +267,7 @@ fn sample_b_dp(
     }
     debug_assert_eq!(remaining, 0);
     // Shuffle for exchangeability
-    super::support::shuffle_slice(&mut occupations, rng);
+    shuffle_slice(&mut occupations, rng);
     Ok(occupations)
 }
 

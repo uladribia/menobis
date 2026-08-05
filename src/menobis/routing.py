@@ -150,6 +150,8 @@ def sample_model(
     fit: FitResult | None = None,
     strength_out: NDArray[Any] | None = None,
     strength_in: NDArray[Any] | None = None,
+    degree_out: NDArray[Any] | None = None,
+    degree_in: NDArray[Any] | None = None,
     total_events: int | None = None,
     target_edges: int | None = None,
     coord_x: NDArray[Any] | None = None,
@@ -161,6 +163,8 @@ def sample_model(
     layers: int = 1,
     self_loops: bool = True,
     seed: int = 0,
+    burn_in_sweeps: int = 50,
+    sweeps_per_sample: int = 10,
 ) -> EdgeTable:
     """Sample a network from a fitted model or directly via stub matching.
 
@@ -177,6 +181,8 @@ def sample_model(
         fit=fit,
         strength_out=strength_out,
         strength_in=strength_in,
+        degree_out=degree_out,
+        degree_in=degree_in,
         total_events=total_events,
         target_edges=target_edges,
         coord_x=coord_x,
@@ -188,6 +194,8 @@ def sample_model(
         layers=layers,
         self_loops=self_loops,
         seed=seed,
+        burn_in_sweeps=burn_in_sweeps,
+        sweeps_per_sample=sweeps_per_sample,
     ).edges
 
 
@@ -199,6 +207,8 @@ def sample_model_detailed(
     fit: FitResult | None = None,
     strength_out: NDArray[Any] | None = None,
     strength_in: NDArray[Any] | None = None,
+    degree_out: NDArray[Any] | None = None,
+    degree_in: NDArray[Any] | None = None,
     total_events: int | None = None,
     target_edges: int | None = None,
     coord_x: NDArray[Any] | None = None,
@@ -210,6 +220,8 @@ def sample_model_detailed(
     layers: int = 1,
     self_loops: bool = True,
     seed: int = 0,
+    burn_in_sweeps: int = 50,
+    sweeps_per_sample: int = 10,
 ) -> SamplingResult:
     """Sample a network and return the detailed :class:`SamplingResult`.
 
@@ -237,6 +249,8 @@ def sample_model_detailed(
             fit=fit,
             strength_out=strength_out,
             strength_in=strength_in,
+            degree_out=degree_out,
+            degree_in=degree_in,
             total_events=total_events,
             target_edges=target_edges,
             coord_x=coord_x,
@@ -248,15 +262,21 @@ def sample_model_detailed(
             layers=layers,
             self_loops=self_loops,
             seed=seed,
+            burn_in_sweeps=burn_in_sweeps,
+            sweeps_per_sample=sweeps_per_sample,
         ),
     )
 
     if ensemble is Ensemble.MICROCANONICAL:
         if constraint is Constraint.EDGES_EVENTS:
             method = "microcanonical_fixed_et"
+            exactness = SamplingExactness.EXACT_DIRECT
+        elif constraint is Constraint.DEGREE_EVENTS:
+            method = "microcanonical_fixed_kt"
+            exactness = SamplingExactness.EXACT_STATIONARY_MCMC
         else:
             method = "stub_matching"
-        exactness = SamplingExactness.EXACT_DIRECT
+            exactness = SamplingExactness.EXACT_DIRECT
     elif ensemble is Ensemble.CANONICAL:
         method = "canonical_multinomial"
         exactness = SamplingExactness.EXACT_DIRECT
@@ -560,6 +580,8 @@ def _sample_model(
     fit: FitResult | None = None,
     strength_out: NDArray[Any] | None = None,
     strength_in: NDArray[Any] | None = None,
+    degree_out: NDArray[Any] | None = None,
+    degree_in: NDArray[Any] | None = None,
     total_events: int | None = None,
     target_edges: int | None = None,
     coord_x: NDArray[Any] | None = None,
@@ -571,9 +593,12 @@ def _sample_model(
     layers: int = 1,
     self_loops: bool = True,
     seed: int = 0,
+    burn_in_sweeps: int = 50,
+    sweeps_per_sample: int = 10,
 ) -> EdgeTable:
     from menobis.models.generation import (
         _sample_degree_events_binomial,
+        _sample_degree_events_fixed_kt,
         _sample_degree_events_geometric,
         _sample_degree_events_negative_binomial,
         _sample_degree_events_poisson,
@@ -662,9 +687,34 @@ def _sample_model(
                     np.asarray(strength_in, dtype=np.uint64),
                     seed=seed,
                 )
+            if constraint is Constraint.DEGREE_EVENTS:
+                if degree_out is None or degree_in is None:
+                    msg = (
+                        "microcanonical DEGREE_EVENTS requires degree_out and degree_in"
+                    )
+                    raise ValueError(msg)
+                if total_events is None:
+                    msg = "microcanonical DEGREE_EVENTS requires total_events"
+                    raise ValueError(msg)
+                fam = (
+                    "ME"
+                    if family == ModelFamily.ME
+                    else ("B" if family == ModelFamily.B else "W")
+                )
+                return _sample_degree_events_fixed_kt(
+                    family=fam,
+                    degree_out=np.asarray(degree_out, dtype=np.uint32).tolist(),
+                    degree_in=np.asarray(degree_in, dtype=np.uint32).tolist(),
+                    total_events=int(total_events),
+                    layers=int(layers),
+                    seed=seed,
+                    self_loops=bool(self_loops),
+                    burn_in_sweeps=burn_in_sweeps,
+                    sweeps_per_sample=sweeps_per_sample,
+                )
             msg = (
                 f"microcanonical does not support constraint={constraint!r}; "
-                "supported: STRENGTH, EDGES_EVENTS"
+                "supported: STRENGTH, EDGES_EVENTS, DEGREE_EVENTS"
             )
             raise UnsupportedModelCaseError(msg)
         case Ensemble.CANONICAL:

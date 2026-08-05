@@ -100,7 +100,8 @@ use menobis_core::generation::{
     sample_degree_events_geometric as core_sample_degree_events_geometric,
     sample_degree_events_negative_binomial as core_sample_degree_events_negative_binomial,
     sample_degree_events_poisson as core_sample_degree_events_poisson,
-    sample_edges_events as core_sample_edges_events, sample_me_fixed_et as core_sample_me_fixed_et,
+    sample_edges_events as core_sample_edges_events, sample_fixed_kt_core as core_sample_fixed_kt,
+    sample_me_fixed_et as core_sample_me_fixed_et,
     sample_me_fixed_et_explicit as core_sample_me_fixed_et_explicit,
     sample_strength_binomial as core_sample_strength_binomial,
     sample_strength_cost_binomial_coordinates as core_sample_strength_cost_binomial_coordinates,
@@ -122,6 +123,7 @@ use menobis_core::generation::{
     sample_strength_stub_matching as core_sample_strength_stub_matching,
     sample_w_fixed_et as core_sample_w_fixed_et,
     sample_w_fixed_et_explicit as core_sample_w_fixed_et_explicit,
+    FixedDegreeMcmcConfig as CoreFixedDegreeMcmcConfig, FixedKTConfig as CoreFixedKTConfig,
 };
 use menobis_core::graph::{
     directed_degrees as core_directed_degrees, directed_strengths as core_directed_strengths,
@@ -363,5 +365,6 @@ fn _menobis(module: &Bound<'_, PyModule>) -> PyResult<()> {
     add_pyfunction!(module, stats::benjamini_hochberg)?;
     add_pyfunction!(module, stats::clustering_coefficients)?;
     add_pyfunction!(module, stats::occupation_clustering_coefficients)?;
+    add_pyfunction!(module, generation::sample_degree_events_fixed_kt)?;
     Ok(())
 }

@@ -20,6 +20,7 @@ menobis = "menobis.cli.main:app"
 dev = [
   "matplotlib>=3.10.9",
   "maturin>=1.8,<2",
+  "ruff>=0.15,<0.16",
 ]
 docs = [
   "ipykernel>=6.29,<7",

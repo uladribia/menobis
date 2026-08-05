@@ -16,10 +16,11 @@ use rand::Rng;
 
 use super::core::{FixedETOccupancy, MAX_DP_CELLS};
 use super::errors::FixedETError;
+use crate::generation::microcanonical::support::uniform_edges::shuffle_slice;
 use crate::OccNum;
 
 /// ME (MultiEdge) family: no extra parameters.
-pub(crate) struct MeFamily;
+pub struct MeFamily;
 
 impl FixedETOccupancy for MeFamily {
     fn family_name(&self) -> &'static str {
@@ -207,7 +208,7 @@ fn sample_stirling_sizes(
     }
 
     // Shuffle for exchangeability
-    super::support::shuffle_slice(&mut sizes, rng);
+    shuffle_slice(&mut sizes, rng);
     Ok(sizes)
 }
 

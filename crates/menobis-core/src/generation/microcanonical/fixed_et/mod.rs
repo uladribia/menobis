@@ -15,7 +15,6 @@ pub mod core;
 pub mod errors;
 pub mod me;
 pub mod pairs;
-pub mod support;
 pub mod w;
 
 use rand::rngs::StdRng;
