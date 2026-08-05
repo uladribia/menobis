@@ -225,3 +225,57 @@ def test_b_fixed_et_matches_exact_enumeration() -> None:
         assert abs(observed - expected) < 5.0 * sigma, (
             f"config {config}: expected {expected:.1f}, observed {observed}"
         )
+
+
+# ---------------------------------------------------------------------------
+# M=1 and near-boundary cases
+# ---------------------------------------------------------------------------
+
+
+def test_b_fixed_et_m1_requires_t_equals_e() -> None:
+    """M=1: feasibility requires T == E; every pair gets occupation 1."""
+    n, e, t, layers = 10, 6, 6, 1
+    sampled = _sample_b(n, e, t, layers, seed=3)
+    assert len(sampled) == e
+    assert (sampled.occ_num == 1).all()
+    # T > E with M=1 is infeasible
+    with pytest.raises(ValueError):
+        _sample_b(10, 6, 7, layers=1, seed=3)
+
+
+def test_b_fixed_et_near_lower_bound() -> None:
+    """T = E + 1: exactly one pair gets 2, the rest get 1."""
+    n, e, layers = 10, 5, 3
+    t = e + 1
+    sampled = _sample_b(n, e, t, layers, seed=4)
+    assert len(sampled) == e
+    assert int(sampled.occ_num.sum()) == t
+    assert (sampled.occ_num >= 1).all()
+    # T = E+1 → one pair has 2, rest have 1
+    assert (sampled.occ_num == 1).sum() == e - 1
+    assert (sampled.occ_num == 2).sum() == 1
+
+
+def test_b_fixed_et_near_saturation() -> None:
+    """T = M*E - 1: complement-mode rejection path (many holes)."""
+    n, e, layers = 10, 6, 4
+    t = layers * e - 1
+    sampled = _sample_b(n, e, t, layers, seed=5)
+    assert len(sampled) == e
+    assert int(sampled.occ_num.sum()) == t
+    assert (sampled.occ_num <= layers).all()
+    assert (sampled.occ_num > 0).all()
+
+
+def test_b_fixed_et_rejects_fixed_occ_above_m() -> None:
+    """A fixed pair with occupation > M must be rejected."""
+    n, e, t, layers = 10, 5, 10, 3
+    with pytest.raises(ValueError, match="layer capacity"):
+        _sample_b(
+            n,
+            e,
+            t,
+            layers,
+            seed=6,
+            known=(np.array([0]), np.array([1]), np.array([5])),
+        )

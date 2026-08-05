@@ -192,3 +192,66 @@ def test_w_fixed_et_matches_exact_enumeration() -> None:
         assert abs(observed - expected) < 5.0 * sigma, (
             f"config {config}: expected {expected:.1f}, observed {observed}"
         )
+
+
+# ---------------------------------------------------------------------------
+# M=1 and near-boundary cases
+# ---------------------------------------------------------------------------
+
+
+def test_w_fixed_et_m1_uniform_compositions() -> None:
+    """M=1: degeneracy C(t, t)=1 → all positive compositions equally likely.
+
+    Verify the marginal occupation distribution of a single pair is uniform
+    over 1..T-E+1 (by symmetry all pairs share the same marginal).
+    """
+    n, e, t, layers = 6, 3, 8, 1
+    trials = 8_000
+    # Marginal: probability that a FIXED pair position is occupied with occ=k.
+    # By exchangeability, the marginal of pair i (unconditioned on support)
+    # is: P(i selected) = E/L, P(occ=k | selected) is what we test.
+    # Simpler: sample and look at the histogram of occupations of all edges,
+    # which should match the uniform-composition marginal.
+    occ_counts = {}
+    for seed in range(trials):
+        s = sample_model(
+            ensemble=Ensemble.MICROCANONICAL,
+            family=ModelFamily.W,
+            constraint=Constraint.EDGES_EVENTS,
+            node_count=n,
+            target_edges=e,
+            total_events=t,
+            layers=layers,
+            self_loops=False,
+            seed=seed,
+        )
+        for o in s.occ_num.tolist():
+            occ_counts[o] = occ_counts.get(o, 0) + 1
+
+    # Number of ordered compositions of T into E positive parts is C(T-1, E-1).
+    # Each composition has equal probability 1/C(T-1,E-1).
+    # The marginal of one *occupied* pair having occupation k:
+    #   count over compositions where the first part = k / total compositions.
+    total_compositions = math.comb(t - 1, e - 1)
+    total_edges_sampled = trials * e
+    for k in range(1, t - e + 2):
+        # compositions with first part = k: distribute remaining T-k into E-1 parts
+        n_comp_first_k = math.comb((t - k) - 1, (e - 1) - 1) if t - k >= e - 1 else 0
+        expected_frac = n_comp_first_k / total_compositions
+        expected_count = total_edges_sampled * expected_frac
+        observed = occ_counts.get(k, 0)
+        sigma = max((expected_count * (1.0 - expected_frac)) ** 0.5, 1.0)
+        assert abs(observed - expected_count) < 5.0 * sigma, (
+            f"M=1: occ={k} expected {expected_count:.1f}, observed {observed}"
+        )
+
+
+def test_w_fixed_et_near_lower_bound() -> None:
+    """T = E + 1: exactly one pair has 2, the rest have 1."""
+    n, e, layers = 10, 5, 2
+    t = e + 1
+    sampled = _sample_w(n, e, t, layers, seed=4)
+    assert len(sampled) == e
+    assert int(sampled.occ_num.sum()) == t
+    assert (sampled.occ_num == 1).sum() == e - 1
+    assert (sampled.occ_num == 2).sum() == 1
