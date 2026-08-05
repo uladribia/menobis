@@ -154,7 +154,8 @@ fn check_directed_graphicality(
 ) -> Result<(), String> {
     // Delegate to the initializer (which includes randomized fallback).
     // If the initializer can construct a support, the sequence is graphical.
-    match super::initializer::greedy_directed_initialize(out_degrees, in_degrees, self_loops) {
+    match super::initializer::greedy_directed_initialize(out_degrees, in_degrees, self_loops, None)
+    {
         Ok(_) => Ok(()),
         Err(e) => Err(format!("graphicality check failed: {e}")),
     }

@@ -76,9 +76,13 @@ impl FixedDegreeChain {
     }
 
     /// Perform one MCMC step (one directed double-edge switch proposal).
-    pub fn step(&mut self, rng: &mut impl Rng) -> SwitchOutcome {
+    pub fn step(
+        &mut self,
+        rng: &mut impl Rng,
+        admissible_pairs: Option<&[(u64, u64)]>,
+    ) -> SwitchOutcome {
         self.diagnostics.proposals += 1;
-        let outcome = directed_switch_step(&mut self.state, false, rng);
+        let outcome = directed_switch_step(&mut self.state, false, rng, admissible_pairs);
         match outcome {
             SwitchOutcome::Switched => {
                 self.diagnostics.accepted += 1;
@@ -92,27 +96,31 @@ impl FixedDegreeChain {
     }
 
     /// Perform one sweep (E proposal attempts).
-    pub fn sweep(&mut self, rng: &mut impl Rng) {
+    pub fn sweep(&mut self, rng: &mut impl Rng, admissible_pairs: Option<&[(u64, u64)]>) {
         let m = self.state.edge_count().max(1);
         for _ in 0..m {
-            self.step(rng);
+            self.step(rng, admissible_pairs);
         }
     }
 
     /// Run burn-in.
-    pub fn burn_in(&mut self, rng: &mut impl Rng) {
+    pub fn burn_in(&mut self, rng: &mut impl Rng, admissible_pairs: Option<&[(u64, u64)]>) {
         let sweeps = self.config.burn_in_sweeps.max(1);
         for _ in 0..sweeps {
-            self.sweep(rng);
+            self.sweep(rng, admissible_pairs);
         }
     }
 
     /// After burn-in, perform thinning sweeps and return a reference to the
     /// current support.
-    pub fn sample_support(&mut self, rng: &mut impl Rng) -> &[(u64, u64)] {
+    pub fn sample_support(
+        &mut self,
+        rng: &mut impl Rng,
+        admissible_pairs: Option<&[(u64, u64)]>,
+    ) -> &[(u64, u64)] {
         let sweeps = self.config.sweeps_per_sample.max(1);
         for _ in 0..sweeps {
-            self.sweep(rng);
+            self.sweep(rng, admissible_pairs);
         }
         &self.state.edges
     }
@@ -138,6 +146,7 @@ pub fn sample_fixed_degree_support(
     in_degrees: &[u32],
     self_loops: bool,
     config: &FixedDegreeMcmcConfig,
+    admissible_pairs: Option<&[(u64, u64)]>,
 ) -> Result<(DegreeSupportState, FixedDegreeDiagnostics), FixedKTError> {
     let n = out_degrees.len();
     if n == 0 {
@@ -154,7 +163,7 @@ pub fn sample_fixed_degree_support(
         diagnostics::maybe_complement(out_degrees, in_degrees, self_loops);
 
     // Initialize
-    let state = greedy_directed_initialize(&work_out, &work_in, self_loops)?;
+    let state = greedy_directed_initialize(&work_out, &work_in, self_loops, admissible_pairs)?;
 
     // Build chain
     let effective_config = FixedDegreeMcmcConfig {
@@ -170,10 +179,10 @@ pub fn sample_fixed_degree_support(
     let mut rng = rand::rngs::StdRng::seed_from_u64(config.seed);
 
     // Burn in
-    chain.burn_in(&mut rng);
+    chain.burn_in(&mut rng, admissible_pairs);
 
     // Sample (one after burn-in)
-    chain.sample_support(&mut rng);
+    chain.sample_support(&mut rng, admissible_pairs);
 
     // If complement mode, invert back to original representation
     if repr == RepresentationMode::Complement {
@@ -215,7 +224,7 @@ mod tests {
             sweeps_per_sample: 5,
             seed: 42,
         };
-        let (state, diag) = sample_fixed_degree_support(&out, &inp, false, &config).unwrap();
+        let (state, diag) = sample_fixed_degree_support(&out, &inp, false, &config, None).unwrap();
         assert_eq!(state.edge_count(), 4);
         assert_eq!(state.out_degree_sequence(), out);
         assert!(diag.acceptance_rate() >= 0.0);
@@ -235,7 +244,7 @@ mod tests {
             sweeps_per_sample: 5,
             seed: 99,
         };
-        let (state, _diag) = sample_fixed_degree_support(&out, &inp, false, &config).unwrap();
+        let (state, _diag) = sample_fixed_degree_support(&out, &inp, false, &config, None).unwrap();
         assert_eq!(state.edge_count(), n - 1);
         assert_eq!(state.out_degree_sequence(), out);
     }
@@ -253,7 +262,7 @@ mod tests {
             sweeps_per_sample: 2,
             seed: 7,
         };
-        let (state, diag) = sample_fixed_degree_support(&out, &inp, false, &config).unwrap();
+        let (state, diag) = sample_fixed_degree_support(&out, &inp, false, &config, None).unwrap();
         assert_eq!(state.edge_count(), n * (n - 1) - n);
         assert_eq!(diag.representation, RepresentationMode::Complement);
     }
@@ -267,8 +276,8 @@ mod tests {
             sweeps_per_sample: 2,
             seed: 42,
         };
-        let (state_a, _) = sample_fixed_degree_support(&out, &inp, false, &config).unwrap();
-        let (state_b, _) = sample_fixed_degree_support(&out, &inp, false, &config).unwrap();
+        let (state_a, _) = sample_fixed_degree_support(&out, &inp, false, &config, None).unwrap();
+        let (state_b, _) = sample_fixed_degree_support(&out, &inp, false, &config, None).unwrap();
         assert_eq!(state_a.edges, state_b.edges);
     }
 }

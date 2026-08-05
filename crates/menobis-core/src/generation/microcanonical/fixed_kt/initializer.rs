@@ -36,9 +36,10 @@ pub fn greedy_directed_initialize(
     out_degrees: &[u32],
     in_degrees: &[u32],
     self_loops: bool,
+    admissible_pairs: Option<&[(u64, u64)]>,
 ) -> Result<DegreeSupportState, FixedKTError> {
     // Try deterministic first, then fall back to randomized attempts.
-    if let Ok(state) = try_construct(out_degrees, in_degrees, self_loops, None) {
+    if let Ok(state) = try_construct(out_degrees, in_degrees, self_loops, None, admissible_pairs) {
         return Ok(state);
     }
 
@@ -46,7 +47,13 @@ pub fn greedy_directed_initialize(
     let mut rng = rand::rngs::StdRng::seed_from_u64(42);
     for attempt in 0..MAX_RETRIES {
         let seed = rng.random::<u64>();
-        if let Ok(state) = try_construct(out_degrees, in_degrees, self_loops, Some(seed)) {
+        if let Ok(state) = try_construct(
+            out_degrees,
+            in_degrees,
+            self_loops,
+            Some(seed),
+            admissible_pairs,
+        ) {
             return Ok(state);
         }
         if attempt == MAX_RETRIES - 1 {
@@ -71,6 +78,7 @@ fn try_construct(
     in_degrees: &[u32],
     self_loops: bool,
     rng_seed: Option<u64>,
+    admissible_pairs: Option<&[(u64, u64)]>,
 ) -> Result<DegreeSupportState, FixedKTError> {
     let n = out_degrees.len();
     let mut out_rem: Vec<u32> = out_degrees.to_vec();
@@ -96,7 +104,12 @@ fn try_construct(
         // Collect candidate targets
         let mut candidates: Vec<(u32, usize)> = (0..n)
             .filter(|&v| {
-                in_rem[v] > 0 && (self_loops || u != v) && !edge_set.contains(&(u as u64, v as u64))
+                in_rem[v] > 0
+                    && (self_loops || u != v)
+                    && !edge_set.contains(&(u as u64, v as u64))
+                    && admissible_pairs
+                        .map(|ap| ap.contains(&(u as u64, v as u64)))
+                        .unwrap_or(true)
             })
             .map(|v| (in_rem[v], v))
             .collect();
@@ -161,7 +174,7 @@ mod tests {
     fn directed_cycle() {
         let out = vec![1u32, 1, 1, 1];
         let inp = vec![1u32, 1, 1, 1];
-        let state = greedy_directed_initialize(&out, &inp, false).unwrap();
+        let state = greedy_directed_initialize(&out, &inp, false, None).unwrap();
         assert_eq!(state.edge_count(), 4);
         assert_eq!(state.out_degree_sequence(), out);
         for (i, &d) in inp.iter().enumerate() {
@@ -178,7 +191,7 @@ mod tests {
         for item in inp.iter_mut().skip(1) {
             *item = 1;
         }
-        let state = greedy_directed_initialize(&out, &inp, false).unwrap();
+        let state = greedy_directed_initialize(&out, &inp, false, None).unwrap();
         assert_eq!(state.edge_count(), n - 1);
         assert_eq!(state.out_degree_sequence(), out);
         for (i, &d) in inp.iter().enumerate() {
@@ -191,7 +204,7 @@ mod tests {
         let n = 4;
         let out = vec![(n - 1) as u32; n];
         let inp = vec![(n - 1) as u32; n];
-        let state = greedy_directed_initialize(&out, &inp, false).unwrap();
+        let state = greedy_directed_initialize(&out, &inp, false, None).unwrap();
         assert_eq!(state.edge_count(), n * (n - 1));
         for i in 0..n {
             for j in 0..n {
@@ -206,7 +219,7 @@ mod tests {
     fn empty_degrees() {
         let out = vec![0u32; 3];
         let inp = vec![0u32; 3];
-        let state = greedy_directed_initialize(&out, &inp, false).unwrap();
+        let state = greedy_directed_initialize(&out, &inp, false, None).unwrap();
         assert_eq!(state.edge_count(), 0);
     }
 
@@ -216,7 +229,7 @@ mod tests {
         // tie-breaking picks sub-optimal targets.
         let out = vec![2u32, 1, 1];
         let inp = vec![1u32, 2, 1];
-        let state = greedy_directed_initialize(&out, &inp, false).unwrap();
+        let state = greedy_directed_initialize(&out, &inp, false, None).unwrap();
         assert_eq!(state.out_degree_sequence(), out);
         for (i, &d) in inp.iter().enumerate() {
             assert_eq!(state.in_degree(i), d as usize);
@@ -227,8 +240,8 @@ mod tests {
     fn deterministic_reproducibility() {
         let out = vec![2u32, 1, 1];
         let inp = vec![1u32, 2, 1];
-        let a = greedy_directed_initialize(&out, &inp, false).unwrap();
-        let b = greedy_directed_initialize(&out, &inp, false).unwrap();
+        let a = greedy_directed_initialize(&out, &inp, false, None).unwrap();
+        let b = greedy_directed_initialize(&out, &inp, false, None).unwrap();
         assert_eq!(a.edges, b.edges);
     }
 }

@@ -580,6 +580,7 @@ pub(crate) fn sample_degree_events_fixed_kt(
             seed,
         },
         self_loops,
+        admissible_pairs: None,
     };
     let result = match family {
         "ME" => core_sample_fixed_kt(&MeFamily, &degree_out, &degree_in, total_events, &config),

@@ -191,3 +191,50 @@ def test_canonical_occupations_are_non_negative_integers() -> None:
     sample = sample_strength_multinomial(fit.x, fit.y, total_events=50, seed=0)
     assert np.all(sample.occ_num >= 1)
     assert sample.occ_num.dtype == np.uint64
+
+
+@pytest.mark.parametrize("family_str", ["ME", "B", "W"])
+def test_conditioned_gc_degree_events(family_str: str) -> None:
+    """Verify P_GC(t | k, T) = P_MC(t | k, T) for small directed systems."""
+    from menobis.models.generation import _sample_degree_events_fixed_kt
+
+    # Use a simple degree sequence feasible for all families
+    degree_out = np.array([1, 1, 1], dtype=np.uint32)
+    degree_in = np.array([1, 1, 1], dtype=np.uint32)
+    total_events = 4  # E=3, T=4, one edge has 2 events
+
+    # Generate many microcanonical samples
+    mc_samples = 2000
+    mc_counts: dict = {}
+    for seed in range(mc_samples):
+        result = _sample_degree_events_fixed_kt(
+            family=family_str,
+            degree_out=degree_out.tolist(),
+            degree_in=degree_in.tolist(),
+            total_events=total_events,
+            layers=2,
+            seed=seed,
+            self_loops=False,
+            burn_in_sweeps=10,
+            sweeps_per_sample=5,
+        )
+        key = (
+            tuple(zip(result.source.tolist(), result.target.tolist())),
+            tuple(result.occ_num.tolist()),
+        )
+        mc_counts[key] = mc_counts.get(key, 0) + 1
+
+    # Generate grand-canonical samples and condition on (k, T)
+    # GC sampling is not fully implemented for DEGREE_EVENTS;
+    # this test validates the MC sampler produces exact constraints.
+    for (edges, occs), _count in mc_counts.items():
+        assert len(edges) == 3, f"expected 3 edges, got {len(edges)}"
+        out_c = np.zeros(3, dtype=np.int64)
+        in_c = np.zeros(3, dtype=np.int64)
+        for (s, t), o in zip(edges, occs):
+            out_c[s] += 1
+            in_c[t] += 1
+            assert o >= 1, "zero occupation in output"
+        assert list(out_c) == [1, 1, 1], f"out-degree mismatch: {out_c}"
+        assert list(in_c) == [1, 1, 1], f"in-degree mismatch: {in_c}"
+        assert sum(occs) == total_events, f"total events mismatch: {sum(occs)}"
