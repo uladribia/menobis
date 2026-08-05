@@ -26,7 +26,10 @@ pub use grandcanonical::{
     sample_strength_edges_poisson, sample_strength_geometric, sample_strength_negative_binomial,
     sample_strength_poisson,
 };
-pub use microcanonical::sample_strength_stub_matching;
+pub use microcanonical::{
+    sample_b_fixed_et, sample_b_fixed_et_explicit, sample_me_fixed_et, sample_me_fixed_et_explicit,
+    sample_strength_stub_matching, sample_w_fixed_et, sample_w_fixed_et_explicit,
+};
 pub use output::SampledNetwork;
 
 #[cfg(test)]

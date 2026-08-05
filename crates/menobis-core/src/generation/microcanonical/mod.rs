@@ -1,14 +1,21 @@
 //! Microcanonical generation: exact-constraint direct samplers.
 //!
-//! The ME fixed-strength stub-matching sampler is uniform over compatible
-//! labelled stub matchings; aggregated occupation matrices are sampled with
-//! probability proportional to `T! / prod t_ij!` (thesis §2.1).
+//! - `sample_strength_stub_matching`: exact ME fixed-strength via stub
+//!   matching (uniform over compatible labelled matchings).
+//! - `fixed_et`: fixed-(E,T) samplers for ME, B, and W families.
+
+pub mod fixed_et;
 
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
 
 use super::output::SampledNetwork;
+
+pub use fixed_et::{
+    sample_b_fixed_et, sample_b_fixed_et_explicit, sample_me_fixed_et, sample_me_fixed_et_explicit,
+    sample_w_fixed_et, sample_w_fixed_et_explicit,
+};
 
 pub fn sample_strength_stub_matching(
     strength_out: &[u64],

@@ -148,6 +148,53 @@ def fit_strength_poisson_no_self_loops(
     tolerance: float,
     max_iterations: int,
 ) -> tuple[list[float], list[float], bool, int]: ...
+def sample_b_fixed_et(
+    node_count: int,
+    self_loops: bool,
+    layers: int,
+    residual_edges: int,
+    residual_total: int,
+    seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
+def sample_b_fixed_et_explicit(
+    admissible_sources: list[int],
+    admissible_targets: list[int],
+    layers: int,
+    residual_edges: int,
+    residual_total: int,
+    seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
+def sample_me_fixed_et(
+
+    node_count: int,
+    self_loops: bool,
+    residual_edges: int,
+    residual_total: int,
+    seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
+def sample_me_fixed_et_explicit(
+    admissible_sources: list[int],
+    admissible_targets: list[int],
+    residual_edges: int,
+    residual_total: int,
+    seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
+def sample_w_fixed_et(
+    node_count: int,
+    self_loops: bool,
+    layers: int,
+    residual_edges: int,
+    residual_total: int,
+    seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
+def sample_w_fixed_et_explicit(
+    admissible_sources: list[int],
+    admissible_targets: list[int],
+    layers: int,
+    residual_edges: int,
+    residual_total: int,
+    seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
 def sample_strength_stub_matching(
     strength_out: list[int],
     strength_in: list[int],

@@ -163,6 +163,49 @@ def _build_registry() -> dict[
         supports_no_self_loops=False,  # no-self-loop stub matching unsupported
         result_kind="sampled_network",
     )
+    # Microcanonical ME fixed (E,T): exact direct sampler, no fit.
+    registry[
+        (Verb.SAMPLE, Ensemble.MICROCANONICAL, ModelFamily.ME, Constraint.EDGES_EVENTS)
+    ] = ModelCapability(
+        supported=True,
+        requires_fit=False,
+        backend="microcanonical_fixed_et",
+        required_arguments=frozenset({"node_count", "target_edges", "total_events"}),
+        optional_arguments=frozenset({"seed", "self_loops"}),
+        supports_self_loops=True,
+        supports_no_self_loops=True,
+        result_kind="sampled_network",
+    )
+    # Microcanonical B fixed (E,T): exact direct sampler, no fit.
+    registry[
+        (Verb.SAMPLE, Ensemble.MICROCANONICAL, ModelFamily.B, Constraint.EDGES_EVENTS)
+    ] = ModelCapability(
+        supported=True,
+        requires_fit=False,
+        backend="microcanonical_fixed_et",
+        required_arguments=frozenset(
+            {"node_count", "target_edges", "total_events", "layers"}
+        ),
+        optional_arguments=frozenset({"seed", "self_loops"}),
+        supports_self_loops=True,
+        supports_no_self_loops=True,
+        result_kind="sampled_network",
+    )
+    # Microcanonical W fixed (E,T): exact direct sampler, no fit.
+    registry[
+        (Verb.SAMPLE, Ensemble.MICROCANONICAL, ModelFamily.W, Constraint.EDGES_EVENTS)
+    ] = ModelCapability(
+        supported=True,
+        requires_fit=False,
+        backend="microcanonical_fixed_et",
+        required_arguments=frozenset(
+            {"node_count", "target_edges", "total_events", "layers"}
+        ),
+        optional_arguments=frozenset({"seed", "self_loops"}),
+        supports_self_loops=True,
+        supports_no_self_loops=True,
+        result_kind="sampled_network",
+    )
 
     # --- FILTER ---
     for family in _FAMILIES:

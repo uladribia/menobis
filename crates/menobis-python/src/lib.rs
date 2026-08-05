@@ -92,13 +92,16 @@ use menobis_core::fitting::{
     fit_strength_cost_w_lbfgs as core_fit_strength_cost_w_lbfgs, CostFitOptions,
 };
 use menobis_core::generation::{
+    sample_b_fixed_et as core_sample_b_fixed_et,
+    sample_b_fixed_et_explicit as core_sample_b_fixed_et_explicit,
     sample_custom_multinomial as core_sample_custom_multinomial,
     sample_custom_poisson as core_sample_custom_poisson,
     sample_degree_events_binomial as core_sample_degree_events_binomial,
     sample_degree_events_geometric as core_sample_degree_events_geometric,
     sample_degree_events_negative_binomial as core_sample_degree_events_negative_binomial,
     sample_degree_events_poisson as core_sample_degree_events_poisson,
-    sample_edges_events as core_sample_edges_events,
+    sample_edges_events as core_sample_edges_events, sample_me_fixed_et as core_sample_me_fixed_et,
+    sample_me_fixed_et_explicit as core_sample_me_fixed_et_explicit,
     sample_strength_binomial as core_sample_strength_binomial,
     sample_strength_cost_binomial_coordinates as core_sample_strength_cost_binomial_coordinates,
     sample_strength_cost_geometric_coordinates as core_sample_strength_cost_geometric_coordinates,
@@ -117,6 +120,8 @@ use menobis_core::generation::{
     sample_strength_negative_binomial as core_sample_strength_negative_binomial,
     sample_strength_poisson as core_sample_strength_poisson,
     sample_strength_stub_matching as core_sample_strength_stub_matching,
+    sample_w_fixed_et as core_sample_w_fixed_et,
+    sample_w_fixed_et_explicit as core_sample_w_fixed_et_explicit,
 };
 use menobis_core::graph::{
     directed_degrees as core_directed_degrees, directed_strengths as core_directed_strengths,
@@ -245,8 +250,14 @@ fn _menobis(module: &Bound<'_, PyModule>) -> PyResult<()> {
     add_pyfunction!(module, fitting::fit_strength_degree_geometric)?;
     add_pyfunction!(module, fitting::fit_strength_degree_negative_binomial)?;
     add_pyfunction!(module, fitting::fit_strength_poisson_no_self_loops)?;
-    add_pyfunction!(module, generation::sample_strength_stub_matching)?;
     add_pyfunction!(module, generation::sample_edges_events)?;
+    add_pyfunction!(module, generation::sample_b_fixed_et)?;
+    add_pyfunction!(module, generation::sample_b_fixed_et_explicit)?;
+    add_pyfunction!(module, generation::sample_me_fixed_et)?;
+    add_pyfunction!(module, generation::sample_me_fixed_et_explicit)?;
+    add_pyfunction!(module, generation::sample_w_fixed_et)?;
+    add_pyfunction!(module, generation::sample_w_fixed_et_explicit)?;
+    add_pyfunction!(module, generation::sample_strength_stub_matching)?;
     add_pyfunction!(module, generation::sample_custom_poisson)?;
     add_pyfunction!(module, generation::sample_custom_multinomial)?;
     add_pyfunction!(module, generation::sample_strength_edges_poisson)?;

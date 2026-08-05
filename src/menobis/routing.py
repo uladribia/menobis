@@ -151,8 +151,13 @@ def sample_model(
     strength_out: NDArray[Any] | None = None,
     strength_in: NDArray[Any] | None = None,
     total_events: int | None = None,
+    target_edges: int | None = None,
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
+    node_count: int | None = None,
+    known_source: NDArray[Any] | None = None,
+    known_target: NDArray[Any] | None = None,
+    known_occnum: NDArray[Any] | None = None,
     layers: int = 1,
     self_loops: bool = True,
     seed: int = 0,
@@ -173,8 +178,13 @@ def sample_model(
         strength_out=strength_out,
         strength_in=strength_in,
         total_events=total_events,
+        target_edges=target_edges,
         coord_x=coord_x,
         coord_y=coord_y,
+        node_count=node_count,
+        known_source=known_source,
+        known_target=known_target,
+        known_occnum=known_occnum,
         layers=layers,
         self_loops=self_loops,
         seed=seed,
@@ -190,8 +200,13 @@ def sample_model_detailed(
     strength_out: NDArray[Any] | None = None,
     strength_in: NDArray[Any] | None = None,
     total_events: int | None = None,
+    target_edges: int | None = None,
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
+    node_count: int | None = None,
+    known_source: NDArray[Any] | None = None,
+    known_target: NDArray[Any] | None = None,
+    known_occnum: NDArray[Any] | None = None,
     layers: int = 1,
     self_loops: bool = True,
     seed: int = 0,
@@ -223,8 +238,13 @@ def sample_model_detailed(
             strength_out=strength_out,
             strength_in=strength_in,
             total_events=total_events,
+            target_edges=target_edges,
             coord_x=coord_x,
             coord_y=coord_y,
+            node_count=node_count,
+            known_source=known_source,
+            known_target=known_target,
+            known_occnum=known_occnum,
             layers=layers,
             self_loops=self_loops,
             seed=seed,
@@ -232,7 +252,10 @@ def sample_model_detailed(
     )
 
     if ensemble is Ensemble.MICROCANONICAL:
-        method = "stub_matching"
+        if constraint is Constraint.EDGES_EVENTS:
+            method = "microcanonical_fixed_et"
+        else:
+            method = "stub_matching"
         exactness = SamplingExactness.EXACT_DIRECT
     elif ensemble is Ensemble.CANONICAL:
         method = "canonical_multinomial"
@@ -538,8 +561,13 @@ def _sample_model(
     strength_out: NDArray[Any] | None = None,
     strength_in: NDArray[Any] | None = None,
     total_events: int | None = None,
+    target_edges: int | None = None,
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
+    node_count: int | None = None,
+    known_source: NDArray[Any] | None = None,
+    known_target: NDArray[Any] | None = None,
+    known_occnum: NDArray[Any] | None = None,
     layers: int = 1,
     self_loops: bool = True,
     seed: int = 0,
@@ -580,25 +608,65 @@ def _sample_model(
 
     match ensemble:
         case Ensemble.MICROCANONICAL:
-            if family != ModelFamily.ME or constraint != Constraint.STRENGTH:
-                msg = "microcanonical supports only family=ME, constraint=STRENGTH"
-                raise UnsupportedModelCaseError(msg)
-            if strength_out is None or strength_in is None:
-                msg = "microcanonical requires strength_out and strength_in"
-                raise ValueError(msg)
-            if not self_loops:
-                msg = (
-                    "microcanonical stub matching without self-loops is not "
-                    "supported yet: naive rejection would bias the uniform "
-                    "stub-matching measure; use the grand-canonical ensemble "
-                    "until the MCMC backend exists"
+            if constraint is Constraint.EDGES_EVENTS:
+                if family not in (ModelFamily.ME, ModelFamily.B, ModelFamily.W):
+                    msg = (
+                        f"microcanonical EDGES_EVENTS does not "
+                        f"support family={family!r}"
+                    )
+                    raise UnsupportedModelCaseError(msg)
+                # Exact ME fixed-(E,T) microcanonical sampler
+                if target_edges is None:
+                    msg = "microcanonical EDGES_EVENTS requires target_edges"
+                    raise ValueError(msg)
+                if total_events is None:
+                    msg = "microcanonical EDGES_EVENTS requires total_events"
+                    raise ValueError(msg)
+                if node_count is None:
+                    msg = "microcanonical EDGES_EVENTS requires node_count"
+                    raise ValueError(msg)
+                fam = (
+                    "ME"
+                    if family == ModelFamily.ME
+                    else ("B" if family == ModelFamily.B else "W")
                 )
-                raise UnsupportedModelCaseError(msg)
-            return _sample_strength_stub_matching(
-                np.asarray(strength_out, dtype=np.uint64),
-                np.asarray(strength_in, dtype=np.uint64),
-                seed=seed,
+                layers_val = int(layers) if fam in ("B", "W") else 1
+                return _sample_fixed_et_edges_events(
+                    family=fam,
+                    node_count=int(node_count),
+                    total_edges=int(target_edges),
+                    total_events=int(total_events),
+                    self_loops=bool(self_loops),
+                    layers=layers_val,
+                    known_source=known_source,
+                    known_target=known_target,
+                    known_occnum=known_occnum,
+                    seed=seed,
+                )
+            if constraint is Constraint.STRENGTH:
+                if strength_out is None or strength_in is None:
+                    msg = (
+                        "microcanonical strength requires strength_out and strength_in"
+                    )
+                    raise ValueError(msg)
+                if not self_loops:
+                    msg = (
+                        "microcanonical stub matching without self-loops is not "
+                        "supported yet: naive rejection would bias the uniform "
+                        "stub-matching measure; use the grand-canonical ensemble "
+                        "until the MCMC backend exists"
+                    )
+                    raise UnsupportedModelCaseError(msg)
+                return _sample_strength_stub_matching(
+                    np.asarray(strength_out, dtype=np.uint64),
+                    np.asarray(strength_in, dtype=np.uint64),
+                    seed=seed,
+                )
+            msg = (
+                f"microcanonical does not support constraint={constraint!r}; "
+                "supported: STRENGTH, EDGES_EVENTS"
             )
+            raise UnsupportedModelCaseError(msg)
         case Ensemble.CANONICAL:
             if family != ModelFamily.ME or constraint != Constraint.STRENGTH:
                 msg = "canonical supports only family=ME, constraint=STRENGTH"
@@ -760,6 +828,173 @@ def _sample_model(
         return dispatch[variant]()
     msg = f"unsupported constraint: {constraint!r}"
     raise UnsupportedModelCaseError(msg)
+
+
+def _sample_fixed_et_edges_events(
+    *,
+    family: str,
+    node_count: int,
+    total_edges: int,
+    total_events: int,
+    self_loops: bool,
+    layers: int = 1,
+    known_source: NDArray[Any] | None,
+    known_target: NDArray[Any] | None,
+    known_occnum: NDArray[Any] | None,
+    seed: int,
+) -> EdgeTable:
+    """Sample the exact microcanonical (E,T) model for any family.
+
+    Applies the shared preprocessing pipeline: fixed (known) pairs are
+    subtracted from the constraints, the residual problem is sampled over
+    the admissible pairs, and fixed pairs are merged back into the result.
+
+    * No fixed pairs: uses the O(1) index-mapped fast path (no pair list).
+    * With fixed pairs: builds the admissible pair set explicitly, computes
+      residual E/T, and calls the explicit-pair Rust kernel.
+    """
+    from menobis.data.frames import EdgeTable
+    from menobis.models.generation import (
+        _sample_b_fixed_et,
+        _sample_b_fixed_et_explicit,
+        _sample_me_fixed_et,
+        _sample_me_fixed_et_explicit,
+        _sample_w_fixed_et,
+        _sample_w_fixed_et_explicit,
+    )
+
+    n = int(node_count)
+    e_total = int(total_edges)
+    t_total = int(total_events)
+    sl = bool(self_loops)
+
+    has_fixed = not (
+        known_source is None or known_target is None or known_occnum is None
+    )
+    if not has_fixed:
+        # Fast path: all candidate pairs are admissible, no residualization.
+        f_dispatch = {
+            "ME": lambda: _sample_me_fixed_et(
+                n,
+                self_loops=sl,
+                residual_edges=e_total,
+                residual_total=t_total,
+                seed=seed,
+            ),
+            "B": lambda: _sample_b_fixed_et(
+                n,
+                self_loops=sl,
+                layers=layers,
+                residual_edges=e_total,
+                residual_total=t_total,
+                seed=seed,
+            ),
+            "W": lambda: _sample_w_fixed_et(
+                n,
+                self_loops=sl,
+                layers=layers,
+                residual_edges=e_total,
+                residual_total=t_total,
+                seed=seed,
+            ),
+        }
+        return f_dispatch[family]()
+
+    # ---- fixed-pair preprocessing ----
+    k_src = np.asarray(known_source, dtype=np.uint64)
+    k_tgt = np.asarray(known_target, dtype=np.uint64)
+    k_occ = np.asarray(known_occnum, dtype=np.uint64)
+    if not (len(k_src) == len(k_tgt) == len(k_occ)):
+        msg = "known_source, known_target, known_occnum must have same length"
+        raise ValueError(msg)
+
+    # Fixed contributions to E and T
+    e_fixed = int((k_occ > 0).sum())
+    t_fixed = int(k_occ.sum())
+    if e_fixed > e_total or t_fixed > t_total:
+        msg = (
+            f"fixed pairs contribute E={e_fixed}, T={t_fixed} which exceeds "
+            f"requested E={e_total}, T={t_total}"
+        )
+        raise ValueError(msg)
+    e_res = e_total - e_fixed
+    t_res = t_total - t_fixed
+
+    # Build the admissible (non-fixed) pair set.
+    # Pairs are indexed as in the Rust fast path: row-major (i, j),
+    # skipping the diagonal when self_loops=False.
+    fixed_keys: set[tuple[int, int]] = {
+        (int(s), int(t)) for s, t in zip(k_src, k_tgt, strict=True)
+    }
+    adm_src: list[int] = []
+    adm_tgt: list[int] = []
+    for i in range(n):
+        for j in range(n):
+            if not sl and i == j:
+                continue
+            if (i, j) in fixed_keys:
+                continue
+            adm_src.append(i)
+            adm_tgt.append(j)
+
+    if e_res > len(adm_src):
+        msg = (
+            f"residual edges ({e_res}) exceed admissible pairs ({len(adm_src)}) "
+            "after removing fixed pairs"
+        )
+        raise ValueError(msg)
+    if e_res > t_res:
+        msg = f"residual total ({t_res}) < residual edges ({e_res})"
+        raise ValueError(msg)
+
+    # Sample the residual graph
+    adm_src_arr = np.asarray(adm_src, dtype=np.uint64)
+    adm_tgt_arr = np.asarray(adm_tgt, dtype=np.uint64)
+    e_dispatch = {
+        "ME": lambda: _sample_me_fixed_et_explicit(
+            adm_src_arr,
+            adm_tgt_arr,
+            residual_edges=e_res,
+            residual_total=t_res,
+            seed=seed,
+        ),
+        "B": lambda: _sample_b_fixed_et_explicit(
+            adm_src_arr,
+            adm_tgt_arr,
+            layers=layers,
+            residual_edges=e_res,
+            residual_total=t_res,
+            seed=seed,
+        ),
+        "W": lambda: _sample_w_fixed_et_explicit(
+            adm_src_arr,
+            adm_tgt_arr,
+            layers=layers,
+            residual_edges=e_res,
+            residual_total=t_res,
+            seed=seed,
+        ),
+    }
+    residual = e_dispatch[family]()
+
+    # ---- merge fixed pairs back (drop fixed zeros: occ_num == 0) ----
+    pos_mask = k_occ > 0
+    k_src_pos = k_src[pos_mask]
+    k_tgt_pos = k_tgt[pos_mask]
+    k_occ_pos = k_occ[pos_mask]
+    if len(residual) == 0:
+        return EdgeTable(source=k_src_pos, target=k_tgt_pos, occ_num=k_occ_pos)
+    merged = EdgeTable(
+        source=np.concatenate([residual.source, k_src_pos]),
+        target=np.concatenate([residual.target, k_tgt_pos]),
+        occ_num=np.concatenate([residual.occ_num, k_occ_pos]),
+    )
+    # Final validation: total E and T must match the original request
+    assert len(merged) == e_total, f"merged E={len(merged)} != requested E={e_total}"
+    assert int(merged.occ_num.sum()) == t_total, (
+        f"merged T={merged.occ_num.sum()} != requested T={t_total}"
+    )
+    return merged
 
 
 def _node_count(edges: EdgeTable) -> int:

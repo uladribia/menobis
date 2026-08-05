@@ -115,6 +115,167 @@ def _sample_strength_stub_matching(
     return _edge_table_from_lists(sources, targets, occ_nums)
 
 
+def _sample_me_fixed_et(
+    node_count: int,
+    *,
+    self_loops: bool = True,
+    residual_edges: int,
+    residual_total: int,
+    seed: int = 0,
+) -> EdgeTable:
+    """Exact ME microcanonical sampler with fixed (E,T) over all pairs.
+
+    Draws an exact sample from the ME microcanonical distribution over
+    the full admissible set of ``node_count`` nodes (all N² or N(N-1)
+    candidate pairs depending on ``self_loops``).  No pair list is
+    materialised: the Rust kernel maps linear indices to pairs on the fly.
+
+    Args:
+        node_count: Number of nodes.
+        self_loops: Whether diagonal pairs are admissible.
+        residual_edges: Number of occupied pairs E.
+        residual_total: Total occupation T.
+        seed: Random seed.
+
+    Returns:
+        EdgeTable with exactly ``residual_edges`` occupied pairs and
+        total occupation ``residual_total``.
+    """
+    sources, targets, occ_nums = _menobis.sample_me_fixed_et(
+        int(node_count),
+        bool(self_loops),
+        int(residual_edges),
+        int(residual_total),
+        int(seed),
+    )
+    return _edge_table_from_lists(sources, targets, occ_nums)
+
+
+def _sample_me_fixed_et_explicit(
+    admissible_sources: NDArray[np.uint64],
+    admissible_targets: NDArray[np.uint64],
+    residual_edges: int,
+    residual_total: int,
+    *,
+    seed: int = 0,
+) -> EdgeTable:
+    """Exact ME microcanonical sampler on an explicit admissible-pair set.
+
+    Used when masks or fixed pairs reduce the admissible domain.  The
+    caller is responsible for computing residual E and T by subtracting
+    fixed-pair contributions, and for merging fixed pairs afterwards.
+
+    Args:
+        admissible_sources: Source nodes of admissible (free) pairs.
+        admissible_targets: Target nodes of admissible (free) pairs.
+        residual_edges: Number of occupied pairs E in the residual graph.
+        residual_total: Total occupation T in the residual graph.
+        seed: Random seed.
+
+    Returns:
+        EdgeTable with exactly ``residual_edges`` occupied pairs and
+        total occupation ``residual_total``.
+    """
+    sources_list = np.asarray(admissible_sources, dtype=np.uint64).tolist()
+    targets_list = np.asarray(admissible_targets, dtype=np.uint64).tolist()
+    sources, targets, occ_nums = _menobis.sample_me_fixed_et_explicit(
+        sources_list,
+        targets_list,
+        int(residual_edges),
+        int(residual_total),
+        int(seed),
+    )
+    return _edge_table_from_lists(sources, targets, occ_nums)
+
+
+def _sample_b_fixed_et(
+    node_count: int,
+    *,
+    self_loops: bool = True,
+    layers: int = 1,
+    residual_edges: int,
+    residual_total: int,
+    seed: int = 0,
+) -> EdgeTable:
+    """Exact B microcanonical sampler with fixed (E,T) and M layers."""
+    sources, targets, occ_nums = _menobis.sample_b_fixed_et(
+        int(node_count),
+        bool(self_loops),
+        int(layers),
+        int(residual_edges),
+        int(residual_total),
+        int(seed),
+    )
+    return _edge_table_from_lists(sources, targets, occ_nums)
+
+
+def _sample_b_fixed_et_explicit(
+    admissible_sources: NDArray[np.uint64],
+    admissible_targets: NDArray[np.uint64],
+    layers: int = 1,
+    residual_edges: int = 0,
+    residual_total: int = 0,
+    *,
+    seed: int = 0,
+) -> EdgeTable:
+    """Exact B microcanonical sampler on an explicit admissible-pair set."""
+    sources_list = np.asarray(admissible_sources, dtype=np.uint64).tolist()
+    targets_list = np.asarray(admissible_targets, dtype=np.uint64).tolist()
+    sources, targets, occ_nums = _menobis.sample_b_fixed_et_explicit(
+        sources_list,
+        targets_list,
+        int(layers),
+        int(residual_edges),
+        int(residual_total),
+        int(seed),
+    )
+    return _edge_table_from_lists(sources, targets, occ_nums)
+
+
+def _sample_w_fixed_et(
+    node_count: int,
+    *,
+    self_loops: bool = True,
+    layers: int = 1,
+    residual_edges: int,
+    residual_total: int,
+    seed: int = 0,
+) -> EdgeTable:
+    """Exact W microcanonical sampler with fixed (E,T) and M layers."""
+    sources, targets, occ_nums = _menobis.sample_w_fixed_et(
+        int(node_count),
+        bool(self_loops),
+        int(layers),
+        int(residual_edges),
+        int(residual_total),
+        int(seed),
+    )
+    return _edge_table_from_lists(sources, targets, occ_nums)
+
+
+def _sample_w_fixed_et_explicit(
+    admissible_sources: NDArray[np.uint64],
+    admissible_targets: NDArray[np.uint64],
+    layers: int = 1,
+    residual_edges: int = 0,
+    residual_total: int = 0,
+    *,
+    seed: int = 0,
+) -> EdgeTable:
+    """Exact W microcanonical sampler on an explicit admissible-pair set."""
+    sources_list = np.asarray(admissible_sources, dtype=np.uint64).tolist()
+    targets_list = np.asarray(admissible_targets, dtype=np.uint64).tolist()
+    sources, targets, occ_nums = _menobis.sample_w_fixed_et_explicit(
+        sources_list,
+        targets_list,
+        int(layers),
+        int(residual_edges),
+        int(residual_total),
+        int(seed),
+    )
+    return _edge_table_from_lists(sources, targets, occ_nums)
+
+
 def _sample_custom_poisson(
     probabilities: ProbabilityTable,
     *,

@@ -1,5 +1,154 @@
 use super::*;
 
+/// Exact ME microcanonical sampler with fixed (E,T).
+///
+/// Draws an exact sample from the ME microcanonical distribution with
+/// fixed occupied-pair count `E` and fixed total occupation `T`.
+/// Pair indices are computed on the fly from `node_count` + `self_loops`;
+/// no pair list is materialised.
+#[pyfunction]
+pub(crate) fn sample_me_fixed_et(
+    node_count: usize,
+    self_loops: bool,
+    residual_edges: usize,
+    residual_total: u64,
+    seed: u64,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    match core_sample_me_fixed_et(node_count, self_loops, residual_edges, residual_total, seed) {
+        Ok(sample) => Ok((sample.sources, sample.targets, sample.occ_nums)),
+        Err(e) => Err(PyValueError::new_err(e.to_string())),
+    }
+}
+
+/// Exact ME microcanonical sampler with fixed (E,T) on an explicit
+/// admissible-pair set (after masks/fixed-pair subtraction).
+#[pyfunction]
+pub(crate) fn sample_me_fixed_et_explicit(
+    admissible_sources: Vec<u64>,
+    admissible_targets: Vec<u64>,
+    residual_edges: usize,
+    residual_total: u64,
+    seed: u64,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    if admissible_sources.len() != admissible_targets.len() {
+        return Err(PyValueError::new_err(
+            "admissible_sources and admissible_targets must have same length",
+        ));
+    }
+    match core_sample_me_fixed_et_explicit(
+        &admissible_sources,
+        &admissible_targets,
+        residual_edges,
+        residual_total,
+        seed,
+    ) {
+        Ok(sample) => Ok((sample.sources, sample.targets, sample.occ_nums)),
+        Err(e) => Err(PyValueError::new_err(e.to_string())),
+    }
+}
+
+/// Exact B microcanonical sampler with fixed (E,T) and M layers.
+#[pyfunction]
+pub(crate) fn sample_b_fixed_et(
+    node_count: usize,
+    self_loops: bool,
+    layers: u32,
+    residual_edges: usize,
+    residual_total: u64,
+    seed: u64,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    match core_sample_b_fixed_et(
+        node_count,
+        self_loops,
+        layers as u64,
+        residual_edges,
+        residual_total,
+        seed,
+    ) {
+        Ok(sample) => Ok((sample.sources, sample.targets, sample.occ_nums)),
+        Err(e) => Err(PyValueError::new_err(e.to_string())),
+    }
+}
+
+/// Exact B microcanonical sampler with explicit pair arrays.
+#[pyfunction]
+pub(crate) fn sample_b_fixed_et_explicit(
+    admissible_sources: Vec<u64>,
+    admissible_targets: Vec<u64>,
+    layers: u32,
+    residual_edges: usize,
+    residual_total: u64,
+    seed: u64,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    if admissible_sources.len() != admissible_targets.len() {
+        return Err(PyValueError::new_err(
+            "admissible_sources and admissible_targets must have same length",
+        ));
+    }
+    match core_sample_b_fixed_et_explicit(
+        &admissible_sources,
+        &admissible_targets,
+        layers as u64,
+        residual_edges,
+        residual_total,
+        seed,
+    ) {
+        Ok(sample) => Ok((sample.sources, sample.targets, sample.occ_nums)),
+        Err(e) => Err(PyValueError::new_err(e.to_string())),
+    }
+}
+
+/// Exact W microcanonical sampler with fixed (E,T) and M layers.
+#[pyfunction]
+pub(crate) fn sample_w_fixed_et(
+    node_count: usize,
+    self_loops: bool,
+    layers: u32,
+    residual_edges: usize,
+    residual_total: u64,
+    seed: u64,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    match core_sample_w_fixed_et(
+        node_count,
+        self_loops,
+        layers as u64,
+        residual_edges,
+        residual_total,
+        seed,
+    ) {
+        Ok(sample) => Ok((sample.sources, sample.targets, sample.occ_nums)),
+        Err(e) => Err(PyValueError::new_err(e.to_string())),
+    }
+}
+
+/// Exact W microcanonical sampler with explicit pair arrays.
+#[pyfunction]
+pub(crate) fn sample_w_fixed_et_explicit(
+    admissible_sources: Vec<u64>,
+    admissible_targets: Vec<u64>,
+    layers: u32,
+    residual_edges: usize,
+    residual_total: u64,
+    seed: u64,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    if admissible_sources.len() != admissible_targets.len() {
+        return Err(PyValueError::new_err(
+            "admissible_sources and admissible_targets must have same length",
+        ));
+    }
+    match core_sample_w_fixed_et_explicit(
+        &admissible_sources,
+        &admissible_targets,
+        layers as u64,
+        residual_edges,
+        residual_total,
+        seed,
+    ) {
+        Ok(sample) => Ok((sample.sources, sample.targets, sample.occ_nums)),
+        Err(e) => Err(PyValueError::new_err(e.to_string())),
+    }
+}
+
 /// Sample the symmetric EDGES_EVENTS model.
 #[pyfunction]
 pub(crate) fn sample_edges_events(
