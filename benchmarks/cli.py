@@ -21,7 +21,7 @@ import numpy as np
 import typer
 
 from menobis.data.frames import EdgeTable
-from menobis.models.spec import Constraint, ModelFamily
+from menobis.models.spec import Constraint, Ensemble, ModelFamily
 from menobis.routing import filter_model, fit_model, sample_model
 from menobis.utilities.synthetic import (
     derive_synthetic_constraints,
@@ -982,6 +982,165 @@ def compare_command(
 
 
 # --- Display ---
+
+
+@app.command("micro")
+def micro_command(
+    nodes: Annotated[
+        str, typer.Option("--nodes", help="Comma-separated node sizes.")
+    ] = "100,500",
+    families: Annotated[
+        str, typer.Option("--families", help="Comma-separated families: me,b,w.")
+    ] = "me,b,w",
+    regimes: Annotated[
+        str, typer.Option("--regime", help="Comma-separated regimes: sparse,dense.")
+    ] = "sparse,dense",
+    known_pairs: Annotated[
+        str, typer.Option("--known-pairs", help="Comma-separated fixed-pair fractions.")
+    ] = "0.0,0.05",
+    seed: Annotated[int, typer.Option("--seed", help="Base random seed.")] = 10_000,
+    self_loops: Annotated[bool, typer.Option("--self-loops/--no-self-loops")] = False,
+    no_memory: Annotated[
+        bool, typer.Option("--no-memory", help="Skip memory profiling.")
+    ] = False,
+    output: Annotated[Path, typer.Option("--output", "-o")] = Path(
+        "benchmarks/results/microcanonical-fixed-et.json"
+    ),
+    output_json: Annotated[
+        bool, typer.Option("--json", help="Print JSON to stdout.")
+    ] = False,
+) -> None:
+    """Benchmark the microcanonical fixed-(E,T) samplers (ME, B, W).
+
+    For each family and regime, derives feasible (E, T) from a synthetic
+    PA-geographic network and samples the microcanonical EDGES_EVENTS model
+    directly (no fitting), with and without fixed pairs.
+    """
+    rows: list[BenchmarkRow] = []
+    _print_header()
+
+    node_list = tuple(_parse_ints(nodes))
+    family_list = tuple(_parse_tokens(families, ("me", "b", "w"), "family"))
+    regime_list = tuple(_parse_tokens(regimes, ("sparse", "dense"), "regime"))
+    kp_list = tuple(_parse_floats(known_pairs))
+
+    for n_index, node_count in enumerate(node_list):
+        for regime in regime_list:
+            params = _regime_params(regime, node_count)
+            net, gen_m = _measure(
+                lambda _nc=node_count, _ni=n_index, _p=params: (
+                    generate_pa_geographic_network(
+                        _nc, seed=seed + _ni, self_loops=self_loops, **_p
+                    )
+                ),
+                track_memory=not no_memory,
+            )
+            edges = net.edges
+            e_total = edges.num_edges
+            t_total = edges.total_events
+
+            for family in family_list:
+                # B layer count: must satisfy T <= M*E, and fixed occ <= M.
+                layers = max(1, int(np.ceil(t_total / e_total)))
+                if family == "b":
+                    layers = max(layers, int(edges.occ_num.max()) if len(edges) else 1)
+                layers = max(layers, 1)
+
+                for kp_fraction in kp_list:
+                    # Build fixed pairs (fraction of edges, sorted)
+                    known = None
+                    if kp_fraction > 0.0:
+                        n_fixed = max(1, int(kp_fraction * e_total))
+                        idx = np.sort(np.random.default_rng(seed).choice(
+                            e_total, size=n_fixed, replace=False
+                        ))
+                        known = (
+                            edges.source[idx].astype(np.uint64),
+                            edges.target[idx].astype(np.uint64),
+                            edges.occ_num[idx].astype(np.uint64),
+                        )
+
+                    def _sample_micro(
+                        _family=family,
+                        _layers=layers,
+                        _e=e_total,
+                        _t=t_total,
+                        _known=known,
+                        _sl=self_loops,
+                        _seed=seed,
+                    ):
+                        kwargs: dict[str, Any] = {
+                            "ensemble": Ensemble.MICROCANONICAL,
+                            "family": _FAMILY_MAP[_family],
+                            "constraint": Constraint.EDGES_EVENTS,
+                            "node_count": node_count,
+                            "total_events": _t,
+                            "target_edges": _e,
+                            "self_loops": _sl,
+                            "seed": _seed,
+                        }
+                        if _family in ("b", "w"):
+                            kwargs["layers"] = _layers
+                        if _known is not None:
+                            kwargs["known_source"] = _known[0]
+                            kwargs["known_target"] = _known[1]
+                            kwargs["known_occnum"] = _known[2]
+                        return sample_model(**kwargs)
+
+                    try:
+                        sample, m = _measure(_sample_micro, track_memory=not no_memory)
+                    except Exception as exc:  # noqa: BLE001 - benchmark reports failures
+                        rows.append(
+                            BenchmarkRow(
+                                stage="microcanonical-sample",
+                                node_count=node_count,
+                                family=family,
+                                constraint="edges-events",
+                                self_loops=self_loops,
+                                regime=regime,
+                                known_pair_fraction=kp_fraction,
+                                wall_seconds=0.0,
+                                cpu_seconds=0.0,
+                                parallel_factor=1.0,
+                                memory_python_peak_mb=0.0,
+                                memory_rss_peak_mb=0.0,
+                                sampled_edges=None,
+                                status="error",
+                                message=f"failed: {exc}",
+                            )
+                        )
+                        typer.echo(f"ERROR {family}/{regime}: {exc}", err=True)
+                        continue
+
+                    ok = sample.num_edges == e_total and sample.total_events == t_total
+                    rows.append(
+                        BenchmarkRow(
+                            stage="microcanonical-sample",
+                            node_count=node_count,
+                            family=family,
+                            constraint="edges-events",
+                            self_loops=self_loops,
+                            regime=regime,
+                            known_pair_fraction=kp_fraction,
+                            wall_seconds=m.wall_seconds,
+                            cpu_seconds=m.cpu_seconds,
+                            parallel_factor=m.parallel_factor,
+                            memory_python_peak_mb=m.memory_python_peak_mb,
+                            memory_rss_peak_mb=m.memory_rss_peak_mb,
+                            sampled_edges=sample.num_edges,
+                            status="ok" if ok else "error",
+                            message=(
+                                f"exact_E={sample.num_edges} exact_T={sample.total_events} "
+                                f"layers={layers}"
+                            ),
+                        )
+                    )
+                    if ok:
+                        typer.echo(_format_row(rows[-1]), err=True)
+                    else:
+                        typer.echo(f"ERROR {family}/{regime}: E,T mismatch", err=True)
+
+    _save_and_display(rows, output, output_json)
 
 
 def _save_and_display(
