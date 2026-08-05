@@ -34,6 +34,7 @@ pub fn directed_switch_step(
     state: &mut DegreeSupportState,
     self_loops: bool,
     rng: &mut impl Rng,
+    admissible_pairs: Option<&[(u64, u64)]>,
 ) -> SwitchOutcome {
     let m = state.edge_count();
     if m < 2 {
@@ -83,7 +84,14 @@ pub fn directed_switch_step(
         return SwitchOutcome::Hold;
     }
 
-    // 5. Apply the switch
+    // 5. Mask validity (admissible-pair restriction)
+    if let Some(admissible) = admissible_pairs {
+        if !admissible.contains(&cand_1) || !admissible.contains(&cand_2) {
+            return SwitchOutcome::Hold;
+        }
+    }
+
+    // 6. Apply the switch
     state.remove(&edge_1);
     state.remove(&edge_2);
     state.insert(cand_1);
@@ -115,7 +123,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(42);
 
         for _ in 0..100 {
-            directed_switch_step(&mut state, false, &mut rng);
+            directed_switch_step(&mut state, false, &mut rng, None);
             assert_eq!(state.out_degree_sequence(), out_before);
             #[cfg(debug_assertions)]
             state.debug_validate();
@@ -129,7 +137,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(42);
 
         for _ in 0..100 {
-            directed_switch_step(&mut state, false, &mut rng);
+            directed_switch_step(&mut state, false, &mut rng, None);
             assert_eq!(state.edge_count(), m);
         }
     }
@@ -140,7 +148,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(42);
 
         for _ in 0..100 {
-            directed_switch_step(&mut state, false, &mut rng);
+            directed_switch_step(&mut state, false, &mut rng, None);
             for &(src, tgt) in &state.edges {
                 assert_ne!(src, tgt, "self-loop found");
             }
@@ -153,7 +161,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(42);
 
         for _ in 0..100 {
-            directed_switch_step(&mut state, false, &mut rng);
+            directed_switch_step(&mut state, false, &mut rng, None);
             let mut pairs = state.edges.clone();
             pairs.sort_unstable();
             pairs.dedup();
@@ -166,7 +174,7 @@ mod tests {
         let mut state = DegreeSupportState::new(3, vec![(0, 1)], false);
         let mut rng = StdRng::seed_from_u64(42);
         assert_eq!(
-            directed_switch_step(&mut state, false, &mut rng),
+            directed_switch_step(&mut state, false, &mut rng, None),
             SwitchOutcome::Hold
         );
     }
@@ -181,9 +189,28 @@ mod tests {
 
         // Run many steps — the chain should stay within valid states.
         for _ in 0..500 {
-            directed_switch_step(&mut state, false, &mut rng);
+            directed_switch_step(&mut state, false, &mut rng, None);
             assert_eq!(state.edge_count(), 3);
             assert_eq!(state.out_degree_sequence(), vec![1, 1, 1]);
+        }
+    }
+
+    #[test]
+    fn switch_respects_admissible_pairs() {
+        let edges = vec![(0, 1), (1, 2), (2, 0), (0, 2)];
+        let mut state = DegreeSupportState::new(3, edges, false);
+        let admissible = vec![(0u64, 1u64), (1, 2), (2, 0), (0, 2), (1, 0), (2, 1)];
+        let mut rng = StdRng::seed_from_u64(42);
+
+        for _ in 0..200 {
+            directed_switch_step(&mut state, false, &mut rng, Some(&admissible));
+            // Every edge must be in the admissible set
+            for &(src, tgt) in &state.edges {
+                assert!(
+                    admissible.contains(&(src, tgt)),
+                    "edge ({src},{tgt}) not admissible"
+                );
+            }
         }
     }
 }

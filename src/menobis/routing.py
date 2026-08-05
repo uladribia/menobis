@@ -696,22 +696,91 @@ def _sample_model(
                 if total_events is None:
                     msg = "microcanonical DEGREE_EVENTS requires total_events"
                     raise ValueError(msg)
+                has_fixed = not (
+                    known_source is None or known_target is None or known_occnum is None
+                )
                 fam = (
                     "ME"
                     if family == ModelFamily.ME
                     else ("B" if family == ModelFamily.B else "W")
                 )
-                return _sample_degree_events_fixed_kt(
+                if not has_fixed:
+                    return _sample_degree_events_fixed_kt(
+                        family=fam,
+                        degree_out=np.asarray(degree_out, dtype=np.uint32).tolist(),
+                        degree_in=np.asarray(degree_in, dtype=np.uint32).tolist(),
+                        total_events=int(total_events),
+                        layers=int(layers),
+                        seed=seed,
+                        self_loops=bool(self_loops),
+                        burn_in_sweeps=burn_in_sweeps,
+                        sweeps_per_sample=sweeps_per_sample,
+                    )
+                # ---- fixed-pair residualization ----
+                k_src = np.asarray(known_source, dtype=np.uint64)
+                k_tgt = np.asarray(known_target, dtype=np.uint64)
+                k_occ = np.asarray(known_occnum, dtype=np.uint64)
+                # Fixed contributions to out/in degrees and total T
+                k_out_fix = np.zeros(len(degree_out), dtype=np.uint64)
+                k_in_fix = np.zeros(len(degree_in), dtype=np.uint64)
+                t_fix = 0
+                for s, t, o in zip(k_src, k_tgt, k_occ):
+                    if o > 0:
+                        k_out_fix[int(s)] += 1
+                        k_in_fix[int(t)] += 1
+                        t_fix += int(o)
+                # Residual degrees
+                k_out_res = np.asarray(degree_out, dtype=np.int64) - k_out_fix
+                k_in_res = np.asarray(degree_in, dtype=np.int64) - k_in_fix
+                if (k_out_res < 0).any() or (k_in_res < 0).any():
+                    msg = "fixed pairs exceed target degree sequence"
+                    raise ValueError(msg)
+                t_res = int(total_events) - t_fix
+                if t_res < 0:
+                    msg = "fixed pairs exceed total events"
+                    raise ValueError(msg)
+                # Build admissible pair set (exclude fixed positive pairs)
+                n = len(degree_out)
+                fixed_keys = set()
+                for s, t, o in zip(k_src, k_tgt, k_occ):
+                    if o > 0:
+                        fixed_keys.add((int(s), int(t)))
+                adm_src, adm_tgt = [], []
+                for i in range(n):
+                    for j in range(n):
+                        if not self_loops and i == j:
+                            continue
+                        if (i, j) in fixed_keys:
+                            continue
+                        adm_src.append(i)
+                        adm_tgt.append(j)
+                # Sample residual
+                residual = _sample_degree_events_fixed_kt(
                     family=fam,
-                    degree_out=np.asarray(degree_out, dtype=np.uint32).tolist(),
-                    degree_in=np.asarray(degree_in, dtype=np.uint32).tolist(),
-                    total_events=int(total_events),
+                    degree_out=k_out_res.tolist(),
+                    degree_in=k_in_res.tolist(),
+                    total_events=t_res,
                     layers=int(layers),
                     seed=seed,
                     self_loops=bool(self_loops),
                     burn_in_sweeps=burn_in_sweeps,
                     sweeps_per_sample=sweeps_per_sample,
                 )
+                # Merge fixed pairs back
+                pos_mask = k_occ > 0
+                k_src_pos = k_src[pos_mask]
+                k_tgt_pos = k_tgt[pos_mask]
+                k_occ_pos = k_occ[pos_mask]
+                if len(residual) == 0:
+                    return EdgeTable(
+                        source=k_src_pos, target=k_tgt_pos, occ_num=k_occ_pos
+                    )
+                merged = EdgeTable(
+                    source=np.concatenate([residual.source, k_src_pos]),
+                    target=np.concatenate([residual.target, k_tgt_pos]),
+                    occ_num=np.concatenate([residual.occ_num, k_occ_pos]),
+                )
+                return merged
             msg = (
                 f"microcanonical does not support constraint={constraint!r}; "
                 "supported: STRENGTH, EDGES_EVENTS, DEGREE_EVENTS"
