@@ -7,6 +7,7 @@ import menobis._menobis as _menobis
 from menobis.data.frames import EdgeTable, ProbabilityTable
 from menobis.models.types import (
     DegreeEventsFit,
+    StrengthCostDiagnostics,
     StrengthCostFit,
     StrengthDegreeFit,
     StrengthEdgesFit,
@@ -216,7 +217,7 @@ def _sample_strength_fixed_strength_cost_mcmc(
     relative_cost_tolerance: float = 1e-3,
     confidence_multiplier: float = 2.09,
     batch_count: int = 20,
-) -> EdgeTable:
+) -> tuple[EdgeTable, StrengthCostDiagnostics]:
     """Microcanonical fixed-strength + expected-cost sampler.
 
     Fits gamma via stochastic bisection, then draws one sample at the
@@ -248,7 +249,8 @@ def _sample_strength_fixed_strength_cost_mcmc(
         batch_count: Number of batches for batch-means SE.
 
     Returns:
-        EdgeTable with exact strength preservation.
+        Tuple of (EdgeTable with exact strength preservation, gamma-fit
+        diagnostics).
     """
     import menobis._menobis as _menobis
 
@@ -277,14 +279,15 @@ def _sample_strength_fixed_strength_cost_mcmc(
         sources,
         targets,
         occ_nums,
-        _gamma,
-        _exp_cost,
-        _se,
-        _converged,
-        _obs_cost,
-        _residual,
-        _props,
-        _accs,
+        gamma,
+        exp_cost,
+        se,
+        converged,
+        obs_cost,
+        residual,
+        props,
+        accs,
+        iterations,
     ) = _menobis.sample_fixed_strength_with_cost(  # type: ignore
         family,
         s_out,
@@ -310,11 +313,23 @@ def _sample_strength_fixed_strength_cost_mcmc(
         int(sweeps_per_sample),
         int(seed),
     )
-    return EdgeTable(
+    edges = EdgeTable(
         source=np.asarray(sources, dtype=np.uint64),
         target=np.asarray(targets, dtype=np.uint64),
         occ_num=np.asarray(occ_nums, dtype=np.uint64),
     )
+    diagnostics = StrengthCostDiagnostics(
+        gamma=float(gamma),
+        expected_cost_estimate=float(exp_cost),
+        expected_cost_standard_error=float(se),
+        observed_cost=float(obs_cost),
+        residual=float(residual),
+        converged=bool(converged),
+        iterations=int(iterations),
+        proposals=int(props),
+        accepted=int(accs),
+    )
+    return edges, diagnostics
 
 
 def _sample_me_fixed_et(

@@ -434,10 +434,13 @@ pub fn fit_gamma<'a>(
             best_samples = samples;
         }
 
-        // Check convergence: residual within tolerance AND SE sufficiently small.
+        // Check convergence on the BEST estimate found so far (the current
+        // iteration's residual fluctuates with Monte Carlo noise; the best
+        // residual is more stable).  Both residual and SE must be within
+        // tolerance.
         let tol = (config.absolute_cost_tolerance)
             .max(config.relative_cost_tolerance * residual_obs.abs());
-        if residual <= tol && config.confidence_multiplier * se <= tol {
+        if best_residual <= tol && config.confidence_multiplier * best_se <= tol {
             converged = true;
             break;
         }
@@ -563,9 +566,10 @@ mod tests {
 
     type OccupiedState = Vec<((u64, u64), crate::OccNum)>;
 
-    /// Enumerate all ME occupation states for given strengths.
+    /// Enumerate all occupation states for a given family and strengths.
     /// Returns (state, log_degeneracy).
-    fn enumerate_me_states(
+    fn enumerate_states(
+        family: OccupationFamily,
         s_out: &[crate::OccNum],
         s_in: &[crate::OccNum],
         self_loops: bool,
@@ -579,6 +583,7 @@ mod tests {
             .collect();
 
         fn recurse(
+            family: OccupationFamily,
             idx: usize,
             cells: &[(u64, u64)],
             remaining_out: &mut [crate::OccNum],
@@ -590,7 +595,7 @@ mod tests {
                 if remaining_out.iter().all(|&s| s == 0) && remaining_in.iter().all(|&s| s == 0) {
                     let log_degen: f64 = current
                         .iter()
-                        .map(|&(_, occ)| -libm::lgamma((occ as f64) + 1.0))
+                        .map(|&(_, occ)| family.log_local_degeneracy(occ))
                         .sum();
                     results.push((current.clone(), log_degen));
                 }
@@ -607,6 +612,7 @@ mod tests {
                     current.push(((src, tgt), occ));
                 }
                 recurse(
+                    family,
                     idx + 1,
                     cells,
                     remaining_out,
@@ -626,6 +632,7 @@ mod tests {
         let mut remaining_in = s_in.to_vec();
         let mut current: OccupiedState = Vec::new();
         recurse(
+            family,
             0,
             &cells,
             &mut remaining_out,
@@ -644,6 +651,31 @@ mod tests {
             total += c * (occ as f64);
         }
         total
+    }
+
+    /// Exact expected cost at a given gamma via full enumeration.
+    ///
+    /// \[\mu_C(\gamma) = \sum_t C(t) \frac{D_F(t) e^{-\gamma C(t)}}{Z}\]
+    fn exact_expected_cost_at_gamma(
+        states: &[(OccupiedState, f64)],
+        costs: &dyn PairCostProvider,
+        gamma: f64,
+    ) -> f64 {
+        let log_weights: Vec<f64> = states
+            .iter()
+            .map(|(pairs, log_d)| log_d - gamma * state_cost_from_pairs(pairs, costs))
+            .collect();
+        let max_log = log_weights
+            .iter()
+            .cloned()
+            .fold(f64::NEG_INFINITY, f64::max);
+        let weights: Vec<f64> = log_weights.iter().map(|w| (w - max_log).exp()).collect();
+        let total: f64 = weights.iter().sum();
+        states
+            .iter()
+            .zip(weights.iter())
+            .map(|((pairs, _), w)| state_cost_from_pairs(pairs, costs) * w / total)
+            .sum()
     }
 
     // -----------------------------------------------------------------------
@@ -766,7 +798,7 @@ mod tests {
         let s_in = vec![2u64, 2];
 
         // Enumerate all states with their (log_degen, cost).
-        let states = enumerate_me_states(&s_out, &s_in, true);
+        let states = enumerate_states(OccupationFamily::Poisson, &s_out, &s_in, true);
         let costs = LinearCost;
         let gamma = 0.5;
 
@@ -941,5 +973,93 @@ mod tests {
             gamma_0 < 0.0,
             "expected negative gamma for high observed cost, got {gamma_0}"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 5: Gamma recovery from an exactly enumerable target
+    // -----------------------------------------------------------------------
+
+    /// Run `fit_gamma` on an enumerable N=2 problem and check the fitted
+    /// gamma reproduces the target expected cost (and is close to the
+    /// known target gamma).
+    fn assert_gamma_recovery(family: OccupationFamily, target_gamma: f64) {
+        let s_out = vec![2u64, 2];
+        let s_in = vec![2u64, 2];
+
+        // Enumerate the exact state space and compute the expected cost
+        // at the target gamma.
+        let states = enumerate_states(family, &s_out, &s_in, true);
+        assert!(!states.is_empty(), "enumeration returned no states");
+        let costs = LinearCost;
+        let c_obs = exact_expected_cost_at_gamma(&states, &costs, target_gamma);
+        assert!(c_obs.is_finite() && c_obs > 0.0, "invalid c_obs {c_obs}");
+
+        // Build a chain with a cost-aware target (gamma starts at 0).
+        let domain = PairDomain::Complete {
+            node_count: 2,
+            self_loops: true,
+        };
+        let table = initialize_table(&s_out, &s_in, family, &domain).unwrap();
+        let state = StrengthState::new(2, table);
+        let config = McmcConfig::new(10, 5, 42);
+        let mut chain = super::super::chain::FixedStrengthChain::new(
+            state,
+            StrengthTarget::with_costs(family, &costs),
+            domain,
+            config,
+        );
+
+        let mut rng = StdRng::seed_from_u64(42);
+        let fit_config = FixedStrengthCostFitConfig {
+            warm_start_sweeps: 200,
+            adaptation_sweeps: 200,
+            estimation_sweeps: 400,
+            samples_per_iteration: 400,
+            max_iterations: 25,
+            // Looser tolerance: the SE criterion requires enough samples
+            // that z·SE fits inside the cost tolerance, and the intrinsic
+            // cost SD of a tiny N=2 problem is ~1.
+            absolute_cost_tolerance: 0.05,
+            relative_cost_tolerance: 0.25,
+            confidence_multiplier: 2.09,
+            batch_count: 20,
+            ..FixedStrengthCostFitConfig::default()
+        };
+
+        let result = fit_gamma(&mut chain, &mut rng, &costs, c_obs, 0.0, &fit_config)
+            .unwrap_or_else(|e| panic!("fit_gamma failed for {family:?}: {e}"));
+
+        // 1. The fitted gamma should be close to the target gamma.
+        assert!(
+            (result.gamma - target_gamma).abs() < 0.5,
+            "fitted gamma {} not close to target {target_gamma} for {family:?}",
+            result.gamma
+        );
+
+        // 2. The expected cost at the fitted gamma must reproduce c_obs
+        //    (exact check against the enumerable target).
+        let mu_fit = exact_expected_cost_at_gamma(&states, &costs, result.gamma);
+        let tol = 0.15 * c_obs.abs().max(1.0);
+        let ok = (mu_fit - c_obs).abs() < tol;
+        assert!(
+            ok,
+            "expected cost at fitted gamma {} does not match target {} (gamma={}, family={:?})",
+            mu_fit, c_obs, result.gamma, family
+        );
+    }
+
+    #[test]
+    fn gamma_recovery_me() {
+        assert_gamma_recovery(OccupationFamily::Poisson, 1.0);
+    }
+
+    #[test]
+    fn gamma_recovery_b() {
+        assert_gamma_recovery(OccupationFamily::Binomial(4), 1.0);
+    }
+
+    #[test]
+    fn gamma_recovery_w() {
+        assert_gamma_recovery(OccupationFamily::NegativeBinomial(2), 1.0);
     }
 }

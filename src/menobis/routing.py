@@ -19,7 +19,7 @@ from menobis.models.spec import (
 if TYPE_CHECKING:
     from menobis.data.frames import EdgeTable
     from menobis.filtering.types import FilterResult
-    from menobis.models.types import FitResult, SamplingResult
+    from menobis.models.types import FitResult, SamplingResult, StrengthCostDiagnostics
 
 
 def route_model(
@@ -29,8 +29,13 @@ def route_model(
     family: ModelFamily,
     constraint: Constraint,
     **kwargs: Any,  # noqa: ANN401 - unified verb router accepts verb-specific args.
-) -> FitResult | EdgeTable | FilterResult:
-    """Route a model workflow by verb, ensemble, family, and constraint."""
+) -> FitResult | EdgeTable | FilterResult | tuple[EdgeTable, StrengthCostDiagnostics]:
+    """Route a model workflow by verb, ensemble, family, and constraint.
+
+    The SAMPLE verb may additionally return
+    ``(EdgeTable, StrengthCostDiagnostics)`` for the microcanonical
+    STRENGTH_COST case.
+    """
     match verb:
         case Verb.FIT:
             return _fit_model(
@@ -269,43 +274,46 @@ def sample_model_detailed(
         )
         raise UnsupportedModelCaseError(msg)
 
-    edges = cast(
-        "EdgeTable",
-        route_model(
-            Verb.SAMPLE,
-            ensemble=ensemble,
-            family=family,
-            constraint=constraint,
-            fit=fit,
-            strength_out=strength_out,
-            strength_in=strength_in,
-            degree_out=degree_out,
-            degree_in=degree_in,
-            total_events=total_events,
-            target_edges=target_edges,
-            target_cost=target_cost,
-            coord_x=coord_x,
-            coord_y=coord_y,
-            node_count=node_count,
-            known_source=known_source,
-            known_target=known_target,
-            known_occnum=known_occnum,
-            layers=layers,
-            self_loops=self_loops,
-            seed=seed,
-            burn_in_sweeps=burn_in_sweeps,
-            sweeps_per_sample=sweeps_per_sample,
-            warm_start_sweeps=warm_start_sweeps,
-            adaptation_sweeps=adaptation_sweeps,
-            estimation_sweeps=estimation_sweeps,
-            samples_per_iteration=samples_per_iteration,
-            max_iterations=max_iterations,
-            absolute_cost_tolerance=absolute_cost_tolerance,
-            relative_cost_tolerance=relative_cost_tolerance,
-            confidence_multiplier=confidence_multiplier,
-            batch_count=batch_count,
-        ),
+    _sampled = route_model(
+        Verb.SAMPLE,
+        ensemble=ensemble,
+        family=family,
+        constraint=constraint,
+        fit=fit,
+        strength_out=strength_out,
+        strength_in=strength_in,
+        degree_out=degree_out,
+        degree_in=degree_in,
+        total_events=total_events,
+        target_edges=target_edges,
+        target_cost=target_cost,
+        coord_x=coord_x,
+        coord_y=coord_y,
+        node_count=node_count,
+        known_source=known_source,
+        known_target=known_target,
+        known_occnum=known_occnum,
+        layers=layers,
+        self_loops=self_loops,
+        seed=seed,
+        burn_in_sweeps=burn_in_sweeps,
+        sweeps_per_sample=sweeps_per_sample,
+        warm_start_sweeps=warm_start_sweeps,
+        adaptation_sweeps=adaptation_sweeps,
+        estimation_sweeps=estimation_sweeps,
+        samples_per_iteration=samples_per_iteration,
+        max_iterations=max_iterations,
+        absolute_cost_tolerance=absolute_cost_tolerance,
+        relative_cost_tolerance=relative_cost_tolerance,
+        confidence_multiplier=confidence_multiplier,
+        batch_count=batch_count,
     )
+
+    if isinstance(_sampled, tuple):
+        edges, sc_diagnostics = _sampled
+    else:
+        edges = _sampled
+        sc_diagnostics = None
 
     if ensemble is Ensemble.MICROCANONICAL:
         if constraint is Constraint.EDGES_EVENTS:
@@ -313,6 +321,9 @@ def sample_model_detailed(
             exactness = SamplingExactness.EXACT_DIRECT
         elif constraint is Constraint.DEGREE_EVENTS:
             method = "microcanonical_fixed_kt"
+            exactness = SamplingExactness.EXACT_STATIONARY_MCMC
+        elif constraint is Constraint.STRENGTH_COST:
+            method = "microcanonical_fixed_strength_cost"
             exactness = SamplingExactness.EXACT_STATIONARY_MCMC
         else:
             method = "stub_matching"
@@ -324,6 +335,24 @@ def sample_model_detailed(
         method = "grandcanonical_independent"
         exactness = SamplingExactness.EXACT_INDEPENDENT
 
+    # Build diagnostics, including gamma-fit info when available.
+    if sc_diagnostics is not None:
+        diagnostics = SamplingDiagnostics(
+            method=method,
+            exactness=exactness,
+            iterations=sc_diagnostics.iterations,
+            accepted=sc_diagnostics.accepted,
+            proposals=sc_diagnostics.proposals,
+            gamma=sc_diagnostics.gamma,
+            expected_cost=sc_diagnostics.expected_cost_estimate,
+            expected_cost_standard_error=sc_diagnostics.expected_cost_standard_error,
+            observed_cost=sc_diagnostics.observed_cost,
+            cost_residual=sc_diagnostics.residual,
+            converged=sc_diagnostics.converged,
+        )
+    else:
+        diagnostics = SamplingDiagnostics(method=method, exactness=exactness)
+
     return SamplingResult(
         edges=edges,
         ensemble=ensemble,
@@ -332,7 +361,7 @@ def sample_model_detailed(
         method=method,
         exactness=exactness,
         seed=seed,
-        diagnostics=SamplingDiagnostics(method=method, exactness=exactness),
+        diagnostics=diagnostics,
     )
 
 
@@ -645,7 +674,7 @@ def _sample_model(
     relative_cost_tolerance: float = 1e-3,
     confidence_multiplier: float = 2.09,
     batch_count: int = 20,
-) -> EdgeTable:
+) -> EdgeTable | tuple[EdgeTable, StrengthCostDiagnostics]:
     from menobis.data.frames import EdgeTable
     from menobis.models.generation import (
         _sample_degree_events_binomial,
@@ -898,7 +927,7 @@ def _sample_model(
                 )
             msg = (
                 f"microcanonical does not support constraint={constraint!r}; "
-                "supported: STRENGTH, EDGES_EVENTS, DEGREE_EVENTS"
+                "supported: STRENGTH, STRENGTH_COST, EDGES_EVENTS, DEGREE_EVENTS"
             )
             raise UnsupportedModelCaseError(msg)
         case Ensemble.CANONICAL:
