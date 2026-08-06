@@ -263,6 +263,34 @@ class SamplingDiagnostics:
     accepted: int | None = None
     total_steps: int | None = None
     message: str | None = None
+    # Strength-cost gamma-fit diagnostics (microcanonical only).
+    gamma: float | None = None
+    expected_cost: float | None = None
+    expected_cost_standard_error: float | None = None
+    observed_cost: float | None = None
+    cost_residual: float | None = None
+    converged: bool | None = None
+    proposals: int | None = None
+
+
+@dataclass(frozen=True)
+class StrengthCostDiagnostics:
+    """Gamma-fit diagnostics for microcanonical strength-cost sampling.
+
+    Mirrors the Rust ``FixedStrengthCostFitResult`` fields exposed through
+    the Python binding ``sample_fixed_strength_with_cost``.
+    """
+
+    gamma: float
+    expected_cost_estimate: float
+    expected_cost_standard_error: float
+    observed_cost: float
+    residual: float
+    converged: bool
+    iterations: int
+    proposals: int
+    accepted: int
+    fixed_cost: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -316,6 +344,7 @@ __all__ = [
     "PartialFitResult",
     "SamplingDiagnostics",
     "SamplingResult",
+    "StrengthCostDiagnostics",
     "StrengthCostFit",
     "StrengthDegreeFit",
     "StrengthEdgesFit",

@@ -17,6 +17,7 @@ type StrengthCostSample = (
     f64,      // residual
     u64,      // proposals
     u64,      // accepted
+    usize,    // iterations
 );
 
 /// Exact ME microcanonical sampler with fixed (E,T).
@@ -944,5 +945,6 @@ pub(crate) fn sample_fixed_strength_with_cost(
         fit_result.residual,
         fit_result.mcmc_proposals,
         fit_result.mcmc_accepted,
+        fit_result.iterations,
     ))
 }

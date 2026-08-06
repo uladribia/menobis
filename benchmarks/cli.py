@@ -22,7 +22,12 @@ import typer
 
 from menobis.data.frames import EdgeTable
 from menobis.models.spec import Constraint, Ensemble, ModelFamily
-from menobis.routing import filter_model, fit_model, sample_model
+from menobis.routing import (
+    filter_model,
+    fit_model,
+    sample_model,
+    sample_model_detailed,
+)
 from menobis.utilities.synthetic import (
     derive_synthetic_constraints,
     generate_pa_geographic_network,
@@ -84,6 +89,12 @@ class BenchmarkRow:
     cost_err: float | None = None
     false_positive_rate: float | None = None
     sampled_edges: int | None = None
+    gamma: float | None = None
+    expected_cost: float | None = None
+    expected_cost_se: float | None = None
+    observed_cost: float | None = None
+    gamma_converged: bool | None = None
+    gamma_iterations: int | None = None
     status: str = "ok"
     message: str = ""
 
@@ -1247,10 +1258,17 @@ def micro_command(
                                 kwargs["known_source"] = _known[0]
                                 kwargs["known_target"] = _known[1]
                                 kwargs["known_occnum"] = _known[2]
-                        return sample_model(**kwargs)
+                        if _constraint == "strength-cost":
+                            # Use the detailed route to capture gamma-fit
+                            # diagnostics.
+                            detailed = sample_model_detailed(**kwargs)
+                            return detailed.edges, detailed.diagnostics
+                        return sample_model(**kwargs), None
 
                     try:
-                        sample, m = _measure(_sample_micro, track_memory=not no_memory)
+                        (sample, sc_diag), m = _measure(
+                            _sample_micro, track_memory=not no_memory
+                        )
                     except Exception as exc:  # noqa: BLE001 - benchmark reports failures
                         rows.append(
                             BenchmarkRow(
@@ -1314,28 +1332,44 @@ def micro_command(
                                 abs(sampled_cost - total_cost)
                                 <= 5.0 * fit_cost_tolerance * max(total_cost, 1.0)
                             )
-                    rows.append(
-                        BenchmarkRow(
-                            stage="microcanonical-sample",
-                            node_count=node_count,
-                            family=family,
-                            constraint=constraint,
-                            self_loops=self_loops,
-                            regime=regime,
-                            known_pair_fraction=kp_fraction,
-                            wall_seconds=m.wall_seconds,
-                            cpu_seconds=m.cpu_seconds,
-                            parallel_factor=m.parallel_factor,
-                            memory_python_peak_mb=m.memory_python_peak_mb,
-                            memory_rss_peak_mb=m.memory_rss_peak_mb,
-                            sampled_edges=sample.num_edges,
-                            status="ok" if ok else "error",
-                            message=(
-                                f"exact_E={sample.num_edges} exact_T={sample.total_events} "
-                                f"layers={layers}"
-                            ),
+                    row_kwargs: dict[str, Any] = {
+                        "stage": "microcanonical-sample",
+                        "node_count": node_count,
+                        "family": family,
+                        "constraint": constraint,
+                        "self_loops": self_loops,
+                        "regime": regime,
+                        "known_pair_fraction": kp_fraction,
+                        "wall_seconds": m.wall_seconds,
+                        "cpu_seconds": m.cpu_seconds,
+                        "parallel_factor": m.parallel_factor,
+                        "memory_python_peak_mb": m.memory_python_peak_mb,
+                        "memory_rss_peak_mb": m.memory_rss_peak_mb,
+                        "sampled_edges": sample.num_edges,
+                        "status": "ok" if ok else "error",
+                        "message": (
+                            f"exact_E={sample.num_edges} exact_T={sample.total_events} "
+                            f"layers={layers}"
+                        ),
+                    }
+                    if sc_diag is not None:
+                        row_kwargs.update(
+                            {
+                                "gamma": sc_diag.gamma,
+                                "expected_cost": sc_diag.expected_cost,
+                                "expected_cost_se": sc_diag.expected_cost_standard_error,
+                                "observed_cost": sc_diag.observed_cost,
+                                "cost_err": sc_diag.cost_residual,
+                                "gamma_converged": sc_diag.converged,
+                                "gamma_iterations": sc_diag.iterations,
+                            }
                         )
-                    )
+                        row_kwargs["message"] += (
+                            f" gamma={sc_diag.gamma:.4f} "
+                            f"exp_cost={sc_diag.expected_cost:.3f} "
+                            f"resid={sc_diag.cost_residual:.3f}"
+                        )
+                    rows.append(BenchmarkRow(**row_kwargs))
                     if ok:
                         typer.echo(_format_row(rows[-1]), err=True)
                     else:
