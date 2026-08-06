@@ -1016,13 +1016,15 @@ def micro_command(
     burn_in_sweeps: Annotated[
         int,
         typer.Option(
-            "--burn-in-sweeps", help="MCMC burn-in sweeps (degree-events only)."
+            "--burn-in-sweeps",
+            help="MCMC burn-in sweeps (degree-events / strength).",
         ),
     ] = 50,
     sweeps_per_sample: Annotated[
         int,
         typer.Option(
-            "--sweeps-per-sample", help="MCMC thinning sweeps (degree-events only)."
+            "--sweeps-per-sample",
+            help="MCMC thinning sweeps (degree-events / strength).",
         ),
     ] = 10,
     output: Annotated[Path, typer.Option("--output", "-o")] = Path(
@@ -1213,6 +1215,20 @@ def micro_command(
                             in_s[int(t)] += 1
                         ok = ok and bool(
                             (out_s == out_deg).all() and (in_s == in_deg).all()
+                        )
+                    if constraint == "strength":
+                        # Strength case: edge count is not fixed; only total
+                        # occupation (T = sum of strengths) and the exact
+                        # out/in strength sequences are constrained.
+                        out_s = np.zeros(node_count, dtype=np.uint64)
+                        in_s = np.zeros(node_count, dtype=np.uint64)
+                        for s, t, w in zip(
+                            sample.source, sample.target, sample.occ_num, strict=True
+                        ):
+                            out_s[int(s)] += int(w)
+                            in_s[int(t)] += int(w)
+                        ok = sample.total_events == t_total and bool(
+                            (out_s == out_str).all() and (in_s == in_str).all()
                         )
                     rows.append(
                         BenchmarkRow(
