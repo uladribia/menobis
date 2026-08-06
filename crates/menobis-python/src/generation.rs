@@ -195,8 +195,10 @@ pub(crate) fn sample_strength_stub_matching(
             "stub_matching requires balanced strengths",
         ));
     }
-    let sample = core_sample_strength_stub_matching(&strength_out, &strength_in, seed);
-    Ok((sample.sources, sample.targets, sample.occ_nums))
+    match core_sample_strength_stub_matching(&strength_out, &strength_in, seed) {
+        Ok(sample) => Ok((sample.sources, sample.targets, sample.occ_nums)),
+        Err(e) => Err(PyValueError::new_err(e.to_string())),
+    }
 }
 
 #[pyfunction]
@@ -577,6 +579,7 @@ pub(crate) fn sample_degree_events_fixed_kt(
         mcmc: CoreFixedDegreeMcmcConfig {
             burn_in_sweeps,
             sweeps_per_sample,
+            proposals_per_sweep: None,
             seed,
         },
         self_loops,
@@ -624,4 +627,100 @@ pub(crate) fn sample_strength_multinomial(
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let edges = core_sample_strength_multinomial(&x, &y, total_events, self_loops, seed);
     (edges.sources, edges.targets, edges.occ_nums)
+}
+
+/// Sample from the microcanonical fixed-strength ensemble.
+///
+/// Routes to the ME direct stub-matching backend or the generic 4-cycle
+/// MCMC backend depending on the problem configuration.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn sample_fixed_strength(
+    family: &str,
+    strength_out: Vec<u64>,
+    strength_in: Vec<u64>,
+    self_loops: bool,
+    fixed_sources: Vec<u64>,
+    fixed_targets: Vec<u64>,
+    fixed_occnums: Vec<u64>,
+    layers: u32,
+    burn_in_sweeps: usize,
+    sweeps_per_sample: usize,
+    seed: u64,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    use menobis_core::distribution::OccupationFamily;
+    use menobis_core::generation::microcanonical::fixed_strength::domain::PairDomain;
+    use menobis_core::generation::microcanonical::fixed_strength::problem::FixedStrengthProblem;
+    use menobis_core::generation::microcanonical::mcmc::McmcConfig;
+
+    let family_enum = match family {
+        "ME" => OccupationFamily::Poisson,
+        "B" => OccupationFamily::Binomial(layers),
+        "W" => OccupationFamily::NegativeBinomial(layers),
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "unknown family: {other}. Use ME, B, or W"
+            )))
+        }
+    };
+
+    let n = strength_out.len();
+    let domain = PairDomain::Complete {
+        node_count: n,
+        self_loops,
+    };
+
+    let fixed_pairs: Vec<_> = fixed_sources
+        .iter()
+        .zip(fixed_targets.iter())
+        .zip(fixed_occnums.iter())
+        .map(|((&s, &t), &o)| (s, t, o))
+        .collect();
+    let has_fixed = !fixed_pairs.is_empty();
+
+    let problem = match FixedStrengthProblem::new(
+        family_enum,
+        strength_out,
+        strength_in,
+        domain,
+        fixed_pairs,
+    ) {
+        Ok(p) => p,
+        Err(e) => return Err(PyValueError::new_err(e.to_string())),
+    };
+
+    let residual = match problem.into_residual() {
+        Ok(r) => r,
+        Err(e) => return Err(PyValueError::new_err(e.to_string())),
+    };
+
+    let config = McmcConfig::new(burn_in_sweeps, sweeps_per_sample, seed);
+
+    match core_sample_fixed_strength(residual, config, has_fixed) {
+        Ok((mut network, _backend)) => {
+            // Merge fixed pairs back into the sampled residual network.
+            if has_fixed {
+                let mut all: Vec<(u64, u64, u64)> = fixed_sources
+                    .iter()
+                    .zip(fixed_targets.iter())
+                    .zip(fixed_occnums.iter())
+                    .map(|((&s, &t), &o)| (s, t, o))
+                    .collect();
+                all.extend(
+                    network
+                        .sources
+                        .iter()
+                        .zip(network.targets.iter())
+                        .zip(network.occ_nums.iter())
+                        .map(|((&s, &t), &o)| (s, t, o)),
+                );
+                all.sort_unstable();
+                network.sources = all.iter().map(|&(s, _, _)| s).collect();
+                network.targets = all.iter().map(|&(_, t, _)| t).collect();
+                network.occ_nums = all.iter().map(|&(_, _, o)| o).collect();
+            }
+            Ok((network.sources, network.targets, network.occ_nums))
+        }
+        Err(e) => Err(PyValueError::new_err(e.to_string())),
+    }
 }

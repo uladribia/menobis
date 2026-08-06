@@ -29,6 +29,7 @@ pub use grandcanonical::{
 pub use microcanonical::fixed_kt::core::{sample_fixed_kt_core, FixedKTConfig};
 pub use microcanonical::fixed_kt::diagnostics::FixedDegreeDiagnostics;
 pub use microcanonical::fixed_kt::sampler::FixedDegreeMcmcConfig;
+pub use microcanonical::fixed_strength::sample_fixed_strength;
 pub use microcanonical::{
     sample_b_fixed_et, sample_b_fixed_et_explicit, sample_me_fixed_et, sample_me_fixed_et_explicit,
     sample_strength_stub_matching, sample_w_fixed_et, sample_w_fixed_et_explicit,
@@ -81,7 +82,9 @@ mod tests {
     fn stub_matching_preserves_exact_strengths() {
         let s_out = vec![10, 20, 30];
         let s_in = vec![15, 25, 20];
-        let edges = sample_strength_stub_matching(&s_out, &s_in, 42);
+        let result = sample_strength_stub_matching(&s_out, &s_in, 42);
+        assert!(result.is_ok(), "stub matching failed: {:?}", result);
+        let edges = result.unwrap();
         let total: u64 = edges.occ_nums.iter().sum();
         assert_eq!(total, 60);
         let mut actual_out = vec![0u64; 3];

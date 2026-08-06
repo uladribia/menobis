@@ -1,5 +1,7 @@
 //! Diagnostics for the fixed-degree support MCMC.
 
+use crate::generation::microcanonical::mcmc::McmcCounters;
+
 /// Representation mode — direct or complement.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RepresentationMode {
@@ -16,12 +18,15 @@ pub enum DegreeHeterogeneity {
 }
 
 /// Diagnostics collected during support MCMC.
+///
+/// Embeds the generic [`McmcCounters`] for proposal/acceptance tracking,
+/// plus degree-specific diagnostics.
 #[derive(Clone, Debug)]
 pub struct FixedDegreeDiagnostics {
+    /// Generic MCMC counters (proposals, accepted, held, rejected).
+    pub mcmc: McmcCounters,
     pub representation: RepresentationMode,
     pub heterogeneity: DegreeHeterogeneity,
-    pub proposals: u64,
-    pub accepted: u64,
     pub self_loop_holds: u64,
     pub duplicate_holds: u64,
     pub no_op_holds: u64,
@@ -30,22 +35,18 @@ pub struct FixedDegreeDiagnostics {
 impl FixedDegreeDiagnostics {
     pub fn new() -> Self {
         Self {
+            mcmc: McmcCounters::new(),
             representation: RepresentationMode::Direct,
             heterogeneity: DegreeHeterogeneity::Light,
-            proposals: 0,
-            accepted: 0,
             self_loop_holds: 0,
             duplicate_holds: 0,
             no_op_holds: 0,
         }
     }
 
-    /// Acceptance rate.
+    /// Overall acceptance rate (delegates to [`McmcCounters::acceptance_rate`]).
     pub fn acceptance_rate(&self) -> f64 {
-        if self.proposals == 0 {
-            return 0.0;
-        }
-        self.accepted as f64 / self.proposals as f64
+        self.mcmc.acceptance_rate()
     }
 }
 
