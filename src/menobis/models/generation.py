@@ -115,6 +115,82 @@ def _sample_strength_stub_matching(
     return _edge_table_from_lists(sources, targets, occ_nums)
 
 
+def _sample_strength_fixed_strength_mcmc(
+    *,
+    family: str,
+    strength_out: NDArray[np.integer],
+    strength_in: NDArray[np.integer],
+    self_loops: bool = True,
+    known_source: NDArray[np.integer] | None = None,
+    known_target: NDArray[np.integer] | None = None,
+    known_occnum: NDArray[np.integer] | None = None,
+    layers: int = 1,
+    seed: int = 0,
+    burn_in_sweeps: int = 50,
+    sweeps_per_sample: int = 10,
+) -> EdgeTable:
+    """Microcanonical fixed-strength sampler via MCMC (or ME direct).
+
+    Routes to the ME direct stub-matching backend when eligible, otherwise
+    uses the generic 4-cycle Metropolis chain.
+
+    Args:
+        family: "ME", "B", or "W".
+        strength_out: Exact outgoing strength per node.
+        strength_in: Exact incoming strength per node.
+        self_loops: Whether self-loops are allowed.
+        known_source: Source nodes of fixed pairs.
+        known_target: Target nodes of fixed pairs.
+        known_occnum: Occupations of fixed pairs.
+        layers: Layer count M for B/W.
+        seed: Random seed.
+        burn_in_sweeps: Number of MCMC burn-in sweeps.
+        sweeps_per_sample: Number of thinning sweeps per sample.
+
+    Returns:
+        EdgeTable with exact strength preservation.
+    """
+    import menobis._menobis as _menobis
+
+    s_out = np.asarray(strength_out, dtype=np.uint64).tolist()
+    s_in = np.asarray(strength_in, dtype=np.uint64).tolist()
+
+    f_src = (
+        np.asarray(known_source, dtype=np.uint64).tolist()
+        if known_source is not None
+        else []
+    )
+    f_tgt = (
+        np.asarray(known_target, dtype=np.uint64).tolist()
+        if known_target is not None
+        else []
+    )
+    f_occ = (
+        np.asarray(known_occnum, dtype=np.uint64).tolist()
+        if known_occnum is not None
+        else []
+    )
+
+    sources, targets, occ_nums = _menobis.sample_fixed_strength(  # type: ignore
+        family,
+        s_out,
+        s_in,
+        bool(self_loops),
+        f_src,
+        f_tgt,
+        f_occ,
+        int(layers),
+        int(burn_in_sweeps),
+        int(sweeps_per_sample),
+        int(seed),
+    )
+    return EdgeTable(
+        source=np.asarray(sources, dtype=np.uint64),
+        target=np.asarray(targets, dtype=np.uint64),
+        occ_num=np.asarray(occ_nums, dtype=np.uint64),
+    )
+
+
 def _sample_me_fixed_et(
     node_count: int,
     *,

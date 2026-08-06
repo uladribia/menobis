@@ -150,17 +150,49 @@ def _build_registry() -> dict[
             result_kind="sampled_network",
         )
     )
-    # Microcanonical ME strength: exact stub matching, no fit.
+    # Microcanonical ME strength: stub matching + MCMC backend.
     registry[
         (Verb.SAMPLE, Ensemble.MICROCANONICAL, ModelFamily.ME, Constraint.STRENGTH)
     ] = ModelCapability(
         supported=True,
         requires_fit=False,
-        backend="microcanonical_stub_matching",
+        backend="microcanonical_fixed_strength",
         required_arguments=frozenset({"strength_out", "strength_in"}),
-        optional_arguments=frozenset({"seed"}),
+        optional_arguments=frozenset(
+            {"seed", "self_loops", "burn_in_sweeps", "sweeps_per_sample"}
+        ),
         supports_self_loops=True,
-        supports_no_self_loops=False,  # no-self-loop stub matching unsupported
+        supports_no_self_loops=True,
+        result_kind="sampled_network",
+    )
+    # Microcanonical B strength: MCMC backend.
+    registry[
+        (Verb.SAMPLE, Ensemble.MICROCANONICAL, ModelFamily.B, Constraint.STRENGTH)
+    ] = ModelCapability(
+        supported=True,
+        requires_fit=False,
+        backend="microcanonical_fixed_strength",
+        required_arguments=frozenset({"strength_out", "strength_in"}),
+        optional_arguments=frozenset(
+            {"seed", "self_loops", "layers", "burn_in_sweeps", "sweeps_per_sample"}
+        ),
+        supports_self_loops=True,
+        supports_no_self_loops=True,
+        result_kind="sampled_network",
+    )
+    # Microcanonical W strength: MCMC backend.
+    registry[
+        (Verb.SAMPLE, Ensemble.MICROCANONICAL, ModelFamily.W, Constraint.STRENGTH)
+    ] = ModelCapability(
+        supported=True,
+        requires_fit=False,
+        backend="microcanonical_fixed_strength",
+        required_arguments=frozenset({"strength_out", "strength_in"}),
+        optional_arguments=frozenset(
+            {"seed", "self_loops", "layers", "burn_in_sweeps", "sweeps_per_sample"}
+        ),
+        supports_self_loops=True,
+        supports_no_self_loops=True,
         result_kind="sampled_network",
     )
     # Microcanonical ME fixed (E,T): exact direct sampler, no fit.
@@ -263,6 +295,8 @@ def unsupported_cases() -> list[tuple[Verb, Ensemble, ModelFamily, Constraint]]:
     """Explicitly unsupported combinations that callers may attempt."""
     _supported_microcanonical: set[tuple[ModelFamily, Constraint]] = {
         (ModelFamily.ME, Constraint.STRENGTH),
+        (ModelFamily.B, Constraint.STRENGTH),
+        (ModelFamily.W, Constraint.STRENGTH),
         (ModelFamily.ME, Constraint.EDGES_EVENTS),
         (ModelFamily.B, Constraint.EDGES_EVENTS),
         (ModelFamily.W, Constraint.EDGES_EVENTS),

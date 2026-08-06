@@ -617,6 +617,7 @@ def _sample_model(
         _sample_strength_edges_geometric,
         _sample_strength_edges_negative_binomial,
         _sample_strength_edges_poisson,
+        _sample_strength_fixed_strength_mcmc,
         _sample_strength_geometric,
         _sample_strength_multinomial,
         _sample_strength_negative_binomial,
@@ -675,18 +676,35 @@ def _sample_model(
                         "microcanonical strength requires strength_out and strength_in"
                     )
                     raise ValueError(msg)
-                if not self_loops:
-                    msg = (
-                        "microcanonical stub matching without self-loops is not "
-                        "supported yet: naive rejection would bias the uniform "
-                        "stub-matching measure; use the grand-canonical ensemble "
-                        "until the MCMC backend exists"
+                has_fixed = not (
+                    known_source is None or known_target is None or known_occnum is None
+                )
+                # ME direct fast path: eligible when self-loops allowed and
+                # no fixed pairs. The Rust backend handles the routing.
+                if family is ModelFamily.ME and self_loops and not has_fixed:
+                    return _sample_strength_stub_matching(
+                        np.asarray(strength_out, dtype=np.uint64),
+                        np.asarray(strength_in, dtype=np.uint64),
+                        seed=seed,
                     )
-                    raise UnsupportedModelCaseError(msg)
-                return _sample_strength_stub_matching(
-                    np.asarray(strength_out, dtype=np.uint64),
-                    np.asarray(strength_in, dtype=np.uint64),
+                # Generic MCMC backend for all other cases.
+                fam = (
+                    "ME"
+                    if family == ModelFamily.ME
+                    else ("B" if family == ModelFamily.B else "W")
+                )
+                return _sample_strength_fixed_strength_mcmc(
+                    family=fam,
+                    strength_out=np.asarray(strength_out, dtype=np.uint64),
+                    strength_in=np.asarray(strength_in, dtype=np.uint64),
+                    self_loops=bool(self_loops),
+                    known_source=known_source,
+                    known_target=known_target,
+                    known_occnum=known_occnum,
+                    layers=int(layers),
                     seed=seed,
+                    burn_in_sweeps=burn_in_sweeps,
+                    sweeps_per_sample=sweeps_per_sample,
                 )
             if constraint is Constraint.DEGREE_EVENTS:
                 if degree_out is None or degree_in is None:

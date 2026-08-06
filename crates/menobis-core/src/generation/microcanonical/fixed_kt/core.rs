@@ -147,6 +147,7 @@ mod tests {
             mcmc: FixedDegreeMcmcConfig {
                 burn_in_sweeps: 10,
                 sweeps_per_sample: 5,
+                proposals_per_sweep: None,
                 seed: 42,
             },
             self_loops: false,
@@ -176,6 +177,7 @@ mod tests {
             mcmc: FixedDegreeMcmcConfig {
                 burn_in_sweeps: 10,
                 sweeps_per_sample: 5,
+                proposals_per_sweep: None,
                 seed: 42,
             },
             self_loops: false,
@@ -200,6 +202,7 @@ mod tests {
             mcmc: FixedDegreeMcmcConfig {
                 burn_in_sweeps: 10,
                 sweeps_per_sample: 5,
+                proposals_per_sweep: None,
                 seed: 42,
             },
             self_loops: false,
@@ -218,6 +221,7 @@ mod tests {
             mcmc: FixedDegreeMcmcConfig {
                 burn_in_sweeps: 10,
                 sweeps_per_sample: 5,
+                proposals_per_sweep: None,
                 seed: 42,
             },
             self_loops: false,
@@ -245,6 +249,7 @@ mod tests {
             mcmc: FixedDegreeMcmcConfig {
                 burn_in_sweeps: 5,
                 sweeps_per_sample: 2,
+                proposals_per_sweep: None,
                 seed: 42,
             },
             self_loops: false,
@@ -366,6 +371,7 @@ mod exhaustive_tests {
                 mcmc: FixedDegreeMcmcConfig {
                     burn_in_sweeps: 20,
                     sweeps_per_sample: 10,
+                    proposals_per_sweep: None,
                     seed,
                 },
                 self_loops: false,

@@ -1,7 +1,6 @@
 """P0.7 tests: capability registry and detailed sampling result."""
 
 import numpy as np
-import pytest
 
 from menobis.capabilities import (
     REGISTRY,
@@ -64,18 +63,18 @@ def test_microcanonical_capability_rules() -> None:
     assert cap is not None and cap.supported
     assert not cap.requires_fit
     assert cap.supports_self_loops
-    assert not cap.supports_no_self_loops  # §11: no naive rejection
+    assert cap.supports_no_self_loops  # MCMC backend handles no-self-loops
 
 
 def test_unsupported_cases_are_explicit() -> None:
     cases = unsupported_cases()
-    # No microcanonical W/B, no canonical non-ME, no canonical/micro filtering.
+    # Microcanonical W/B STRENGTH now supported via MCMC.
     assert (
         Verb.SAMPLE,
         Ensemble.MICROCANONICAL,
         ModelFamily.W,
         Constraint.STRENGTH,
-    ) in cases
+    ) not in cases
     assert (
         Verb.SAMPLE,
         Ensemble.CANONICAL,
@@ -178,14 +177,19 @@ def test_sample_model_delegates_to_detailed() -> None:
     assert hasattr(edges, "occ_num")
 
 
-def test_microcanonical_no_self_loops_raises() -> None:
-    with pytest.raises(Exception, match="self-loops"):
-        sample_model(
-            ensemble=Ensemble.MICROCANONICAL,
-            family=ModelFamily.ME,
-            constraint=Constraint.STRENGTH,
-            strength_out=np.array([5, 7]),
-            strength_in=np.array([6, 6]),
-            self_loops=False,
-            seed=1,
-        )
+def test_microcanonical_no_self_loops_succeeds() -> None:
+    # MCMC backend handles no-self-loops.
+    edges = sample_model(
+        ensemble=Ensemble.MICROCANONICAL,
+        family=ModelFamily.ME,
+        constraint=Constraint.STRENGTH,
+        strength_out=np.array([5, 5]),
+        strength_in=np.array([5, 5]),
+        self_loops=False,
+        seed=42,
+    )
+    assert hasattr(edges, "source")
+    assert hasattr(edges, "target")
+    assert hasattr(edges, "occ_num")
+    # Verify no self-loops.
+    assert not any(edges.source == edges.target)

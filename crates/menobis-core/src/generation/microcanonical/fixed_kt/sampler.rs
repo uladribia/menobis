@@ -21,6 +21,8 @@ pub struct FixedDegreeMcmcConfig {
     pub burn_in_sweeps: usize,
     /// Number of sweeps between output samples.
     pub sweeps_per_sample: usize,
+    /// Optional override for proposals per sweep.  `None` means auto.
+    pub proposals_per_sweep: Option<usize>,
     /// Seed for the RNG (deterministic reproducibility).
     pub seed: u64,
 }
@@ -33,16 +35,19 @@ impl FixedDegreeMcmcConfig {
                 burn_in_sweeps: 20,
                 sweeps_per_sample: 5,
                 seed: 0,
+                proposals_per_sweep: None,
             },
             DegreeHeterogeneity::Heterogeneous => Self {
                 burn_in_sweeps: 50,
                 sweeps_per_sample: 10,
                 seed: 0,
+                proposals_per_sweep: None,
             },
             DegreeHeterogeneity::HubDominated => Self {
                 burn_in_sweeps: 100,
                 sweeps_per_sample: 20,
                 seed: 0,
+                proposals_per_sweep: None,
             },
         }
     }
@@ -54,6 +59,7 @@ impl Default for FixedDegreeMcmcConfig {
             burn_in_sweeps: 50,
             sweeps_per_sample: 10,
             seed: 0,
+            proposals_per_sweep: None,
         }
     }
 }
@@ -81,11 +87,11 @@ impl FixedDegreeChain {
         rng: &mut impl Rng,
         admissible_pairs: Option<&[(u64, u64)]>,
     ) -> SwitchOutcome {
-        self.diagnostics.proposals += 1;
+        self.diagnostics.mcmc.proposals += 1;
         let outcome = directed_switch_step(&mut self.state, false, rng, admissible_pairs);
         match outcome {
             SwitchOutcome::Switched => {
-                self.diagnostics.accepted += 1;
+                self.diagnostics.mcmc.accepted += 1;
             }
             SwitchOutcome::Hold => {
                 // We don't track hold subtypes here for simplicity;
@@ -170,6 +176,7 @@ pub fn sample_fixed_degree_support(
         burn_in_sweeps: config.burn_in_sweeps,
         sweeps_per_sample: config.sweeps_per_sample,
         seed: config.seed,
+        proposals_per_sweep: None,
     };
     let mut chain = FixedDegreeChain::new(state, effective_config);
     chain.diagnostics.representation = repr;
@@ -223,6 +230,7 @@ mod tests {
             burn_in_sweeps: 10,
             sweeps_per_sample: 5,
             seed: 42,
+            proposals_per_sweep: None,
         };
         let (state, diag) = sample_fixed_degree_support(&out, &inp, false, &config, None).unwrap();
         assert_eq!(state.edge_count(), 4);
@@ -243,6 +251,7 @@ mod tests {
             burn_in_sweeps: 10,
             sweeps_per_sample: 5,
             seed: 99,
+            proposals_per_sweep: None,
         };
         let (state, _diag) = sample_fixed_degree_support(&out, &inp, false, &config, None).unwrap();
         assert_eq!(state.edge_count(), n - 1);
@@ -261,6 +270,7 @@ mod tests {
             burn_in_sweeps: 5,
             sweeps_per_sample: 2,
             seed: 7,
+            proposals_per_sweep: None,
         };
         let (state, diag) = sample_fixed_degree_support(&out, &inp, false, &config, None).unwrap();
         assert_eq!(state.edge_count(), n * (n - 1) - n);
@@ -275,6 +285,7 @@ mod tests {
             burn_in_sweeps: 5,
             sweeps_per_sample: 2,
             seed: 42,
+            proposals_per_sweep: None,
         };
         let (state_a, _) = sample_fixed_degree_support(&out, &inp, false, &config, None).unwrap();
         let (state_b, _) = sample_fixed_degree_support(&out, &inp, false, &config, None).unwrap();

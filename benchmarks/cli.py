@@ -1002,7 +1002,7 @@ def micro_command(
         str,
         typer.Option(
             "--constraint",
-            help="Microcanonical constraint: edges-events or degree-events.",
+            help="Microcanonical constraint: edges-events, degree-events, or strength.",
         ),
     ] = "edges-events",
     known_pairs: Annotated[
@@ -1032,14 +1032,18 @@ def micro_command(
         bool, typer.Option("--json", help="Print JSON to stdout.")
     ] = False,
 ) -> None:
-    """Benchmark the microcanonical fixed-(E,T) or fixed-(k,T) samplers (ME, B, W).
+    """Benchmark the microcanonical fixed-(E,T), fixed-(k,T), or fixed-strength samplers.
 
     For each family and regime, derives feasible constraints from a synthetic
     PA-geographic network and samples the microcanonical model directly (no fitting),
-    with and without fixed pairs.  Use --constraint edges-events or degree-events.
+    with and without fixed pairs.  Use --constraint edges-events, degree-events, or
+    strength.
     """
-    if constraint not in ("edges-events", "degree-events"):
-        msg = f"unsupported constraint: {constraint!r}, expected edges-events or degree-events"
+    if constraint not in ("edges-events", "degree-events", "strength"):
+        msg = (
+            f"unsupported constraint: {constraint!r}, expected edges-events, "
+            "degree-events, or strength"
+        )
         raise typer.BadParameter(msg)
     rows: list[BenchmarkRow] = []
     _print_header()
@@ -1087,12 +1091,19 @@ def micro_command(
                             edges.occ_num[idx].astype(np.uint64),
                         )
 
-                    # Derive out/in degree sequences from the generated network
+                    # Derive out/in degree and strength sequences from the
+                    # generated network.
                     out_deg = np.zeros(node_count, dtype=np.uint64)
                     in_deg = np.zeros(node_count, dtype=np.uint64)
-                    for s, t in zip(edges.source, edges.target, strict=True):
+                    out_str = np.zeros(node_count, dtype=np.uint64)
+                    in_str = np.zeros(node_count, dtype=np.uint64)
+                    for s, t, w in zip(
+                        edges.source, edges.target, edges.occ_num, strict=True
+                    ):
                         out_deg[int(s)] += 1
                         in_deg[int(t)] += 1
+                        out_str[int(s)] += int(w)
+                        in_str[int(t)] += int(w)
 
                     def _sample_micro(
                         _family=family,
@@ -1108,6 +1119,8 @@ def micro_command(
                         _burn_in=burn_in_sweeps,
                         _sample_sweeps=sweeps_per_sample,
                         _node_count=node_count,
+                        _out_str=out_str,
+                        _in_str=in_str,
                     ):
                         if _constraint == "edges-events":
                             kwargs: dict[str, Any] = {
@@ -1134,6 +1147,24 @@ def micro_command(
                                 "degree_out": _out_deg,
                                 "degree_in": _in_deg,
                                 "total_events": _t,
+                                "self_loops": _sl,
+                                "seed": _seed,
+                                "burn_in_sweeps": _burn_in,
+                                "sweeps_per_sample": _sample_sweeps,
+                            }
+                            if _family in ("b", "w"):
+                                kwargs["layers"] = _layers
+                            if _known is not None:
+                                kwargs["known_source"] = _known[0]
+                                kwargs["known_target"] = _known[1]
+                                kwargs["known_occnum"] = _known[2]
+                        elif _constraint == "strength":
+                            kwargs = {
+                                "ensemble": Ensemble.MICROCANONICAL,
+                                "family": _FAMILY_MAP[_family],
+                                "constraint": Constraint.STRENGTH,
+                                "strength_out": _out_str,
+                                "strength_in": _in_str,
                                 "self_loops": _sl,
                                 "seed": _seed,
                                 "burn_in_sweeps": _burn_in,
