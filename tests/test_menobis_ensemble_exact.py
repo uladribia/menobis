@@ -219,7 +219,7 @@ def test_conditioned_gc_degree_events(family_str: str) -> None:
             sweeps_per_sample=5,
         )
         key = (
-            tuple(zip(result.source.tolist(), result.target.tolist())),
+            tuple(zip(result.source.tolist(), result.target.tolist(), strict=True)),
             tuple(result.occ_num.tolist()),
         )
         mc_counts[key] = mc_counts.get(key, 0) + 1
@@ -231,7 +231,7 @@ def test_conditioned_gc_degree_events(family_str: str) -> None:
         assert len(edges) == 3, f"expected 3 edges, got {len(edges)}"
         out_c = np.zeros(3, dtype=np.int64)
         in_c = np.zeros(3, dtype=np.int64)
-        for (s, t), o in zip(edges, occs):
+        for (s, t), o in zip(edges, occs, strict=True):
             out_c[s] += 1
             in_c[t] += 1
             assert o >= 1, "zero occupation in output"

@@ -743,7 +743,7 @@ def _sample_model(
                 k_out_fix = np.zeros(len(degree_out), dtype=np.int64)
                 k_in_fix = np.zeros(len(degree_in), dtype=np.int64)
                 t_fix = 0
-                for s, t, o in zip(k_src, k_tgt, k_occ):
+                for s, t, o in zip(k_src, k_tgt, k_occ, strict=True):
                     if o > 0:
                         k_out_fix[int(s)] += 1
                         k_in_fix[int(t)] += 1
@@ -764,7 +764,7 @@ def _sample_model(
                 # Build admissible pair set (exclude fixed positive pairs)
                 n = len(degree_out)
                 fixed_keys = set()
-                for s, t, o in zip(k_src, k_tgt, k_occ):
+                for s, t, o in zip(k_src, k_tgt, k_occ, strict=True):
                     if o > 0:
                         fixed_keys.add((int(s), int(t)))
                 adm_src, adm_tgt = [], []
@@ -797,12 +797,11 @@ def _sample_model(
                     return EdgeTable(
                         source=k_src_pos, target=k_tgt_pos, occ_num=k_occ_pos
                     )
-                merged = EdgeTable(
+                return EdgeTable(
                     source=np.concatenate([residual.source, k_src_pos]),
                     target=np.concatenate([residual.target, k_tgt_pos]),
                     occ_num=np.concatenate([residual.occ_num, k_occ_pos]),
                 )
-                return merged
             msg = (
                 f"microcanonical does not support constraint={constraint!r}; "
                 "supported: STRENGTH, EDGES_EVENTS, DEGREE_EVENTS"
