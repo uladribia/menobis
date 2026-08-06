@@ -64,6 +64,7 @@ nav:
           - Phase 3 fixed-(k,T) plan: development/agent-specifications/05_phase3_fixed_kt_plan.md
           - Phase 4 fixed strengths: development/agent-specifications/06_phase4_fixed_strengths_me_b_w_final.md
           - Phase 5 strength + expected cost: development/agent-specifications/07_phase5_fixed_strength_expected_cost_final.md
+          - Phase 6 scalability refactor: development/agent-specifications/08_scalable_fixed_total_gibbs_migration_final.md
 
 plugins:
   - search
