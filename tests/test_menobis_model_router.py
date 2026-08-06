@@ -82,16 +82,15 @@ def test_canonical_rejects_non_me_family() -> None:
 
 
 def test_microcanonical_rejects_unsupported_constraint() -> None:
-    """Microcanonical supports STRENGTH, EDGES_EVENTS, DEGREE_EVENTS only."""
+    """Microcanonical does not support STRENGTH_EDGES."""
     with pytest.raises(UnsupportedModelCaseError, match=r"unsupported sampling case"):
         sample_model(
             ensemble=Ensemble.MICROCANONICAL,
             family=ModelFamily.ME,
-            constraint=Constraint.STRENGTH_COST,
+            constraint=Constraint.STRENGTH_EDGES,
             strength_out=np.array([1], dtype=np.uint64),
             strength_in=np.array([1], dtype=np.uint64),
-            coord_x=np.array([0.0]),
-            coord_y=np.array([0.0]),
+            target_edges=1,
         )
 
 

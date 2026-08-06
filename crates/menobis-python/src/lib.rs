@@ -368,5 +368,6 @@ fn _menobis(module: &Bound<'_, PyModule>) -> PyResult<()> {
     add_pyfunction!(module, stats::occupation_clustering_coefficients)?;
     add_pyfunction!(module, generation::sample_degree_events_fixed_kt)?;
     add_pyfunction!(module, generation::sample_fixed_strength)?;
+    add_pyfunction!(module, generation::sample_fixed_strength_with_cost)?;
     Ok(())
 }

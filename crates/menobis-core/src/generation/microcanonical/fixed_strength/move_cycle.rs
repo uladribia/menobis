@@ -188,7 +188,7 @@ mod tests {
         let so = vec![5u64, 3, 7, 2];
         let si = vec![4u64, 6, 3, 4];
         let mut state = make_state(n, &so, &si, OccupationFamily::Poisson, true);
-        let target = StrengthTarget::new(OccupationFamily::Poisson, 0.0);
+        let target = StrengthTarget::new(OccupationFamily::Poisson);
         let domain = PairDomain::Complete {
             node_count: n,
             self_loops: true,
@@ -207,7 +207,7 @@ mod tests {
         let so = vec![10u64; 5];
         let si = vec![10u64; 5];
         let mut state = make_state(n, &so, &si, OccupationFamily::Poisson, true);
-        let target = StrengthTarget::new(OccupationFamily::Poisson, 0.0);
+        let target = StrengthTarget::new(OccupationFamily::Poisson);
         let domain = PairDomain::Complete {
             node_count: n,
             self_loops: true,
@@ -232,7 +232,7 @@ mod tests {
         let so = vec![5u64; 4];
         let si = vec![5u64; 4];
         let mut state = make_state(n, &so, &si, OccupationFamily::Poisson, false);
-        let target = StrengthTarget::new(OccupationFamily::Poisson, 0.0);
+        let target = StrengthTarget::new(OccupationFamily::Poisson);
         let domain = PairDomain::Complete {
             node_count: n,
             self_loops: false,
@@ -253,7 +253,7 @@ mod tests {
         let so = vec![4u64; 3];
         let si = vec![4u64; 3];
         let mut state = make_state(n, &so, &si, OccupationFamily::Binomial(layers), true);
-        let target = StrengthTarget::new(OccupationFamily::Binomial(layers), 0.0);
+        let target = StrengthTarget::new(OccupationFamily::Binomial(layers));
         let domain = PairDomain::Complete {
             node_count: n,
             self_loops: true,
@@ -276,7 +276,7 @@ mod tests {
         let so = vec![3u64; 4];
         let si = vec![3u64; 4];
         let mut state = make_state(n, &so, &si, OccupationFamily::Poisson, true);
-        let target = StrengthTarget::new(OccupationFamily::Poisson, 0.0);
+        let target = StrengthTarget::new(OccupationFamily::Poisson);
         let domain = PairDomain::Complete {
             node_count: n,
             self_loops: true,

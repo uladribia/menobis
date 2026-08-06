@@ -1,4 +1,23 @@
+use rand::rngs::StdRng;
+use rand::SeedableRng;
+
 use super::*;
+
+/// Return type of `sample_fixed_strength_with_cost`: sampled network plus
+/// gamma-fit diagnostics.
+type StrengthCostSample = (
+    Vec<u64>, // sources
+    Vec<u64>, // targets
+    Vec<u64>, // occ_nums
+    f64,      // gamma
+    f64,      // expected cost estimate
+    f64,      // standard error
+    bool,     // converged
+    f64,      // observed cost
+    f64,      // residual
+    u64,      // proposals
+    u64,      // accepted
+);
 
 /// Exact ME microcanonical sampler with fixed (E,T).
 ///
@@ -723,4 +742,207 @@ pub(crate) fn sample_fixed_strength(
         }
         Err(e) => Err(PyValueError::new_err(e.to_string())),
     }
+}
+
+/// Sample from the microcanonical fixed-strength ensemble with expected cost.
+///
+/// Fits gamma via stochastic bisection, then draws one sample at the fitted gamma.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn sample_fixed_strength_with_cost(
+    family: &str,
+    strength_out: Vec<u64>,
+    strength_in: Vec<u64>,
+    coord_x: Vec<f64>,
+    coord_y: Vec<f64>,
+    observed_total_cost: f64,
+    self_loops: bool,
+    fixed_sources: Vec<u64>,
+    fixed_targets: Vec<u64>,
+    fixed_occnums: Vec<u64>,
+    layers: u32,
+    warm_start_sweeps: usize,
+    adaptation_sweeps: usize,
+    estimation_sweeps: usize,
+    samples_per_iteration: usize,
+    max_iterations: usize,
+    absolute_cost_tolerance: f64,
+    relative_cost_tolerance: f64,
+    confidence_multiplier: f64,
+    batch_count: usize,
+    burn_in_sweeps: usize,
+    sweeps_per_sample: usize,
+    seed: u64,
+) -> PyResult<StrengthCostSample> {
+    use menobis_core::distribution::OccupationFamily;
+    use menobis_core::generation::microcanonical::fixed_strength::cost_fit::{
+        fit_gamma, FixedStrengthCostFitConfig,
+    };
+    use menobis_core::generation::microcanonical::fixed_strength::domain::PairDomain;
+    use menobis_core::generation::microcanonical::fixed_strength::problem::FixedStrengthProblem;
+    use menobis_core::generation::microcanonical::mcmc::McmcConfig;
+    use menobis_core::pairs::EuclideanCostProvider;
+
+    let family_enum = match family {
+        "ME" => OccupationFamily::Poisson,
+        "B" => OccupationFamily::Binomial(layers),
+        "W" => OccupationFamily::NegativeBinomial(layers),
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "unknown family: {other}. Use ME, B, or W"
+            )))
+        }
+    };
+
+    let n = strength_out.len();
+    let domain = PairDomain::Complete {
+        node_count: n,
+        self_loops,
+    };
+
+    let fixed_pairs: Vec<_> = fixed_sources
+        .iter()
+        .zip(fixed_targets.iter())
+        .zip(fixed_occnums.iter())
+        .map(|((&s, &t), &o)| (s, t, o))
+        .collect();
+    let has_fixed = !fixed_pairs.is_empty();
+
+    let problem = match FixedStrengthProblem::new(
+        family_enum,
+        strength_out,
+        strength_in,
+        domain,
+        fixed_pairs,
+    ) {
+        Ok(p) => p,
+        Err(e) => return Err(PyValueError::new_err(e.to_string())),
+    };
+
+    let residual = match problem.into_residual() {
+        Ok(r) => r,
+        Err(e) => return Err(PyValueError::new_err(e.to_string())),
+    };
+
+    // Build cost provider from coordinates.
+    let costs = if coord_x.len() != n || coord_y.len() != n {
+        return Err(PyValueError::new_err(
+            "coord_x and coord_y must match node count",
+        ));
+    } else {
+        EuclideanCostProvider {
+            x: &coord_x,
+            y: &coord_y,
+        }
+    };
+
+    let mcmc_config = McmcConfig::new(burn_in_sweeps, sweeps_per_sample, seed);
+
+    // Build chain with cost provider.
+    let core_result = menobis_core::generation::microcanonical::fixed_strength::chain::
+        sample_fixed_strength_with_cost(residual, &costs, mcmc_config, has_fixed);
+    let (mut chain, _backend) = match core_result {
+        Ok(r) => r,
+        Err(e) => return Err(PyValueError::new_err(e.to_string())),
+    };
+
+    // Compute fixed-pair cost.
+    let fixed_cost = if has_fixed {
+        match menobis_core::generation::microcanonical::fixed_strength::cost::fixed_pairs_cost(
+            &fixed_sources
+                .iter()
+                .zip(fixed_targets.iter())
+                .zip(fixed_occnums.iter())
+                .map(|((&s, &t), &o)| (s, t, o))
+                .collect::<Vec<_>>(),
+            &costs,
+        ) {
+            Ok(c) => c,
+            Err(e) => return Err(PyValueError::new_err(e.to_string())),
+        }
+    } else {
+        0.0
+    };
+
+    // Fit config.
+    let fit_config = FixedStrengthCostFitConfig {
+        warm_start_sweeps,
+        adaptation_sweeps,
+        estimation_sweeps,
+        samples_per_iteration,
+        max_iterations,
+        absolute_cost_tolerance,
+        relative_cost_tolerance,
+        confidence_multiplier,
+        batch_count,
+        ..FixedStrengthCostFitConfig::default()
+    };
+
+    let mut rng = StdRng::seed_from_u64(seed);
+
+    // Fit gamma.
+    let fit_result = match fit_gamma(
+        &mut chain,
+        &mut rng,
+        &costs,
+        observed_total_cost,
+        fixed_cost,
+        &fit_config,
+    ) {
+        Ok(r) => r,
+        Err(e) => {
+            // Even if not converged, we may have a best result.
+            // Return what we have with converged=false.
+            return Err(PyValueError::new_err(e.to_string()));
+        }
+    };
+
+    // Set the fitted gamma and burn in again before final sample.
+    {
+        let mut target = menobis_core::generation::microcanonical::fixed_strength::
+            target::StrengthTarget::with_costs(family_enum, &costs);
+        target.set_gamma(fit_result.gamma);
+        chain.set_target(target);
+    }
+    chain.burn_in(&mut rng);
+
+    // Merge fixed pairs back into the sampled residual network.
+    let mut network = chain.sample(&mut rng);
+    if has_fixed {
+        let fixed_src: Vec<u64> = fixed_sources;
+        let fixed_tgt: Vec<u64> = fixed_targets;
+        let fixed_occ: Vec<u64> = fixed_occnums;
+        let mut all: Vec<(u64, u64, u64)> = fixed_src
+            .iter()
+            .zip(fixed_tgt.iter())
+            .zip(fixed_occ.iter())
+            .map(|((&s, &t), &o)| (s, t, o))
+            .collect();
+        all.extend(
+            network
+                .sources
+                .iter()
+                .zip(network.targets.iter())
+                .zip(network.occ_nums.iter())
+                .map(|((&s, &t), &o)| (s, t, o)),
+        );
+        all.sort_unstable();
+        network.sources = all.iter().map(|&(s, _, _)| s).collect();
+        network.targets = all.iter().map(|&(_, t, _)| t).collect();
+        network.occ_nums = all.iter().map(|&(_, _, o)| o).collect();
+    }
+
+    Ok((
+        network.sources,
+        network.targets,
+        network.occ_nums,
+        fit_result.gamma,
+        fit_result.expected_cost_estimate,
+        fit_result.expected_cost_standard_error,
+        fit_result.converged,
+        fit_result.observed_cost,
+        fit_result.residual,
+        fit_result.mcmc_proposals,
+        fit_result.mcmc_accepted,
+    ))
 }

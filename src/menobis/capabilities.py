@@ -195,6 +195,35 @@ def _build_registry() -> dict[
         supports_no_self_loops=True,
         result_kind="sampled_network",
     )
+    # Microcanonical strength-cost: MCMC + gamma fitting.
+    for _fam, _layers_req in [
+        (ModelFamily.ME, False),
+        (ModelFamily.B, True),
+        (ModelFamily.W, True),
+    ]:
+        _opt_args = {"seed", "self_loops", "burn_in_sweeps", "sweeps_per_sample"}
+        _req_args = {
+            "strength_out",
+            "strength_in",
+            "coord_x",
+            "coord_y",
+            "observed_total_cost",
+        }
+        if _layers_req:
+            _opt_args.add("layers")
+        registry[
+            (Verb.SAMPLE, Ensemble.MICROCANONICAL, _fam, Constraint.STRENGTH_COST)
+        ] = ModelCapability(
+            supported=True,
+            requires_fit=True,
+            backend="microcanonical_fixed_strength_cost",
+            required_arguments=frozenset(_req_args),
+            optional_arguments=frozenset(_opt_args),
+            supports_self_loops=True,
+            supports_no_self_loops=True,
+            result_kind="sampled_network",
+        )
+
     # Microcanonical ME fixed (E,T): exact direct sampler, no fit.
     registry[
         (Verb.SAMPLE, Ensemble.MICROCANONICAL, ModelFamily.ME, Constraint.EDGES_EVENTS)
@@ -297,6 +326,9 @@ def unsupported_cases() -> list[tuple[Verb, Ensemble, ModelFamily, Constraint]]:
         (ModelFamily.ME, Constraint.STRENGTH),
         (ModelFamily.B, Constraint.STRENGTH),
         (ModelFamily.W, Constraint.STRENGTH),
+        (ModelFamily.ME, Constraint.STRENGTH_COST),
+        (ModelFamily.B, Constraint.STRENGTH_COST),
+        (ModelFamily.W, Constraint.STRENGTH_COST),
         (ModelFamily.ME, Constraint.EDGES_EVENTS),
         (ModelFamily.B, Constraint.EDGES_EVENTS),
         (ModelFamily.W, Constraint.EDGES_EVENTS),

@@ -12,6 +12,8 @@
 //!   all families and restricted domains.
 
 pub mod chain;
+pub mod cost;
+pub mod cost_fit;
 pub mod domain;
 pub mod errors;
 pub mod feasibility;
@@ -22,5 +24,7 @@ pub mod problem;
 pub mod state;
 pub mod target;
 
-pub use chain::{sample_fixed_strength, StrengthBackend};
+pub use chain::{sample_fixed_strength, sample_fixed_strength_with_cost, StrengthBackend};
+pub use cost::{residual_cost_target, state_cost};
+pub use errors::FixedStrengthCostError;
 pub use me_direct::sample_strength_stub_matching;
