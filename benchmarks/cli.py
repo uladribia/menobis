@@ -1002,7 +1002,8 @@ def micro_command(
         str,
         typer.Option(
             "--constraint",
-            help="Microcanonical constraint: edges-events, degree-events, or strength.",
+            help="Microcanonical constraint: edges-events, degree-events, strength, "
+            "or strength-cost.",
         ),
     ] = "edges-events",
     known_pairs: Annotated[
@@ -1017,16 +1018,38 @@ def micro_command(
         int,
         typer.Option(
             "--burn-in-sweeps",
-            help="MCMC burn-in sweeps (degree-events / strength).",
+            help="MCMC burn-in sweeps (degree-events / strength / strength-cost).",
         ),
     ] = 50,
     sweeps_per_sample: Annotated[
         int,
         typer.Option(
             "--sweeps-per-sample",
-            help="MCMC thinning sweeps (degree-events / strength).",
+            help="MCMC thinning sweeps (degree-events / strength / strength-cost).",
         ),
     ] = 10,
+    fit_max_iterations: Annotated[
+        int,
+        typer.Option("--fit-max-iterations", help="Gamma-fit bisection iterations."),
+    ] = 40,
+    fit_warm_start_sweeps: Annotated[
+        int, typer.Option("--fit-warm-start-sweeps", help="Warm-start sweeps.")
+    ] = 50,
+    fit_adaptation_sweeps: Annotated[
+        int, typer.Option("--fit-adaptation-sweeps", help="Adaptation sweeps per gamma.")
+    ] = 100,
+    fit_estimation_sweeps: Annotated[
+        int, typer.Option("--fit-estimation-sweeps", help="Estimation sweeps per gamma.")
+    ] = 80,
+    fit_samples_per_iteration: Annotated[
+        int, typer.Option("--fit-samples-per-iteration", help="Samples per gamma iteration.")
+    ] = 20,
+    fit_batch_count: Annotated[
+        int, typer.Option("--fit-batch-count", help="Batch count for SE.")
+    ] = 10,
+    fit_cost_tolerance: Annotated[
+        float, typer.Option("--fit-cost-tolerance", help="Cost convergence tolerance.")
+    ] = 5e-1,
     output: Annotated[Path, typer.Option("--output", "-o")] = Path(
         "benchmarks/results/microcanonical-bench.json"
     ),
@@ -1041,10 +1064,12 @@ def micro_command(
     with and without fixed pairs.  Use --constraint edges-events, degree-events, or
     strength.
     """
-    if constraint not in ("edges-events", "degree-events", "strength"):
+    if constraint not in (
+        "edges-events", "degree-events", "strength", "strength-cost"
+    ):
         msg = (
             f"unsupported constraint: {constraint!r}, expected edges-events, "
-            "degree-events, or strength"
+            "degree-events, strength, or strength-cost"
         )
         raise typer.BadParameter(msg)
     rows: list[BenchmarkRow] = []
@@ -1107,6 +1132,17 @@ def micro_command(
                         out_str[int(s)] += int(w)
                         in_str[int(t)] += int(w)
 
+                    # Compute total observed cost for strength-cost constraint.
+                    dists = np.sqrt(
+                        (net.x[edges.source.astype(int)]
+                         - net.x[edges.target.astype(int)])**2
+                        + (net.y[edges.source.astype(int)]
+                           - net.y[edges.target.astype(int)])**2
+                    )
+                    total_cost = float(
+                        np.sum(edges.occ_num.astype(np.float64) * dists)
+                    )
+
                     def _sample_micro(
                         _family=family,
                         _layers=layers,
@@ -1123,6 +1159,8 @@ def micro_command(
                         _node_count=node_count,
                         _out_str=out_str,
                         _in_str=in_str,
+                        _net=net,
+                        _total_cost=total_cost,
                     ):
                         if _constraint == "edges-events":
                             kwargs: dict[str, Any] = {
@@ -1178,6 +1216,37 @@ def micro_command(
                                 kwargs["known_source"] = _known[0]
                                 kwargs["known_target"] = _known[1]
                                 kwargs["known_occnum"] = _known[2]
+                        elif _constraint == "strength-cost":
+                            # Observed total cost from the synthetic network.
+                            kwargs = {
+                                "ensemble": Ensemble.MICROCANONICAL,
+                                "family": _FAMILY_MAP[_family],
+                                "constraint": Constraint.STRENGTH_COST,
+                                "strength_out": _out_str,
+                                "strength_in": _in_str,
+                                "coord_x": _net.x,
+                                "coord_y": _net.y,
+                                "target_cost": _total_cost,
+                                "self_loops": _sl,
+                                "seed": _seed,
+                                "burn_in_sweeps": _burn_in,
+                                "sweeps_per_sample": _sample_sweeps,
+                                "warm_start_sweeps": fit_warm_start_sweeps,
+                                "adaptation_sweeps": fit_adaptation_sweeps,
+                                "estimation_sweeps": fit_estimation_sweeps,
+                                "samples_per_iteration": fit_samples_per_iteration,
+                                "max_iterations": fit_max_iterations,
+                                "absolute_cost_tolerance": fit_cost_tolerance,
+                                "relative_cost_tolerance": fit_cost_tolerance,
+                                "confidence_multiplier": 2.09,
+                                "batch_count": fit_batch_count,
+                            }
+                            if _family in ("b", "w"):
+                                kwargs["layers"] = _layers
+                            if _known is not None:
+                                kwargs["known_source"] = _known[0]
+                                kwargs["known_target"] = _known[1]
+                                kwargs["known_occnum"] = _known[2]
                         return sample_model(**kwargs)
 
                     try:
@@ -1216,7 +1285,7 @@ def micro_command(
                         ok = ok and bool(
                             (out_s == out_deg).all() and (in_s == in_deg).all()
                         )
-                    if constraint == "strength":
+                    if constraint in ("strength", "strength-cost"):
                         # Strength case: edge count is not fixed; only total
                         # occupation (T = sum of strengths) and the exact
                         # out/in strength sequences are constrained.
@@ -1230,6 +1299,21 @@ def micro_command(
                         ok = sample.total_events == t_total and bool(
                             (out_s == out_str).all() and (in_s == in_str).all()
                         )
+                        if constraint == "strength-cost":
+                            # Report sampled cost vs target.
+                            sampled_cost = float(
+                                np.sum(
+                                    sample.occ_num.astype(np.float64)
+                                    * np.hypot(
+                                        net.x[sample.source.astype(np.int64)],
+                                        net.y[sample.target.astype(np.int64)],
+                                    )
+                                )
+                            )
+                            ok = ok and bool(
+                                abs(sampled_cost - total_cost)
+                                <= 5.0 * fit_cost_tolerance * max(total_cost, 1.0)
+                            )
                     rows.append(
                         BenchmarkRow(
                             stage="microcanonical-sample",

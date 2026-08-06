@@ -191,6 +191,132 @@ def _sample_strength_fixed_strength_mcmc(
     )
 
 
+def _sample_strength_fixed_strength_cost_mcmc(
+    *,
+    family: str,
+    strength_out: NDArray[np.integer],
+    strength_in: NDArray[np.integer],
+    coord_x: NDArray[np.floating],
+    coord_y: NDArray[np.floating],
+    observed_total_cost: float,
+    self_loops: bool = True,
+    known_source: NDArray[np.integer] | None = None,
+    known_target: NDArray[np.integer] | None = None,
+    known_occnum: NDArray[np.integer] | None = None,
+    layers: int = 1,
+    seed: int = 0,
+    burn_in_sweeps: int = 50,
+    sweeps_per_sample: int = 10,
+    warm_start_sweeps: int = 20,
+    adaptation_sweeps: int = 50,
+    estimation_sweeps: int = 50,
+    samples_per_iteration: int = 5,
+    max_iterations: int = 30,
+    absolute_cost_tolerance: float = 1e-3,
+    relative_cost_tolerance: float = 1e-3,
+    confidence_multiplier: float = 2.09,
+    batch_count: int = 20,
+) -> EdgeTable:
+    """Microcanonical fixed-strength + expected-cost sampler.
+
+    Fits gamma via stochastic bisection, then draws one sample at the
+    fitted gamma.
+
+    Args:
+        family: "ME", "B", or "W".
+        strength_out: Exact outgoing strength per node.
+        strength_in: Exact incoming strength per node.
+        coord_x: X coordinates for Euclidean cost.
+        coord_y: Y coordinates for Euclidean cost.
+        observed_total_cost: Target total cost.
+        self_loops: Whether self-loops are allowed.
+        known_source: Sources of fixed pairs.
+        known_target: Targets of fixed pairs.
+        known_occnum: Occupations of fixed pairs.
+        layers: Layer count M for B/W.
+        seed: Random seed.
+        burn_in_sweeps: Burn-in sweeps after gamma is set.
+        sweeps_per_sample: Thinning sweeps for final sample.
+        warm_start_sweeps: Sweeps for warm-start estimate.
+        adaptation_sweeps: Adaptation sweeps per gamma change.
+        estimation_sweeps: Estimation sweeps per iteration.
+        samples_per_iteration: Cost samples per iteration.
+        max_iterations: Maximum bisection iterations.
+        absolute_cost_tolerance: Absolute convergence tolerance.
+        relative_cost_tolerance: Relative convergence tolerance.
+        confidence_multiplier: SE multiplier for convergence.
+        batch_count: Number of batches for batch-means SE.
+
+    Returns:
+        EdgeTable with exact strength preservation.
+    """
+    import menobis._menobis as _menobis
+
+    s_out = np.asarray(strength_out, dtype=np.uint64).tolist()
+    s_in = np.asarray(strength_in, dtype=np.uint64).tolist()
+    c_x = np.asarray(coord_x, dtype=np.float64).tolist()
+    c_y = np.asarray(coord_y, dtype=np.float64).tolist()
+
+    f_src = (
+        np.asarray(known_source, dtype=np.uint64).tolist()
+        if known_source is not None
+        else []
+    )
+    f_tgt = (
+        np.asarray(known_target, dtype=np.uint64).tolist()
+        if known_target is not None
+        else []
+    )
+    f_occ = (
+        np.asarray(known_occnum, dtype=np.uint64).tolist()
+        if known_occnum is not None
+        else []
+    )
+
+    (
+        sources,
+        targets,
+        occ_nums,
+        _gamma,
+        _exp_cost,
+        _se,
+        _converged,
+        _obs_cost,
+        _residual,
+        _props,
+        _accs,
+    ) = _menobis.sample_fixed_strength_with_cost(  # type: ignore
+        family,
+        s_out,
+        s_in,
+        c_x,
+        c_y,
+        float(observed_total_cost),
+        bool(self_loops),
+        f_src,
+        f_tgt,
+        f_occ,
+        int(layers),
+        int(warm_start_sweeps),
+        int(adaptation_sweeps),
+        int(estimation_sweeps),
+        int(samples_per_iteration),
+        int(max_iterations),
+        float(absolute_cost_tolerance),
+        float(relative_cost_tolerance),
+        float(confidence_multiplier),
+        int(batch_count),
+        int(burn_in_sweeps),
+        int(sweeps_per_sample),
+        int(seed),
+    )
+    return EdgeTable(
+        source=np.asarray(sources, dtype=np.uint64),
+        target=np.asarray(targets, dtype=np.uint64),
+        occ_num=np.asarray(occ_nums, dtype=np.uint64),
+    )
+
+
 def _sample_me_fixed_et(
     node_count: int,
     *,

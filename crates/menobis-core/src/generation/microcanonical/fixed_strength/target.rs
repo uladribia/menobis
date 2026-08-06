@@ -2,9 +2,8 @@
 //!
 //! The [`StrengthTarget`] encapsulates the local log-weight calculation
 //! used by the Metropolis acceptance step of the fixed-strength MCMC
-//! chain.  For Phase 4 (no cost), `gamma = 0.0` and the cost provider is
-//! `None`.  For Phase 5, a fitted `gamma` and a [`PairCostProvider`] are
-//! injected.
+//! chain.  Gamma is always fitted from observed cost data — it is never
+//! user-supplied.
 
 use crate::distribution::OccupationFamily;
 use crate::pairs::PairCostProvider;
@@ -20,35 +19,51 @@ use crate::OccNum;
 ///     - \gamma \, c_{ij}\, (t_{\text{new}} - t_{\text{old}}).
 /// \]
 ///
-/// For Phase 4, `gamma = 0.0` and only the degeneracy ratio contributes.
+/// Gamma is set by the fitting procedure.  Missing or non-finite cost
+/// values are fatal configuration errors.
 pub struct StrengthTarget<'a> {
     pub family: OccupationFamily,
-    /// Cost multiplier \(\gamma\).  Set to `0.0` for Phase 4.
-    pub gamma: f64,
-    /// Optional cost provider (Phase 5).  `None` disables the cost term.
+    /// Cost multiplier \(\gamma\).  Always fitted from observed cost.
+    /// Not directly settable by users.
+    gamma: f64,
+    /// Optional cost provider.  `None` disables the cost term.
     pub costs: Option<&'a dyn PairCostProvider>,
 }
 
 impl<'a> StrengthTarget<'a> {
-    pub fn new(family: OccupationFamily, gamma: f64) -> Self {
+    /// Create a target without cost (Phase 4 mode).  Gamma is 0.
+    pub fn new(family: OccupationFamily) -> Self {
         Self {
             family,
-            gamma,
+            gamma: 0.0,
             costs: None,
         }
     }
 
-    /// Construct a target with a cost provider (Phase 5 readiness).
-    pub fn with_costs(
-        family: OccupationFamily,
-        gamma: f64,
-        costs: &'a dyn PairCostProvider,
-    ) -> Self {
+    /// Create a target with a cost provider.  Gamma starts at 0.0
+    /// and must be set via [`set_gamma`](Self::set_gamma) after fitting.
+    pub fn with_costs(family: OccupationFamily, costs: &'a dyn PairCostProvider) -> Self {
         Self {
             family,
-            gamma,
+            gamma: 0.0,
             costs: Some(costs),
         }
+    }
+
+    /// Set the cost multiplier \(\gamma\).  Called by the fitting loop.
+    pub fn set_gamma(&mut self, gamma: f64) {
+        self.gamma = gamma;
+    }
+
+    /// Current gamma value.
+    pub fn gamma(&self) -> f64 {
+        self.gamma
+    }
+
+    /// Whether the target has a non-trivial cost term (provider present
+    /// and gamma != 0).
+    pub fn has_nontrivial_cost(&self) -> bool {
+        self.costs.is_some() && self.gamma != 0.0
     }
 
     /// Compute \(\Delta\log\pi\) for changing one pair from `old` to `new`.
@@ -56,31 +71,39 @@ impl<'a> StrengthTarget<'a> {
     /// Returns `None` if the new occupation would violate the family's
     /// occupation support (e.g., B occupation exceeding layers).
     ///
-    /// The cost contribution is `-gamma * cost * (new - old)`.  When
-    /// `gamma == 0.0` (Phase 4) this term vanishes regardless of cost.
+    /// # Panics
+    ///
+    /// Panics if a cost provider is present, gamma is non-zero, and the
+    /// provider returns `None` or a non-finite value for the pair.  This
+    /// is a configuration error: all admissible pairs must have valid costs.
     #[inline]
-    pub fn delta_log_weight(&self, _src: u64, _tgt: u64, old: OccNum, new: OccNum) -> Option<f64> {
+    pub fn delta_log_weight(&self, src: u64, tgt: u64, old: OccNum, new: OccNum) -> Option<f64> {
         // Validate new occupation against family support.
         if !self.family.validate_occnum(new) {
             return None;
         }
 
         // Degeneracy contribution.
-        let log_old = self.family.log_local_degeneracy(old);
-        let log_new = self.family.log_local_degeneracy(new);
-        let mut delta = log_new - log_old;
+        let delta = self.family.delta_log_local_degeneracy(old, new);
 
-        // Cost contribution (Phase 5: gamma > 0 with cost provider).
+        // Cost contribution (only when gamma != 0 and provider present).
         if let Some(costs) = self.costs {
-            if let Some(c) = costs.cost(_src as usize, _tgt as usize) {
-                delta -= self.gamma * c * ((new as i64) - (old as i64)) as f64;
+            if self.gamma != 0.0 {
+                let c = costs.cost(src as usize, tgt as usize).unwrap_or_else(|| {
+                    panic!("cost provider returned None for admissible pair ({src}, {tgt})");
+                });
+                assert!(
+                    c.is_finite(),
+                    "cost provider returned non-finite cost {c} for pair ({src}, {tgt})"
+                );
+                let occ_delta = (new as i64) - (old as i64);
+                Some(delta - self.gamma * c * (occ_delta as f64))
             } else {
-                // Pair excluded from cost-constrained domain: reject.
-                return None;
+                Some(delta)
             }
+        } else {
+            Some(delta)
         }
-
-        Some(delta)
     }
 
     /// Compute \(\Delta\log\pi\) for a batch of pair changes.
@@ -107,9 +130,8 @@ mod tests {
     /// Reference log-local-degeneracy formulas for verification.
     fn me_log_degen(t: OccNum) -> f64 {
         if t == 0 {
-            return 0.0; // 0! = 1, log(1) = 0
+            return 0.0;
         }
-        // log(1/t!) = -lgamma(t+1)
         -libm::lgamma((t as f64) + 1.0)
     }
 
@@ -130,9 +152,7 @@ mod tests {
 
     #[test]
     fn me_delta_increment() {
-        let target = StrengthTarget::new(OccupationFamily::Poisson, 0.0);
-        // d_ME(t+1)/d_ME(t) = 1/(t+1) → log = -log(t+1)
-        // So delta_log = -log(6) - (-log(5)) = log(5/6)
+        let target = StrengthTarget::new(OccupationFamily::Poisson);
         let delta = target.delta_log_weight(0, 0, 5, 6).unwrap();
         let expected = me_log_degen(6) - me_log_degen(5);
         assert!((delta - expected).abs() < 1e-12);
@@ -140,8 +160,7 @@ mod tests {
 
     #[test]
     fn me_delta_decrement() {
-        let target = StrengthTarget::new(OccupationFamily::Poisson, 0.0);
-        // d_ME(t-1)/d_ME(t) = t → log = log(t)
+        let target = StrengthTarget::new(OccupationFamily::Poisson);
         let delta = target.delta_log_weight(0, 0, 5, 4).unwrap();
         let expected = me_log_degen(4) - me_log_degen(5);
         assert!((delta - expected).abs() < 1e-12);
@@ -149,17 +168,14 @@ mod tests {
 
     #[test]
     fn me_zero_to_one() {
-        let target = StrengthTarget::new(OccupationFamily::Poisson, 0.0);
-        // log(1/1!) - log(1/0!) = 0 - 0 = 0
+        let target = StrengthTarget::new(OccupationFamily::Poisson);
         let delta = target.delta_log_weight(0, 0, 0, 1).unwrap();
         assert!((delta - 0.0).abs() < 1e-12);
     }
 
     #[test]
     fn b_delta_increment() {
-        // B with M=5: increment from 2 to 3
-        // d(3)/d(2) = (M-2)/(2+1) = 3/3 = 1 → log = 0
-        let target = StrengthTarget::new(OccupationFamily::Binomial(5), 0.0);
+        let target = StrengthTarget::new(OccupationFamily::Binomial(5));
         let delta = target.delta_log_weight(0, 0, 2, 3).unwrap();
         let expected = b_log_degen(3, 5) - b_log_degen(2, 5);
         assert!((delta - expected).abs() < 1e-12);
@@ -167,16 +183,13 @@ mod tests {
 
     #[test]
     fn b_delta_at_capacity() {
-        // B with M=3: increment from 3 to 4 should be invalid
-        let target = StrengthTarget::new(OccupationFamily::Binomial(3), 0.0);
+        let target = StrengthTarget::new(OccupationFamily::Binomial(3));
         assert!(target.delta_log_weight(0, 0, 3, 4).is_none());
     }
 
     #[test]
     fn w_delta_increment() {
-        // W with M=2: increment from 1 to 2
-        // d(2)/d(1) = (M+1)/(1+1) = (2+1)/2 = 3/2 → log = ln(1.5)
-        let target = StrengthTarget::new(OccupationFamily::NegativeBinomial(2), 0.0);
+        let target = StrengthTarget::new(OccupationFamily::NegativeBinomial(2));
         let delta = target.delta_log_weight(0, 0, 1, 2).unwrap();
         let expected = w_log_degen(2, 2) - w_log_degen(1, 2);
         assert!((delta - expected).abs() < 1e-12);
@@ -184,11 +197,8 @@ mod tests {
 
     #[test]
     fn batch_sum() {
-        let target = StrengthTarget::new(OccupationFamily::Poisson, 0.0);
-        let changes = vec![
-            (0, 1, 2, 3), // ME: log(1/3) - log(1/2) = -log(3) + log(2) = log(2/3)
-            (1, 0, 5, 4), // ME: log(1/4!) - log(1/5!) = log(5)
-        ];
+        let target = StrengthTarget::new(OccupationFamily::Poisson);
+        let changes = vec![(0, 1, 2, 3), (1, 0, 5, 4)];
         let expected = (me_log_degen(3) - me_log_degen(2)) + (me_log_degen(4) - me_log_degen(5));
         let delta = target.delta_log_weight_batch(&changes).unwrap();
         assert!((delta - expected).abs() < 1e-12);
@@ -204,10 +214,9 @@ mod tests {
 
     #[test]
     fn cost_potential_adds_gamma_term() {
-        // Phase 5 readiness: gamma>0 with a cost provider adds the cost
-        // term to the local log-weight delta.
         let costs = LinearCost;
-        let target = StrengthTarget::with_costs(OccupationFamily::Poisson, 2.0, &costs);
+        let mut target = StrengthTarget::with_costs(OccupationFamily::Poisson, &costs);
+        target.set_gamma(2.0);
 
         // Increment (0,1) from 2 to 3:
         // Δ = log(1/3!) − log(1/2!) − γ·c·(3−2) = log(2/3) − 2·1·1
@@ -217,9 +226,8 @@ mod tests {
     }
 
     #[test]
-    fn cost_potential_requires_admissible_pair() {
-        // A provider returning None for a pair excludes it (Phase 5
-        // semantics match grand-canonical admissibility).
+    #[should_panic(expected = "cost provider returned None")]
+    fn missing_cost_panics_when_gamma_nonzero() {
         struct ExcludingCost;
         impl crate::pairs::PairCostProvider for ExcludingCost {
             fn cost(&self, _source: usize, _target: usize) -> Option<f64> {
@@ -227,7 +235,48 @@ mod tests {
             }
         }
         let costs = ExcludingCost;
-        let target = StrengthTarget::with_costs(OccupationFamily::Poisson, 1.0, &costs);
-        assert!(target.delta_log_weight(0, 1, 2, 3).is_none());
+        let mut target = StrengthTarget::with_costs(OccupationFamily::Poisson, &costs);
+        target.set_gamma(1.0);
+        // This should panic, not return None.
+        target.delta_log_weight(0, 1, 2, 3);
+    }
+
+    #[test]
+    fn gamma_defaults_to_zero() {
+        let target = StrengthTarget::new(OccupationFamily::Poisson);
+        assert!((target.gamma() - 0.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn with_costs_gamma_starts_zero() {
+        let costs = LinearCost;
+        let target = StrengthTarget::with_costs(OccupationFamily::Poisson, &costs);
+        assert!((target.gamma() - 0.0).abs() < 1e-12);
+        assert!(!target.has_nontrivial_cost());
+    }
+
+    #[test]
+    fn set_gamma_works() {
+        let costs = LinearCost;
+        let mut target = StrengthTarget::with_costs(OccupationFamily::Poisson, &costs);
+        target.set_gamma(1.5);
+        assert!((target.gamma() - 1.5).abs() < 1e-12);
+        assert!(target.has_nontrivial_cost());
+    }
+
+    #[test]
+    fn zero_gamma_cost_term_vanishes() {
+        let costs = LinearCost;
+        let mut target = StrengthTarget::with_costs(OccupationFamily::Poisson, &costs);
+        // gamma is 0.0 → cost term disabled → same as no-cost target.
+        let without = StrengthTarget::new(OccupationFamily::Poisson);
+        let d_with = target.delta_log_weight(0, 1, 2, 3).unwrap();
+        let d_without = without.delta_log_weight(0, 1, 2, 3).unwrap();
+        assert!((d_with - d_without).abs() < 1e-12);
+
+        // After setting gamma=0 explicitly, still no cost term.
+        target.set_gamma(0.0);
+        let d_zero = target.delta_log_weight(0, 1, 2, 3).unwrap();
+        assert!((d_zero - d_without).abs() < 1e-12);
     }
 }

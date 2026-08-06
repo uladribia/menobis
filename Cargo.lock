@@ -110,6 +110,7 @@ version = "1.0.1"
 dependencies = [
  "menobis-core",
  "pyo3",
+ "rand",
 ]
 
 [[package]]

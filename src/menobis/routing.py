@@ -154,6 +154,7 @@ def sample_model(
     degree_in: NDArray[Any] | None = None,
     total_events: int | None = None,
     target_edges: int | None = None,
+    target_cost: float | None = None,
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
     node_count: int | None = None,
@@ -165,6 +166,15 @@ def sample_model(
     seed: int = 0,
     burn_in_sweeps: int = 50,
     sweeps_per_sample: int = 10,
+    warm_start_sweeps: int = 20,
+    adaptation_sweeps: int = 50,
+    estimation_sweeps: int = 50,
+    samples_per_iteration: int = 5,
+    max_iterations: int = 30,
+    absolute_cost_tolerance: float = 1e-3,
+    relative_cost_tolerance: float = 1e-3,
+    confidence_multiplier: float = 2.09,
+    batch_count: int = 20,
 ) -> EdgeTable:
     """Sample a network from a fitted model or directly via stub matching.
 
@@ -185,6 +195,7 @@ def sample_model(
         degree_in=degree_in,
         total_events=total_events,
         target_edges=target_edges,
+        target_cost=target_cost,
         coord_x=coord_x,
         coord_y=coord_y,
         node_count=node_count,
@@ -196,6 +207,15 @@ def sample_model(
         seed=seed,
         burn_in_sweeps=burn_in_sweeps,
         sweeps_per_sample=sweeps_per_sample,
+        warm_start_sweeps=warm_start_sweeps,
+        adaptation_sweeps=adaptation_sweeps,
+        estimation_sweeps=estimation_sweeps,
+        samples_per_iteration=samples_per_iteration,
+        max_iterations=max_iterations,
+        absolute_cost_tolerance=absolute_cost_tolerance,
+        relative_cost_tolerance=relative_cost_tolerance,
+        confidence_multiplier=confidence_multiplier,
+        batch_count=batch_count,
     ).edges
 
 
@@ -211,6 +231,7 @@ def sample_model_detailed(
     degree_in: NDArray[Any] | None = None,
     total_events: int | None = None,
     target_edges: int | None = None,
+    target_cost: float | None = None,
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
     node_count: int | None = None,
@@ -222,6 +243,15 @@ def sample_model_detailed(
     seed: int = 0,
     burn_in_sweeps: int = 50,
     sweeps_per_sample: int = 10,
+    warm_start_sweeps: int = 20,
+    adaptation_sweeps: int = 50,
+    estimation_sweeps: int = 50,
+    samples_per_iteration: int = 5,
+    max_iterations: int = 30,
+    absolute_cost_tolerance: float = 1e-3,
+    relative_cost_tolerance: float = 1e-3,
+    confidence_multiplier: float = 2.09,
+    batch_count: int = 20,
 ) -> SamplingResult:
     """Sample a network and return the detailed :class:`SamplingResult`.
 
@@ -253,6 +283,7 @@ def sample_model_detailed(
             degree_in=degree_in,
             total_events=total_events,
             target_edges=target_edges,
+            target_cost=target_cost,
             coord_x=coord_x,
             coord_y=coord_y,
             node_count=node_count,
@@ -264,6 +295,15 @@ def sample_model_detailed(
             seed=seed,
             burn_in_sweeps=burn_in_sweeps,
             sweeps_per_sample=sweeps_per_sample,
+            warm_start_sweeps=warm_start_sweeps,
+            adaptation_sweeps=adaptation_sweeps,
+            estimation_sweeps=estimation_sweeps,
+            samples_per_iteration=samples_per_iteration,
+            max_iterations=max_iterations,
+            absolute_cost_tolerance=absolute_cost_tolerance,
+            relative_cost_tolerance=relative_cost_tolerance,
+            confidence_multiplier=confidence_multiplier,
+            batch_count=batch_count,
         ),
     )
 
@@ -584,6 +624,7 @@ def _sample_model(
     degree_in: NDArray[Any] | None = None,
     total_events: int | None = None,
     target_edges: int | None = None,
+    target_cost: float | None = None,
     coord_x: NDArray[Any] | None = None,
     coord_y: NDArray[Any] | None = None,
     node_count: int | None = None,
@@ -595,6 +636,15 @@ def _sample_model(
     seed: int = 0,
     burn_in_sweeps: int = 50,
     sweeps_per_sample: int = 10,
+    warm_start_sweeps: int = 20,
+    adaptation_sweeps: int = 50,
+    estimation_sweeps: int = 50,
+    samples_per_iteration: int = 5,
+    max_iterations: int = 30,
+    absolute_cost_tolerance: float = 1e-3,
+    relative_cost_tolerance: float = 1e-3,
+    confidence_multiplier: float = 2.09,
+    batch_count: int = 20,
 ) -> EdgeTable:
     from menobis.data.frames import EdgeTable
     from menobis.models.generation import (
@@ -617,6 +667,7 @@ def _sample_model(
         _sample_strength_edges_geometric,
         _sample_strength_edges_negative_binomial,
         _sample_strength_edges_poisson,
+        _sample_strength_fixed_strength_cost_mcmc,
         _sample_strength_fixed_strength_mcmc,
         _sample_strength_geometric,
         _sample_strength_multinomial,
@@ -705,6 +756,49 @@ def _sample_model(
                     seed=seed,
                     burn_in_sweeps=burn_in_sweeps,
                     sweeps_per_sample=sweeps_per_sample,
+                )
+            if constraint is Constraint.STRENGTH_COST:
+                if strength_out is None or strength_in is None:
+                    msg = (
+                        "microcanonical strength-cost requires "
+                        "strength_out and strength_in"
+                    )
+                    raise ValueError(msg)
+                if coord_x is None or coord_y is None:
+                    msg = "microcanonical strength-cost requires coord_x and coord_y"
+                    raise ValueError(msg)
+                if target_cost is None:
+                    msg = "microcanonical strength-cost requires target_cost"
+                    raise ValueError(msg)
+                fam = (
+                    "ME"
+                    if family == ModelFamily.ME
+                    else ("B" if family == ModelFamily.B else "W")
+                )
+                return _sample_strength_fixed_strength_cost_mcmc(
+                    family=fam,
+                    strength_out=np.asarray(strength_out, dtype=np.uint64),
+                    strength_in=np.asarray(strength_in, dtype=np.uint64),
+                    coord_x=np.asarray(coord_x, dtype=np.float64),
+                    coord_y=np.asarray(coord_y, dtype=np.float64),
+                    observed_total_cost=float(target_cost),
+                    self_loops=bool(self_loops),
+                    known_source=known_source,
+                    known_target=known_target,
+                    known_occnum=known_occnum,
+                    layers=int(layers),
+                    seed=seed,
+                    burn_in_sweeps=burn_in_sweeps,
+                    sweeps_per_sample=sweeps_per_sample,
+                    warm_start_sweeps=warm_start_sweeps,
+                    adaptation_sweeps=adaptation_sweeps,
+                    estimation_sweeps=estimation_sweeps,
+                    samples_per_iteration=samples_per_iteration,
+                    max_iterations=max_iterations,
+                    absolute_cost_tolerance=absolute_cost_tolerance,
+                    relative_cost_tolerance=relative_cost_tolerance,
+                    confidence_multiplier=confidence_multiplier,
+                    batch_count=batch_count,
                 )
             if constraint is Constraint.DEGREE_EVENTS:
                 if degree_out is None or degree_in is None:
