@@ -1318,13 +1318,16 @@ def micro_command(
                             (out_s == out_str).all() and (in_s == in_str).all()
                         )
                         if constraint == "strength-cost":
-                            # Report sampled cost vs target.
+                            # Report sampled cost vs target.  Cost of an edge
+                            # is the Euclidean distance between its endpoints.
+                            src_idx = sample.source.astype(np.int64)
+                            tgt_idx = sample.target.astype(np.int64)
                             sampled_cost = float(
                                 np.sum(
                                     sample.occ_num.astype(np.float64)
                                     * np.hypot(
-                                        net.x[sample.source.astype(np.int64)],
-                                        net.y[sample.target.astype(np.int64)],
+                                        net.x[src_idx] - net.x[tgt_idx],
+                                        net.y[src_idx] - net.y[tgt_idx],
                                     )
                                 )
                             )

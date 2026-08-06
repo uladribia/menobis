@@ -378,10 +378,14 @@ pub fn fit_gamma<'a>(
     // --- Warm start ---
     let mut gamma_0 = warm_start_gamma(chain, rng, costs, residual_obs, config.warm_start_sweeps)?;
 
-    // Clamp to avoid near-zero gamma (which would make bracket expansion
-    // too slow).  If gamma_0 is tiny, pick a sensible default direction.
+    // Clamp to avoid extreme gamma values from noisy variance estimates.
+    // If gamma_0 is tiny, pick a sensible default direction.
+    // If gamma_0 is huge (> 1e3), the variance was too small and the
+    // linear approximation is unreliable — clamp to a moderate value.
     if gamma_0.abs() < 1e-6 {
         gamma_0 = if gamma_0 >= 0.0 { 0.1 } else { -0.1 };
+    } else if gamma_0.abs() > 100.0 {
+        gamma_0 = gamma_0.signum() * 10.0;
     }
 
     // --- Bracket expansion ---
@@ -480,15 +484,10 @@ pub fn fit_gamma<'a>(
         seed: config.seed,
     };
 
-    if !converged {
-        // Return the best result even if not converged, but with an error.
-        // The caller can decide whether to accept it.
-        return Err(FixedStrengthCostError::FitDidNotConverge {
-            iterations: config.max_iterations,
-            residual: best_residual,
-        });
-    }
-
+    // Return the best result even when not converged (converged=false).
+    // The caller can decide whether to accept it.  The
+    // `FitDidNotConverge` error variant remains available for callers
+    // that prefer to treat non-convergence as fatal.
     Ok(result)
 }
 
