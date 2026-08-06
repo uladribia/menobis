@@ -247,7 +247,8 @@ mod tests {
 
     #[test]
     fn stirling_table_too_large() {
-        let err = sample_stirling_sizes(10_000, 10_000, &mut StdRng::seed_from_u64(0)).unwrap_err();
+        // 20000 × 20000 = 400M cells exceeds MAX_DP_CELLS (200M)
+        let err = sample_stirling_sizes(20_000, 20_000, &mut StdRng::seed_from_u64(0)).unwrap_err();
         assert!(matches!(err, FixedETError::TableTooLarge { .. }));
     }
 }

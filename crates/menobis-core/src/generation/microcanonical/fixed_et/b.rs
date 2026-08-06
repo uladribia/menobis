@@ -335,7 +335,7 @@ mod tests {
 
     #[test]
     fn dp_table_too_large() {
-        let err = sample_b_dp(10_000, 10_000, 10_000, &mut StdRng::seed_from_u64(0)).unwrap_err();
+        let err = sample_b_dp(20_000, 20_000, 20_000, &mut StdRng::seed_from_u64(0)).unwrap_err();
         assert!(matches!(err, FixedETError::TableTooLarge { .. }));
     }
 }

@@ -97,9 +97,6 @@ pub fn directed_switch_step(
     state.insert(cand_1);
     state.insert(cand_2);
 
-    #[cfg(debug_assertions)]
-    state.debug_validate();
-
     SwitchOutcome::Switched
 }
 

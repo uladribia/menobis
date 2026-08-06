@@ -187,6 +187,22 @@ fn sample_w_dp(
         });
     }
 
+    // Check time: the naive recurrence is O(E·T²).  Cap it so large problems
+    // fail fast with a clear error instead of hanging for minutes.
+    let work = (e as u64)
+        .saturating_mul(t_u as u64)
+        .saturating_mul(t_u as u64);
+    const MAX_W_DP_WORK: u64 = 1_000_000_000; // ~1s of log-domain ops
+    if work > MAX_W_DP_WORK {
+        return Err(FixedETError::TableTooLarge {
+            t: t_u,
+            e,
+            required_cells: max_cells,
+            max_cells: MAX_W_DP_WORK as usize,
+            family: "W/DP",
+        });
+    }
+
     let log_degen = precompute_w_degeneracy(m, t_u);
 
     // Build table: rows[k] = log Z_W(k, s) for s in k..=T

@@ -17,14 +17,20 @@ use crate::OccNum;
 // ---------------------------------------------------------------------------
 
 /// Maximum rejection attempts before falling back to the exact DP backend.
-pub const MAX_REJECTION_ATTEMPTS: usize = 20;
+pub const MAX_REJECTION_ATTEMPTS: usize = 200;
 
 /// Estimated-rejection threshold: below this the fast rejection path is tried
 /// first; above it the exact DP sampler is used directly.
-pub const REJECTION_THRESHOLD: f64 = 0.8;
+pub const REJECTION_THRESHOLD: f64 = 0.95;
 
-/// Maximum number of cells in a flat fallback DP table (~16 MB at 8 bytes).
-pub const MAX_DP_CELLS: usize = 2_000_000;
+/// Maximum number of cells in a flat fallback DP table (~1.6 GB at 8 bytes).
+/// On machines with >8 GB RAM this safely handles most practical networks.
+pub const MAX_DP_CELLS: usize = 200_000_000;
+
+/// Minimum estimated acceptance probability for the scaled rejection fallback.
+/// Below this threshold the problem is effectively infeasible for rejection
+/// (e.g. W when T ≈ M·E), so we fail immediately instead of burning attempts.
+pub const MIN_ESTIMATED_P_ACC: f64 = 1e-12;
 
 // ---------------------------------------------------------------------------
 // The trait
@@ -121,11 +127,11 @@ pub(crate) fn sample_positive_occupations<F: FixedETOccupancy>(
 }
 
 /// Total work budget for the scaled-attempts rejection fallback.
-const FALLBACK_WORK_BUDGET: u64 = 100_000_000;
+const FALLBACK_WORK_BUDGET: u64 = 1_000_000_000;
 
 /// Retry rejection with an attempt budget proportional to 1/p_acc, capped so
-/// the total work stays bounded.  If the budget is insufficient, returns a
-/// clear error instead of hanging.
+/// the total work stays bounded.  If acceptance is effectively impossible,
+/// returns a clear error immediately instead of hanging.
 fn scaled_rejection_fallback<F: FixedETOccupancy>(
     family: &F,
     t: OccNum,
@@ -133,7 +139,11 @@ fn scaled_rejection_fallback<F: FixedETOccupancy>(
     rej: f64,
     rng: &mut StdRng,
 ) -> Result<Vec<OccNum>, FixedETError> {
-    let p_acc = (1.0 - rej).clamp(1e-12, 1.0);
+    let p_acc = 1.0 - rej;
+    if p_acc < MIN_ESTIMATED_P_ACC {
+        return Err(FixedETError::NoBackendAvailable);
+    }
+    let p_acc = p_acc.clamp(MIN_ESTIMATED_P_ACC, 1.0);
     let cost = family.rejection_cost_per_attempt(t, e).max(1);
     let max_by_work = (FALLBACK_WORK_BUDGET / cost).max(MAX_REJECTION_ATTEMPTS as u64);
     let scaled = (5.0 / p_acc).ceil() as u64;
