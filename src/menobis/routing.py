@@ -596,6 +596,7 @@ def _sample_model(
     burn_in_sweeps: int = 50,
     sweeps_per_sample: int = 10,
 ) -> EdgeTable:
+    from menobis.data.frames import EdgeTable
     from menobis.models.generation import (
         _sample_degree_events_binomial,
         _sample_degree_events_fixed_kt,
@@ -721,20 +722,23 @@ def _sample_model(
                 k_tgt = np.asarray(known_target, dtype=np.uint64)
                 k_occ = np.asarray(known_occnum, dtype=np.uint64)
                 # Fixed contributions to out/in degrees and total T
-                k_out_fix = np.zeros(len(degree_out), dtype=np.uint64)
-                k_in_fix = np.zeros(len(degree_in), dtype=np.uint64)
+                k_out_fix = np.zeros(len(degree_out), dtype=np.int64)
+                k_in_fix = np.zeros(len(degree_in), dtype=np.int64)
                 t_fix = 0
                 for s, t, o in zip(k_src, k_tgt, k_occ):
                     if o > 0:
                         k_out_fix[int(s)] += 1
                         k_in_fix[int(t)] += 1
                         t_fix += int(o)
-                # Residual degrees
+                # Residual degrees (int64 to avoid uint64 promotion)
                 k_out_res = np.asarray(degree_out, dtype=np.int64) - k_out_fix
                 k_in_res = np.asarray(degree_in, dtype=np.int64) - k_in_fix
                 if (k_out_res < 0).any() or (k_in_res < 0).any():
                     msg = "fixed pairs exceed target degree sequence"
                     raise ValueError(msg)
+                # Cast back to uint32 for the native kernel
+                k_out_res_u32 = k_out_res.astype(np.uint32)
+                k_in_res_u32 = k_in_res.astype(np.uint32)
                 t_res = int(total_events) - t_fix
                 if t_res < 0:
                     msg = "fixed pairs exceed total events"
@@ -757,8 +761,8 @@ def _sample_model(
                 # Sample residual
                 residual = _sample_degree_events_fixed_kt(
                     family=fam,
-                    degree_out=k_out_res.tolist(),
-                    degree_in=k_in_res.tolist(),
+                    degree_out=k_out_res_u32.tolist(),
+                    degree_in=k_in_res_u32.tolist(),
                     total_events=t_res,
                     layers=int(layers),
                     seed=seed,

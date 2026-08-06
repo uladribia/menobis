@@ -860,7 +860,10 @@ def all_command(
         str, typer.Option("--constraints", help="Comma-separated constraints.")
     ] = "strength,strength-cost,strength-edges,strength-degree",
     regimes: Annotated[
-        str, typer.Option("--regime", help="Comma-separated regimes: sparse,dense,saturated.")
+        str,
+        typer.Option(
+            "--regime", help="Comma-separated regimes: sparse,dense,saturated."
+        ),
     ] = "dense",
     known_pairs: Annotated[
         str, typer.Option("--known-pairs", help="Comma-separated known-pair fractions.")
@@ -995,6 +998,13 @@ def micro_command(
     regimes: Annotated[
         str, typer.Option("--regime", help="Comma-separated regimes: sparse,dense.")
     ] = "sparse,dense",
+    constraint: Annotated[
+        str,
+        typer.Option(
+            "--constraint",
+            help="Microcanonical constraint: edges-events or degree-events.",
+        ),
+    ] = "edges-events",
     known_pairs: Annotated[
         str, typer.Option("--known-pairs", help="Comma-separated fixed-pair fractions.")
     ] = "0.0,0.05",
@@ -1003,19 +1013,34 @@ def micro_command(
     no_memory: Annotated[
         bool, typer.Option("--no-memory", help="Skip memory profiling.")
     ] = False,
+    burn_in_sweeps: Annotated[
+        int,
+        typer.Option(
+            "--burn-in-sweeps", help="MCMC burn-in sweeps (degree-events only)."
+        ),
+    ] = 50,
+    sweeps_per_sample: Annotated[
+        int,
+        typer.Option(
+            "--sweeps-per-sample", help="MCMC thinning sweeps (degree-events only)."
+        ),
+    ] = 10,
     output: Annotated[Path, typer.Option("--output", "-o")] = Path(
-        "benchmarks/results/microcanonical-fixed-et.json"
+        "benchmarks/results/microcanonical-bench.json"
     ),
     output_json: Annotated[
         bool, typer.Option("--json", help="Print JSON to stdout.")
     ] = False,
 ) -> None:
-    """Benchmark the microcanonical fixed-(E,T) samplers (ME, B, W).
+    """Benchmark the microcanonical fixed-(E,T) or fixed-(k,T) samplers (ME, B, W).
 
-    For each family and regime, derives feasible (E, T) from a synthetic
-    PA-geographic network and samples the microcanonical EDGES_EVENTS model
-    directly (no fitting), with and without fixed pairs.
+    For each family and regime, derives feasible constraints from a synthetic
+    PA-geographic network and samples the microcanonical model directly (no fitting),
+    with and without fixed pairs.  Use --constraint edges-events or degree-events.
     """
+    if constraint not in ("edges-events", "degree-events"):
+        msg = f"unsupported constraint: {constraint!r}, expected edges-events or degree-events"
+        raise typer.BadParameter(msg)
     rows: list[BenchmarkRow] = []
     _print_header()
 
@@ -1051,14 +1076,23 @@ def micro_command(
                     known = None
                     if kp_fraction > 0.0:
                         n_fixed = max(1, int(kp_fraction * e_total))
-                        idx = np.sort(np.random.default_rng(seed).choice(
-                            e_total, size=n_fixed, replace=False
-                        ))
+                        idx = np.sort(
+                            np.random.default_rng(seed).choice(
+                                e_total, size=n_fixed, replace=False
+                            )
+                        )
                         known = (
                             edges.source[idx].astype(np.uint64),
                             edges.target[idx].astype(np.uint64),
                             edges.occ_num[idx].astype(np.uint64),
                         )
+
+                    # Derive out/in degree sequences from the generated network
+                    out_deg = np.zeros(node_count, dtype=np.uint64)
+                    in_deg = np.zeros(node_count, dtype=np.uint64)
+                    for s, t in zip(edges.source, edges.target, strict=True):
+                        out_deg[int(s)] += 1
+                        in_deg[int(t)] += 1
 
                     def _sample_micro(
                         _family=family,
@@ -1068,23 +1102,49 @@ def micro_command(
                         _known=known,
                         _sl=self_loops,
                         _seed=seed,
+                        _constraint=constraint,
+                        _out_deg=out_deg,
+                        _in_deg=in_deg,
+                        _burn_in=burn_in_sweeps,
+                        _sample_sweeps=sweeps_per_sample,
+                        _node_count=node_count,
                     ):
-                        kwargs: dict[str, Any] = {
-                            "ensemble": Ensemble.MICROCANONICAL,
-                            "family": _FAMILY_MAP[_family],
-                            "constraint": Constraint.EDGES_EVENTS,
-                            "node_count": node_count,
-                            "total_events": _t,
-                            "target_edges": _e,
-                            "self_loops": _sl,
-                            "seed": _seed,
-                        }
-                        if _family in ("b", "w"):
-                            kwargs["layers"] = _layers
-                        if _known is not None:
-                            kwargs["known_source"] = _known[0]
-                            kwargs["known_target"] = _known[1]
-                            kwargs["known_occnum"] = _known[2]
+                        if _constraint == "edges-events":
+                            kwargs: dict[str, Any] = {
+                                "ensemble": Ensemble.MICROCANONICAL,
+                                "family": _FAMILY_MAP[_family],
+                                "constraint": Constraint.EDGES_EVENTS,
+                                "node_count": _node_count,
+                                "total_events": _t,
+                                "target_edges": _e,
+                                "self_loops": _sl,
+                                "seed": _seed,
+                            }
+                            if _family in ("b", "w"):
+                                kwargs["layers"] = _layers
+                            if _known is not None:
+                                kwargs["known_source"] = _known[0]
+                                kwargs["known_target"] = _known[1]
+                                kwargs["known_occnum"] = _known[2]
+                        elif _constraint == "degree-events":
+                            kwargs = {
+                                "ensemble": Ensemble.MICROCANONICAL,
+                                "family": _FAMILY_MAP[_family],
+                                "constraint": Constraint.DEGREE_EVENTS,
+                                "degree_out": _out_deg,
+                                "degree_in": _in_deg,
+                                "total_events": _t,
+                                "self_loops": _sl,
+                                "seed": _seed,
+                                "burn_in_sweeps": _burn_in,
+                                "sweeps_per_sample": _sample_sweeps,
+                            }
+                            if _family in ("b", "w"):
+                                kwargs["layers"] = _layers
+                            if _known is not None:
+                                kwargs["known_source"] = _known[0]
+                                kwargs["known_target"] = _known[1]
+                                kwargs["known_occnum"] = _known[2]
                         return sample_model(**kwargs)
 
                     try:
@@ -1095,7 +1155,7 @@ def micro_command(
                                 stage="microcanonical-sample",
                                 node_count=node_count,
                                 family=family,
-                                constraint="edges-events",
+                                constraint=constraint,
                                 self_loops=self_loops,
                                 regime=regime,
                                 known_pair_fraction=kp_fraction,
@@ -1113,12 +1173,22 @@ def micro_command(
                         continue
 
                     ok = sample.num_edges == e_total and sample.total_events == t_total
+                    if constraint == "degree-events":
+                        # Verify exact out/in degree recovery
+                        out_s = np.zeros(node_count, dtype=np.uint64)
+                        in_s = np.zeros(node_count, dtype=np.uint64)
+                        for s, t in zip(sample.source, sample.target, strict=True):
+                            out_s[int(s)] += 1
+                            in_s[int(t)] += 1
+                        ok = ok and bool(
+                            (out_s == out_deg).all() and (in_s == in_deg).all()
+                        )
                     rows.append(
                         BenchmarkRow(
                             stage="microcanonical-sample",
                             node_count=node_count,
                             family=family,
-                            constraint="edges-events",
+                            constraint=constraint,
                             self_loops=self_loops,
                             regime=regime,
                             known_pair_fraction=kp_fraction,
