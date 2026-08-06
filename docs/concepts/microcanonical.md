@@ -1,52 +1,53 @@
-# Microcanonical fixed-(E,T) sampling
+---
+description: Microcanonical sampling cases, backends, and experimental status.
+---
 
-**TL;DR** — MENoBiS can sample exact microcanonical networks with a fixed
-number of occupied pairs `E` and fixed total occupation `T`, for the ME, B,
-and W families, with no fitting step. The sampled network satisfies the hard
-constraints exactly.
+# Microcanonical sampling
 
-## What it does
+**TL;DR** — MENoBiS implements microcanonical sampling for four constraint
+families across ME, B, and W. **The whole ensemble is experimental and
+validated only for small N (≈10–100 nodes).** Hard constraints are satisfied
+exactly; expected-cost constraints are satisfied in expectation.
 
-The microcanonical ensemble fixes one or more observables *exactly* rather
-than in expectation. The `EDGES_EVENTS` microcanonical case fixes:
+!!! warning "Experimental status"
+    All microcanonical samplers are **experimental and intended for small
+    networks (N ≲ 100)**. They have not been validated at production scale.
+    Use the grand-canonical ensemble for large-N scientific work. MCMC-based
+    cases require sweep-budget tuning and may fail to converge for larger or
+    tighter problems.
 
-- `E` — the number of occupied pairs (binary edges),
-- `T` — the total occupation (sum of all `t_ij`).
+## Implemented cases
 
-The target measure is the family degeneracy, conditioned on `(E, T)`:
+| Case | Constraint | Backend | Exactness |
+|---|---|---|---|
+| fixed (E,T) | `EDGES_EVENTS` | direct: support selection + occupation allocation (rejection + DP) | exact |
+| fixed (k,T) | `DEGREE_EVENTS` | MCMC support (double-edge switch) + occupation allocation | exact at stationarity |
+| fixed strengths | `STRENGTH` | ME: stub matching (direct) or MCMC; B/W: MCMC | exact at stationarity |
+| fixed strengths + expected cost | `STRENGTH_COST` | MCMC + gamma stochastic bisection | exact strengths; cost in expectation |
 
-| Family | Target | Support |
+Families: `ME` (Poisson), `B` (Binomial on M layers), `W` (NegBin on M
+layers; M=1 is geometric). B/W take a `layers` argument.
+
+## How it works
+
+The microcanonical ensemble fixes observables *exactly* rather than in
+expectation. The target measure is the family degeneracy conditioned on the
+constraints:
+
+| Family | Weight per pair | Support |
 |---|---|---|
-| ME | `P(t) ∝ ∏ 1/tᵢ!` | `tᵢ ≥ 0` |
-| B (M layers) | `P(t) ∝ ∏ C(M, tᵢ)` | `0 ≤ tᵢ ≤ M` |
-| W (M layers) | `P(t) ∝ ∏ C(M+tᵢ−1, tᵢ)` | `tᵢ ≥ 0` |
+| ME | `∝ 1/tᵢ!` | `tᵢ ≥ 0` |
+| B (M layers) | `∝ C(M, tᵢ)` | `0 ≤ tᵢ ≤ M` |
+| W (M layers) | `∝ C(M+tᵢ−1, tᵢ)` | `tᵢ ≥ 0` |
 
-## How sampling works
+The fixed-(E,T) sampler factorises exactly into uniform support selection
+plus positive-occupation allocation. The fixed-(k,T), fixed-strength, and
+strength-cost cases use a 4-cycle/double-edge-switch Metropolis chain whose
+stationary distribution is the target ensemble.
 
-The sampler factorises exactly into two independent steps:
+## Usage: fixed (E,T)
 
-1. **Uniform support selection** — pick `E` of the `L` admissible pairs
-   uniformly (Floyd's algorithm, no N² pair list materialised).
-2. **Positive occupation allocation** — draw positive integers
-   `(t_1, …, t_E)` summing to `T` with weight proportional to the family
-   degeneracy.
-
-Step 2 uses a hybrid of two exact backends:
-
-- a **fast rejection proposal** (≤ 20 attempts) built on a microscopic
-  combinatorial object:
-  - ME: multinomial labels;
-  - B: uniform binary-cell subset;
-  - W: uniform weak composition (stars-and-bars);
-- an **exact DP fallback** (bounded composition table) used when rejection
-  is unlikely or retries are exhausted.
-
-Both backends target the same exact distribution, so backend selection only
-affects performance, never correctness. If the DP table would exceed its
-memory budget, the sampler retries rejection with a work-bounded attempt
-budget, and returns a clear error for genuinely hard parameter points.
-
-## Usage
+Exact `E` occupied pairs and `T` total events, no fitting step:
 
 ```python
 from menobis.models.spec import Constraint, Ensemble, ModelFamily
@@ -56,60 +57,89 @@ net = sample_model(
     ensemble=Ensemble.MICROCANONICAL,
     family=ModelFamily.ME,
     constraint=Constraint.EDGES_EVENTS,
-    node_count=100,
-    target_edges=500,
-    total_events=3000,
-    seed=42,
+    node_count=100, target_edges=500, total_events=3000, seed=42,
 )
 # net has exactly 500 occupied pairs and total occupation 3000
 ```
 
-For B or W, pass `layers`:
+Pass `layers` for B or W. Freeze pairs with `known_source`, `known_target`,
+`known_occnum`; their contributions are subtracted and merged back.
 
-```python
-net_b = sample_model(
-    ensemble=Ensemble.MICROCANONICAL, family=ModelFamily.B,
-    constraint=Constraint.EDGES_EVENTS,
-    node_count=100, target_edges=500, total_events=1500, layers=4, seed=42,
-)
-```
+## Usage: fixed (k,T)
 
-### Fixed pairs
-
-Pass `known_source`, `known_target`, and `known_occnum` to freeze specific
-pairs. Their contribution is subtracted from `E` and `T`, the residual is
-sampled, and the fixed pairs are merged back:
+Exact out-degree, in-degree, and total events:
 
 ```python
 net = sample_model(
-    ensemble=Ensemble.MICROCANONICAL, family=ModelFamily.ME,
-    constraint=Constraint.EDGES_EVENTS,
-    node_count=100, target_edges=500, total_events=3000,
-    known_source=[0, 5], known_target=[1, 6], known_occnum=[3, 7],
-    seed=42,
+    ensemble=Ensemble.MICROCANONICAL,
+    family=ModelFamily.ME,
+    constraint=Constraint.DEGREE_EVENTS,
+    degree_out=degree_out, degree_in=degree_in, total_events=3000,
+    self_loops=False, seed=42,
 )
+```
+
+## Usage: fixed strengths
+
+Exact strength sequences (no fitting step):
+
+```python
+net = sample_model(
+    ensemble=Ensemble.MICROCANONICAL,
+    family=ModelFamily.B,
+    constraint=Constraint.STRENGTH,
+    strength_out=strength_out, strength_in=strength_in,
+    layers=4, seed=42,
+)
+```
+
+ME with self-loops routes to direct stub matching; ME without self-loops and
+B/W use the MCMC backend. `burn_in_sweeps` / `sweeps_per_sample` tune the
+chain.
+
+## Usage: fixed strengths + expected cost
+
+Strengths are exact; total cost is matched in expectation by fitting the
+cost multiplier `gamma` via stochastic bisection, then sampling:
+
+```python
+edges, diagnostics = sample_model_detailed(
+    ensemble=Ensemble.MICROCANONICAL,
+    family=ModelFamily.W,
+    constraint=Constraint.STRENGTH_COST,
+    strength_out=strength_out, strength_in=strength_in,
+    coord_x=coord_x, coord_y=coord_y,
+    target_cost=observed_cost, layers=2, seed=42,
+)
+# diagnostics carries gamma, expected cost, SE, converged
 ```
 
 ## Feasibility
 
-The residual problem `(E, T)` must satisfy:
+- fixed (E,T): `0 ≤ E ≤ L`, `E = 0 ⟺ T = 0`, `T ≥ E`, B additionally
+  `T ≤ M·E`.
+- fixed strengths: total out-strength must equal total in-strength; B
+  occupations cannot exceed `M` layers.
+- strength-cost: the cost must be identifiable; extreme targets can make
+  the gamma bracket fail.
 
-- `0 ≤ E ≤ L` (at most one occupation per admissible pair);
-- `E = 0 ⟺ T = 0`;
-- `T ≥ E` (every occupied pair has at least one event);
-- B additionally requires `T ≤ M·E` (no pair can exceed its layers).
+## Experimental limitations
+
+| Limitation | Detail |
+|---|---|
+| Small N only | validated on N ≈ 10–100; not production-ready at larger N |
+| MCMC mixing | fixed-strength and strength-cost chains need generous sweep budgets and may mix poorly on tight or large problems |
+| Strength-cost fit | gamma fit is reliable at N ≤ 100 with tuned sweeps; at N = 500 it requires per-case tuning (see [strength-cost benchmark](../benchmarks/microcanonical_strength_cost.md)) |
+| ME/W cost variance | the warm-start cost-variance estimate can collapse, triggering `CostNotIdentifiable` |
+| W hard regimes | fixed-(E,T) with large E and high T may exceed the rejection work budget and error out |
 
 ## Validation
 
-The samplers are validated by:
-
 - exact enumeration on tiny systems;
-- the conditioned grand-canonical identity
-  `P_GC(t | E, T) = P_MC(t | E, T)`;
-- E2E constraint recovery on synthetic networks (dense and sparse regimes).
+- conditioned grand-canonical identity `P_GC(t | E,T) = P_MC(t | E,T)`;
+- E2E constraint recovery on synthetic networks (dense/sparse).
 
 ## Memory
 
-No O(N²) memory is used: admissible pairs are mapped from a linear index on
-the fly. The exact DP tables are capped (~16 MB); larger problems fall back
-to bounded rejection.
+No O(N²) pair lists are materialised. Fixed-(E,T) DP tables are capped
+(~16 MB); larger problems fall back to bounded rejection.

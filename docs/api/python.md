@@ -59,11 +59,15 @@ result = filter_model(
 )
 ```
 
-## Microcanonical fixed-(E,T) sampling
+## Microcanonical sampling (experimental, small N)
 
-The `EDGES_EVENTS` constraint supports the microcanonical ensemble (exact
-`E` occupied pairs and `T` total occupation) for all three families with no
-fitting step:
+All microcanonical cases are **experimental and validated only for small N
+(≈10–100)**. They require no fitting step (constraints are hard or matched
+in expectation). ME, B, and W families are supported where applicable.
+
+### Fixed (E,T) — EDGES_EVENTS
+
+Exact `E` occupied pairs and `T` total events, no fitting step:
 
 ```python
 net = sample_model(
@@ -82,6 +86,57 @@ net = sample_model(
 
 Fixed pairs are frozen via `known_source`, `known_target`, `known_occnum`;
 their contribution is subtracted from `E`/`T`, the residual is sampled, and
+they are merged back. See
+[Microcanonical sampling](../concepts/microcanonical.md).
+
+### Fixed (k,T) — DEGREE_EVENTS
+
+Exact out-degree, in-degree, and total events via MCMC:
+
+```python
+from menobis.models.spec import Ensemble, Constraint
+net = sample_model(
+    ensemble=Ensemble.MICROCANONICAL,
+    family=ModelFamily.B,
+    constraint=Constraint.DEGREE_EVENTS,
+    degree_out=degree_out, degree_in=degree_in,
+    total_events=5000, layers=4, seed=42,
+)
+```
+
+### Fixed strengths — STRENGTH
+
+Exact strength sequences. ME with self-loops uses direct stub matching;
+ME without self-loops and B/W use MCMC:
+
+```python
+net = sample_model(
+    ensemble=Ensemble.MICROCANONICAL,
+    family=ModelFamily.W,
+    constraint=Constraint.STRENGTH,
+    strength_out=strength_out, strength_in=strength_in,
+    layers=2, seed=42,
+)
+```
+
+### Fixed strengths + expected cost — STRENGTH_COST
+
+Strengths are exact; total cost is matched in expectation by fitting the
+cost multiplier `gamma` via stochastic bisection. Returns the sampled
+network plus gamma diagnostics:
+
+```python
+from menobis.routing import sample_model_detailed
+result = sample_model_detailed(
+    ensemble=Ensemble.MICROCANONICAL,
+    family=ModelFamily.ME,
+    constraint=Constraint.STRENGTH_COST,
+    strength_out=strength_out, strength_in=strength_in,
+    coord_x=coord_x, coord_y=coord_y,
+    target_cost=observed_cost, seed=42,
+)
+# result.edges, result.diagnostics.gamma, result.diagnostics.converged
+```
 they are merged back. See
 [Microcanonical fixed-(E,T) sampling](../concepts/microcanonical.md).
 

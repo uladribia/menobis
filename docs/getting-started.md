@@ -106,3 +106,5 @@ uv run menobis filter strength-poisson data/openflights.csv \
   null distributions of network-level statistics.
 - Use [Choose a null model](concepts/choose-null-model.md) before changing
   family, ensemble, or constraints.
+- Use [Microcanonical sampling](concepts/microcanonical.md) for exact-constraint
+  generation (experimental, small N).

@@ -43,8 +43,10 @@ flowchart TD
   PC --> G
   S --> CME[ME only: canonical total events]
   SC -. ME thesis extension .-> CME
-  S --> MME[ME only: microcanonical fixed strengths]
-  E --> X[Missing thesis case? Extend MENoBiS]
+  S --> MMC["Microcanonical (experimental, small N)"]
+  SC --> MMC
+  DE --> MMC
+  EEMC["Edges + events"] -.-> MMC
 ```
 
 ## Family choice
@@ -71,8 +73,8 @@ flowchart TD
 | Ensemble | Available cases |
 |---|---|
 | grand canonical | default for ME, B, W; independent pairs |
-| canonical | current public route: ME fixed-strength with fixed total events; strength-cost is a thesis extension path |
-| microcanonical | ME fixed strengths via stub matching |
+| canonical | ME fixed-strength with fixed total events |
+| microcanonical (experimental) | ME/B/W: fixed (E,T), fixed (k,T), fixed strengths, fixed strengths + expected cost. **Small N only** |
 
 !!! warning "Do not relabel families"
     Same constraints with different event nature lead to different statistics.

@@ -71,3 +71,22 @@ Every fit exposes at least:
 
 For exploratory runs, prefer a moderate tolerance such as `1e-6` before asking
 for stricter recovery.
+
+## Microcanonical sampling
+
+Microcanonical samplers are **experimental and validated only for small N
+(≈10–100)**. They have no fitting step (constraints are exact or matched in
+expectation), so solver convergence does not apply, but MCMC-based cases have
+their own tuning concerns:
+
+| Case | Cost model | Notes |
+|---|---|---|
+| fixed (E,T) | direct; rejection + capped DP | exact; largest cost is the DP table (≤ ~16 MB) |
+| fixed (k,T) | MCMC sweeps over edge switches | needs `burn_in_sweeps` / `sweeps_per_sample` |
+| fixed strengths | ME stub matching (direct) or MCMC | stub matching is O(T) and exact with self-loops |
+| strength + expected cost | MCMC + gamma bisection | most fragile; see [strength-cost benchmark](../benchmarks/microcanonical_strength_cost.md) |
+
+Check `diagnostics.exactness` on `SamplingResult` (`exact_direct` vs
+`exact_stationary_mcmc`) to know whether a sampled network is exact or exact
+at stationarity. MCMC cases need generous sweep budgets and may not converge
+on larger or tighter problems.

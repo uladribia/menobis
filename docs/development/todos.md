@@ -10,13 +10,14 @@ Phase 0 foundation refactor is complete and merged to `master`. The codebase
 now uses occupation-number terminology throughout, has a machine-readable
 capability registry, and a shared constraints module. The new
 `EDGES_EVENTS` constraint is implemented for ME/B/W grand-canonical
-fit/sample/filter. Microcanonical fixed-(E,T) samplers for ME, B, and W are
-implemented (shared `FixedETOccupancy` architecture, rejection + DP
-backends, fixed-pair preprocessing, conditioned grand-canonical validation,
-`benchmarks micro` command). A phase0-baseline benchmark (111 rows,
-0 mismatches) is captured. Remaining work focuses on solver robustness
-(especially W zero-inflated), sparse-support fitting, cost providers,
-benchmark tooling, packaging, and the next microcanonical phases.
+fit/sample/filter. Microcanonical sampling is implemented for ME, B, and W
+across four constraint families: fixed (E,T), fixed (k,T), fixed strengths,
+and fixed strengths + expected cost. **All microcanonical cases are
+experimental and validated only for small N (≈10–100 nodes).** A
+phase0-baseline benchmark (111 rows, 0 mismatches) is captured. Remaining
+work focuses on solver robustness (especially W zero-inflated),
+sparse-support fitting, cost providers, benchmark tooling, packaging, and
+the remaining microcanonical phases (6–8).
 
 ## Public release status
 
@@ -46,6 +47,13 @@ benchmark tooling, packaging, and the next microcanonical phases.
 
 ## Microcanonical backlog
 
+### Status
+
+All four implemented cases are **experimental and validated only for small
+N (≈10–100)**; MCMC-based cases need sweep-budget tuning and may fail to
+converge on larger or tighter problems. See
+[docs/concepts/microcanonical.md](../concepts/microcanonical.md).
+
 ### Done (fixed-(E,T))
 
 | Item | Notes |
@@ -71,20 +79,29 @@ benchmark tooling, packaging, and the next microcanonical phases.
 | Conditioned-GC validation breadth | add larger systems and near-boundary regimes to `tests/test_menobis_conditioned_grandcanonical_identity.py` |
 | Observable convergence across families/constraints | test the convergence of network observables — y2 (second occupation moment), average weighted neighbour strength, leading entropy per event, and related quantities — across all families (ME/B/W) and all constraints (strength, strength-cost, strength-edges, strength-degree, degree-events, edges-events), for grand-canonical vs canonical vs microcanonical ensembles. Validate ensemble equivalence where the theory predicts it and document deviations (sparse limits, W convergence boundary, B saturation). See `docs/development/agent-specifications/00_intro.md` §13 |
 
+### Done (fixed (k,T), fixed strengths, strength + cost)
+
+| Item | Notes |
+|---|---|
+| ME/B/W fixed (k,T) | ✅ MCMC support (double-edge switch) + fixed-(E,T) occupation allocator; `generation/microcanonical/fixed_kt/` |
+| ME fixed strengths | ✅ stub matching (direct, self-loops) + 4-cycle MCMC backend |
+| B/W fixed strengths | ✅ 4-cycle MCMC backend; B occupations bounded by layers |
+| Fixed-pair support | ✅ residualisation + merge for fixed strengths and fixed (k,T) |
+| ME/B/W strength + expected cost | ✅ MCMC + gamma stochastic bisection; `generation/microcanonical/fixed_strength/`; benchmark in `docs/benchmarks/microcanonical_strength_cost.md` |
+| Validation gap | ⚠️ strength-cost and fixed (k,T) lack dedicated E2E Python tests (only benchmark coverage) |
+
 ### Pending — next phases (roadmap, `00_intro.md` §2)
 
 | Phase | Constraint | Notes |
 |---|---|---|
-| 3 | fixed (k,T) | degree sequence + total events; needs degree-residual machinery from `constraints/` |
-| 4 | fixed strengths | exact strength sequences (microcanonical) |
-| 5 | fixed strengths + expected cost | strengths hard, cost expected |
 | 6 | fixed (s,E) | strengths + occupied-pair count |
 | 7 | fixed (s,k) | strengths + degrees |
 | 8 | advanced backends | backbone samplers, pseudo-marginal methods, MCMC kernels |
 
-Phase 3 (fixed k,T) is the natural next implementation; see
+Phases 3 (fixed k,T), 4 (fixed strengths), and 5 (strength + expected cost)
+are implemented (experimental, small N). See
 `docs/development/agent-specifications/05_microcanonical_sampling_framework_fixed_se_plan.md`
-for the general framework.
+for the general sampling framework.
 
 ## Benchmarking backlog
 
