@@ -4,6 +4,7 @@
 //! - `fixed_et`: fixed-(E,T) samplers for ME, B, and W.
 //! - `fixed_kt`: fixed-degree-event samplers for ME, B, and W.
 //! - `fixed_total`: shared pair-Gibbs fixed-total occupation sampler.
+//! - `route`: unified router (constraint structure → sampling plan → backend).
 //! - `mcmc`: shared MCMC infrastructure (config, counters, outcome).
 //! - `support`: shared support-sampling utilities.
 
@@ -12,6 +13,7 @@ pub mod fixed_kt;
 pub mod fixed_strength;
 pub mod fixed_total;
 pub mod mcmc;
+pub mod route;
 pub mod support;
 
 pub use fixed_et::{

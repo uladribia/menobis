@@ -23,6 +23,11 @@ Microcanonical modules:
   mcmc/             — shared config/counters/outcome types
   support/          — shared uniform-edge sampling
   model/            — shared primitives (family, problem, sampling_plan)
+  route/            — NEW: unified router (sample_microcanonical dispatch)
+
+Note: complement mode in fixed_kt/sampler.rs is output-bound, not a
+scalability bug: it triggers only for dense graphs (E > N²/2), so the
+inversion is Θ(E) = Θ(N²) which is inherent to the dense output.
 
 Reference oracles (menobis-test-oracles):
   enumeration.rs        — exact state enumeration + normalization
@@ -37,7 +42,6 @@ Legacy code removed from production:
   - FixedETError::{TableTooLarge, NoBackendAvailable}
 
 Known limitations:
-  - Complement mode in fixed_kt/sampler.rs uses O(N^2) iteration
-  - No SamplingPlan routing wired into generation entry points
+  - No SamplingPlan routing wired into Python entry points (Rust router exists)
   - Fixed (E,s) not implemented
   - Partial per-constraint mini-framework structure remains (fixed_strength/)

@@ -34,6 +34,7 @@ pub use microcanonical::fixed_strength::cost_fit::{
 };
 pub use microcanonical::fixed_strength::sample_fixed_strength;
 pub use microcanonical::fixed_strength::sample_fixed_strength_with_cost;
+pub use microcanonical::route::{sample_microcanonical, MicrocanonicalConfig, MicrocanonicalError};
 pub use microcanonical::{
     sample_b_fixed_et, sample_b_fixed_et_explicit, sample_me_fixed_et, sample_me_fixed_et_explicit,
     sample_strength_stub_matching, sample_w_fixed_et, sample_w_fixed_et_explicit,
