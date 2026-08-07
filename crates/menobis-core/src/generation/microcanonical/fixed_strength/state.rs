@@ -152,33 +152,6 @@ impl StrengthState {
         }
     }
 
-    /// Apply a batch of occupation deltas atomically.
-    ///
-    /// Each delta is `(src, tgt, delta_occ)` where `delta_occ` is a
-    /// signed change (positive or negative).
-    ///
-    /// # Panics
-    ///
-    /// Panics in debug mode if any resulting occupation would be negative.
-    pub fn apply_deltas(&mut self, deltas: &[(u64, u64, i64)]) {
-        // Compute new occupations in a temporary map to handle
-        // overlapping deltas (same pair appears multiple times).
-        let mut changes: HashMap<(u64, u64), i64> = HashMap::new();
-        for &(src, tgt, d) in deltas {
-            *changes.entry((src, tgt)).or_insert(0) += d;
-        }
-
-        for (&(src, tgt), &d) in &changes {
-            let old = self.get(src, tgt);
-            let new = (old as i64 + d) as OccNum;
-            debug_assert!(
-                (old as i64 + d) >= 0,
-                "negative occupation for ({src}, {tgt}): {old} + {d}"
-            );
-            self.set(src, tgt, new);
-        }
-    }
-
     /// Convert to a [`SampledNetwork`] for output.
     ///
     /// The pairs are sorted by `(src, tgt)` for deterministic output.
@@ -266,44 +239,36 @@ mod tests {
     }
 
     #[test]
-    fn apply_delta_increment() {
+    fn set_increment() {
         let mut state = StrengthState::new(3, vec![((0, 1), 3)]);
-        state.apply_deltas(&[(0, 1, 2)]);
+        state.set(0, 1, 5);
         assert_eq!(state.get(0, 1), 5);
         assert_eq!(state.out_strengths[0], 5);
         assert_eq!(state.in_strengths[1], 5);
     }
 
     #[test]
-    fn apply_delta_decrement() {
+    fn set_decrement() {
         let mut state = StrengthState::new(3, vec![((0, 1), 5)]);
-        state.apply_deltas(&[(0, 1, -3)]);
+        state.set(0, 1, 2);
         assert_eq!(state.get(0, 1), 2);
         assert_eq!(state.out_strengths[0], 2);
     }
 
     #[test]
-    fn apply_delta_remove() {
+    fn set_remove() {
         let mut state = StrengthState::new(3, vec![((0, 1), 3)]);
-        state.apply_deltas(&[(0, 1, -3)]);
+        state.set(0, 1, 0);
         assert_eq!(state.get(0, 1), 0);
         assert_eq!(state.occupied_count(), 0);
     }
 
     #[test]
-    fn apply_delta_insert() {
+    fn set_insert() {
         let mut state = StrengthState::new(3, vec![]);
-        state.apply_deltas(&[(1, 2, 4)]);
+        state.set(1, 2, 4);
         assert_eq!(state.get(1, 2), 4);
         assert_eq!(state.occupied_count(), 1);
-    }
-
-    #[test]
-    fn overlapping_deltas() {
-        let mut state = StrengthState::new(3, vec![((0, 1), 5)]);
-        // Apply (0,1,+2) and (0,1,+3) — should sum to +5
-        state.apply_deltas(&[(0, 1, 2), (0, 1, 3)]);
-        assert_eq!(state.get(0, 1), 10);
     }
 
     #[test]
@@ -327,7 +292,10 @@ mod tests {
         let in_before = state.in_strengths.clone();
 
         // Apply a 4-cycle: (0,0)+1, (1,2)+1, (0,2)-1, (1,0)-1
-        state.apply_deltas(&[(0, 0, 1), (1, 2, 1), (0, 2, -1), (1, 0, -1)]);
+        state.set(0, 0, 3);
+        state.set(1, 2, 6);
+        state.set(0, 2, 0);
+        state.set(1, 0, 2);
 
         // Marginals should be unchanged (each node gets +1 and -1).
         assert_eq!(state.out_strengths, out_before);
@@ -338,7 +306,8 @@ mod tests {
     #[cfg(debug_assertions)]
     fn debug_validate_after_updates() {
         let mut state = StrengthState::new(2, vec![((0, 1), 4), ((1, 0), 2)]);
-        state.apply_deltas(&[(0, 1, -1), (1, 0, 1)]);
+        state.set(0, 1, 3);
+        state.set(1, 0, 3);
         state.debug_validate();
     }
 }
