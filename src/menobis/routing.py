@@ -677,32 +677,10 @@ def _sample_model(
 ) -> EdgeTable | tuple[EdgeTable, StrengthCostDiagnostics]:
     from menobis.data.frames import EdgeTable
     from menobis.models.generation import (
-        _sample_degree_events_binomial,
         _sample_degree_events_fixed_kt,
-        _sample_degree_events_geometric,
-        _sample_degree_events_negative_binomial,
-        _sample_degree_events_poisson,
-        _sample_edges_events,
-        _sample_microcanonical_router,
-        _sample_strength_binomial,
-        _sample_strength_cost_binomial,
-        _sample_strength_cost_geometric,
-        _sample_strength_cost_negative_binomial,
-        _sample_strength_cost_poisson,
-        _sample_strength_degree_binomial,
-        _sample_strength_degree_geometric,
-        _sample_strength_degree_negative_binomial,
-        _sample_strength_degree_poisson,
-        _sample_strength_edges_binomial,
-        _sample_strength_edges_geometric,
-        _sample_strength_edges_negative_binomial,
-        _sample_strength_edges_poisson,
+        _sample_model_router,
         _sample_strength_fixed_strength_cost_mcmc,
         _sample_strength_fixed_strength_mcmc,
-        _sample_strength_geometric,
-        _sample_strength_multinomial,
-        _sample_strength_negative_binomial,
-        _sample_strength_poisson,
     )
     from menobis.models.types import (
         DegreeEventsFit,
@@ -743,8 +721,10 @@ def _sample_model(
                 )
                 if not has_fixed:
                     # Unified Rust router: uniform support + fixed-total Gibbs.
-                    return _sample_microcanonical_router(
+                    return _sample_model_router(
+                        ensemble="microcanonical",
                         family=fam,
+                        constraint="edges_events",
                         node_count=int(node_count),
                         self_loops=bool(self_loops),
                         residual_edges=int(target_edges),
@@ -781,9 +761,10 @@ def _sample_model(
                 if not has_fixed:
                     # Unified Rust router: selects ME-direct stub matching or
                     # the 4-cycle occupation MCMC internally.
-                    return _sample_microcanonical_router(
+                    return _sample_model_router(
+                        ensemble="microcanonical",
                         family=fam,
-                        node_count=len(strength_out),
+                        constraint="strength",
                         self_loops=bool(self_loops),
                         strength_out=np.asarray(strength_out, dtype=np.uint64).tolist(),
                         strength_in=np.asarray(strength_in, dtype=np.uint64).tolist(),
@@ -868,9 +849,10 @@ def _sample_model(
                 )
                 if not has_fixed:
                     # Unified Rust router: degree-support MCMC + fixed-total Gibbs.
-                    return _sample_microcanonical_router(
+                    return _sample_model_router(
+                        ensemble="microcanonical",
                         family=fam,
-                        node_count=len(degree_out),
+                        constraint="degree_events",
                         self_loops=bool(self_loops),
                         degree_out=np.asarray(degree_out, dtype=np.uint32).tolist(),
                         degree_in=np.asarray(degree_in, dtype=np.uint32).tolist(),
@@ -968,10 +950,13 @@ def _sample_model(
             if total_events is None:
                 msg = "canonical sampling requires total_events"
                 raise ValueError(msg)
-            return _sample_strength_multinomial(
-                fit.x,
-                fit.y,
-                total_events=total_events,
+            return _sample_model_router(
+                ensemble="canonical",
+                family="ME",
+                constraint="strength",
+                x=fit.x.tolist(),
+                y=fit.y.tolist(),
+                total_events=int(total_events),
                 self_loops=fit.self_loops,
                 seed=seed,
             )
@@ -985,34 +970,19 @@ def _sample_model(
         msg = "grand-canonical sampling requires a fit result"
         raise ValueError(msg)
     fit_layers = getattr(fit, "layers", None) or layers
-    variant = _fit_variant(family, fit_layers)
+    common = {
+        "ensemble": "grandcanonical",
+        "family": _family_name(family),
+        "constraint": constraint.value,
+        "self_loops": fit.self_loops,
+        "layers": fit_layers,
+        "seed": seed,
+    }
     if constraint == Constraint.STRENGTH:
         if not isinstance(fit, StrengthFit):
             msg = f"strength sampling requires StrengthFit, got {type(fit).__name__}"
             raise TypeError(msg)
-        dispatch = {
-            "poisson": lambda: _sample_strength_poisson(
-                fit.x, fit.y, self_loops=fit.self_loops, seed=seed
-            ),
-            "binomial": lambda: _sample_strength_binomial(
-                fit.x,
-                fit.y,
-                layers=fit.layers or 1,
-                self_loops=fit.self_loops,
-                seed=seed,
-            ),
-            "geometric": lambda: _sample_strength_geometric(
-                fit.x, fit.y, self_loops=fit.self_loops, seed=seed
-            ),
-            "negative_binomial": lambda: _sample_strength_negative_binomial(
-                fit.x,
-                fit.y,
-                layers=fit.layers or 1,
-                self_loops=fit.self_loops,
-                seed=seed,
-            ),
-        }
-        return dispatch[variant]()
+        return _sample_model_router(**common, x=fit.x.tolist(), y=fit.y.tolist())
     if constraint == Constraint.DEGREE_EVENTS:
         if not isinstance(fit, DegreeEventsFit):
             msg = (
@@ -1020,15 +990,9 @@ def _sample_model(
                 f"{type(fit).__name__}"
             )
             raise TypeError(msg)
-        dispatch = {
-            "poisson": lambda: _sample_degree_events_poisson(fit, seed=seed),
-            "binomial": lambda: _sample_degree_events_binomial(fit, seed=seed),
-            "geometric": lambda: _sample_degree_events_geometric(fit, seed=seed),
-            "negative_binomial": lambda: _sample_degree_events_negative_binomial(
-                fit, seed=seed
-            ),
-        }
-        return dispatch[variant]()
+        return _sample_model_router(
+            **common, x=fit.x.tolist(), y=fit.y.tolist(), q=fit.q
+        )
     if constraint == Constraint.EDGES_EVENTS:
         if not isinstance(fit, EdgesEventsFit):
             msg = (
@@ -1036,14 +1000,8 @@ def _sample_model(
                 f"{type(fit).__name__}"
             )
             raise TypeError(msg)
-        return _sample_edges_events(
-            fit.node_count,
-            fit.q,
-            fit.occupation,
-            fit.family,
-            layers=fit.layers or 1,
-            self_loops=fit.self_loops,
-            seed=seed,
+        return _sample_model_router(
+            **common, node_count=fit.node_count, q=fit.q, occupation=fit.occupation
         )
     if constraint == Constraint.STRENGTH_EDGES:
         if not isinstance(fit, StrengthEdgesFit):
@@ -1052,18 +1010,9 @@ def _sample_model(
                 f"{type(fit).__name__}"
             )
             raise TypeError(msg)
-        edges_fit = fit
-        dispatch = {
-            "poisson": lambda: _sample_strength_edges_poisson(edges_fit, seed=seed),
-            "binomial": lambda: _sample_strength_edges_binomial(
-                edges_fit, layers=fit_layers, seed=seed
-            ),
-            "geometric": lambda: _sample_strength_edges_geometric(edges_fit, seed=seed),
-            "negative_binomial": lambda: _sample_strength_edges_negative_binomial(
-                edges_fit, layers=fit_layers, seed=seed
-            ),
-        }
-        return dispatch[variant]()
+        return _sample_model_router(
+            **common, x=fit.x.tolist(), y=fit.y.tolist(), lam=fit.lam
+        )
     if constraint == Constraint.STRENGTH_DEGREE:
         if not isinstance(fit, StrengthDegreeFit):
             msg = (
@@ -1071,20 +1020,13 @@ def _sample_model(
                 f"{type(fit).__name__}"
             )
             raise TypeError(msg)
-        degree_fit = fit
-        dispatch = {
-            "poisson": lambda: _sample_strength_degree_poisson(degree_fit, seed=seed),
-            "binomial": lambda: _sample_strength_degree_binomial(
-                degree_fit, layers=fit_layers, seed=seed
-            ),
-            "geometric": lambda: _sample_strength_degree_geometric(
-                degree_fit, seed=seed
-            ),
-            "negative_binomial": lambda: _sample_strength_degree_negative_binomial(
-                degree_fit, layers=fit_layers, seed=seed
-            ),
-        }
-        return dispatch[variant]()
+        return _sample_model_router(
+            **common,
+            x=fit.x.tolist(),
+            y=fit.y.tolist(),
+            z=fit.z.tolist(),
+            w=fit.w.tolist(),
+        )
     if constraint == Constraint.STRENGTH_COST:
         if coord_x is None or coord_y is None:
             msg = "strength_cost sampling requires coord_x and coord_y"
@@ -1095,24 +1037,30 @@ def _sample_model(
                 f"{type(fit).__name__}"
             )
             raise TypeError(msg)
-        cost_fit = fit
-        dispatch = {
-            "poisson": lambda: _sample_strength_cost_poisson(
-                cost_fit, coord_x, coord_y, seed=seed
-            ),
-            "binomial": lambda: _sample_strength_cost_binomial(
-                cost_fit, coord_x, coord_y, layers=fit_layers, seed=seed
-            ),
-            "geometric": lambda: _sample_strength_cost_geometric(
-                cost_fit, coord_x, coord_y, seed=seed
-            ),
-            "negative_binomial": lambda: _sample_strength_cost_negative_binomial(
-                cost_fit, coord_x, coord_y, layers=fit_layers, seed=seed
-            ),
-        }
-        return dispatch[variant]()
+        return _sample_model_router(
+            **common,
+            x=fit.x.tolist(),
+            y=fit.y.tolist(),
+            gamma=fit.gamma,
+            coord_x=coord_x.tolist(),
+            coord_y=coord_y.tolist(),
+        )
     msg = f"unsupported constraint: {constraint!r}"
     raise UnsupportedModelCaseError(msg)
+
+
+def _family_name(family: ModelFamily) -> str:
+    """Map the model family enum to the Rust family identifier."""
+    match family:
+        case ModelFamily.ME:
+            return "ME"
+        case ModelFamily.B:
+            return "B"
+        case ModelFamily.W:
+            return "W"
+        case _:
+            msg = f"invalid family: {family!r}"
+            raise UnsupportedModelCaseError(msg)
 
 
 def _sample_fixed_et_edges_events(

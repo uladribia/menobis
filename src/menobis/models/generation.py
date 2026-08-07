@@ -899,43 +899,69 @@ def _sample_degree_events_fixed_kt(
     )
 
 
-def _sample_microcanonical_router(
+def _sample_model_router(
+    ensemble: str,
     family: str,
-    node_count: int,
+    constraint: str,
     *,
-    self_loops: bool,
-    residual_edges: int | None = None,
-    residual_total: int | None = None,
-    degree_out: list[int] | None = None,
-    degree_in: list[int] | None = None,
-    strength_out: list[int] | None = None,
-    strength_in: list[int] | None = None,
+    node_count: int | None = None,
+    self_loops: bool = True,
     layers: int = 1,
     seed: int = 0,
     burn_in_sweeps: int = 50,
     sweeps_per_sample: int = 10,
+    x: list[float] | None = None,
+    y: list[float] | None = None,
+    z: list[float] | None = None,
+    w: list[float] | None = None,
+    lam: float | None = None,
+    q: float | None = None,
+    occupation: float | None = None,
+    gamma: float | None = None,
+    coord_x: list[float] | None = None,
+    coord_y: list[float] | None = None,
+    total_events: int | None = None,
+    strength_out: list[int] | None = None,
+    strength_in: list[int] | None = None,
+    degree_out: list[int] | None = None,
+    degree_in: list[int] | None = None,
+    residual_edges: int | None = None,
+    residual_total: int | None = None,
 ) -> EdgeTable:
-    """Sample a microcanonical network via the unified Rust router.
+    """Sample a network via the unified Rust router.
 
-    Dispatches on the constraint structure (degrees → fixed-(k,T),
-    edges → fixed-(E,T), strengths → fixed-strength MCMC).  The Python
-    layer passes residual constraints only; fixed pairs are merged back
-    by the caller.
+    Rust validates the constraint-required parameters and dispatches to
+    the grand-canonical, canonical, or microcanonical backend.  The
+    Python layer handles fixed-pair residualization and microcanonical
+    STRENGTH_COST gamma fitting before calling this function.
     """
-    sources, targets, occ_nums = _menobis.sample_microcanonical(
+    sources, targets, occ_nums = _menobis.sample_model(
+        ensemble,
         family,
-        int(node_count),
+        constraint,
+        node_count,
         bool(self_loops),
-        residual_edges,
-        residual_total,
-        degree_out,
-        degree_in,
-        strength_out,
-        strength_in,
         int(layers),
         int(seed),
         int(burn_in_sweeps),
         int(sweeps_per_sample),
+        x,
+        y,
+        z,
+        w,
+        lam,
+        q,
+        occupation,
+        gamma,
+        coord_x,
+        coord_y,
+        total_events,
+        strength_out,
+        strength_in,
+        degree_out,
+        degree_in,
+        residual_edges,
+        residual_total,
     )
     return EdgeTable(
         source=np.asarray(sources, dtype=np.uint64),

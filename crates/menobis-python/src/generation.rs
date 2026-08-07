@@ -948,43 +948,104 @@ pub(crate) fn sample_fixed_strength_with_cost(
         fit_result.iterations,
     ))
 }
-/// Unified microcanonical sampling via the Rust router.
+
+/// Unified model sampling across ensembles, families, and constraints.
 ///
-/// Dispatches on the prepared-problem structure (degrees → fixed-(k,T),
-/// edges → fixed-(E,T), strengths → fixed-strength MCMC).  Returns a
-/// residual network; fixed pairs are handled by the Python layer before
-/// calling this function.
+/// One entry point mirrors the Python `sample_model` surface.  Rust
+/// validates the constraint-required parameters and dispatches:
+///
+/// - `microcanonical`: EDGES_EVENTS → fixed-(E,T), DEGREE_EVENTS →
+///   fixed-(k,T), STRENGTH → fixed-strength MCMC.
+/// - `grand_canonical`: all six constraints via the grand-canonical
+///   router (fitted multipliers x, y, ...).
+/// - `canonical`: ME STRENGTH multinomial with fixed total events.
+///
+/// Fixed-pair residualization and microcanonical STRENGTH_COST gamma
+/// fitting remain in the Python layer.
 #[pyfunction]
 #[pyo3(signature = (
-    family,
-    node_count,
-    self_loops,
-    residual_edges=None,
-    residual_total=None,
-    degree_out=None,
-    degree_in=None,
-    strength_out=None,
-    strength_in=None,
-    layers=1,
-    seed=0,
-    burn_in_sweeps=50,
-    sweeps_per_sample=10,
+    ensemble, family, constraint,
+    node_count=None, self_loops=true, layers=1, seed=0,
+    burn_in_sweeps=50, sweeps_per_sample=10,
+    x=None, y=None, z=None, w=None, lam=None, q=None, occupation=None,
+    gamma=None, coord_x=None, coord_y=None,
+    total_events=None,
+    strength_out=None, strength_in=None, degree_out=None, degree_in=None,
+    residual_edges=None, residual_total=None,
 ))]
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn sample_microcanonical(
+pub(crate) fn sample_model(
+    ensemble: &str,
     family: &str,
-    node_count: usize,
+    constraint: &str,
+    node_count: Option<usize>,
     self_loops: bool,
-    residual_edges: Option<usize>,
-    residual_total: Option<u64>,
-    degree_out: Option<Vec<u32>>,
-    degree_in: Option<Vec<u32>>,
-    strength_out: Option<Vec<u64>>,
-    strength_in: Option<Vec<u64>>,
     layers: u32,
     seed: u64,
     burn_in_sweeps: usize,
     sweeps_per_sample: usize,
+    x: Option<Vec<f64>>,
+    y: Option<Vec<f64>>,
+    z: Option<Vec<f64>>,
+    w: Option<Vec<f64>>,
+    lam: Option<f64>,
+    q: Option<f64>,
+    occupation: Option<f64>,
+    gamma: Option<f64>,
+    coord_x: Option<Vec<f64>>,
+    coord_y: Option<Vec<f64>>,
+    total_events: Option<u64>,
+    strength_out: Option<Vec<u64>>,
+    strength_in: Option<Vec<u64>>,
+    degree_out: Option<Vec<u32>>,
+    degree_in: Option<Vec<u32>>,
+    residual_edges: Option<usize>,
+    residual_total: Option<u64>,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    match ensemble {
+        "microcanonical" => sample_model_microcanonical(
+            family,
+            constraint,
+            node_count,
+            self_loops,
+            layers,
+            seed,
+            burn_in_sweeps,
+            sweeps_per_sample,
+            strength_out,
+            strength_in,
+            degree_out,
+            degree_in,
+            residual_edges,
+            residual_total,
+        ),
+        "grandcanonical" => sample_model_grandcanonical(
+            family, constraint, self_loops, layers, seed, x, y, z, w, lam, q, occupation, gamma,
+            coord_x, coord_y, node_count,
+        ),
+        "canonical" => {
+            sample_model_canonical(family, constraint, self_loops, seed, x, y, total_events)
+        }
+        other => Err(PyValueError::new_err(format!("invalid ensemble: {other}"))),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn sample_model_microcanonical(
+    family: &str,
+    constraint: &str,
+    node_count: Option<usize>,
+    self_loops: bool,
+    layers: u32,
+    seed: u64,
+    burn_in_sweeps: usize,
+    sweeps_per_sample: usize,
+    strength_out: Option<Vec<u64>>,
+    strength_in: Option<Vec<u64>>,
+    degree_out: Option<Vec<u32>>,
+    degree_in: Option<Vec<u32>>,
+    residual_edges: Option<usize>,
+    residual_total: Option<u64>,
 ) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
     use menobis_core::generation::microcanonical::route::{
         sample_microcanonical as route_sample, MicrocanonicalConfig,
@@ -1000,23 +1061,68 @@ pub(crate) fn sample_microcanonical(
             return Err(PyValueError::new_err(format!("invalid family: {other}")));
         }
     };
-    let admissible = if self_loops {
-        node_count.saturating_mul(node_count)
-    } else {
-        node_count.saturating_mul(node_count.saturating_sub(1))
+    let missing = |name: &str| -> PyErr {
+        PyValueError::new_err(format!("microcanonical {constraint} requires {name}"))
     };
-    let problem = PreparedProblem::new(
-        fam,
-        node_count,
-        self_loops,
-        admissible,
-        residual_edges,
-        residual_total,
-        degree_out,
-        degree_in,
-        strength_out,
-        strength_in,
-    );
+    let problem = match constraint {
+        "edges_events" => {
+            let n = node_count.ok_or_else(|| missing("node_count"))?;
+            let e = residual_edges.ok_or_else(|| missing("residual_edges"))?;
+            let t = residual_total.ok_or_else(|| missing("residual_total"))?;
+            PreparedProblem::new(
+                fam,
+                n,
+                self_loops,
+                admissible_pairs(n, self_loops),
+                Some(e),
+                Some(t),
+                None,
+                None,
+                None,
+                None,
+            )
+        }
+        "degree_events" => {
+            let d_out = degree_out.ok_or_else(|| missing("degree_out"))?;
+            let d_in = degree_in.ok_or_else(|| missing("degree_in"))?;
+            let t = residual_total.ok_or_else(|| missing("residual_total"))?;
+            let n = d_out.len();
+            PreparedProblem::new(
+                fam,
+                n,
+                self_loops,
+                admissible_pairs(n, self_loops),
+                None,
+                Some(t),
+                Some(d_out),
+                Some(d_in),
+                None,
+                None,
+            )
+        }
+        "strength" => {
+            let s_out = strength_out.ok_or_else(|| missing("strength_out"))?;
+            let s_in = strength_in.ok_or_else(|| missing("strength_in"))?;
+            let n = s_out.len();
+            PreparedProblem::new(
+                fam,
+                n,
+                self_loops,
+                admissible_pairs(n, self_loops),
+                None,
+                None,
+                None,
+                None,
+                Some(s_out),
+                Some(s_in),
+            )
+        }
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "microcanonical does not support constraint={other}"
+            )));
+        }
+    };
     let config = MicrocanonicalConfig {
         seed,
         burn_in_sweeps,
@@ -1026,5 +1132,114 @@ pub(crate) fn sample_microcanonical(
     match route_sample(&problem, &config) {
         Ok(net) => Ok((net.sources, net.targets, net.occ_nums)),
         Err(e) => Err(PyValueError::new_err(e.to_string())),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn sample_model_grandcanonical(
+    family: &str,
+    constraint: &str,
+    self_loops: bool,
+    layers: u32,
+    seed: u64,
+    x: Option<Vec<f64>>,
+    y: Option<Vec<f64>>,
+    z: Option<Vec<f64>>,
+    w: Option<Vec<f64>>,
+    lam: Option<f64>,
+    q: Option<f64>,
+    occupation: Option<f64>,
+    gamma: Option<f64>,
+    coord_x: Option<Vec<f64>>,
+    coord_y: Option<Vec<f64>>,
+    node_count: Option<usize>,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    use menobis_core::distribution::OccupationFamily;
+    use menobis_core::generation::grandcanonical::{sample_grandcanonical, GrandCanonicalCase};
+
+    let fam = match family {
+        "ME" => OccupationFamily::Poisson,
+        "B" => OccupationFamily::Binomial(layers),
+        "W" if layers == 1 => OccupationFamily::Geometric,
+        "W" => OccupationFamily::NegativeBinomial(layers),
+        other => {
+            return Err(PyValueError::new_err(format!("invalid family: {other}")));
+        }
+    };
+    let case = match constraint {
+        "strength" => GrandCanonicalCase::Strength,
+        "strength_edges" => GrandCanonicalCase::StrengthEdges,
+        "strength_degree" => GrandCanonicalCase::StrengthDegree,
+        "strength_cost" => GrandCanonicalCase::StrengthCost,
+        "degree_events" => GrandCanonicalCase::DegreeEvents,
+        "edges_events" => GrandCanonicalCase::EdgesEvents,
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "grand_canonical does not support constraint={other}"
+            )));
+        }
+    };
+    let missing = |name: &str| -> PyErr {
+        PyValueError::new_err(format!("grand_canonical {constraint} requires {name}"))
+    };
+    let (x, y) = if constraint == "edges_events" {
+        (Vec::new(), Vec::new())
+    } else {
+        let x = x.ok_or_else(|| missing("x"))?;
+        let y = y.ok_or_else(|| missing("y"))?;
+        (x, y)
+    };
+    match sample_grandcanonical(
+        case,
+        fam,
+        &x,
+        &y,
+        lam,
+        q,
+        z.as_deref(),
+        w.as_deref(),
+        gamma,
+        coord_x.as_deref(),
+        coord_y.as_deref(),
+        node_count,
+        q,
+        occupation,
+        self_loops,
+        seed,
+    ) {
+        Ok(net) => Ok((net.sources, net.targets, net.occ_nums)),
+        Err(e) => Err(PyValueError::new_err(e)),
+    }
+}
+
+fn sample_model_canonical(
+    family: &str,
+    constraint: &str,
+    self_loops: bool,
+    seed: u64,
+    x: Option<Vec<f64>>,
+    y: Option<Vec<f64>>,
+    total_events: Option<u64>,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    if family != "ME" || constraint != "strength" {
+        return Err(PyValueError::new_err(
+            "canonical supports only family=ME, constraint=STRENGTH",
+        ));
+    }
+    let x = x.ok_or_else(|| PyValueError::new_err("canonical requires x"))?;
+    let y = y.ok_or_else(|| PyValueError::new_err("canonical requires y"))?;
+    let t = total_events.ok_or_else(|| PyValueError::new_err("canonical requires total_events"))?;
+    let net = menobis_core::generation::canonical::sample_strength_multinomial(
+        &x, &y, t, self_loops, seed,
+    );
+    Ok((net.sources, net.targets, net.occ_nums))
+}
+
+/// Number of admissible ordered pairs for a complete domain.
+fn admissible_pairs(node_count: usize, self_loops: bool) -> usize {
+    if self_loops {
+        node_count.saturating_mul(node_count)
+    } else {
+        node_count.saturating_mul(node_count.saturating_sub(1))
     }
 }
