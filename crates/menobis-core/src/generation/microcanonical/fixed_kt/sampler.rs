@@ -200,11 +200,16 @@ pub fn sample_fixed_degree_support(
 }
 
 /// Invert a complement representation back to the original support.
+///
+/// Builds the complement edge list directly and replaces the state's
+/// edges, dropping the stale adjacency structures (O(N²) memory).  The
+/// resulting state is only valid for edge extraction, not for further
+/// MCMC steps or `contains()` queries.
 fn invert_complement(state: &mut DegreeSupportState, self_loops: bool) {
     let n = state.node_count;
 
     // Build the complement: all ordered pairs not in the current state.
-    let mut new_edges = Vec::new();
+    let mut new_edges = Vec::with_capacity(n.saturating_mul(n.saturating_sub(1)));
     for i in 0..(n as u64) {
         for j in 0..(n as u64) {
             if !self_loops && i == j {
@@ -215,7 +220,7 @@ fn invert_complement(state: &mut DegreeSupportState, self_loops: bool) {
             }
         }
     }
-    *state = DegreeSupportState::new(n, new_edges, self_loops);
+    state.replace_edges(new_edges);
 }
 
 #[cfg(test)]

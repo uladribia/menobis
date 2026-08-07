@@ -138,6 +138,21 @@ impl DegreeSupportState {
     /// Debug build validation skipped in release.
     #[cfg(not(debug_assertions))]
     pub fn debug_validate(&self) {}
+
+    /// Replace the full edge list and drop the stale adjacency structures.
+    ///
+    /// After a complement inversion the previous `out_adjacency` and
+    /// `edge_positions` refer to the old graph; this method drops them
+    /// to avoid O(N²) memory for the dense inverted graph.
+    ///
+    /// The edge list itself is O(E) and remains.  `contains()` and
+    /// `out_degree()` will return incorrect results after this call;
+    /// use only for final output extraction.
+    pub fn replace_edges(&mut self, new_edges: Vec<(u64, u64)>) {
+        self.edges = new_edges;
+        self.edge_positions.clear();
+        self.out_adjacency.iter_mut().for_each(|s| s.clear());
+    }
 }
 
 impl std::fmt::Display for DegreeSupportState {

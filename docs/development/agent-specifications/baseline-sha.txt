@@ -28,6 +28,9 @@ Microcanonical modules:
 Note: complement mode in fixed_kt/sampler.rs is output-bound, not a
 scalability bug: it triggers only for dense graphs (E > N²/2), so the
 inversion is Θ(E) = Θ(N²) which is inherent to the dense output.
+The hidden O(N²) adjacency allocation was removed: invert_complement
+now uses DegreeSupportState::replace_edges which drops the stale
+out_adjacency/edge_positions structures (only the O(E) edge list remains).
 
 Reference oracles (menobis-test-oracles):
   enumeration.rs        — exact state enumeration + normalization
