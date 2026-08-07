@@ -15,6 +15,11 @@
 //! in-strengths are preserved exactly.  The proposal is symmetric because
 //! node indices are chosen uniformly, so the Metropolis acceptance ratio
 //! depends only on the target probability ratio.
+//!
+//! # Hot path
+//!
+//! The four cells are always distinct (`a \ne c`, `b \ne d`), so no delta
+//! merging is needed and the step performs **no heap allocation**.
 
 use rand::Rng;
 
@@ -24,67 +29,20 @@ use super::target::StrengthTarget;
 use crate::generation::microcanonical::mcmc::McmcOutcome;
 use crate::OccNum;
 
-/// A 4-cycle delta before validation.
-struct Cycle4Proposal {
-    deltas: [(u64, u64, i64); 4],
+/// Four (cell, delta) pairs of one cycle proposal.
+type Deltas = [(u64, u64, i64); 4];
+
+/// Build a 4-cycle delta set from two sources, two targets, and a sign.
+fn build_cycle4(a: u64, c: u64, b: u64, d: u64, sign: i64) -> Deltas {
+    [(a, b, sign), (c, d, sign), (a, d, -sign), (c, b, -sign)]
 }
 
-/// Build a 4-cycle proposal from two source nodes, two target nodes, and a sign.
-fn build_cycle4(a: u64, c: u64, b: u64, d: u64, sign: i64) -> Cycle4Proposal {
-    Cycle4Proposal {
-        deltas: [(a, b, sign), (c, d, sign), (a, d, -sign), (c, b, -sign)],
-    }
-}
-
-/// Validate a 4-cycle proposal against the current state and domain.
-fn validate_cycle4(
-    proposal: &Cycle4Proposal,
-    state: &StrengthState,
-    domain: &PairDomain,
-    cap: OccNum,
-) -> bool {
-    let mut net_delta: std::collections::HashMap<(u64, u64), i64> =
-        std::collections::HashMap::new();
-    for &(src, tgt, d) in &proposal.deltas {
-        *net_delta.entry((src, tgt)).or_insert(0) += d;
-    }
-
-    let mut is_noop = true;
-    for (&(src, tgt), &d) in &net_delta {
-        if d == 0 {
-            continue;
-        }
-        is_noop = false;
-        let old = state.get(src, tgt);
-        let new = old as i64 + d;
-
-        // Negative occupation check.
-        if new < 0 {
-            return false;
-        }
-        #[allow(clippy::cast_sign_loss)]
-        let new_occ = new as OccNum;
-
-        // Domain admissibility check.
-        if !domain.is_admissible(src, tgt) {
-            return false;
-        }
-
-        // Capacity check (B layers, etc.).
-        if new_occ > cap {
-            return false;
-        }
-    }
-
-    // No-op check.
-    if is_noop {
-        return false;
-    }
-
-    true
-}
-
-/// Perform one 4-cycle MCMC step.
+/// Perform one 4-cycle MCMC step (allocation-free).
+///
+/// Validation is inlined: each affected cell is checked for negativity,
+/// domain admissibility, and family capacity before the target ratio is
+/// computed.  If valid and accepted, the four cells are written directly
+/// via [`StrengthState::set`].
 pub fn cycle4_step(
     state: &mut StrengthState,
     target: &StrengthTarget,
@@ -113,34 +71,37 @@ pub fn cycle4_step(
     // Choose sign uniformly.
     let sign = if rng.random_bool(0.5) { 1i64 } else { -1i64 };
 
-    let proposal = build_cycle4(a, c, b, d, sign);
+    let deltas = build_cycle4(a, c, b, d, sign);
     let cap = domain.capacity(target.family);
 
-    if !validate_cycle4(&proposal, state, domain, cap) {
-        return McmcOutcome::Held;
-    }
-
-    // Merge overlapping deltas.
-    let mut merged: std::collections::HashMap<(u64, u64), i64> = std::collections::HashMap::new();
-    for &(src, tgt, d) in &proposal.deltas {
-        *merged.entry((src, tgt)).or_insert(0) += d;
-    }
-
-    // Compute Δlogπ.
+    // ---- Validation + target ratio in one pass (no allocation) ----
     let mut delta_log_pi = 0.0f64;
-    for (&(src, tgt), &d) in &merged {
-        if d == 0 {
-            continue;
-        }
+    let mut applied = false;
+    for &(src, tgt, d) in &deltas {
         let old = state.get(src, tgt);
         let new = (old as i64 + d) as OccNum;
+        if old as i64 + d < 0 {
+            return McmcOutcome::Held;
+        }
+        if !domain.is_admissible(src, tgt) {
+            return McmcOutcome::Held;
+        }
+        if new > cap {
+            return McmcOutcome::Held;
+        }
         match target.delta_log_weight(src, tgt, old, new) {
             Some(w) => delta_log_pi += w,
             None => return McmcOutcome::Held,
         }
+        if d != 0 {
+            applied = true;
+        }
+    }
+    if !applied {
+        return McmcOutcome::Held;
     }
 
-    // Metropolis acceptance.
+    // ---- Metropolis acceptance ----
     if delta_log_pi < 0.0 {
         let log_u = (rng.random::<f64>() + f64::MIN_POSITIVE).ln();
         if log_u >= delta_log_pi {
@@ -148,13 +109,11 @@ pub fn cycle4_step(
         }
     }
 
-    // Apply the move.
-    let deltas_vec: Vec<_> = merged
-        .into_iter()
-        .filter(|&(_, d)| d != 0)
-        .map(|((src, tgt), d)| (src, tgt, d))
-        .collect();
-    state.apply_deltas(&deltas_vec);
+    // ---- Apply directly (cells are distinct, no merging needed) ----
+    for &(src, tgt, d) in &deltas {
+        let old = state.get(src, tgt);
+        state.set(src, tgt, (old as i64 + d) as OccNum);
+    }
 
     McmcOutcome::Accepted
 }
@@ -290,5 +249,33 @@ mod tests {
             state.occupied_count() != initial,
             "occupied pairs unchanged after 500 moves"
         );
+    }
+
+    #[test]
+    fn cycle4_reproducible() {
+        let n = 4;
+        let so = vec![3u64; 4];
+        let si = vec![3u64; 4];
+
+        let run = |seed: u64| -> Vec<OccNum> {
+            let mut state = make_state(n, &so, &si, OccupationFamily::Poisson, true);
+            let target = StrengthTarget::new(OccupationFamily::Poisson);
+            let domain = PairDomain::Complete {
+                node_count: n,
+                self_loops: true,
+            };
+            let mut rng = StdRng::seed_from_u64(seed);
+            for _ in 0..100 {
+                cycle4_step(&mut state, &target, &domain, &mut rng);
+            }
+            let mut pairs = state.iter_occupied().collect::<Vec<_>>();
+            pairs.sort_unstable();
+            pairs
+                .into_iter()
+                .flat_map(|((s, t), o)| vec![s, t, o])
+                .collect()
+        };
+
+        assert_eq!(run(42), run(42));
     }
 }

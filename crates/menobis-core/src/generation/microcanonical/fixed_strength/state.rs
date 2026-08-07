@@ -111,7 +111,10 @@ impl StrengthState {
     ///
     /// If `new_occ` is 0, the pair is removed from the sparse map.
     /// If `new_occ > 0` and the pair was absent, it is inserted.
-    fn set(&mut self, src: u64, tgt: u64, new_occ: OccNum) {
+    ///
+    /// This is `pub(super)` so the cycle move can apply the 4-cell
+    /// deltas directly without heap allocation.
+    pub(super) fn set(&mut self, src: u64, tgt: u64, new_occ: OccNum) {
         let old_occ = self.get(src, tgt);
         if old_occ == new_occ {
             return;
