@@ -11,6 +11,8 @@ These documents are intentionally more detailed than end-user documentation. The
 - benchmark and test protocols;
 - exit gates and completion checklists.
 
+FOr now, a folder contains deatils on the implementation of the microcanonical samplers. Be careful, docs might be obsolte, always refer to code in case of doubt!
+
 ## Documents
 
 | Document | Status | Description |
