@@ -1,6 +1,12 @@
 Baseline SHA: 4def7fb3ab14724bb9cdd921c2c981f31ec8ae19
-Archive SHA:  3fa140f964f221eab33a64545f18a5d308a315db
 Branch: microcanonical-refactor
+
+Archive branch: archive/exact-fixed-total-pre-gibbs
+  Archive SHA:  9425efbfdaaefb497141ebc6fba33ed390491ad2
+  Tag: exact-fixed-total-v1 (annotated)
+  Migration report: docs/decisions/exact-fixed-total-v1-migration.md
+  Preserves: FixedETOccupancy trait, MeFamily/BFamily/WFamily,
+  rejection/DP backends, Stirling fallback, exhaustive tests.
 
 Current status after Phase 5 (fixed-(E,T) Gibbs migration):
 
@@ -19,11 +25,6 @@ Microcanonical modules:
   mcmc/             — shared config/counters/outcome types
   support/          — shared uniform-edge sampling
   model/            — shared primitives (family, problem, sampling_plan)
-
-Archive branch archive/exact-fixed-total-pre-gibbs (at SHA 3fa140f9)
-  Tag exact-fixed-total-v1
-  Preserves: FixedETOccupancy trait, MeFamily/BFamily/WFamily,
-  rejection/DP backends, Stirling fallback, exhaustive tests removed from core.
 
 Legacy code removed from production:
   - crates/menobis-core/src/.../fixed_et/{me,b,w,support}.rs
