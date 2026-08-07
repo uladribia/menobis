@@ -8,11 +8,11 @@ and tested on every CI run).  No archive branch.
 Current status (after unified router + perf work):
 
 Tests:
-  cargo test -p menobis-core         = 287 passed (fast unit tests)
+  cargo test -p menobis-core         = 286 passed (fast unit tests)
   cargo test -p menobis-test-oracles = 40 passed (enumeration + legacy comparison)
   cargo clippy --workspace -D warnings = clean
   cargo fmt --all -- --check = clean
-  Python: targeted routing suites pass (67 tests); full suite ~385 tests
+  Python: targeted routing suites pass (67+ tests); full suite ~385 tests
   (run before any merge to master)
 
 Microcanonical modules:
@@ -20,7 +20,8 @@ Microcanonical modules:
   fixed_et/         — fixed-(E,T) thin orchestrator calling Gibbs chain
   fixed_kt/         — fixed-degree support MCMC + Gibbs occupation
   fixed_total/      — shared pair-Gibbs fixed-total chain (O(E) memory)
-  fixed_strength/   — fixed-strength MCMC (allocation-free cycle4 hot path)
+  fixed_strength/   — fixed-strength MCMC (allocation-free cycle4 hot path;
+                      dead apply_deltas removed)
   mcmc/             — shared config/counters/outcome types
   support/          — shared uniform-edge sampling
   model/            — shared primitives (family, problem, sampling_plan)
@@ -43,6 +44,7 @@ Performance fixes applied:
     (DegreeSupportState::replace_edges; only O(E) edge list remains)
   - fixed_strength cycle4: allocation-free hot path (4-cycle deltas never
     overlap, removed 3 HashMap allocations per proposal)
+  - fixed_strength: removed dead apply_deltas (reworked tests to set())
 
 Reference oracles (menobis-test-oracles):
   enumeration.rs        — exact state enumeration + normalization
@@ -55,5 +57,4 @@ Known limitations / next steps:
     to model::family::OccupationFamily (mechanical, ~8 files)
   - SamplingPlan::classify needs an explicit rule for future fixed-(E,s)
   - Fixed (E,s) not implemented (deferred)
-  - apply_deltas in fixed_strength/state.rs now used only by its own tests
   - Python full suite + benchmark run outstanding before merge gates
