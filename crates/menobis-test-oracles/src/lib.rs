@@ -27,3 +27,4 @@
 //! - Small deterministic correctness checks
 
 pub mod enumeration;
+pub mod legacy_fixed_et;
