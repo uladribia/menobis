@@ -1500,16 +1500,21 @@ current exact production implementation
         |
         +-- validate new scalable backend against it
         |
-        +-- copy/move exact logic into menobis-test-oracles
+        +-- move exact logic into menobis-test-oracles
         |
         +-- rerun distribution comparison
         |
         +-- remove exact implementation from production crate
 ```
 
-Before deleting major exact production code, create a repository tag or archival branch if desired for historical reproducibility.
+Exact DP and reference algorithms move **permanently** into
+`menobis-test-oracles`, where they serve as exact oracles for
+validating the scalable backends at larger sizes.  No separate
+archive branch or tag is created: git commit history already
+preserves the old production code.
 
-The final `menobis-core` generation modules must contain no exact small-N sampler merely as a fallback.
+The final `menobis-core` generation modules must contain no exact
+small-N sampler merely as a fallback.
 
 ---
 

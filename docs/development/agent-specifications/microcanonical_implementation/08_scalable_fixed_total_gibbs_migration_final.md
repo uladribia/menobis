@@ -2,7 +2,7 @@
 
 **Repository:** `uladribia/menobis`  
 **Version:** August 2026  
-**Objective:** Replace the large rejection/DP occupation backends with a scalable shared pair-Gibbs sampler, validate it against the current exact implementations, then remove the legacy exact code from `master` while preserving it on an archival branch.
+**Objective:** Replace the large rejection/DP occupation backends with a scalable shared pair-Gibbs sampler, validate it against the current exact implementations, then move the exact DP/reference algorithms into `menobis-test-oracles` and remove them from production `menobis-core`.
 
 ---
 
@@ -12,19 +12,21 @@ Yes, this migration strategy makes sense.
 
 The current exact backends still have value as:
 
-1. production samplers;
-2. correctness oracles;
-3. reproducibility references.
+1. correctness oracles;
+2. reproducibility references.
 
 After the new Gibbs backend is validated:
 
 - Gibbs replaces the production role;
 - exact enumeration retains the small-system oracle role;
-- an archival branch and tag preserve reproducibility.
+- the exact DP implementations move to `menobis-test-oracles` as reference
+  science and medium-scale validation oracles;
+- git commit history preserves the original production code (no separate
+  archive branch or tag is created).
 
-Keeping the large DP and low-acceptance rejection machinery indefinitely on `master` would create unnecessary maintenance, testing, documentation, and API burden.
-
-Use an `archive/` branch rather than a “stalled” branch, because the implementation is complete but superseded.
+Keeping the large DP and low-acceptance rejection machinery indefinitely in
+production `menobis-core` would create unnecessary maintenance, testing,
+documentation, and API burden.
 
 ---
 
@@ -328,7 +330,7 @@ Runs both backends for validation and reports diagnostics.
 
 # 8. Validation strategy
 
-The new implementation must be validated against the current exact methods before the legacy implementation is removed from `master`.
+The new implementation must be validated against the current exact methods before the legacy implementation is removed from production `menobis-core`.
 
 Validation has three levels.
 
@@ -606,7 +608,7 @@ The final report must contain exact commands, commit SHA, parameters, timings, E
 
 ## A. Parallel implementation
 
-Add Gibbs while keeping legacy exact code on `master`.
+Add Gibbs while keeping legacy exact code in production.
 
 Default remains legacy initially.
 
@@ -633,33 +635,21 @@ Auto -> Gibbs
 
 Keep explicit `ExactLegacy` temporarily and rerun CI plus benchmarks.
 
-## D. Archive exact implementation
+## D. Move exact implementation to the oracle crate
 
-Before deletion, create:
+The exact DP/rejection implementations are **not deleted** — they move
+permanently into `menobis-test-oracles` as reference algorithms and
+medium-scale validation oracles:
 
-```text
-archive/exact-fixed-total-pre-gibbs
-```
-
-and an annotated tag:
-
-```text
-exact-fixed-total-v1
-```
-
-The archival branch must contain:
-
-- final rejection/DP code;
-- tests;
-- benchmarks;
-- documentation;
+- Stirling-table ME sampler;
+- bounded/unbounded DP samplers for B and W;
+- their tests;
 - the migration validation report.
 
-Record the archival branch, tag, and commit SHA in the repository documentation.
+No separate archive branch or tag is created: git commit history already
+preserves the old production code for historical reproducibility.
 
-Protect the branch from deletion if repository settings allow.
-
-## E. Remove legacy code from master
+## E. Remove legacy code from production
 
 After Gibbs has been the default and passed the final gate, remove both the legacy sampler and all migration-only comparison plumbing.
 
@@ -684,11 +674,11 @@ Keep trivial deterministic exact cases:
   T=ME.
   \]
 
-These are simple and should remain on `master`.
+These are simple and should remain in production.
 
 ---
 
-# 18. Final master layout
+# 18. Final production layout
 
 ```text
 fixed_et/
@@ -739,9 +729,8 @@ The migration is complete only when:
 - the temporary migration benchmark harness is executed;
 - measured scaling improvement is reported;
 - Gibbs becomes the default;
-- archival branch and tag are created;
-- archival SHA is documented;
-- legacy exact production code is removed from `master`;
+- Gibbs is the only production backend;
+- exact DP/reference code is moved to `menobis-test-oracles`;
 - dead constants, errors, tests, and docs are cleaned up;
 - deterministic special cases remain;
 - final CI and benchmark reports are committed.
@@ -755,11 +744,11 @@ implement Gibbs
     ↓
 validate against exact methods
     ↓
-switch default
+switch default to Gibbs
     ↓
-archive exact implementation
+move exact DP/reference code to oracle crate
     ↓
-remove legacy dead weight from master
+remove fallback machinery from production
 ```
 
-This preserves scientific confidence while keeping `master` scalable and maintainable.
+This preserves scientific confidence while keeping the production code scalable and maintainable.
