@@ -7,11 +7,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use menobis_core::generation::microcanonical::fixed_et::me::MeFamily;
 use menobis_core::generation::microcanonical::fixed_kt::core::{
     sample_fixed_kt_core, FixedKTConfig,
 };
 use menobis_core::generation::microcanonical::fixed_kt::sampler::FixedDegreeMcmcConfig;
+use menobis_core::model::family::OccupationFamily;
 
 type EdgeList = Vec<(u64, u64)>;
 type SupportMap = HashMap<EdgeList, Vec<EdgeList>>;
@@ -109,7 +109,7 @@ fn exhaustive_support_uniformity_for_4_cycle() {
             self_loops: false,
             admissible_pairs: None,
         };
-        let result = sample_fixed_kt_core(&MeFamily, &out, &inp, 4, &config).unwrap();
+        let result = sample_fixed_kt_core(OccupationFamily::ME, &out, &inp, 4, &config).unwrap();
         let mut edges: EdgeList = result
             .sources
             .iter()

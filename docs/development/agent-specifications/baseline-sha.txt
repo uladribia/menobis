@@ -1,29 +1,38 @@
 Baseline SHA: 4def7fb3ab14724bb9cdd921c2c981f31ec8ae19
+Archive SHA:  3fa140f964f221eab33a64545f18a5d308a315db
 Branch: microcanonical-refactor
-Date: 2025-07-18
+
+Current status after Phase 5 (fixed-(E,T) Gibbs migration):
 
 Tests:
-  cargo test -p menobis-core    = 268 passed (fast unit tests)
-  cargo test -p menobis-test-oracles = 15 passed (heavy enumeration)
+  cargo test -p menobis-core         = 280 passed (fast unit tests)
+  cargo test -p menobis-test-oracles = 22 passed (heavy enumeration + stationarity)
   cargo clippy --workspace -D warnings = clean
   cargo fmt --all -- --check = clean
 
-Current microcanonical production code:
+Microcanonical modules:
 
-  fixed_et/         — ME/B/W fixed-(E,T) via rejection + DP fallback
-  fixed_kt/         — fixed-degree support MCMC + reuse of fixed_et occupation
+  fixed_et/         — fixed-(E,T) thin orchestrator calling Gibbs chain (no legacy DP)
+  fixed_kt/         — fixed-degree support MCMC + Gibbs occupation allocation
+  fixed_total/      — NEW (Phase 4): shared pair-Gibbs fixed-total chain
   fixed_strength/   — fixed-strength MCMC (ME direct + 4-cycle)
   mcmc/             — shared config/counters/outcome types
   support/          — shared uniform-edge sampling
+  model/            — shared primitives (family, problem, sampling_plan)
 
-  model/            — NEW (Phase 1+2): shared primitives
-    family.rs, problem.rs, sampling_plan.rs
+Archive branch archive/exact-fixed-total-pre-gibbs (at SHA 3fa140f9)
+  Tag exact-fixed-total-v1
+  Preserves: FixedETOccupancy trait, MeFamily/BFamily/WFamily,
+  rejection/DP backends, Stirling fallback, exhaustive tests removed from core.
 
-  crates/menobis-test-oracles/ — NEW (Phase 3): heavy test infrastructure
+Legacy code removed from production:
+  - crates/menobis-core/src/.../fixed_et/{me,b,w,support}.rs
+  - FixedETOccupancy trait and all impls
+  - sample_positive_occupations, scaled_rejection_fallback, DP constants
+  - FixedETError::{TableTooLarge, NoBackendAvailable}
 
 Known limitations:
-  - No shared fixed-total pair-Gibbs chain (still rejection/DP in fixed_et)
   - Complement mode in fixed_kt/sampler.rs uses O(N^2) iteration
   - No SamplingPlan routing wired into generation entry points
   - Fixed (E,s) not implemented
-  - Per-constraint mini-framework structure persists
+  - Partial per-constraint mini-framework structure remains (fixed_strength/)

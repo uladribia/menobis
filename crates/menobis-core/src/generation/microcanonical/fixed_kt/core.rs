@@ -4,19 +4,16 @@
 //! 1. Validate residual out-degree / in-degree sequences.
 //! 2. Sample a directed support via MCMC.
 //! 3. Compute \(E = \sum k^{\mathrm{out}} = \sum k^{\mathrm{in}}\).
-//! 4. Allocate positive occupations via the family-specific allocator.
+//! 4. Allocate positive occupations via the shared fixed-total Gibbs sampler.
 //! 5. Pair occupations with support → build `SampledNetwork`.
-
-use rand::rngs::StdRng;
-use rand::SeedableRng;
 
 use super::super::super::output::SampledNetwork;
 use super::errors::FixedKTError;
 use super::feasibility::DirectedDegreeSequence;
 use super::sampler::{sample_fixed_degree_support, FixedDegreeMcmcConfig};
-use crate::generation::microcanonical::fixed_et::core::{
-    sample_positive_occupations, FixedETOccupancy,
-};
+use crate::generation::microcanonical::fixed_total::sample_fixed_total;
+use crate::generation::microcanonical::mcmc::McmcConfig;
+use crate::model::family::OccupationFamily;
 use crate::OccNum;
 
 /// Configuration for fixed-\((\mathbf k,T)\) sampling.
@@ -43,7 +40,7 @@ impl FixedKTConfig {
 ///
 /// # Arguments
 ///
-/// * `family` — the family-specific occupancy implementation (ME, B, or W).
+/// * `family` — the occupation family (ME, B, or W).
 /// * `out_degrees` — target out-degree sequence (length N).
 /// * `in_degrees` — target in-degree sequence (length N).
 /// * `total` — target total occupation \(T\).
@@ -53,8 +50,8 @@ impl FixedKTConfig {
 ///
 /// A `SampledNetwork` with exactly `E = Σout = Σin` edges and total
 /// occupation `T`.
-pub fn sample_fixed_kt_core<F: FixedETOccupancy>(
-    family: &F,
+pub fn sample_fixed_kt_core(
+    family: OccupationFamily,
     out_degrees: &[u32],
     in_degrees: &[u32],
     total: OccNum,
@@ -83,13 +80,25 @@ pub fn sample_fixed_kt_core<F: FixedETOccupancy>(
         )));
     }
 
-    // Family-specific residual validation
-    family
-        .validate_residual(e, total)
-        .map_err(|e| FixedKTError::OccupationError(e.to_string()))?;
+    // Family-specific residual validation (B capacity)
+    if let Some(max) = family.max_occupation() {
+        let capacity = max.saturating_mul(e as OccNum);
+        if total > capacity {
+            return Err(FixedKTError::InvalidResidual(format!(
+                "total occupation {total} exceeds B capacity {max} × {e} = {capacity}"
+            )));
+        }
+    }
+
+    // Gibbs occupation backend configuration (derived from the support MCMC config)
+    let gibbs_config = McmcConfig {
+        burn_in_sweeps: config.mcmc.burn_in_sweeps,
+        sweeps_per_sample: config.mcmc.sweeps_per_sample,
+        proposals_per_sweep: config.mcmc.proposals_per_sweep,
+        seed: config.mcmc.seed,
+    };
 
     // ---- Step 2: Sample directed support ----
-    let mut rng = StdRng::seed_from_u64(config.mcmc.seed);
     let (state, _diag) = sample_fixed_degree_support(
         &seq.out_degrees,
         &seq.in_degrees,
@@ -104,7 +113,7 @@ pub fn sample_fixed_kt_core<F: FixedETOccupancy>(
     } else if total == e as OccNum {
         vec![1; e]
     } else {
-        sample_positive_occupations(family, total, e, &mut rng)
+        sample_fixed_total(family, e, total, &gibbs_config)
             .map_err(|e| FixedKTError::OccupationError(e.to_string()))?
     };
 
@@ -134,9 +143,7 @@ pub fn sample_fixed_kt_core<F: FixedETOccupancy>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generation::microcanonical::fixed_et::b::BFamily;
-    use crate::generation::microcanonical::fixed_et::me::MeFamily;
-    use crate::generation::microcanonical::fixed_et::w::WFamily;
+    use crate::model::family::OccupationFamily;
 
     #[test]
     fn me_directed_cycle() {
@@ -153,7 +160,7 @@ mod tests {
             self_loops: false,
             admissible_pairs: None,
         };
-        let result = sample_fixed_kt_core(&MeFamily, &out, &inp, 8, &config).unwrap();
+        let result = sample_fixed_kt_core(OccupationFamily::ME, &out, &inp, 8, &config).unwrap();
         assert_eq!(result.sources.len(), 4);
         assert_eq!(result.occ_nums.iter().sum::<OccNum>(), 8);
         // Verify support out-degree
@@ -184,7 +191,7 @@ mod tests {
             admissible_pairs: None,
         };
         let t = (n as OccNum - 1) * 3;
-        let result = sample_fixed_kt_core(&MeFamily, &out, &inp, t, &config).unwrap();
+        let result = sample_fixed_kt_core(OccupationFamily::ME, &out, &inp, t, &config).unwrap();
         assert_eq!(result.sources.len(), n - 1);
         assert_eq!(result.occ_nums.iter().sum::<OccNum>(), t);
         let mut support_out = vec![0u32; n];
@@ -208,7 +215,9 @@ mod tests {
             self_loops: false,
             admissible_pairs: None,
         };
-        let result = sample_fixed_kt_core(&BFamily { layers: 4 }, &out, &inp, 6, &config).unwrap();
+        let result =
+            sample_fixed_kt_core(OccupationFamily::B { layers: 4 }, &out, &inp, 6, &config)
+                .unwrap();
         assert_eq!(result.sources.len(), 4);
         assert_eq!(result.occ_nums.iter().sum::<OccNum>(), 6);
     }
@@ -227,7 +236,9 @@ mod tests {
             self_loops: false,
             admissible_pairs: None,
         };
-        let result = sample_fixed_kt_core(&WFamily { layers: 2 }, &out, &inp, 10, &config).unwrap();
+        let result =
+            sample_fixed_kt_core(OccupationFamily::W { layers: 2 }, &out, &inp, 10, &config)
+                .unwrap();
         assert_eq!(result.sources.len(), 4);
         assert_eq!(result.occ_nums.iter().sum::<OccNum>(), 10);
     }
@@ -237,7 +248,7 @@ mod tests {
         let out = vec![2u32, 2];
         let inp = vec![2u32, 2];
         let config = FixedKTConfig::default();
-        let result = sample_fixed_kt_core(&MeFamily, &out, &inp, 3, &config);
+        let result = sample_fixed_kt_core(OccupationFamily::ME, &out, &inp, 3, &config);
         assert!(result.is_err());
     }
 
@@ -255,8 +266,8 @@ mod tests {
             self_loops: false,
             admissible_pairs: None,
         };
-        let a = sample_fixed_kt_core(&MeFamily, &out, &inp, 8, &config).unwrap();
-        let b = sample_fixed_kt_core(&MeFamily, &out, &inp, 8, &config).unwrap();
+        let a = sample_fixed_kt_core(OccupationFamily::ME, &out, &inp, 8, &config).unwrap();
+        let b = sample_fixed_kt_core(OccupationFamily::ME, &out, &inp, 8, &config).unwrap();
         assert_eq!(a.sources, b.sources);
         assert_eq!(a.targets, b.targets);
         assert_eq!(a.occ_nums, b.occ_nums);

@@ -591,9 +591,7 @@ pub(crate) fn sample_degree_events_fixed_kt(
     seed: u64,
     self_loops: bool,
 ) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
-    use menobis_core::generation::microcanonical::fixed_et::b::BFamily;
-    use menobis_core::generation::microcanonical::fixed_et::me::MeFamily;
-    use menobis_core::generation::microcanonical::fixed_et::w::WFamily;
+    use menobis_core::model::family::OccupationFamily;
 
     let config = CoreFixedKTConfig {
         mcmc: CoreFixedDegreeMcmcConfig {
@@ -606,20 +604,22 @@ pub(crate) fn sample_degree_events_fixed_kt(
         admissible_pairs: None,
     };
     let result = match family {
-        "ME" => core_sample_fixed_kt(&MeFamily, &degree_out, &degree_in, total_events, &config),
+        "ME" => core_sample_fixed_kt(
+            OccupationFamily::ME,
+            &degree_out,
+            &degree_in,
+            total_events,
+            &config,
+        ),
         "B" => core_sample_fixed_kt(
-            &BFamily {
-                layers: layers as u64,
-            },
+            OccupationFamily::B { layers },
             &degree_out,
             &degree_in,
             total_events,
             &config,
         ),
         "W" => core_sample_fixed_kt(
-            &WFamily {
-                layers: layers as u64,
-            },
+            OccupationFamily::W { layers },
             &degree_out,
             &degree_in,
             total_events,
