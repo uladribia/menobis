@@ -114,6 +114,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "menobis-test-oracles"
+version = "1.0.1"
+dependencies = [
+ "menobis-core",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
