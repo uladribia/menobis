@@ -3,48 +3,57 @@ Branch: microcanonical-refactor
 
 Legacy backends policy: exact fixed-(E,T) rejection/DP code lives in
 menobis-test-oracles/src/legacy_fixed_et/ (reference oracle, compiled
-and tested on every CI run).  No archive branch; the archive
-branch/tag exact-fixed-total-v1 was deleted.
+and tested on every CI run).  No archive branch.
 
-Current status after Phase 5 (fixed-(E,T) Gibbs migration):
+Current status (after unified router + perf work):
 
 Tests:
-  cargo test -p menobis-core         = 280 passed (fast unit tests)
-  cargo test -p menobis-test-oracles = 25 passed (enumeration + stationarity + legacy comparison)
+  cargo test -p menobis-core         = 287 passed (fast unit tests)
+  cargo test -p menobis-test-oracles = 40 passed (enumeration + legacy comparison)
   cargo clippy --workspace -D warnings = clean
   cargo fmt --all -- --check = clean
+  Python: targeted routing suites pass (67 tests); full suite ~385 tests
+  (run before any merge to master)
 
 Microcanonical modules:
 
-  fixed_et/         — fixed-(E,T) thin orchestrator calling Gibbs chain (no legacy DP)
-  fixed_kt/         — fixed-degree support MCMC + Gibbs occupation allocation
-  fixed_total/      — NEW (Phase 4): shared pair-Gibbs fixed-total chain
-  fixed_strength/   — fixed-strength MCMC (ME direct + 4-cycle)
+  fixed_et/         — fixed-(E,T) thin orchestrator calling Gibbs chain
+  fixed_kt/         — fixed-degree support MCMC + Gibbs occupation
+  fixed_total/      — shared pair-Gibbs fixed-total chain (O(E) memory)
+  fixed_strength/   — fixed-strength MCMC (allocation-free cycle4 hot path)
   mcmc/             — shared config/counters/outcome types
   support/          — shared uniform-edge sampling
   model/            — shared primitives (family, problem, sampling_plan)
-  route/            — NEW: unified router (sample_microcanonical dispatch)
+  route/            — Rust router: sample_microcanonical (MC)
 
-Note: complement mode in fixed_kt/sampler.rs is output-bound, not a
-scalability bug: it triggers only for dense graphs (E > N²/2), so the
-inversion is Θ(E) = Θ(N²) which is inherent to the dense output.
-The hidden O(N²) adjacency allocation was removed: invert_complement
-now uses DegreeSupportState::replace_edges which drops the stale
-out_adjacency/edge_positions structures (only the O(E) edge list remains).
+Grand-canonical:
+  grandcanonical/   — GrandCanonicalCase + sample_grandcanonical router
+                      (centralizes the 24 per-family functions)
+
+Python:
+  routing.py        — route_model/fit_model/sample_model/filter_model;
+                      _sample_model routes GC/canonical/MC through the
+                      unified Rust pyfunction sample_model(ensemble,
+                      family, constraint, ...) with Rust-side
+                      constraint-required parameter validation
+  generation.py     — _sample_model_router thin wrapper
+
+Performance fixes applied:
+  - fixed_kt complement inversion: dropped hidden O(N²) adjacency memory
+    (DegreeSupportState::replace_edges; only O(E) edge list remains)
+  - fixed_strength cycle4: allocation-free hot path (4-cycle deltas never
+    overlap, removed 3 HashMap allocations per proposal)
 
 Reference oracles (menobis-test-oracles):
   enumeration.rs        — exact state enumeration + normalization
   legacy_fixed_et/      — legacy rejection/DP backends (scientific reference)
-  tests/fixed_total_stationarity.rs   — Gibbs vs enumeration (TV < 0.03)
-  tests/fixed_total_legacy_comparison.rs — Gibbs vs legacy DP (E=10)
+  tests/fixed_total_stationarity.rs       — Gibbs vs enumeration (TV < 0.03)
+  tests/fixed_total_legacy_comparison.rs  — Gibbs vs legacy DP (E=10)
 
-Legacy code removed from production:
-  - crates/menobis-core/src/.../fixed_et/{me,b,w,support}.rs
-  - FixedETOccupancy trait and all impls
-  - sample_positive_occupations, scaled_rejection_fallback, DP constants
-  - FixedETError::{TableTooLarge, NoBackendAvailable}
-
-Known limitations:
-  - No SamplingPlan routing wired into Python entry points (Rust router exists)
-  - Fixed (E,s) not implemented
-  - Partial per-constraint mini-framework structure remains (fixed_strength/)
+Known limitations / next steps:
+  - fixed_strength/ still uses old distribution::OccupationFamily; migrate
+    to model::family::OccupationFamily (mechanical, ~8 files)
+  - SamplingPlan::classify needs an explicit rule for future fixed-(E,s)
+  - Fixed (E,s) not implemented (deferred)
+  - apply_deltas in fixed_strength/state.rs now used only by its own tests
+  - Python full suite + benchmark run outstanding before merge gates
