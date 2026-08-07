@@ -32,22 +32,28 @@ impl SamplingPlan {
     ///
     /// Rules (checked in order):
     ///
-    /// 1. No residual total occupation → grand canonical.
-    /// 2. Residual degree or edge constraint (with total) → factorized MC.
-    /// 3. Otherwise (strength constraints) → occupation MCMC.
+    /// 1. Residual degree or edge constraint → factorized MC
+    ///    (binary support + fixed-total occupation).
+    /// 2. Residual strength constraint → occupation MCMC
+    ///    (total T is implied by Σs_out = Σs_in; no explicit total needed).
+    /// 3. Otherwise (no hard constraints) → grand canonical.
+    ///
+    /// A future fixed-(E,s) case (edges + strengths, no total) will need
+    /// an explicit rule here; today it falls through to the factorized
+    /// branch which reports a missing-constraint error.
     pub fn classify(problem: &PreparedProblem) -> Self {
-        // No total → expectation constraints only → GC.
-        if problem.residual_total.is_none() {
-            return Self::GrandCanonical;
-        }
-
         // Degree or edge constraint factorizes: support then occupations.
         if problem.residual_out_degrees.is_some() || problem.residual_edges.is_some() {
             return Self::FactorizedMicrocanonical;
         }
 
-        // Remaining: coupled occupation MCMC (e.g. fixed strengths).
-        Self::OccupationMcmc
+        // Strength constraints → coupled occupation MCMC.
+        if problem.residual_out_strengths.is_some() {
+            return Self::OccupationMcmc;
+        }
+
+        // No hard constraints → expectation constraints only → GC.
+        Self::GrandCanonical
     }
 }
 

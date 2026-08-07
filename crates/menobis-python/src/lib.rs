@@ -257,6 +257,7 @@ fn _menobis(module: &Bound<'_, PyModule>) -> PyResult<()> {
     add_pyfunction!(module, generation::sample_b_fixed_et)?;
     add_pyfunction!(module, generation::sample_b_fixed_et_explicit)?;
     add_pyfunction!(module, generation::sample_me_fixed_et)?;
+    add_pyfunction!(module, generation::sample_microcanonical)?;
     add_pyfunction!(module, generation::sample_me_fixed_et_explicit)?;
     add_pyfunction!(module, generation::sample_w_fixed_et)?;
     add_pyfunction!(module, generation::sample_w_fixed_et_explicit)?;

@@ -948,3 +948,83 @@ pub(crate) fn sample_fixed_strength_with_cost(
         fit_result.iterations,
     ))
 }
+/// Unified microcanonical sampling via the Rust router.
+///
+/// Dispatches on the prepared-problem structure (degrees → fixed-(k,T),
+/// edges → fixed-(E,T), strengths → fixed-strength MCMC).  Returns a
+/// residual network; fixed pairs are handled by the Python layer before
+/// calling this function.
+#[pyfunction]
+#[pyo3(signature = (
+    family,
+    node_count,
+    self_loops,
+    residual_edges=None,
+    residual_total=None,
+    degree_out=None,
+    degree_in=None,
+    strength_out=None,
+    strength_in=None,
+    layers=1,
+    seed=0,
+    burn_in_sweeps=50,
+    sweeps_per_sample=10,
+))]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn sample_microcanonical(
+    family: &str,
+    node_count: usize,
+    self_loops: bool,
+    residual_edges: Option<usize>,
+    residual_total: Option<u64>,
+    degree_out: Option<Vec<u32>>,
+    degree_in: Option<Vec<u32>>,
+    strength_out: Option<Vec<u64>>,
+    strength_in: Option<Vec<u64>>,
+    layers: u32,
+    seed: u64,
+    burn_in_sweeps: usize,
+    sweeps_per_sample: usize,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    use menobis_core::generation::microcanonical::route::{
+        sample_microcanonical as route_sample, MicrocanonicalConfig,
+    };
+    use menobis_core::model::family::OccupationFamily;
+    use menobis_core::model::problem::PreparedProblem;
+
+    let fam = match family {
+        "ME" => OccupationFamily::ME,
+        "B" => OccupationFamily::B { layers },
+        "W" => OccupationFamily::W { layers },
+        other => {
+            return Err(PyValueError::new_err(format!("invalid family: {other}")));
+        }
+    };
+    let admissible = if self_loops {
+        node_count.saturating_mul(node_count)
+    } else {
+        node_count.saturating_mul(node_count.saturating_sub(1))
+    };
+    let problem = PreparedProblem::new(
+        fam,
+        node_count,
+        self_loops,
+        admissible,
+        residual_edges,
+        residual_total,
+        degree_out,
+        degree_in,
+        strength_out,
+        strength_in,
+    );
+    let config = MicrocanonicalConfig {
+        seed,
+        burn_in_sweeps,
+        sweeps_per_sample,
+        self_loops,
+    };
+    match route_sample(&problem, &config) {
+        Ok(net) => Ok((net.sources, net.targets, net.occ_nums)),
+        Err(e) => Err(PyValueError::new_err(e.to_string())),
+    }
+}

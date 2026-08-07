@@ -897,3 +897,48 @@ def _sample_degree_events_fixed_kt(
         target=np.asarray(targets, dtype=np.uint64),
         occ_num=np.asarray(occ_nums, dtype=np.uint64),
     )
+
+
+def _sample_microcanonical_router(
+    family: str,
+    node_count: int,
+    *,
+    self_loops: bool,
+    residual_edges: int | None = None,
+    residual_total: int | None = None,
+    degree_out: list[int] | None = None,
+    degree_in: list[int] | None = None,
+    strength_out: list[int] | None = None,
+    strength_in: list[int] | None = None,
+    layers: int = 1,
+    seed: int = 0,
+    burn_in_sweeps: int = 50,
+    sweeps_per_sample: int = 10,
+) -> EdgeTable:
+    """Sample a microcanonical network via the unified Rust router.
+
+    Dispatches on the constraint structure (degrees → fixed-(k,T),
+    edges → fixed-(E,T), strengths → fixed-strength MCMC).  The Python
+    layer passes residual constraints only; fixed pairs are merged back
+    by the caller.
+    """
+    sources, targets, occ_nums = _menobis.sample_microcanonical(
+        family,
+        int(node_count),
+        bool(self_loops),
+        residual_edges,
+        residual_total,
+        degree_out,
+        degree_in,
+        strength_out,
+        strength_in,
+        int(layers),
+        int(seed),
+        int(burn_in_sweeps),
+        int(sweeps_per_sample),
+    )
+    return EdgeTable(
+        source=np.asarray(sources, dtype=np.uint64),
+        target=np.asarray(targets, dtype=np.uint64),
+        occ_num=np.asarray(occ_nums, dtype=np.uint64),
+    )

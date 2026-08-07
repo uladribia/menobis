@@ -683,6 +683,7 @@ def _sample_model(
         _sample_degree_events_negative_binomial,
         _sample_degree_events_poisson,
         _sample_edges_events,
+        _sample_microcanonical_router,
         _sample_strength_binomial,
         _sample_strength_cost_binomial,
         _sample_strength_cost_geometric,
@@ -702,7 +703,6 @@ def _sample_model(
         _sample_strength_multinomial,
         _sample_strength_negative_binomial,
         _sample_strength_poisson,
-        _sample_strength_stub_matching,
     )
     from menobis.models.types import (
         DegreeEventsFit,
@@ -738,6 +738,20 @@ def _sample_model(
                     else ("B" if family == ModelFamily.B else "W")
                 )
                 layers_val = int(layers) if fam in ("B", "W") else 1
+                has_fixed = not (
+                    known_source is None or known_target is None or known_occnum is None
+                )
+                if not has_fixed:
+                    # Unified Rust router: uniform support + fixed-total Gibbs.
+                    return _sample_microcanonical_router(
+                        family=fam,
+                        node_count=int(node_count),
+                        self_loops=bool(self_loops),
+                        residual_edges=int(target_edges),
+                        residual_total=int(total_events),
+                        layers=layers_val,
+                        seed=seed,
+                    )
                 return _sample_fixed_et_edges_events(
                     family=fam,
                     node_count=int(node_count),
@@ -759,20 +773,26 @@ def _sample_model(
                 has_fixed = not (
                     known_source is None or known_target is None or known_occnum is None
                 )
-                # ME direct fast path: eligible when self-loops allowed and
-                # no fixed pairs. The Rust backend handles the routing.
-                if family is ModelFamily.ME and self_loops and not has_fixed:
-                    return _sample_strength_stub_matching(
-                        np.asarray(strength_out, dtype=np.uint64),
-                        np.asarray(strength_in, dtype=np.uint64),
-                        seed=seed,
-                    )
-                # Generic MCMC backend for all other cases.
                 fam = (
                     "ME"
                     if family == ModelFamily.ME
                     else ("B" if family == ModelFamily.B else "W")
                 )
+                if not has_fixed:
+                    # Unified Rust router: selects ME-direct stub matching or
+                    # the 4-cycle occupation MCMC internally.
+                    return _sample_microcanonical_router(
+                        family=fam,
+                        node_count=len(strength_out),
+                        self_loops=bool(self_loops),
+                        strength_out=np.asarray(strength_out, dtype=np.uint64).tolist(),
+                        strength_in=np.asarray(strength_in, dtype=np.uint64).tolist(),
+                        layers=int(layers),
+                        seed=seed,
+                        burn_in_sweeps=burn_in_sweeps,
+                        sweeps_per_sample=sweeps_per_sample,
+                    )
+                # Generic MCMC backend for fixed-pair cases.
                 return _sample_strength_fixed_strength_mcmc(
                     family=fam,
                     strength_out=np.asarray(strength_out, dtype=np.uint64),
@@ -847,14 +867,16 @@ def _sample_model(
                     else ("B" if family == ModelFamily.B else "W")
                 )
                 if not has_fixed:
-                    return _sample_degree_events_fixed_kt(
+                    # Unified Rust router: degree-support MCMC + fixed-total Gibbs.
+                    return _sample_microcanonical_router(
                         family=fam,
+                        node_count=len(degree_out),
+                        self_loops=bool(self_loops),
                         degree_out=np.asarray(degree_out, dtype=np.uint32).tolist(),
                         degree_in=np.asarray(degree_in, dtype=np.uint32).tolist(),
-                        total_events=int(total_events),
+                        residual_total=int(total_events),
                         layers=int(layers),
                         seed=seed,
-                        self_loops=bool(self_loops),
                         burn_in_sweeps=burn_in_sweeps,
                         sweeps_per_sample=sweeps_per_sample,
                     )
