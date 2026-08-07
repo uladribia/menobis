@@ -2,40 +2,28 @@ Baseline SHA: 4def7fb3ab14724bb9cdd921c2c981f31ec8ae19
 Branch: microcanonical-refactor
 Date: 2025-07-18
 
-Tests: cargo test --workspace = 272 passed, 0 failed
-Lint:  cargo clippy --workspace --all-targets -- -D warnings = clean
-Format: cargo fmt --all -- --check = clean
-Python ruff format --check = 84 files already formatted
-Python ruff check = All checks passed
+Tests:
+  cargo test -p menobis-core    = 268 passed (fast unit tests)
+  cargo test -p menobis-test-oracles = 15 passed (heavy enumeration)
+  cargo clippy --workspace -D warnings = clean
+  cargo fmt --all -- --check = clean
 
-Current microcanonical production code (crates/menobis-core/src/generation/microcanonical/):
+Current microcanonical production code:
 
   fixed_et/         — ME/B/W fixed-(E,T) via rejection + DP fallback
-    me.rs, b.rs, w.rs   — family-specific FixedETOccupancy impls
-    core.rs              — shared orchestrator + sample_positive_occupations
-    support.rs           — (moved to support/uniform_edges.rs)
-    pairs.rs, errors.rs
-
   fixed_kt/         — fixed-degree support MCMC + reuse of fixed_et occupation
-    state.rs, switch.rs, initializer.rs, feasibility.rs
-    sampler.rs, diagnostics.rs, errors.rs
-    core.rs              — composes support + occupation
-
   fixed_strength/   — fixed-strength MCMC (ME direct + 4-cycle)
-    state.rs, chain.rs, target.rs, move_cycle.rs, initializer.rs
-    cost.rs, cost_fit.rs, domain.rs, problem.rs, feasibility.rs
-    errors.rs, me_direct.rs
-
   mcmc/             — shared config/counters/outcome types
-    config.rs, counters.rs, outcome.rs
-
   support/          — shared uniform-edge sampling
-    uniform_edges.rs
+
+  model/            — NEW (Phase 1+2): shared primitives
+    family.rs, problem.rs, sampling_plan.rs
+
+  crates/menobis-test-oracles/ — NEW (Phase 3): heavy test infrastructure
 
 Known limitations:
   - No shared fixed-total pair-Gibbs chain (still rejection/DP in fixed_et)
   - Complement mode in fixed_kt/sampler.rs uses O(N^2) iteration
-  - No oracle test crate (heavy tests in core crate)
-  - No SamplingPlan routing
+  - No SamplingPlan routing wired into generation entry points
   - Fixed (E,s) not implemented
   - Per-constraint mini-framework structure persists

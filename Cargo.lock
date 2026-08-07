@@ -117,7 +117,9 @@ dependencies = [
 name = "menobis-test-oracles"
 version = "1.0.1"
 dependencies = [
+ "libm",
  "menobis-core",
+ "rand",
 ]
 
 [[package]]
