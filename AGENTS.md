@@ -315,11 +315,11 @@ At the end of each agent session, report:
 | Agent | Role | Tools | Model |
 |-------|------|-------|-------|
 | `supervisor` | Phase owner, gate enforcer, delegation manager | full | z-ai/glm-5.2 |
-| `architectural-analyst` | Read-only codebase mapping | read,grep,find,ls,bash | z-ai/glm-5.2 |
+| `architectural-analyst` | Read-only codebase mapping | read,grep,find,ls,bash | deepseek/deepseek-v4-flash |
 | `implementation-agent` | Bounded implementation per task | full | deepseek/deepseek-v4-flash |
 | `semantic-reviewer` | Mathematical/scientific validation | read,grep,find,ls,bash | z-ai/glm-5.2 |
 | `testing-agent` | Tests, benchmarks, regression detection | full | deepseek/deepseek-v4-flash |
-| `integration-reviewer` | Architecture, duplication, API, docs review | read,grep,find,ls,bash | z-ai/glm-5.2 |
+| `integration-reviewer` | Architecture, duplication, API, docs review | read,grep,find,ls,bash | deepseek/deepseek-v4-flash |
 
 **Phase state:** `_workspace/refactor-state.md` — read on session start for durable state recovery.
 
