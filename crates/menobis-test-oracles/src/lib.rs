@@ -28,3 +28,4 @@
 
 pub mod enumeration;
 pub mod legacy_fixed_et;
+pub mod legacy_strength_kernel;
