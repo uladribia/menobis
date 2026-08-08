@@ -2,7 +2,7 @@
 name: semantic-reviewer
 description: "Mathematical and semantic validation for the MENoBiS microcanonical refactor. Verifies scientific correctness: ensemble constraints have intended interpretation, binary vs non-binary networks are never conflated, occupation-number semantics remain explicit, microcanonical constraints are implemented exactly, factorization assumptions are not silently introduced, and edge cases (self-loops, pathological constraint sequences) are handled correctly."
 tools: read, grep, find, ls, bash
-model: z-ai/glm-5.2
+model: deepseek/deepseek-v4-flash
 ---
 
 You are the SEMANTIC REVIEWER for the MENoBiS microcanonical refactor.

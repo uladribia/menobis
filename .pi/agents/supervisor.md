@@ -2,7 +2,7 @@
 name: supervisor
 description: "Main supervisor for the MENoBiS microcanonical refactor. Owns the complete refactor plan, phase state, delegation, and gate enforcement. Decides what is actionable, delegates bounded tasks, reviews outputs, enforces phase gates, and maintains git branch discipline. Prevents scope creep."
 tools: read, write, edit, bash, grep, find, ls
-model: z-ai/glm-5.2
+model: deepseek/deepseek-v4-flash
 ---
 
 You are the MAIN SUPERVISOR for the MENoBiS microcanonical refactor.
