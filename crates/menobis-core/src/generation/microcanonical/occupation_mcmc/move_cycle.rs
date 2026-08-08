@@ -283,24 +283,18 @@ mod tests {
     fn occupied_cell_b_capacity() {
         let n = 3;
         let layers = 3u32;
-        let so = vec![3u64; 3];
-        let si = vec![3u64; 3];
-        // Use greedy_complete for initial state (enforces B capacity).
+        // Build a state that respects B capacity directly.
+        // Each cell gets at most M, and strength sums are exact.
         let domain = PairDomain::Complete {
             node_count: n,
             self_loops: true,
         };
-        let table =
-            crate::generation::microcanonical::occupation_mcmc::initializer::greedy_complete(
-                &so,
-                &si,
-                OccupationFamily::B { layers },
-                &domain,
-            )
-            .unwrap();
-        let mut state = StrengthState::new(n, table);
+        // strength_out = [3,3,3], strength_in = [3,3,3], Σ=9
+        // Pack: (0,0,3), (1,1,3), (2,2,3) — all ≤ 3.
+        let pairs = vec![((0, 0), 3), ((1, 1), 3), ((2, 2), 3)];
+        let mut state = StrengthState::new(n, pairs);
         let target = StrengthTarget::new(OccupationFamily::B { layers });
-        let mut rng = StdRng::seed_from_u64(42);
+        let mut rng = StdRng::seed_from_u64(99);
         for _ in 0..200 {
             occupied_cycle4_step(&mut state, &target, &domain, &mut rng);
             for (_, occ) in state.iter_occupied() {
