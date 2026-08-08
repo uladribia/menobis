@@ -5,17 +5,17 @@
 //! Lives in the oracle crate so these expensive tests don't slow down
 //! `cargo test -p menobis-core`.
 
-use menobis_core::distribution::OccupationFamily;
-use menobis_core::generation::microcanonical::fixed_strength::chain::FixedStrengthChain;
-use menobis_core::generation::microcanonical::fixed_strength::cost_fit::{
+use menobis_core::generation::microcanonical::mcmc::McmcConfig;
+use menobis_core::generation::microcanonical::occupation_mcmc::chain::FixedStrengthChain;
+use menobis_core::generation::microcanonical::occupation_mcmc::cost_fit::{
     fit_gamma, warm_start_gamma, FixedStrengthCostFitConfig,
 };
-use menobis_core::generation::microcanonical::fixed_strength::domain::PairDomain;
-use menobis_core::generation::microcanonical::fixed_strength::initializer::initialize_table;
-use menobis_core::generation::microcanonical::fixed_strength::problem::FixedStrengthProblem;
-use menobis_core::generation::microcanonical::fixed_strength::state::StrengthState;
-use menobis_core::generation::microcanonical::fixed_strength::target::StrengthTarget;
-use menobis_core::generation::microcanonical::mcmc::McmcConfig;
+use menobis_core::generation::microcanonical::occupation_mcmc::domain::PairDomain;
+use menobis_core::generation::microcanonical::occupation_mcmc::initializer::initialize_table;
+use menobis_core::generation::microcanonical::occupation_mcmc::problem::FixedStrengthProblem;
+use menobis_core::generation::microcanonical::occupation_mcmc::state::StrengthState;
+use menobis_core::generation::microcanonical::occupation_mcmc::target::StrengthTarget;
+use menobis_core::model::family::OccupationFamily;
 use menobis_core::pairs::PairCostProvider;
 use menobis_core::OccNum;
 use rand::rngs::StdRng;
@@ -71,7 +71,7 @@ fn enumerate_states(
             if remaining_out.iter().all(|&s| s == 0) && remaining_in.iter().all(|&s| s == 0) {
                 let log_degen: f64 = current
                     .iter()
-                    .map(|&(_, occ)| family.log_local_degeneracy(occ))
+                    .map(|&(_, occ)| family.log_base_measure(occ))
                     .sum();
                 results.push((current.clone(), log_degen));
             }
@@ -164,16 +164,16 @@ fn constant_cost_does_not_affect_distribution() {
     let config = McmcConfig::new(10, 5, 42);
     let costs = ConstantCost;
 
-    let table = initialize_table(&s_out, &s_in, OccupationFamily::Poisson, &domain).unwrap();
+    let table = initialize_table(&s_out, &s_in, OccupationFamily::ME, &domain).unwrap();
     let state = StrengthState::new(n, table);
     let mut chain = FixedStrengthChain::new(
         state,
-        StrengthTarget::with_costs(OccupationFamily::Poisson, &costs),
+        StrengthTarget::with_costs(OccupationFamily::ME, &costs),
         domain,
         config,
     );
     // Set a large gamma
-    let mut target = StrengthTarget::with_costs(OccupationFamily::Poisson, &costs);
+    let mut target = StrengthTarget::with_costs(OccupationFamily::ME, &costs);
     target.set_gamma(10.0);
     chain.set_target(target);
 
@@ -204,15 +204,15 @@ fn zero_gamma_cost_equals_no_cost() {
     let config = McmcConfig::new(10, 5, 42);
     let costs = LinearCost;
 
-    let table = initialize_table(&s_out, &s_in, OccupationFamily::Poisson, &domain).unwrap();
+    let table = initialize_table(&s_out, &s_in, OccupationFamily::ME, &domain).unwrap();
     let state = StrengthState::new(n, table);
     let chain = FixedStrengthChain::new(
         state,
-        StrengthTarget::with_costs(OccupationFamily::Poisson, &costs),
+        StrengthTarget::with_costs(OccupationFamily::ME, &costs),
         domain,
         config,
     );
-    let no_cost = StrengthTarget::new(OccupationFamily::Poisson);
+    let no_cost = StrengthTarget::new(OccupationFamily::ME);
     let d1 = no_cost.delta_log_weight(0, 1, 2, 3).unwrap();
     let d2 = chain.target.delta_log_weight(0, 1, 2, 3).unwrap();
     assert!(
@@ -225,7 +225,7 @@ fn zero_gamma_cost_equals_no_cost() {
 fn me_cost_enumeration_agreement_n2() {
     let s_out = vec![2u64, 2];
     let s_in = vec![2u64, 2];
-    let states = enumerate_states(OccupationFamily::Poisson, &s_out, &s_in, true);
+    let states = enumerate_states(OccupationFamily::ME, &s_out, &s_in, true);
     let costs = LinearCost;
     let gamma = 0.5;
 
@@ -247,7 +247,7 @@ fn me_cost_enumeration_agreement_n2() {
     let mut counts = std::collections::HashMap::<OccupiedState, u64>::new();
     for seed in 0..trials {
         let problem = FixedStrengthProblem::new(
-            OccupationFamily::Poisson,
+            OccupationFamily::ME,
             s_out.clone(),
             s_in.clone(),
             PairDomain::Complete {
@@ -269,7 +269,7 @@ fn me_cost_enumeration_agreement_n2() {
         .unwrap();
         let state = StrengthState::new(2, table);
 
-        let mut tgt = StrengthTarget::with_costs(OccupationFamily::Poisson, &costs);
+        let mut tgt = StrengthTarget::with_costs(OccupationFamily::ME, &costs);
         tgt.set_gamma(gamma);
 
         let mcmc_config = McmcConfig {
@@ -327,11 +327,11 @@ fn warm_start_positive_gamma_when_cost_above_uniform() {
     let config = McmcConfig::new(5, 2, 42);
     let costs = LinearCost;
 
-    let table = initialize_table(&s_out, &s_in, OccupationFamily::Poisson, &domain).unwrap();
+    let table = initialize_table(&s_out, &s_in, OccupationFamily::ME, &domain).unwrap();
     let state = StrengthState::new(n, table);
     let mut chain = FixedStrengthChain::new(
         state,
-        StrengthTarget::with_costs(OccupationFamily::Poisson, &costs),
+        StrengthTarget::with_costs(OccupationFamily::ME, &costs),
         domain,
         config,
     );
@@ -356,11 +356,11 @@ fn warm_start_negative_gamma_when_cost_below_uniform() {
     let config = McmcConfig::new(5, 2, 42);
     let costs = LinearCost;
 
-    let table = initialize_table(&s_out, &s_in, OccupationFamily::Poisson, &domain).unwrap();
+    let table = initialize_table(&s_out, &s_in, OccupationFamily::ME, &domain).unwrap();
     let state = StrengthState::new(n, table);
     let mut chain = FixedStrengthChain::new(
         state,
-        StrengthTarget::with_costs(OccupationFamily::Poisson, &costs),
+        StrengthTarget::with_costs(OccupationFamily::ME, &costs),
         domain,
         config,
     );
@@ -432,15 +432,15 @@ fn assert_gamma_recovery(family: OccupationFamily, target_gamma: f64) {
 
 #[test]
 fn gamma_recovery_me() {
-    assert_gamma_recovery(OccupationFamily::Poisson, 1.0);
+    assert_gamma_recovery(OccupationFamily::ME, 1.0);
 }
 
 #[test]
 fn gamma_recovery_b() {
-    assert_gamma_recovery(OccupationFamily::Binomial(4), 1.0);
+    assert_gamma_recovery(OccupationFamily::B { layers: 4 }, 1.0);
 }
 
 #[test]
 fn gamma_recovery_w() {
-    assert_gamma_recovery(OccupationFamily::NegativeBinomial(2), 1.0);
+    assert_gamma_recovery(OccupationFamily::W { layers: 2 }, 1.0);
 }

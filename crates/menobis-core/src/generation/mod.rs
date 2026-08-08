@@ -26,14 +26,14 @@ pub use grandcanonical::{
     sample_strength_edges_poisson, sample_strength_geometric, sample_strength_negative_binomial,
     sample_strength_poisson,
 };
-pub use microcanonical::fixed_kt::core::{sample_fixed_kt_core, FixedKTConfig};
-pub use microcanonical::fixed_kt::diagnostics::FixedDegreeDiagnostics;
-pub use microcanonical::fixed_kt::sampler::FixedDegreeMcmcConfig;
-pub use microcanonical::fixed_strength::cost_fit::{
+pub use microcanonical::binary::core::{sample_fixed_kt_core, FixedKTConfig};
+pub use microcanonical::binary::diagnostics::FixedDegreeDiagnostics;
+pub use microcanonical::binary::sampler::FixedDegreeMcmcConfig;
+pub use microcanonical::occupation_mcmc::cost_fit::{
     fit_gamma, FixedStrengthCostFitConfig, FixedStrengthCostFitResult,
 };
-pub use microcanonical::fixed_strength::sample_fixed_strength;
-pub use microcanonical::fixed_strength::sample_fixed_strength_with_cost;
+pub use microcanonical::occupation_mcmc::sample_fixed_strength;
+pub use microcanonical::occupation_mcmc::sample_fixed_strength_with_cost;
 pub use microcanonical::route::{sample_microcanonical, MicrocanonicalConfig, MicrocanonicalError};
 pub use microcanonical::{
     sample_b_fixed_et, sample_b_fixed_et_explicit, sample_me_fixed_et, sample_me_fixed_et_explicit,

@@ -12,7 +12,7 @@
 
 use std::collections::HashSet;
 
-use crate::distribution::OccupationFamily;
+use crate::model::family::OccupationFamily;
 use crate::OccNum;
 
 /// Domain of admissible ordered pairs for a fixed-strength problem.
@@ -77,7 +77,7 @@ impl PairDomain {
     #[inline]
     pub fn capacity(&self, family: OccupationFamily) -> OccNum {
         match family {
-            OccupationFamily::Binomial(m) => m as OccNum,
+            OccupationFamily::B { layers: m } => m as OccNum,
             _ => OccNum::MAX,
         }
     }
@@ -175,8 +175,8 @@ mod tests {
             node_count: 5,
             self_loops: true,
         };
-        assert_eq!(d.capacity(OccupationFamily::Binomial(3)), 3);
-        assert_eq!(d.capacity(OccupationFamily::Binomial(10)), 10);
+        assert_eq!(d.capacity(OccupationFamily::B { layers: 3 }), 3);
+        assert_eq!(d.capacity(OccupationFamily::B { layers: 10 }), 10);
     }
 
     #[test]
@@ -185,12 +185,9 @@ mod tests {
             node_count: 5,
             self_loops: true,
         };
-        assert_eq!(d.capacity(OccupationFamily::Poisson), OccNum::MAX);
-        assert_eq!(d.capacity(OccupationFamily::Geometric), OccNum::MAX);
-        assert_eq!(
-            d.capacity(OccupationFamily::NegativeBinomial(3)),
-            OccNum::MAX
-        );
+        assert_eq!(d.capacity(OccupationFamily::ME), OccNum::MAX);
+        assert_eq!(d.capacity(OccupationFamily::W { layers: 1 }), OccNum::MAX);
+        assert_eq!(d.capacity(OccupationFamily::W { layers: 3 }), OccNum::MAX);
     }
 
     #[test]
@@ -200,12 +197,12 @@ mod tests {
             self_loops: true,
         };
         // ME: capacity = min(src_out_res, tgt_in_res) (since no family cap)
-        assert_eq!(d.flow_capacity(OccupationFamily::Poisson, 5, 3), 3);
-        assert_eq!(d.flow_capacity(OccupationFamily::Poisson, 2, 10), 2);
+        assert_eq!(d.flow_capacity(OccupationFamily::ME, 5, 3), 3);
+        assert_eq!(d.flow_capacity(OccupationFamily::ME, 2, 10), 2);
         // B: capacity = min(M, src_out_res, tgt_in_res)
-        assert_eq!(d.flow_capacity(OccupationFamily::Binomial(4), 5, 3), 3);
-        assert_eq!(d.flow_capacity(OccupationFamily::Binomial(4), 2, 10), 2);
-        assert_eq!(d.flow_capacity(OccupationFamily::Binomial(2), 5, 3), 2);
+        assert_eq!(d.flow_capacity(OccupationFamily::B { layers: 4 }, 5, 3), 3);
+        assert_eq!(d.flow_capacity(OccupationFamily::B { layers: 4 }, 2, 10), 2);
+        assert_eq!(d.flow_capacity(OccupationFamily::B { layers: 2 }, 5, 3), 2);
     }
 
     #[test]

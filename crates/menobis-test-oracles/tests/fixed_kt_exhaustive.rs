@@ -7,10 +7,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use menobis_core::generation::microcanonical::fixed_kt::core::{
-    sample_fixed_kt_core, FixedKTConfig,
-};
-use menobis_core::generation::microcanonical::fixed_kt::sampler::FixedDegreeMcmcConfig;
+use menobis_core::generation::microcanonical::binary::core::{sample_fixed_kt_core, FixedKTConfig};
+use menobis_core::generation::microcanonical::binary::sampler::FixedDegreeMcmcConfig;
 use menobis_core::model::family::OccupationFamily;
 
 type EdgeList = Vec<(u64, u64)>;

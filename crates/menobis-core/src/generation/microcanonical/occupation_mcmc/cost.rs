@@ -147,10 +147,10 @@ pub fn residual_cost_target(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::distribution::OccupationFamily;
-    use crate::generation::microcanonical::fixed_strength::domain::PairDomain;
-    use crate::generation::microcanonical::fixed_strength::initializer::initialize_table;
-    use crate::generation::microcanonical::fixed_strength::state::StrengthState;
+    use crate::generation::microcanonical::occupation_mcmc::domain::PairDomain;
+    use crate::generation::microcanonical::occupation_mcmc::initializer::initialize_table;
+    use crate::generation::microcanonical::occupation_mcmc::state::StrengthState;
+    use crate::model::family::OccupationFamily;
 
     struct LinearCost;
     impl PairCostProvider for LinearCost {
@@ -185,7 +185,7 @@ mod tests {
             node_count: n,
             self_loops: true,
         };
-        let table = initialize_table(so, si, OccupationFamily::Poisson, &domain).unwrap();
+        let table = initialize_table(so, si, OccupationFamily::ME, &domain).unwrap();
         StrengthState::new(n, table)
     }
 

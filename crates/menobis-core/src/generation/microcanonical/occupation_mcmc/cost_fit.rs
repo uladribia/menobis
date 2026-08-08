@@ -24,7 +24,7 @@ use super::chain::FixedStrengthChain;
 use super::cost::{residual_cost_target, state_cost};
 use super::errors::FixedStrengthCostError;
 use super::target::StrengthTarget;
-use crate::distribution::OccupationFamily;
+use crate::model::family::OccupationFamily;
 use crate::pairs::PairCostProvider;
 
 // ---------------------------------------------------------------------------

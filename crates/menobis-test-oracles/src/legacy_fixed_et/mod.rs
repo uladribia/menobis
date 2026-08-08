@@ -2,7 +2,7 @@
 //!
 //! These are the exact rejection/DP samplers that were the production
 //! implementation before the scalable pair-Gibbs chain
-//! ([`menobis_core::generation::microcanonical::fixed_total`]).
+//! ([`menobis_core::generation::microcanonical::conditional::fixed_total`]).
 //!
 //! They are **scientifically valid** and remain valuable as a reference
 //! oracle at medium `E`, `T` where state enumeration is infeasible:

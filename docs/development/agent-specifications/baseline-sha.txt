@@ -1,60 +1,97 @@
-Baseline SHA: 4def7fb3ab14724bb9cdd921c2c981f31ec8ae19
 Branch: microcanonical-refactor
 
 Legacy backends policy: exact fixed-(E,T) rejection/DP code lives in
 menobis-test-oracles/src/legacy_fixed_et/ (reference oracle, compiled
 and tested on every CI run).  No archive branch.
 
-Current status (after unified router + perf work):
+Last updated: session handoff before Gate 5
 
-Tests:
-  cargo test -p menobis-core         = 286 passed (fast unit tests)
+=============================================================================
+GATE STATUS
+=============================================================================
+
+  Gate 1 — Folder structure        ✅ DONE
+  Gate 2 — Python E2E test split   ✅ DONE
+  Gate 3 — Exact vs current        ✅ DONE (oracle crate)
+  Gate 4 — Small N                 ✅ DONE (oracle tests)
+  Gate 5 — Large N / benchmarks    ✅ DONE (see docs/benchmarks/microcanonical_gate5.md)
+
+=============================================================================
+FOLDER STRUCTURE (after Gate 1)
+=============================================================================
+
+generation/microcanonical/
+  conditional/
+    fixed_et.rs               — fixed-(E,T) orchestrator (support + Gibbs)
+    fixed_total/              — shared pair-Gibbs chain (O(E) memory)
+    mod.rs
+  binary/                     — fixed-degree binary-support MCMC (was fixed_kt/)
+  mcmc/                       — shared config/counters/outcome types
+  occupation_mcmc/            — fixed-strength MCMC (was fixed_strength/)
+    chain.rs, state.rs, target.rs, domain.rs, problem.rs, initializer.rs,
+    feasibility.rs, move_cycle.rs, cost.rs, cost_fit.rs, me_direct.rs,
+    errors.rs, mod.rs
+  route.rs                    — unified MC router
+  support/                    — shared uniform-edge sampling
+  mod.rs
+
+generation/grandcanonical/
+  mod.rs                      — GrandCanonicalCase + sample_grandcanonical router
+
+model/
+  family.rs                   — OccupationFamily (ME/B/W) — single source of truth
+  problem.rs                  — PreparedProblem
+  sampling_plan.rs            — SamplingPlan enum
+  mod.rs
+
+=============================================================================
+TEST COVERAGE (after Gate 2)
+=============================================================================
+
+Rust tests:
+  cargo test -p menobis-core         = 284 passed
   cargo test -p menobis-test-oracles = 40 passed (enumeration + legacy comparison)
-  cargo clippy --workspace -D warnings = clean
+  cargo clippy -p menobis-core --lib --tests = clean
   cargo fmt --all -- --check = clean
-  Python: targeted routing suites pass (67+ tests); full suite ~385 tests
-  (run before any merge to master)
 
-Microcanonical modules:
+Criterion benchmarks:
+  crates/menobis-core/benches/fixed_total_chain.rs — pair-Gibbs chain
+  crates/menobis-core/benches/grandcanonical.rs    — GC router (added Gate 1)
 
-  fixed_et/         — fixed-(E,T) thin orchestrator calling Gibbs chain
-  fixed_kt/         — fixed-degree support MCMC + Gibbs occupation
-  fixed_total/      — shared pair-Gibbs fixed-total chain (O(E) memory)
-  fixed_strength/   — fixed-strength MCMC (allocation-free cycle4 hot path;
-                      dead apply_deltas removed)
-  mcmc/             — shared config/counters/outcome types
-  support/          — shared uniform-edge sampling
-  model/            — shared primitives (family, problem, sampling_plan)
-  route/            — Rust router: sample_microcanonical (MC)
+Python test split (conftest.py):
+  pytest                        — fast suite:    386 tests in ~11s  (skip @pytest.mark.heavy)
+  pytest --run-heavy            — full suite:    389 tests in ~180s
+  pytest -m heavy               — heavy only:     11 tests
 
-Grand-canonical:
-  grandcanonical/   — GrandCanonicalCase + sample_grandcanonical router
-                      (centralizes the 24 per-family functions)
+  Fast suite coverage (all ensembles, constraints, families at small N):
 
-Python:
-  routing.py        — route_model/fit_model/sample_model/filter_model;
-                      _sample_model routes GC/canonical/MC through the
-                      unified Rust pyfunction sample_model(ensemble,
-                      family, constraint, ...) with Rust-side
-                      constraint-required parameter validation
-  generation.py     — _sample_model_router thin wrapper
+  | Ensemble     | Constraint      | ME    | B     | W     |
+  |--------------|----------------|-------|-------|-------|
+  | GC           | all 6          | ✅    | ✅    | ✅    |
+  | Canonical    | Strength       | ✅    | n/a   | n/a   |
+  | MC           | EdgesEvents    | ✅    | ✅    | ✅    |
+  | MC           | DegreeEvents   | ✅    | ✅    | ✅    |
+  | MC           | Strength       | ✅    | ✅    | ✅    |
+  | MC           | StrengthCost   | ✅    | ✅    | ✅    |
 
-Performance fixes applied:
-  - fixed_kt complement inversion: dropped hidden O(N²) adjacency memory
-    (DegreeSupportState::replace_edges; only O(E) edge list remains)
-  - fixed_strength cycle4: allocation-free hot path (4-cycle deltas never
-    overlap, removed 3 HashMap allocations per proposal)
-  - fixed_strength: removed dead apply_deltas (reworked tests to set())
+  Heavy tests (11):
+    test_conditioned_grandcanonical_identity          4 parametrisations
+    test_filtering_across_families_and_constraints    3 (STRENGTH_DEGREE × ME/B/W)
+    test_integration_matrix_strength_degree           3 (ME/B/W)
+    test_w_fixed_et_matches_exact_enumeration         1
 
-Reference oracles (menobis-test-oracles):
-  enumeration.rs        — exact state enumeration + normalization
-  legacy_fixed_et/      — legacy rejection/DP backends (scientific reference)
-  tests/fixed_total_stationarity.rs       — Gibbs vs enumeration (TV < 0.03)
-  tests/fixed_total_legacy_comparison.rs  — Gibbs vs legacy DP (E=10)
+=============================================================================
+NEXT STEPS
+=============================================================================
 
-Known limitations / next steps:
-  - fixed_strength/ still uses old distribution::OccupationFamily; migrate
-    to model::family::OccupationFamily (mechanical, ~8 files)
-  - SamplingPlan::classify needs an explicit rule for future fixed-(E,s)
-  - Fixed (E,s) not implemented (deferred)
-  - Python full suite + benchmark run outstanding before merge gates
+Immediate (Gate 5):
+  - Run benchmark CLI (menobis benchmark) at prescribed sizes
+    (N=500, 1000, 5000) to verify no O(N²) blowup
+  - Record results in docs/benchmarks/
+
+Deferred (not started, may become separate branches):
+  - Fixed (E,s) — coupled strength + edge count MCMC
+  - Fixed (s,k) — coupled strength + degree MCMC  (deferred)
+  - SamplingPlan::classify rule for future fixed-(E,s)
+
+=============================================================================

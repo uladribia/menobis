@@ -5,7 +5,7 @@
 //! These tests are intentionally more expensive than the fast unit tests
 //! in `menobis-core` and live in the oracle crate by design.
 
-use menobis_core::generation::microcanonical::fixed_total::chain::sample_fixed_total;
+use menobis_core::generation::microcanonical::conditional::fixed_total::chain::sample_fixed_total;
 use menobis_core::generation::microcanonical::mcmc::McmcConfig;
 use menobis_core::model::family::OccupationFamily;
 use menobis_test_oracles::enumeration::{enumerate_fixed_total, normalize_states, WeightedState};

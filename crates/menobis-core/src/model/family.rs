@@ -58,6 +58,24 @@ impl OccupationFamily {
         }
     }
 
+    /// Whether `occ_num` is a valid occupation number for this family.
+    ///
+    /// B rejects occupation numbers above its layer capacity `M`.
+    pub fn validate_occnum(&self, occ_num: OccNum) -> bool {
+        match self {
+            Self::B { layers } => occ_num <= *layers as OccNum,
+            _ => true,
+        }
+    }
+
+    /// Layer count `M` for B and W families; `None` for ME.
+    pub fn layers(&self) -> Option<u32> {
+        match self {
+            Self::ME => None,
+            Self::B { layers } | Self::W { layers } => Some(*layers),
+        }
+    }
+
     /// Difference of log base measures: `ln d(new) − ln d(old)`.
     ///
     /// Used for local Metropolis acceptance.  Defaults to computing the

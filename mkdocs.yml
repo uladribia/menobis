@@ -52,19 +52,7 @@ nav:
       - TODOs: development/todos.md
       - Architecture: development/architecture.md
       - Phase 0 migration notes: development/migration-notes.md
-      - Agent specs:
-          - Overview: development/agent-specifications/README.md
-          - Framework intro: development/agent-specifications/00_intro.md
-          - Phase 0 refactor: development/agent-specifications/microcanonical-phase-0.md
-          - Fixed-SE sampling framework plan: development/agent-specifications/05_microcanonical_sampling_framework_fixed_se_plan.md
-          - Phase 1 ME fixed-(E,T) design: development/agent-specifications/01_phase1_me_fixed_et_design.md
-          - Phase 1 ME fixed-(E,T) implementation: development/agent-specifications/02_phase1_me_fixed_et_implementation.md
-          - Phase 2 B fixed-(E,T): development/agent-specifications/03_phase2_b_fixed_et.md
-          - Phase 2 W fixed-(E,T): development/agent-specifications/04_phase2_w_fixed_et.md
-          - Phase 3 fixed-(k,T) plan: development/agent-specifications/05_phase3_fixed_kt_plan.md
-          - Phase 4 fixed strengths: development/agent-specifications/06_phase4_fixed_strengths_me_b_w_final.md
-          - Phase 5 strength + expected cost: development/agent-specifications/07_phase5_fixed_strength_expected_cost_final.md
-          - Phase 6 scalability refactor: development/agent-specifications/08_scalable_fixed_total_gibbs_migration_final.md
+      - Refactor plan: development/agent-specifications/microcanonical_implementation/09_MENoBiS_microcanonical_refactor_plan.md
 
 plugins:
   - search

@@ -16,13 +16,13 @@
 //! and differ only in the binary-support stage.
 
 use super::super::output::SampledNetwork;
-use super::fixed_et::{sample_b_fixed_et, sample_me_fixed_et, sample_w_fixed_et};
-use super::fixed_kt::core::{sample_fixed_kt_core, FixedKTConfig};
-use super::fixed_kt::sampler::FixedDegreeMcmcConfig;
-use super::fixed_strength::domain::PairDomain;
-use super::fixed_strength::problem::FixedStrengthProblem;
-use super::fixed_strength::sample_fixed_strength;
+use super::binary::core::{sample_fixed_kt_core, FixedKTConfig};
+use super::binary::sampler::FixedDegreeMcmcConfig;
+use super::conditional::fixed_et::{sample_b_fixed_et, sample_me_fixed_et, sample_w_fixed_et};
 use super::mcmc::McmcConfig;
+use super::occupation_mcmc::domain::PairDomain;
+use super::occupation_mcmc::problem::FixedStrengthProblem;
+use super::occupation_mcmc::sample_fixed_strength;
 use crate::model::family::OccupationFamily;
 use crate::model::problem::PreparedProblem;
 use crate::model::sampling_plan::SamplingPlan;
@@ -169,7 +169,7 @@ fn route_occupation_mcmc(
         node_count: problem.node_count,
         self_loops: config.self_loops,
     };
-    let family: crate::distribution::OccupationFamily = problem.family.into();
+    let family = problem.family;
     let full = FixedStrengthProblem::new(family, out, in_, domain, vec![])
         .map_err(|e| MicrocanonicalError::Backend(e.to_string()))?;
     let residual = full

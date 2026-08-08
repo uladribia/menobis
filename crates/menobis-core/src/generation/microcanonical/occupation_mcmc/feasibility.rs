@@ -9,7 +9,7 @@
 //! restricted (non-complete) domains.  Complete domains can use the
 //! simpler greedy initializer.
 
-use crate::distribution::OccupationFamily;
+use crate::model::family::OccupationFamily;
 use crate::OccNum;
 
 // ──────────────────────────────────────────────
@@ -228,8 +228,7 @@ mod tests {
         let out = vec![5u64, 5];
         let inp = vec![5u64, 5];
         let pairs = vec![(0, 0), (0, 1), (1, 0), (1, 1)];
-        let result =
-            feasibility_max_flow(&out, &inp, OccupationFamily::Poisson, &pairs, OccNum::MAX);
+        let result = feasibility_max_flow(&out, &inp, OccupationFamily::ME, &pairs, OccNum::MAX);
         assert!(result.is_ok());
         let table = result.unwrap().unwrap();
         let total: OccNum = table.iter().map(|(_, o)| o).sum();
@@ -242,8 +241,7 @@ mod tests {
         let out = vec![10u64, 0];
         let inp = vec![5u64, 5];
         let pairs = vec![(0, 0)]; // only (0,0) admissible
-        let result =
-            feasibility_max_flow(&out, &inp, OccupationFamily::Poisson, &pairs, OccNum::MAX);
+        let result = feasibility_max_flow(&out, &inp, OccupationFamily::ME, &pairs, OccNum::MAX);
         assert!(result.is_err());
     }
 
@@ -253,7 +251,7 @@ mod tests {
         let out = vec![5u64, 0, 0];
         let inp = vec![2u64, 2, 1]; // total = 5
         let pairs = vec![(0, 0), (0, 1), (0, 2)];
-        let result = feasibility_max_flow(&out, &inp, OccupationFamily::Binomial(2), &pairs, 2);
+        let result = feasibility_max_flow(&out, &inp, OccupationFamily::B { layers: 2 }, &pairs, 2);
         assert!(result.is_ok());
         let table = result.unwrap().unwrap();
         for &(_, occ) in &table {
@@ -266,8 +264,7 @@ mod tests {
         let out = vec![0u64; 3];
         let inp = vec![0u64; 3];
         let pairs = vec![];
-        let result =
-            feasibility_max_flow(&out, &inp, OccupationFamily::Poisson, &pairs, OccNum::MAX);
+        let result = feasibility_max_flow(&out, &inp, OccupationFamily::ME, &pairs, OccNum::MAX);
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
     }
@@ -277,8 +274,7 @@ mod tests {
         let out = vec![7u64];
         let inp = vec![7u64];
         let pairs = vec![(0, 0)];
-        let result =
-            feasibility_max_flow(&out, &inp, OccupationFamily::Poisson, &pairs, OccNum::MAX);
+        let result = feasibility_max_flow(&out, &inp, OccupationFamily::ME, &pairs, OccNum::MAX);
         assert!(result.is_ok());
         let table = result.unwrap().unwrap();
         assert_eq!(table, vec![((0, 0), 7)]);

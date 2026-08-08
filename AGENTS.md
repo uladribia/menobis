@@ -82,11 +82,21 @@ Target commands:
 uv run ruff format --check .
 uv run ruff check .
 uv run ty check
-uv run pytest
+uv run pytest          # fast suite only (skips @pytest.mark.heavy)
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 mkdocs build --strict
+```
+
+## Python test split
+
+Tests marked `@pytest.mark.heavy` are slow E2E / benchmark-level (>2 s) and skipped by default.
+
+```bash
+uv run pytest                     # fast suite:  374 tests,  ~11 s
+uv run pytest --run-heavy         # full suite:  389 tests, ~180 s
+uv run pytest -m heavy            # heavy only:   11 tests
 ```
 
 ## Python style

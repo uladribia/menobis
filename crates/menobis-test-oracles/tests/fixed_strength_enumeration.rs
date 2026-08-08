@@ -7,11 +7,11 @@
 
 use std::collections::HashMap;
 
-use menobis_core::distribution::OccupationFamily;
-use menobis_core::generation::microcanonical::fixed_strength::domain::PairDomain;
-use menobis_core::generation::microcanonical::fixed_strength::problem::FixedStrengthProblem;
-use menobis_core::generation::microcanonical::fixed_strength::sample_fixed_strength;
 use menobis_core::generation::microcanonical::mcmc::McmcConfig;
+use menobis_core::generation::microcanonical::occupation_mcmc::domain::PairDomain;
+use menobis_core::generation::microcanonical::occupation_mcmc::problem::FixedStrengthProblem;
+use menobis_core::generation::microcanonical::occupation_mcmc::sample_fixed_strength;
+use menobis_core::model::family::OccupationFamily;
 use menobis_core::OccNum;
 
 type OccupiedState = Vec<((u64, u64), OccNum)>;
@@ -22,7 +22,7 @@ fn make_problem(
     out: Vec<OccNum>,
     inp: Vec<OccNum>,
     self_loops: bool,
-) -> menobis_core::generation::microcanonical::fixed_strength::problem::ResidualStrengthProblem {
+) -> menobis_core::generation::microcanonical::occupation_mcmc::problem::ResidualStrengthProblem {
     let domain = PairDomain::Complete {
         node_count: out.len(),
         self_loops,
@@ -107,7 +107,7 @@ fn me_mcmc_enumeration_agreement_n2() {
     let trials = 2000;
     let mut counts: HashMap<OccupiedState, u64> = HashMap::new();
     for seed in 0..trials {
-        let prob = make_problem(OccupationFamily::Poisson, s_out.clone(), s_in.clone(), true);
+        let prob = make_problem(OccupationFamily::ME, s_out.clone(), s_in.clone(), true);
         let config = McmcConfig {
             burn_in_sweeps: 10,
             sweeps_per_sample: 5,
@@ -150,12 +150,7 @@ fn me_mcmc_enumeration_agreement_n2_no_self_loops() {
     let trials = 2000;
     let mut counts: HashMap<OccupiedState, u64> = HashMap::new();
     for seed in 0..trials {
-        let prob = make_problem(
-            OccupationFamily::Poisson,
-            s_out.clone(),
-            s_in.clone(),
-            false,
-        );
+        let prob = make_problem(OccupationFamily::ME, s_out.clone(), s_in.clone(), false);
         let config = McmcConfig {
             burn_in_sweeps: 10,
             sweeps_per_sample: 5,

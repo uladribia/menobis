@@ -121,8 +121,8 @@ pub fn cycle4_step(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::distribution::OccupationFamily;
-    use crate::generation::microcanonical::fixed_strength::initializer::initialize_table;
+    use crate::generation::microcanonical::occupation_mcmc::initializer::initialize_table;
+    use crate::model::family::OccupationFamily;
     use rand::rngs::StdRng;
     use rand::SeedableRng;
 
@@ -146,8 +146,8 @@ mod tests {
         let n = 4;
         let so = vec![5u64, 3, 7, 2];
         let si = vec![4u64, 6, 3, 4];
-        let mut state = make_state(n, &so, &si, OccupationFamily::Poisson, true);
-        let target = StrengthTarget::new(OccupationFamily::Poisson);
+        let mut state = make_state(n, &so, &si, OccupationFamily::ME, true);
+        let target = StrengthTarget::new(OccupationFamily::ME);
         let domain = PairDomain::Complete {
             node_count: n,
             self_loops: true,
@@ -165,8 +165,8 @@ mod tests {
         let n = 5;
         let so = vec![10u64; 5];
         let si = vec![10u64; 5];
-        let mut state = make_state(n, &so, &si, OccupationFamily::Poisson, true);
-        let target = StrengthTarget::new(OccupationFamily::Poisson);
+        let mut state = make_state(n, &so, &si, OccupationFamily::ME, true);
+        let target = StrengthTarget::new(OccupationFamily::ME);
         let domain = PairDomain::Complete {
             node_count: n,
             self_loops: true,
@@ -190,8 +190,8 @@ mod tests {
         let n = 4;
         let so = vec![5u64; 4];
         let si = vec![5u64; 4];
-        let mut state = make_state(n, &so, &si, OccupationFamily::Poisson, false);
-        let target = StrengthTarget::new(OccupationFamily::Poisson);
+        let mut state = make_state(n, &so, &si, OccupationFamily::ME, false);
+        let target = StrengthTarget::new(OccupationFamily::ME);
         let domain = PairDomain::Complete {
             node_count: n,
             self_loops: false,
@@ -211,8 +211,8 @@ mod tests {
         let layers = 3u32;
         let so = vec![4u64; 3];
         let si = vec![4u64; 3];
-        let mut state = make_state(n, &so, &si, OccupationFamily::Binomial(layers), true);
-        let target = StrengthTarget::new(OccupationFamily::Binomial(layers));
+        let mut state = make_state(n, &so, &si, OccupationFamily::B { layers }, true);
+        let target = StrengthTarget::new(OccupationFamily::B { layers });
         let domain = PairDomain::Complete {
             node_count: n,
             self_loops: true,
@@ -234,8 +234,8 @@ mod tests {
         let n = 4;
         let so = vec![3u64; 4];
         let si = vec![3u64; 4];
-        let mut state = make_state(n, &so, &si, OccupationFamily::Poisson, true);
-        let target = StrengthTarget::new(OccupationFamily::Poisson);
+        let mut state = make_state(n, &so, &si, OccupationFamily::ME, true);
+        let target = StrengthTarget::new(OccupationFamily::ME);
         let domain = PairDomain::Complete {
             node_count: n,
             self_loops: true,
@@ -258,8 +258,8 @@ mod tests {
         let si = vec![3u64; 4];
 
         let run = |seed: u64| -> Vec<OccNum> {
-            let mut state = make_state(n, &so, &si, OccupationFamily::Poisson, true);
-            let target = StrengthTarget::new(OccupationFamily::Poisson);
+            let mut state = make_state(n, &so, &si, OccupationFamily::ME, true);
+            let target = StrengthTarget::new(OccupationFamily::ME);
             let domain = PairDomain::Complete {
                 node_count: n,
                 self_loops: true,

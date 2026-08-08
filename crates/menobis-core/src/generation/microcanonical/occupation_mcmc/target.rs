@@ -5,7 +5,7 @@
 //! chain.  Gamma is always fitted from observed cost data — it is never
 //! user-supplied.
 
-use crate::distribution::OccupationFamily;
+use crate::model::family::OccupationFamily;
 use crate::pairs::PairCostProvider;
 use crate::OccNum;
 
@@ -84,7 +84,7 @@ impl<'a> StrengthTarget<'a> {
         }
 
         // Degeneracy contribution.
-        let delta = self.family.delta_log_local_degeneracy(old, new);
+        let delta = self.family.delta_log_base_measure(old, new);
 
         // Cost contribution (only when gamma != 0 and provider present).
         if let Some(costs) = self.costs {
@@ -125,7 +125,7 @@ impl<'a> StrengthTarget<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::distribution::OccupationFamily;
+    use crate::model::family::OccupationFamily;
 
     /// Reference log-local-degeneracy formulas for verification.
     fn me_log_degen(t: OccNum) -> f64 {
@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn me_delta_increment() {
-        let target = StrengthTarget::new(OccupationFamily::Poisson);
+        let target = StrengthTarget::new(OccupationFamily::ME);
         let delta = target.delta_log_weight(0, 0, 5, 6).unwrap();
         let expected = me_log_degen(6) - me_log_degen(5);
         assert!((delta - expected).abs() < 1e-12);
@@ -160,7 +160,7 @@ mod tests {
 
     #[test]
     fn me_delta_decrement() {
-        let target = StrengthTarget::new(OccupationFamily::Poisson);
+        let target = StrengthTarget::new(OccupationFamily::ME);
         let delta = target.delta_log_weight(0, 0, 5, 4).unwrap();
         let expected = me_log_degen(4) - me_log_degen(5);
         assert!((delta - expected).abs() < 1e-12);
@@ -168,14 +168,14 @@ mod tests {
 
     #[test]
     fn me_zero_to_one() {
-        let target = StrengthTarget::new(OccupationFamily::Poisson);
+        let target = StrengthTarget::new(OccupationFamily::ME);
         let delta = target.delta_log_weight(0, 0, 0, 1).unwrap();
         assert!((delta - 0.0).abs() < 1e-12);
     }
 
     #[test]
     fn b_delta_increment() {
-        let target = StrengthTarget::new(OccupationFamily::Binomial(5));
+        let target = StrengthTarget::new(OccupationFamily::B { layers: 5 });
         let delta = target.delta_log_weight(0, 0, 2, 3).unwrap();
         let expected = b_log_degen(3, 5) - b_log_degen(2, 5);
         assert!((delta - expected).abs() < 1e-12);
@@ -183,13 +183,13 @@ mod tests {
 
     #[test]
     fn b_delta_at_capacity() {
-        let target = StrengthTarget::new(OccupationFamily::Binomial(3));
+        let target = StrengthTarget::new(OccupationFamily::B { layers: 3 });
         assert!(target.delta_log_weight(0, 0, 3, 4).is_none());
     }
 
     #[test]
     fn w_delta_increment() {
-        let target = StrengthTarget::new(OccupationFamily::NegativeBinomial(2));
+        let target = StrengthTarget::new(OccupationFamily::W { layers: 2 });
         let delta = target.delta_log_weight(0, 0, 1, 2).unwrap();
         let expected = w_log_degen(2, 2) - w_log_degen(1, 2);
         assert!((delta - expected).abs() < 1e-12);
@@ -197,7 +197,7 @@ mod tests {
 
     #[test]
     fn batch_sum() {
-        let target = StrengthTarget::new(OccupationFamily::Poisson);
+        let target = StrengthTarget::new(OccupationFamily::ME);
         let changes = vec![(0, 1, 2, 3), (1, 0, 5, 4)];
         let expected = (me_log_degen(3) - me_log_degen(2)) + (me_log_degen(4) - me_log_degen(5));
         let delta = target.delta_log_weight_batch(&changes).unwrap();
@@ -215,7 +215,7 @@ mod tests {
     #[test]
     fn cost_potential_adds_gamma_term() {
         let costs = LinearCost;
-        let mut target = StrengthTarget::with_costs(OccupationFamily::Poisson, &costs);
+        let mut target = StrengthTarget::with_costs(OccupationFamily::ME, &costs);
         target.set_gamma(2.0);
 
         // Increment (0,1) from 2 to 3:
@@ -235,7 +235,7 @@ mod tests {
             }
         }
         let costs = ExcludingCost;
-        let mut target = StrengthTarget::with_costs(OccupationFamily::Poisson, &costs);
+        let mut target = StrengthTarget::with_costs(OccupationFamily::ME, &costs);
         target.set_gamma(1.0);
         // This should panic, not return None.
         target.delta_log_weight(0, 1, 2, 3);
@@ -243,14 +243,14 @@ mod tests {
 
     #[test]
     fn gamma_defaults_to_zero() {
-        let target = StrengthTarget::new(OccupationFamily::Poisson);
+        let target = StrengthTarget::new(OccupationFamily::ME);
         assert!((target.gamma() - 0.0).abs() < 1e-12);
     }
 
     #[test]
     fn with_costs_gamma_starts_zero() {
         let costs = LinearCost;
-        let target = StrengthTarget::with_costs(OccupationFamily::Poisson, &costs);
+        let target = StrengthTarget::with_costs(OccupationFamily::ME, &costs);
         assert!((target.gamma() - 0.0).abs() < 1e-12);
         assert!(!target.has_nontrivial_cost());
     }
@@ -258,7 +258,7 @@ mod tests {
     #[test]
     fn set_gamma_works() {
         let costs = LinearCost;
-        let mut target = StrengthTarget::with_costs(OccupationFamily::Poisson, &costs);
+        let mut target = StrengthTarget::with_costs(OccupationFamily::ME, &costs);
         target.set_gamma(1.5);
         assert!((target.gamma() - 1.5).abs() < 1e-12);
         assert!(target.has_nontrivial_cost());
@@ -267,9 +267,9 @@ mod tests {
     #[test]
     fn zero_gamma_cost_term_vanishes() {
         let costs = LinearCost;
-        let mut target = StrengthTarget::with_costs(OccupationFamily::Poisson, &costs);
+        let mut target = StrengthTarget::with_costs(OccupationFamily::ME, &costs);
         // gamma is 0.0 → cost term disabled → same as no-cost target.
-        let without = StrengthTarget::new(OccupationFamily::Poisson);
+        let without = StrengthTarget::new(OccupationFamily::ME);
         let d_with = target.delta_log_weight(0, 1, 2, 3).unwrap();
         let d_without = without.delta_log_weight(0, 1, 2, 3).unwrap();
         assert!((d_with - d_without).abs() < 1e-12);

@@ -19,3 +19,13 @@ rand.workspace = true
 rand_distr.workspace = true
 rayon.workspace = true
 
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "fixed_total_chain"
+harness = false
+
+[[bench]]
+name = "grandcanonical"
+harness = false

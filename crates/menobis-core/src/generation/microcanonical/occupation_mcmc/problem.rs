@@ -6,7 +6,7 @@
 
 use super::domain::PairDomain;
 use super::errors::FixedStrengthError;
-use crate::distribution::OccupationFamily;
+use crate::model::family::OccupationFamily;
 use crate::OccNum;
 
 /// Full fixed-strength sampling problem (before residualisation).
@@ -246,7 +246,7 @@ mod tests {
     #[test]
     fn residualize_empty_fixed_pairs() {
         let prob = FixedStrengthProblem::new(
-            OccupationFamily::Poisson,
+            OccupationFamily::ME,
             vec![10, 20, 30],
             vec![15, 25, 20],
             complete_domain(3, true),
@@ -261,7 +261,7 @@ mod tests {
     #[test]
     fn residualize_with_fixed_pairs() {
         let prob = FixedStrengthProblem::new(
-            OccupationFamily::Poisson,
+            OccupationFamily::ME,
             vec![10, 20, 30],
             vec![15, 25, 20],
             complete_domain(3, true),
@@ -283,7 +283,7 @@ mod tests {
     #[test]
     fn reject_fixed_pair_exceeding_strength() {
         let prob = FixedStrengthProblem::new(
-            OccupationFamily::Poisson,
+            OccupationFamily::ME,
             vec![2, 10],
             vec![5, 7],
             complete_domain(2, true),
@@ -296,7 +296,7 @@ mod tests {
     #[test]
     fn reject_fixed_pair_not_admissible() {
         let prob = FixedStrengthProblem::new(
-            OccupationFamily::Poisson,
+            OccupationFamily::ME,
             vec![5, 5],
             vec![5, 5],
             complete_domain(2, false),
@@ -309,7 +309,7 @@ mod tests {
     #[test]
     fn residual_validation() {
         let res = ResidualStrengthProblem {
-            family: OccupationFamily::Poisson,
+            family: OccupationFamily::ME,
             strength_out: vec![5, 5],
             strength_in: vec![5, 5],
             total: 10,
@@ -321,7 +321,7 @@ mod tests {
     #[test]
     fn residual_validation_unbalanced() {
         let res = ResidualStrengthProblem {
-            family: OccupationFamily::Poisson,
+            family: OccupationFamily::ME,
             strength_out: vec![5, 5],
             strength_in: vec![6, 4],
             total: 10,
@@ -334,7 +334,7 @@ mod tests {
     #[test]
     fn reject_b_fixed_exceeds_layers() {
         let prob = FixedStrengthProblem::new(
-            OccupationFamily::Binomial(3),
+            OccupationFamily::B { layers: 3 },
             vec![5, 5],
             vec![5, 5],
             complete_domain(2, true),

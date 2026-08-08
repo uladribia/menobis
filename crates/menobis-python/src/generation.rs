@@ -181,12 +181,10 @@ pub(crate) fn sample_edges_events(
     seed: u64,
 ) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
     let occ_family = match family {
-        "poisson" => menobis_core::distribution::OccupationFamily::Poisson,
-        "binomial" => menobis_core::distribution::OccupationFamily::Binomial(layers),
-        "geometric" => menobis_core::distribution::OccupationFamily::Geometric,
-        "negative_binomial" => {
-            menobis_core::distribution::OccupationFamily::NegativeBinomial(layers)
-        }
+        "poisson" => menobis_core::model::family::OccupationFamily::ME,
+        "binomial" => menobis_core::model::family::OccupationFamily::B { layers },
+        "geometric" => menobis_core::model::family::OccupationFamily::W { layers: 1 },
+        "negative_binomial" => menobis_core::model::family::OccupationFamily::W { layers },
         other => {
             return Err(PyValueError::new_err(format!(
                 "unknown occupation family: {other}"
@@ -668,15 +666,15 @@ pub(crate) fn sample_fixed_strength(
     sweeps_per_sample: usize,
     seed: u64,
 ) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
-    use menobis_core::distribution::OccupationFamily;
-    use menobis_core::generation::microcanonical::fixed_strength::domain::PairDomain;
-    use menobis_core::generation::microcanonical::fixed_strength::problem::FixedStrengthProblem;
     use menobis_core::generation::microcanonical::mcmc::McmcConfig;
+    use menobis_core::generation::microcanonical::occupation_mcmc::domain::PairDomain;
+    use menobis_core::generation::microcanonical::occupation_mcmc::problem::FixedStrengthProblem;
+    use menobis_core::model::family::OccupationFamily;
 
     let family_enum = match family {
-        "ME" => OccupationFamily::Poisson,
-        "B" => OccupationFamily::Binomial(layers),
-        "W" => OccupationFamily::NegativeBinomial(layers),
+        "ME" => OccupationFamily::ME,
+        "B" => OccupationFamily::B { layers },
+        "W" => OccupationFamily::W { layers },
         other => {
             return Err(PyValueError::new_err(format!(
                 "unknown family: {other}. Use ME, B, or W"
@@ -775,19 +773,19 @@ pub(crate) fn sample_fixed_strength_with_cost(
     sweeps_per_sample: usize,
     seed: u64,
 ) -> PyResult<StrengthCostSample> {
-    use menobis_core::distribution::OccupationFamily;
-    use menobis_core::generation::microcanonical::fixed_strength::cost_fit::{
+    use menobis_core::generation::microcanonical::mcmc::McmcConfig;
+    use menobis_core::generation::microcanonical::occupation_mcmc::cost_fit::{
         fit_gamma, FixedStrengthCostFitConfig,
     };
-    use menobis_core::generation::microcanonical::fixed_strength::domain::PairDomain;
-    use menobis_core::generation::microcanonical::fixed_strength::problem::FixedStrengthProblem;
-    use menobis_core::generation::microcanonical::mcmc::McmcConfig;
+    use menobis_core::generation::microcanonical::occupation_mcmc::domain::PairDomain;
+    use menobis_core::generation::microcanonical::occupation_mcmc::problem::FixedStrengthProblem;
+    use menobis_core::model::family::OccupationFamily;
     use menobis_core::pairs::EuclideanCostProvider;
 
     let family_enum = match family {
-        "ME" => OccupationFamily::Poisson,
-        "B" => OccupationFamily::Binomial(layers),
-        "W" => OccupationFamily::NegativeBinomial(layers),
+        "ME" => OccupationFamily::ME,
+        "B" => OccupationFamily::B { layers },
+        "W" => OccupationFamily::W { layers },
         other => {
             return Err(PyValueError::new_err(format!(
                 "unknown family: {other}. Use ME, B, or W"
@@ -840,7 +838,7 @@ pub(crate) fn sample_fixed_strength_with_cost(
     let mcmc_config = McmcConfig::new(burn_in_sweeps, sweeps_per_sample, seed);
 
     // Build chain with cost provider.
-    let core_result = menobis_core::generation::microcanonical::fixed_strength::chain::
+    let core_result = menobis_core::generation::microcanonical::occupation_mcmc::chain::
         sample_fixed_strength_with_cost(residual, &costs, mcmc_config, has_fixed);
     let (mut chain, _backend) = match core_result {
         Ok(r) => r,
@@ -849,7 +847,7 @@ pub(crate) fn sample_fixed_strength_with_cost(
 
     // Compute fixed-pair cost.
     let fixed_cost = if has_fixed {
-        match menobis_core::generation::microcanonical::fixed_strength::cost::fixed_pairs_cost(
+        match menobis_core::generation::microcanonical::occupation_mcmc::cost::fixed_pairs_cost(
             &fixed_sources
                 .iter()
                 .zip(fixed_targets.iter())
@@ -900,7 +898,7 @@ pub(crate) fn sample_fixed_strength_with_cost(
 
     // Set the fitted gamma and burn in again before final sample.
     {
-        let mut target = menobis_core::generation::microcanonical::fixed_strength::
+        let mut target = menobis_core::generation::microcanonical::occupation_mcmc::
             target::StrengthTarget::with_costs(family_enum, &costs);
         target.set_gamma(fit_result.gamma);
         chain.set_target(target);
@@ -1154,14 +1152,14 @@ fn sample_model_grandcanonical(
     coord_y: Option<Vec<f64>>,
     node_count: Option<usize>,
 ) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
-    use menobis_core::distribution::OccupationFamily;
     use menobis_core::generation::grandcanonical::{sample_grandcanonical, GrandCanonicalCase};
+    use menobis_core::model::family::OccupationFamily;
 
     let fam = match family {
-        "ME" => OccupationFamily::Poisson,
-        "B" => OccupationFamily::Binomial(layers),
-        "W" if layers == 1 => OccupationFamily::Geometric,
-        "W" => OccupationFamily::NegativeBinomial(layers),
+        "ME" => OccupationFamily::ME,
+        "B" => OccupationFamily::B { layers },
+        "W" if layers == 1 => OccupationFamily::W { layers: 1 },
+        "W" => OccupationFamily::W { layers },
         other => {
             return Err(PyValueError::new_err(format!("invalid family: {other}")));
         }

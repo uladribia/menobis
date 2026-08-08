@@ -16,9 +16,9 @@ use super::move_cycle::cycle4_step;
 use super::problem::ResidualStrengthProblem;
 use super::state::StrengthState;
 use super::target::StrengthTarget;
-use crate::distribution::OccupationFamily;
 use crate::generation::microcanonical::mcmc::{McmcConfig, McmcCounters, McmcOutcome};
 use crate::generation::output::SampledNetwork;
+use crate::model::family::OccupationFamily;
 use crate::pairs::PairCostProvider;
 use crate::OccNum;
 
@@ -146,7 +146,7 @@ fn can_use_me_direct(
     total: OccNum,
     target: &StrengthTarget,
 ) -> bool {
-    if family != OccupationFamily::Poisson {
+    if family != OccupationFamily::ME {
         return false;
     }
     if !self_loops {
@@ -274,7 +274,7 @@ pub fn sample_fixed_strength_with_cost<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generation::microcanonical::fixed_strength::problem::FixedStrengthProblem;
+    use crate::generation::microcanonical::occupation_mcmc::problem::FixedStrengthProblem;
 
     fn make_problem(
         family: OccupationFamily,
@@ -294,7 +294,7 @@ mod tests {
 
     #[test]
     fn me_direct_backend_selected() {
-        let prob = make_problem(OccupationFamily::Poisson, vec![5, 5], vec![5, 5], true);
+        let prob = make_problem(OccupationFamily::ME, vec![5, 5], vec![5, 5], true);
         let config = McmcConfig::new(10, 5, 42);
         let (net, backend) = sample_fixed_strength(prob, config, false).unwrap();
         assert_eq!(backend, StrengthBackend::MeDirect);
@@ -304,12 +304,7 @@ mod tests {
 
     #[test]
     fn me_mcmc_backend_no_self_loops() {
-        let prob = make_problem(
-            OccupationFamily::Poisson,
-            vec![5, 5, 5],
-            vec![5, 5, 5],
-            false,
-        );
+        let prob = make_problem(OccupationFamily::ME, vec![5, 5, 5], vec![5, 5, 5], false);
         let config = McmcConfig {
             burn_in_sweeps: 20,
             sweeps_per_sample: 10,
@@ -328,7 +323,7 @@ mod tests {
     #[test]
     fn b_fixed_strength() {
         let prob = make_problem(
-            OccupationFamily::Binomial(4),
+            OccupationFamily::B { layers: 4 },
             vec![4, 4, 4],
             vec![4, 4, 4],
             true,
@@ -351,7 +346,7 @@ mod tests {
     #[test]
     fn w_fixed_strength() {
         let prob = make_problem(
-            OccupationFamily::NegativeBinomial(2),
+            OccupationFamily::W { layers: 2 },
             vec![5, 5, 5],
             vec![5, 5, 5],
             true,
@@ -370,12 +365,7 @@ mod tests {
 
     #[test]
     fn strengths_preserved_across_backends() {
-        let prob = make_problem(
-            OccupationFamily::Poisson,
-            vec![4, 7, 2],
-            vec![6, 3, 4],
-            true,
-        );
+        let prob = make_problem(OccupationFamily::ME, vec![4, 7, 2], vec![6, 3, 4], true);
         let config = McmcConfig::new(20, 10, 42);
         let (net, backend) = sample_fixed_strength(prob, config, false).unwrap();
         let mut check_out = vec![0u64; 3];
@@ -405,10 +395,10 @@ mod tests {
 
     #[test]
     fn set_target_updates_gamma() {
-        let prob = make_problem(OccupationFamily::Poisson, vec![5, 5], vec![5, 5], true);
+        let prob = make_problem(OccupationFamily::ME, vec![5, 5], vec![5, 5], true);
         let config = McmcConfig::new(10, 5, 42);
         let mut chain = {
-            let target = StrengthTarget::new(OccupationFamily::Poisson);
+            let target = StrengthTarget::new(OccupationFamily::ME);
             let table = initialize_table(
                 &prob.strength_out,
                 &prob.strength_in,
@@ -422,7 +412,7 @@ mod tests {
 
         assert!((chain.target.gamma() - 0.0).abs() < 1e-12);
         let new_target = {
-            let mut t = StrengthTarget::new(OccupationFamily::Poisson);
+            let mut t = StrengthTarget::new(OccupationFamily::ME);
             t.set_gamma(2.5);
             t
         };

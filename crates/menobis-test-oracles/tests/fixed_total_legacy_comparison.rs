@@ -6,7 +6,7 @@
 //! pair-Gibbs chain.  Both target the identical mathematical law, so
 //! means must agree within Monte Carlo tolerance.
 
-use menobis_core::generation::microcanonical::fixed_total::chain::sample_fixed_total;
+use menobis_core::generation::microcanonical::conditional::fixed_total::chain::sample_fixed_total;
 use menobis_core::generation::microcanonical::mcmc::McmcConfig;
 use menobis_core::model::family::OccupationFamily;
 use menobis_test_oracles::legacy_fixed_et::{

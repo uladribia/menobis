@@ -167,6 +167,7 @@ def _compare(family: str, n: int, e: int, t: int, layers: int, seed: int) -> dic
     }
 
 
+@pytest.mark.heavy
 @pytest.mark.parametrize("family,n,e,t,layers", CASES)
 def test_conditioned_grandcanonical_identity(family, n, e, t, layers) -> None:
     """P_GC(obs | E,T) == P_MC(obs | E,T) within statistical tolerance.

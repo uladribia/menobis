@@ -6,8 +6,8 @@
 
 use rand::rngs::StdRng;
 
-use super::super::support::uniform_edges::shuffle_slice;
 use super::errors::FixedTotalError;
+use crate::generation::microcanonical::support::uniform_edges::shuffle_slice;
 use crate::model::family::OccupationFamily;
 use crate::OccNum;
 

@@ -77,6 +77,7 @@ def test_integration_matrix_strength_edges(integration_network, family) -> None:
     _verify_filter(net.edges, family, Constraint.STRENGTH_EDGES, fit, {})
 
 
+@pytest.mark.heavy
 @pytest.mark.parametrize("family", _FAMILIES)
 def test_integration_matrix_strength_degree(integration_network, family) -> None:
     net, c = integration_network

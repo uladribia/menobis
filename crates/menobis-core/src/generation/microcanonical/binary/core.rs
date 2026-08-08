@@ -11,7 +11,7 @@ use super::super::super::output::SampledNetwork;
 use super::errors::FixedKTError;
 use super::feasibility::DirectedDegreeSequence;
 use super::sampler::{sample_fixed_degree_support, FixedDegreeMcmcConfig};
-use crate::generation::microcanonical::fixed_total::sample_fixed_total;
+use crate::generation::microcanonical::conditional::fixed_total::sample_fixed_total;
 use crate::generation::microcanonical::mcmc::McmcConfig;
 use crate::model::family::OccupationFamily;
 use crate::OccNum;

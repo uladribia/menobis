@@ -10,7 +10,7 @@
 use super::domain::PairDomain;
 use super::errors::FixedStrengthError;
 use super::feasibility::feasibility_max_flow;
-use crate::distribution::OccupationFamily;
+use crate::model::family::OccupationFamily;
 use crate::OccNum;
 
 /// Greedy construction for a complete pair domain with self-loops allowed.
@@ -88,7 +88,7 @@ pub fn initialize_table(
             self_loops: true,
             ..
         },
-    ) && family == OccupationFamily::Poisson;
+    ) && family == OccupationFamily::ME;
 
     if use_greedy {
         return greedy_complete(strength_out, strength_in, family);
@@ -113,7 +113,7 @@ mod tests {
     fn greedy_simple_2x2() {
         let out = vec![5, 5];
         let inp = vec![5, 5];
-        let table = greedy_complete(&out, &inp, OccupationFamily::Poisson).unwrap();
+        let table = greedy_complete(&out, &inp, OccupationFamily::ME).unwrap();
         let total: OccNum = table.iter().map(|(_, o)| o).sum();
         assert_eq!(total, 10);
         assert_eq!(table.len(), 2);
@@ -123,7 +123,7 @@ mod tests {
     fn greedy_heterogeneous() {
         let out = vec![10, 0, 5];
         let inp = vec![3, 7, 5];
-        let table = greedy_complete(&out, &inp, OccupationFamily::Poisson).unwrap();
+        let table = greedy_complete(&out, &inp, OccupationFamily::ME).unwrap();
         let total: OccNum = table.iter().map(|(_, o)| o).sum();
         assert_eq!(total, 15);
         let mut check_out = vec![0u64; 3];
@@ -144,7 +144,7 @@ mod tests {
         };
         let out = vec![5, 5, 5];
         let inp = vec![5, 5, 5];
-        let table = initialize_table(&out, &inp, OccupationFamily::Poisson, &domain).unwrap();
+        let table = initialize_table(&out, &inp, OccupationFamily::ME, &domain).unwrap();
         let total: OccNum = table.iter().map(|(_, o)| o).sum();
         assert_eq!(total, 15);
         // No self-loops.
@@ -165,7 +165,7 @@ mod tests {
         };
         let out = vec![4, 3, 2];
         let inp = vec![3, 4, 2];
-        let table = initialize_table(&out, &inp, OccupationFamily::Poisson, &domain).unwrap();
+        let table = initialize_table(&out, &inp, OccupationFamily::ME, &domain).unwrap();
         let total: OccNum = table.iter().map(|(_, o)| o).sum();
         assert_eq!(total, 9);
         for &((s, t), _) in &table {
@@ -181,7 +181,7 @@ mod tests {
             node_count: 3,
             self_loops: true,
         };
-        let table = initialize_table(&out, &inp, OccupationFamily::Poisson, &domain).unwrap();
+        let table = initialize_table(&out, &inp, OccupationFamily::ME, &domain).unwrap();
         assert!(table.is_empty());
     }
 
@@ -189,7 +189,7 @@ mod tests {
     fn b_capacity_greedy() {
         let out = vec![5, 0, 0];
         let inp = vec![2, 2, 1];
-        let table = greedy_complete(&out, &inp, OccupationFamily::Binomial(2)).unwrap();
+        let table = greedy_complete(&out, &inp, OccupationFamily::B { layers: 2 }).unwrap();
         for &(_, occ) in &table {
             assert!(occ <= 2, "B occupation {occ} exceeds M=2");
         }

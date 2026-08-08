@@ -39,7 +39,7 @@ Supported formats: CSV, TSV, Parquet, Arrow IPC, GraphML, Matrix Market, Pajek.
 ```python
 from menobis.analysis import directed_strengths
 from menobis.filtering import filter_model
-from menobis.models import Constraint, ModelFamily, fit_model, sample_model
+from menobis.models import Constraint, Ensemble, ModelFamily, fit_model, sample_model
 from menobis.utilities.synthetic import generate_pa_geographic_network
 
 network = generate_pa_geographic_network(
@@ -52,6 +52,7 @@ network = generate_pa_geographic_network(
 edges = network.edges
 strengths = directed_strengths(edges)
 
+# Grand-canonical fit (default) — soft constraints matched in expectation
 fit = fit_model(
     family=ModelFamily.ME,
     constraint=Constraint.STRENGTH,
@@ -64,6 +65,17 @@ sample = sample_model(
     family=ModelFamily.ME,
     constraint=Constraint.STRENGTH,
     fit=fit,
+    seed=42,
+)
+
+# Microcanonical — exact constraints, no fitting step
+mc_sample = sample_model(
+    ensemble=Ensemble.MICROCANONICAL,
+    family=ModelFamily.ME,
+    constraint=Constraint.EDGES_EVENTS,
+    node_count=30,
+    target_edges=200,
+    total_events=600,
     seed=42,
 )
 
