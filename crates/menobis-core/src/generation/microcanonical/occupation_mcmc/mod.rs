@@ -12,6 +12,7 @@
 //!   all families and restricted domains.
 
 pub mod chain;
+pub mod compressed;
 pub mod cost;
 pub mod cost_fit;
 pub mod domain;
