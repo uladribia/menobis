@@ -58,7 +58,7 @@ use crate::generation::microcanonical::mcmc::McmcOutcome;
 /// Perform one occupied-cell 4-cycle MCMC step (allocation-free).
 ///
 /// Returns [`McmcOutcome::Held`] if fewer than 2 occupied pairs exist or
-/// no valid second pair is found after bounded retries.
+/// no valid second pair exists for the drawn first pair (`v_ab <= 0`).
 pub fn occupied_cycle4_step(
     state: &mut StrengthState,
     target: &StrengthTarget,
@@ -128,10 +128,8 @@ pub fn occupied_cycle4_step(
         + target.delta_log_weight(c, b, old_cb, new_cb).unwrap();
 
     // ---- 8. Hastings log-ratio (§23) ----
-    // Forward: first selected (a,b) or (c,d).
-    let v_ab =
-        m as i64 - state.row_occ_count[a as usize] as i64 - state.col_occ_count[b as usize] as i64
-            + 1;
+    // Forward: first selected (a,b) or (c,d).  `v_ab` was computed at the
+    // pre-guard (step 2) and is unchanged (state not yet mutated).
     let v_cd =
         m as i64 - state.row_occ_count[c as usize] as i64 - state.col_occ_count[d as usize] as i64
             + 1;
