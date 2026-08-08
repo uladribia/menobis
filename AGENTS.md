@@ -300,3 +300,30 @@ At the end of each agent session, report:
 - tests/checks run;
 - tests/checks not run and why;
 - next recommended red/green step.
+
+
+## Harness: Microcanonical Refactor
+
+**Objective:** Execute the 8-phase microcanonical refactor (spec: `docs/development/agent-specifications/microcanonical_implementation/11_microcanonical_refactor_practical_final.md`) via multi-agent orchestration.
+
+**Trigger:** For refactor workflow execution, phase management, or continuation, run `/microcanonical-refactor` to start the supervisor orchestration. For isolated analysis, testing, or review tasks, delegate to individual agents directly via `subagent` with `agentScope: "both"`. Simple edits unrelated to the refactor should be handled directly without the orchestrator.
+
+**Integration branch:** `microcanonical-refactor` (already exists). Never implement directly on it — use `refactor/<phase>-<task>` subbranches.
+
+**Project-local agents:**
+
+| Agent | Role | Tools | Model |
+|-------|------|-------|-------|
+| `supervisor` | Phase owner, gate enforcer, delegation manager | full | z-ai/glm-5.2 |
+| `architectural-analyst` | Read-only codebase mapping | read,grep,find,ls,bash | z-ai/glm-5.2 |
+| `implementation-agent` | Bounded implementation per task | full | deepseek/deepseek-v4-flash |
+| `semantic-reviewer` | Mathematical/scientific validation | read,grep,find,ls,bash | z-ai/glm-5.2 |
+| `testing-agent` | Tests, benchmarks, regression detection | full | deepseek/deepseek-v4-flash |
+| `integration-reviewer` | Architecture, duplication, API, docs review | read,grep,find,ls,bash | z-ai/glm-5.2 |
+
+**Phase state:** `_workspace/refactor-state.md` — read on session start for durable state recovery.
+
+**Change history:**
+| Date | Change | Target | Reason |
+|------|--------|--------|--------|
+| 2026-08-08 | Initial multi-agent harness creation | .pi/agents/, .pi/skills/, .pi/prompts/, AGENTS.md | Pre-refactor infrastructure setup |
