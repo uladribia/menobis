@@ -21,6 +21,7 @@ pub mod initializer;
 pub mod me_direct;
 pub mod move_cycle;
 pub mod problem;
+pub mod rectangle;
 pub mod state;
 pub mod target;
 
