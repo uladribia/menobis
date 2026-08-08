@@ -12,7 +12,7 @@ use super::domain::PairDomain;
 use super::errors::FixedStrengthError;
 use super::initializer::initialize_table;
 use super::me_direct::{sample_strength_stub_matching, MAX_EXPLICIT_STUBS};
-use super::move_cycle::cycle4_step;
+use super::move_cycle::occupied_cycle4_step;
 use super::problem::ResidualStrengthProblem;
 use super::state::StrengthState;
 use super::target::StrengthTarget;
@@ -68,7 +68,7 @@ impl<'a> FixedStrengthChain<'a> {
     /// Perform one MCMC step (one 4-cycle proposal).
     pub fn step(&mut self, rng: &mut impl rand::Rng) -> McmcOutcome {
         self.counters.proposals += 1;
-        let outcome = cycle4_step(&mut self.state, &self.target, &self.domain, rng);
+        let outcome = occupied_cycle4_step(&mut self.state, &self.target, &self.domain, rng);
         match outcome {
             McmcOutcome::Accepted => self.counters.accepted += 1,
             McmcOutcome::Held => self.counters.held += 1,
