@@ -18,6 +18,14 @@ pub enum FixedStrengthError {
     InitializationFailed(String),
     /// An internal error occurred during MCMC.
     McmcError(String),
+    /// The repair step did not converge within the configured bounds (spec 21).
+    RepairDidNotConverge {
+        remaining_loops: usize,
+        remaining_capacity_violations: usize,
+        remaining_forbidden_occupations: usize,
+        restart_count: u32,
+        steps: u64,
+    },
 }
 
 impl fmt::Display for FixedStrengthError {
@@ -33,6 +41,20 @@ impl fmt::Display for FixedStrengthError {
             Self::ArithmeticOverflow(msg) => write!(f, "arithmetic overflow: {msg}"),
             Self::InitializationFailed(msg) => write!(f, "initialization failed: {msg}"),
             Self::McmcError(msg) => write!(f, "MCMC error: {msg}"),
+            Self::RepairDidNotConverge {
+                remaining_loops,
+                remaining_capacity_violations,
+                remaining_forbidden_occupations,
+                restart_count,
+                steps,
+            } => {
+                write!(
+                    f,
+                    "repair did not converge after {steps} steps and {restart_count} restarts: \
+                     {remaining_loops} loops, {remaining_capacity_violations} capacity violations, \
+                     {remaining_forbidden_occupations} forbidden occupations remaining"
+                )
+            }
         }
     }
 }
