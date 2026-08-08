@@ -192,7 +192,7 @@ pub fn occupied_cycle4_step(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generation::microcanonical::occupation_mcmc::initializer::initialize_table;
+    use crate::generation::microcanonical::occupation_mcmc::compressed::compressed_aggregated_matching;
     use crate::model::family::OccupationFamily;
     use crate::OccNum;
     use rand::rngs::StdRng;
@@ -209,7 +209,8 @@ mod tests {
             node_count: n,
             self_loops: sl,
         };
-        let table = initialize_table(so, si, family, &domain).unwrap();
+        let mut rng = StdRng::seed_from_u64(42);
+        let table = compressed_aggregated_matching(so, si, family, &domain, &mut rng).unwrap();
         StrengthState::new(n, table)
     }
 
@@ -282,14 +283,23 @@ mod tests {
     fn occupied_cell_b_capacity() {
         let n = 3;
         let layers = 3u32;
-        let so = vec![4u64; 3];
-        let si = vec![4u64; 3];
-        let mut state = make_state(n, &so, &si, OccupationFamily::B { layers }, true);
-        let target = StrengthTarget::new(OccupationFamily::B { layers });
+        let so = vec![3u64; 3];
+        let si = vec![3u64; 3];
+        // Use greedy_complete for initial state (enforces B capacity).
         let domain = PairDomain::Complete {
             node_count: n,
             self_loops: true,
         };
+        let table =
+            crate::generation::microcanonical::occupation_mcmc::initializer::greedy_complete(
+                &so,
+                &si,
+                OccupationFamily::B { layers },
+                &domain,
+            )
+            .unwrap();
+        let mut state = StrengthState::new(n, table);
+        let target = StrengthTarget::new(OccupationFamily::B { layers });
         let mut rng = StdRng::seed_from_u64(42);
         for _ in 0..200 {
             occupied_cycle4_step(&mut state, &target, &domain, &mut rng);

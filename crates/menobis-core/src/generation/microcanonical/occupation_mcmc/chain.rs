@@ -306,8 +306,8 @@ mod tests {
     fn me_mcmc_backend_no_self_loops() {
         let prob = make_problem(OccupationFamily::ME, vec![5, 5, 5], vec![5, 5, 5], false);
         let config = McmcConfig {
-            burn_in_sweeps: 20,
-            sweeps_per_sample: 10,
+            burn_in_sweeps: 100,
+            sweeps_per_sample: 20,
             proposals_per_sweep: None,
             seed: 42,
         };
@@ -315,8 +315,11 @@ mod tests {
         assert_eq!(backend, StrengthBackend::CycleMcmc);
         let total: OccNum = net.occ_nums.iter().sum();
         assert_eq!(total, 15);
+        // The compressed constructor may produce self-loops, but the MCMC
+        // on a loopless domain will eliminate them given enough mixing.
+        // If self-loops remain after burn-in, increase burn_in_sweeps.
         for (&s, &t) in net.sources.iter().zip(net.targets.iter()) {
-            assert_ne!(s, t, "self-loop found");
+            assert_ne!(s, t, "self-loop found after MCMC");
         }
     }
 

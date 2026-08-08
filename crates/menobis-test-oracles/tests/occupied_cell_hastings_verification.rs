@@ -65,7 +65,11 @@ type StateIdx = usize;
 ///
 /// Returns `(state, log_microcanonical_weight)`.  For ME the weight is
 /// `Σ −ln(t_ij!)` (the multinomial count degeneracy).
-fn enumerate_me_states(s_out: &[OccNum], s_in: &[OccNum], self_loops: bool) -> Vec<(OccupiedState, f64)> {
+fn enumerate_me_states(
+    s_out: &[OccNum],
+    s_in: &[OccNum],
+    self_loops: bool,
+) -> Vec<(OccupiedState, f64)> {
     let n = s_out.len();
     let mut results = Vec::new();
     let cells: Vec<(u64, u64)> = (0..n as u64)
@@ -343,19 +347,14 @@ fn empirical_transition_probs(
 
     for t in 0..trials {
         // Build a fresh StrengthState from the abstract state.
-        let pairs: Vec<((u64, u64), OccNum)> = state
-            .iter()
-            .map(|&(p, o)| (p, o))
-            .collect();
+        let pairs: Vec<((u64, u64), OccNum)> = state.iter().map(|&(p, o)| (p, o)).collect();
         let mut s = StrengthState::new(n, pairs);
         let mut rng = StdRng::seed_from_u64(base_seed + t as u64 * 7919); // prime spacing
 
         let outcome = occupied_cycle4_step(&mut s, &target, &domain, &mut rng);
 
         // Convert the resulting state to OccupiedState for lookup.
-        let mut state_after: OccupiedState = s
-            .iter_occupied()
-            .collect();
+        let mut state_after: OccupiedState = s.iter_occupied().collect();
         state_after.sort_unstable();
 
         let idx = all_states
@@ -407,8 +406,15 @@ fn occupied_cell_hastings_kernel_exact_vs_empirical_n3() {
             "[hastings-verify] empirical: state {si}/{k} ({m} occupied pairs)",
             m = state.len()
         );
-        empirical[si] =
-            empirical_transition_probs(state, si, &all_states, n, family, trials, 42 + si as u64 * 31337);
+        empirical[si] = empirical_transition_probs(
+            state,
+            si,
+            &all_states,
+            n,
+            family,
+            trials,
+            42 + si as u64 * 31337,
+        );
     }
 
     // ---- 4. Assert agreement ----

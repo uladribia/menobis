@@ -1,32 +1,12 @@
-//! Initial-state construction for fixed-strength residual problems.
-//!
-//! Provides two constructors:
-//!
-//! - **Greedy fill** for any complete pair domain (O(N²) integer scan,
-//!   no max-flow).  Always succeeds for balanced strengths on a complete
-//!   domain.
-//! - **Max-flow construction** for sparse/admissible-pair domains.
-
+use super::compressed::compressed_aggregated_matching;
 use super::domain::PairDomain;
 use super::errors::FixedStrengthError;
 use super::feasibility::feasibility_max_flow;
 use crate::model::family::OccupationFamily;
 use crate::OccNum;
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 
-/// Greedy construction for any complete pair domain.
-///
-/// Scans row-by-row, column-by-column, skipping inadmissible cells
-/// (e.g. the diagonal when self-loops are forbidden) and respecting
-/// per-cell family capacity.
-///
-/// **Correctness**: Always succeeds for ME/W with self-loops (the
-/// diagonal provides a safety valve).  For ME/W without self-loops
-/// it succeeds for `N ≥ 4` or when strengths are not all concentrated
-/// on the last rows.  Returns a structured error if residuals remain,
-/// signalling the caller to fall back to max-flow.
-///
-/// Complexity: O(N²) integer operations — fast at production sizes
-/// (N=5000 → 25M iterations, pure integer math, no flow network).
 #[allow(clippy::needless_range_loop)]
 pub fn greedy_complete(
     strength_out: &[OccNum],
@@ -40,7 +20,6 @@ pub fn greedy_complete(
     let cap = domain.capacity(family);
     let self_loops = domain.self_loops_allowed();
     let mut table = Vec::new();
-
     for i in 0..n {
         if out[i] == 0 {
             continue;
@@ -63,22 +42,14 @@ pub fn greedy_complete(
             }
         }
     }
-
-    // Residual check — non-fatal: caller falls back to max-flow.
     if out.iter().any(|&s| s > 0) || inp.iter().any(|&s| s > 0) {
         return Err(FixedStrengthError::InitializationFailed(
             "greedy fill failed: residual strengths remain".into(),
         ));
     }
-
     Ok(table)
 }
 
-/// Construct an initial occupation table for a residual strength problem.
-///
-/// - **Complete domain** (with or without self-loops, any family): fast
-///   greedy O(N²) integer fill, no max-flow.
-/// - **Sparse domain** (explicit admissible pairs): Dinic max-flow.
 pub fn initialize_table(
     strength_out: &[OccNum],
     strength_in: &[OccNum],
@@ -89,25 +60,20 @@ pub fn initialize_table(
     if total == 0 {
         return Ok(Vec::new());
     }
-
-    // Try greedy first for ME/W on complete domains.  Falls back to max-flow
-    // if the greedy fill fails (can happen for small N without self-loops).
-    // B always uses max-flow (per-cell capacity can deadlock greedy).
-    let family_is_b = matches!(family, OccupationFamily::B { .. });
-    if matches!(domain, PairDomain::Complete { .. }) && !family_is_b {
-        match greedy_complete(strength_out, strength_in, family, domain) {
-            Ok(table) => return Ok(table),
-            Err(_) => { /* fall through to max-flow */ }
+    match domain {
+        PairDomain::Complete { .. } => {
+            let mut rng = StdRng::from_os_rng();
+            compressed_aggregated_matching(strength_out, strength_in, family, domain, &mut rng)
         }
-    }
-
-    // Sparse / admissible-pair domain: use max-flow.
-    let cap = domain.capacity(family);
-    let admissible: Vec<_> = domain.iter_admissible().collect();
-    match feasibility_max_flow(strength_out, strength_in, family, &admissible, cap) {
-        Ok(Some(table)) => Ok(table),
-        Ok(None) => Ok(Vec::new()),
-        Err(msg) => Err(FixedStrengthError::InitializationFailed(msg)),
+        PairDomain::Sparse { .. } => {
+            let cap = domain.capacity(family);
+            let admissible: Vec<_> = domain.iter_admissible().collect();
+            match feasibility_max_flow(strength_out, strength_in, family, &admissible, cap) {
+                Ok(Some(table)) => Ok(table),
+                Ok(None) => Ok(Vec::new()),
+                Err(msg) => Err(FixedStrengthError::InitializationFailed(msg)),
+            }
+        }
     }
 }
 
@@ -115,59 +81,57 @@ pub fn initialize_table(
 mod tests {
     use super::*;
     use std::collections::HashSet;
-
     #[test]
     fn greedy_simple_2x2() {
-        let out = vec![5, 5];
-        let inp = vec![5, 5];
         let domain = PairDomain::Complete {
             node_count: 2,
             self_loops: true,
         };
-        let table = greedy_complete(&out, &inp, OccupationFamily::ME, &domain).unwrap();
-        let total: OccNum = table.iter().map(|(_, o)| o).sum();
-        assert_eq!(total, 10);
+        let table = greedy_complete(&[5, 5], &[5, 5], OccupationFamily::ME, &domain).unwrap();
+        assert_eq!(table.iter().map(|(_, o)| o).sum::<OccNum>(), 10);
         assert_eq!(table.len(), 2);
     }
-
     #[test]
     fn greedy_heterogeneous() {
-        let out = vec![10, 0, 5];
-        let inp = vec![3, 7, 5];
         let domain = PairDomain::Complete {
             node_count: 3,
             self_loops: true,
         };
-        let table = greedy_complete(&out, &inp, OccupationFamily::ME, &domain).unwrap();
-        let total: OccNum = table.iter().map(|(_, o)| o).sum();
-        assert_eq!(total, 15);
-        let mut check_out = vec![0u64; 3];
-        let mut check_in = vec![0u64; 3];
+        let table =
+            greedy_complete(&[10, 0, 5], &[3, 7, 5], OccupationFamily::ME, &domain).unwrap();
+        assert_eq!(table.iter().map(|(_, o)| o).sum::<OccNum>(), 15);
+        let (mut co, mut ci) = (vec![0u64; 3], vec![0u64; 3]);
         for &((s, t), o) in &table {
-            check_out[s as usize] += o;
-            check_in[t as usize] += o;
+            co[s as usize] += o;
+            ci[t as usize] += o;
         }
-        assert_eq!(check_out, out);
-        assert_eq!(check_in, inp);
+        assert_eq!(co, [10, 0, 5]);
+        assert_eq!(ci, [3, 7, 5]);
     }
-
     #[test]
-    fn no_self_loops_greedy() {
+    fn compressed_preserves_strengths() {
         let domain = PairDomain::Complete {
             node_count: 3,
             self_loops: false,
         };
-        let out = vec![5, 5, 5];
-        let inp = vec![5, 5, 5];
-        let table = initialize_table(&out, &inp, OccupationFamily::ME, &domain).unwrap();
-        let total: OccNum = table.iter().map(|(_, o)| o).sum();
-        assert_eq!(total, 15);
-        // No self-loops.
-        for &((s, t), _) in &table {
-            assert_ne!(s, t, "self-loop found");
+        let mut rng = StdRng::seed_from_u64(42);
+        let table = compressed_aggregated_matching(
+            &[5, 5, 5],
+            &[5, 5, 5],
+            OccupationFamily::ME,
+            &domain,
+            &mut rng,
+        )
+        .unwrap();
+        assert_eq!(table.iter().map(|(_, o)| o).sum::<OccNum>(), 15);
+        let (mut co, mut ci) = (vec![0u64; 3], vec![0u64; 3]);
+        for &((s, t), o) in &table {
+            co[s as usize] += o;
+            ci[t as usize] += o;
         }
+        assert_eq!(co, [5, 5, 5]);
+        assert_eq!(ci, [5, 5, 5]);
     }
-
     #[test]
     fn sparse_domain_via_max_flow() {
         let mut allowed = HashSet::new();
@@ -178,31 +142,28 @@ mod tests {
             node_count: 3,
             allowed,
         };
-        let out = vec![4, 3, 2];
-        let inp = vec![3, 4, 2];
-        let table = initialize_table(&out, &inp, OccupationFamily::ME, &domain).unwrap();
-        let total: OccNum = table.iter().map(|(_, o)| o).sum();
-        assert_eq!(total, 9);
+        let table =
+            initialize_table(&[4, 3, 2], &[3, 4, 2], OccupationFamily::ME, &domain).unwrap();
+        assert_eq!(table.iter().map(|(_, o)| o).sum::<OccNum>(), 9);
         for &((s, t), _) in &table {
-            assert!(domain.is_admissible(s, t), "({s},{t}) not admissible");
+            assert!(domain.is_admissible(s, t));
         }
     }
-
     #[test]
     fn zero_total() {
-        let out = vec![0; 3];
-        let inp = vec![0; 3];
         let domain = PairDomain::Complete {
             node_count: 3,
             self_loops: true,
         };
-        let table = initialize_table(&out, &inp, OccupationFamily::ME, &domain).unwrap();
-        assert!(table.is_empty());
+        assert!(
+            initialize_table(&[0; 3], &[0; 3], OccupationFamily::ME, &domain)
+                .unwrap()
+                .is_empty()
+        );
     }
-
     #[test]
-    fn greedy_complete_n5000_no_self_loops() {
-        let n = 5000usize;
+    fn greedy_n5000() {
+        let n = 5000;
         let t: OccNum = 45000;
         let mut out = vec![t / n as OccNum; n];
         let mut inp = out.clone();
@@ -214,24 +175,24 @@ mod tests {
             self_loops: false,
         };
         let table = greedy_complete(&out, &inp, OccupationFamily::ME, &domain).unwrap();
-        let total: OccNum = table.iter().map(|(_, o)| o).sum();
-        assert_eq!(total, t);
+        assert_eq!(table.iter().map(|(_, o)| o).sum::<OccNum>(), t);
     }
-
     #[test]
     fn b_capacity_greedy() {
-        let out = vec![5, 0, 0];
-        let inp = vec![2, 2, 1];
         let domain = PairDomain::Complete {
             node_count: 3,
             self_loops: true,
         };
-        let table =
-            greedy_complete(&out, &inp, OccupationFamily::B { layers: 2 }, &domain).unwrap();
+        let table = greedy_complete(
+            &[5, 0, 0],
+            &[2, 2, 1],
+            OccupationFamily::B { layers: 2 },
+            &domain,
+        )
+        .unwrap();
         for &(_, occ) in &table {
-            assert!(occ <= 2, "B occupation {occ} exceeds M=2");
+            assert!(occ <= 2, "B occ {occ} > 2");
         }
-        let total: OccNum = table.iter().map(|(_, o)| o).sum();
-        assert_eq!(total, 5);
+        assert_eq!(table.iter().map(|(_, o)| o).sum::<OccNum>(), 5);
     }
 }
