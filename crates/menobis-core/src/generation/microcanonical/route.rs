@@ -21,6 +21,7 @@ use super::binary::sampler::FixedDegreeMcmcConfig;
 use super::conditional::fixed_et::{sample_b_fixed_et, sample_me_fixed_et, sample_w_fixed_et};
 use super::mcmc::McmcConfig;
 use super::occupation_mcmc::domain::PairDomain;
+use super::occupation_mcmc::me_direct::{sample_strength_stub_matching, MAX_EXPLICIT_STUBS};
 use super::occupation_mcmc::problem::FixedStrengthProblem;
 use super::occupation_mcmc::sample_fixed_strength;
 use crate::model::family::OccupationFamily;
@@ -146,7 +147,7 @@ fn route_factorized(
     .map_err(|e| MicrocanonicalError::Backend(e.to_string()))
 }
 
-/// Coupled branch: fixed-strength occupation MCMC.
+/// Coupled branch: fixed-strength occupation MCMC, with ME stub-matching fast path.
 fn route_occupation_mcmc(
     problem: &PreparedProblem,
     config: &MicrocanonicalConfig,
@@ -165,11 +166,22 @@ fn route_occupation_mcmc(
             .ok_or(MicrocanonicalError::MissingConstraint(
                 "residual_in_strengths",
             ))?;
+    let family = problem.family;
+    let total: OccNum = out.iter().sum();
+
+    // ME stub-matching fast path: self-loops allowed, within stub limit.
+    // Fixed-pair residualization happens at the Python layer before the
+    // router is called, so no additional check is needed here.
+    if family == OccupationFamily::ME && config.self_loops && total <= MAX_EXPLICIT_STUBS {
+        return sample_strength_stub_matching(&out, &in_, config.seed)
+            .map_err(|e| MicrocanonicalError::Backend(e.to_string()));
+    }
+
+    // MCMC path for all other cases.
     let domain = PairDomain::Complete {
         node_count: problem.node_count,
         self_loops: config.self_loops,
     };
-    let family = problem.family;
     let full = FixedStrengthProblem::new(family, out, in_, domain, vec![])
         .map_err(|e| MicrocanonicalError::Backend(e.to_string()))?;
     let residual = full
