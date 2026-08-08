@@ -54,8 +54,6 @@ use super::rectangle::{build_four_cell, validate_four_cell};
 use super::state::StrengthState;
 use super::target::StrengthTarget;
 use crate::generation::microcanonical::mcmc::McmcOutcome;
-/// Maximum retry attempts for selecting the second occupied pair.
-const MAX_SECOND_RETRIES: usize = 20;
 
 /// Perform one occupied-cell 4-cycle MCMC step (allocation-free).
 ///
@@ -75,38 +73,40 @@ pub fn occupied_cycle4_step(
     let a_idx = rng.random_range(0..m);
     let (a, b) = state.occupied_pairs()[a_idx];
 
-    // ---- 2. Select P2 = (c,d) by rejection from occupied pairs ----
-    // Draw random index; reject if same as P1 or sharing a source/target.
-    let mut found_p2 = false;
-    let mut c = 0u64;
-    let mut d = 0u64;
-    let retries = m.saturating_sub(1).min(MAX_SECOND_RETRIES);
-    for _ in 0..retries {
+    // ---- 2. Compute v_ab (valid P2 candidates for P1=(a,b)) ----
+    // Inclusion–exclusion: m − row_occ[a] − col_occ[b] + 1.
+    // P1 is counted in both its row and column; +1 corrects the double-count.
+    let v_ab =
+        m as i64 - state.row_occ_count[a as usize] as i64 - state.col_occ_count[b as usize] as i64
+            + 1;
+    if v_ab <= 0 {
+        return McmcOutcome::Held;
+    }
+    debug_assert!(v_ab >= 1);
+
+    // ---- 3. Select P2 = (c,d) by unbounded rejection ----
+    // Guaranteed to succeed since v_ab >= 1 (pre-guard above).
+    let (c, d) = loop {
         let idx = rng.random_range(0..m);
         if idx == a_idx {
             continue;
         }
         let (cs, cd) = state.occupied_pairs()[idx];
         if cs != a && cd != b {
-            (c, d) = (cs, cd);
-            found_p2 = true;
-            break;
+            break (cs, cd);
         }
-    }
-    if !found_p2 {
-        return McmcOutcome::Held;
-    }
+    };
 
-    // ---- 3. Build deltas (fixed direction per §22) ----
+    // ---- 4. Build deltas (fixed direction per §22) ----
     let deltas = build_four_cell(a, c, b, d);
 
-    // ---- 4. Read current occupations of the four cells ----
+    // ---- 5. Read current occupations of the four cells ----
     let old_ab = state.get(a, b);
     let old_cd = state.get(c, d);
     let old_ad = state.get(a, d);
     let old_cb = state.get(c, b);
 
-    // ---- 5. Validate all four cells ----
+    // ---- 6. Validate all four cells ----
     // (a,b) and (c,d) are occupied by construction, so positivity holds.
     // But (a,d) and (c,b) might be self-loops or capacity-violating.
     // Check all four cells using the shared validator.
@@ -114,7 +114,7 @@ pub fn occupied_cycle4_step(
         return McmcOutcome::Held;
     }
 
-    // ---- 6. Compute Δlogπ = Σ target.delta_log_weight(…) ----
+    // ---- 7. Compute Δlogπ = Σ target.delta_log_weight(…) ----
     // Bounds are guaranteed by validate_four_cell, so checked arithmetic
     // is safe.
     let new_ab = old_ab.checked_sub(1).unwrap();
@@ -127,7 +127,7 @@ pub fn occupied_cycle4_step(
         + target.delta_log_weight(a, d, old_ad, new_ad).unwrap()
         + target.delta_log_weight(c, b, old_cb, new_cb).unwrap();
 
-    // ---- 7. Hastings log-ratio (§23) ----
+    // ---- 8. Hastings log-ratio (§23) ----
     // Forward: first selected (a,b) or (c,d).
     let v_ab =
         m as i64 - state.row_occ_count[a as usize] as i64 - state.col_occ_count[b as usize] as i64
@@ -174,7 +174,7 @@ pub fn occupied_cycle4_step(
 
     let log_alpha = delta_log_pi + (log_q_rev - log_q_fwd);
 
-    // ---- 8. Metropolis–Hastings accept/reject ----
+    // ---- 9. Metropolis–Hastings accept/reject ----
     if log_alpha < 0.0 {
         let log_u = (rng.random::<f64>() + f64::MIN_POSITIVE).ln();
         if log_u >= log_alpha {
@@ -182,7 +182,7 @@ pub fn occupied_cycle4_step(
         }
     }
 
-    // ---- 9. Apply ----
+    // ---- 10. Apply ----
     state.set(a, b, new_ab);
     state.set(c, d, new_cd);
     state.set(a, d, new_ad);
