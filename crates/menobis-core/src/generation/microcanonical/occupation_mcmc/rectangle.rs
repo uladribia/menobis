@@ -49,6 +49,28 @@ pub fn build_four_cell(a: u64, c: u64, b: u64, d: u64) -> Deltas {
     [(a, b, -1i64), (c, d, -1i64), (a, d, 1i64), (c, b, 1i64)]
 }
 
+/// Build a 4-cycle delta set for loop repair (spec 15).
+///
+/// Unlike `build_four_cell` (fixed delta -1/+1 for MCMC proposals), this
+/// builds a variable-delta repair transaction with `delta = min(t_ii, t_cd)`:
+///
+/// (i, i, -delta), (c, d, -delta), (i, d, +delta), (c, i, +delta)
+///
+/// Every source and target strength is preserved exactly because each
+/// row and column receives one `-delta` and one `+delta`.
+///
+/// # Panics
+///
+/// In debug mode, panics if `i == c` or `i == d` (the donor pair must
+/// not share a node with the self-loop being repaired).
+#[inline]
+pub fn build_repair_rectangle(i: u64, c: u64, d: u64, delta: OccNum) -> Deltas {
+    debug_assert_ne!(i, c, "donor source must differ from self-loop node");
+    debug_assert_ne!(i, d, "donor target must differ from self-loop node");
+    let di = delta as i64;
+    [(i, i, -di), (c, d, -di), (i, d, di), (c, i, di)]
+}
+
 /// Validate that all four cells of a rectangle update are admissible.
 ///
 /// Checks, for each `(src, tgt, delta)`:

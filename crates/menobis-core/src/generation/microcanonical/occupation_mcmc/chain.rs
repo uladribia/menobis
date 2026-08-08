@@ -14,6 +14,7 @@ use super::initializer::initialize_table;
 use super::me_direct::{sample_strength_stub_matching, MAX_EXPLICIT_STUBS};
 use super::move_cycle::occupied_cycle4_step;
 use super::problem::ResidualStrengthProblem;
+use super::repair;
 use super::state::StrengthState;
 use super::target::StrengthTarget;
 use crate::generation::microcanonical::mcmc::{McmcConfig, McmcCounters, McmcOutcome};
@@ -217,13 +218,31 @@ pub fn sample_fixed_strength(
     )?;
 
     // Build state.
-    let state = StrengthState::new(problem.domain.node_count(), table);
+    let mut state = StrengthState::new(problem.domain.node_count(), table);
+
+    // Create RNG for repair and MCMC.
+    let mut rng = StdRng::seed_from_u64(seed);
+
+    // Phase D: loop repair for complete loopless ME/W (spec 14-17).
+    if !problem.domain.self_loops_allowed()
+        && (family == OccupationFamily::ME || matches!(family, OccupationFamily::W { .. }))
+    {
+        // O(N) feasibility check (spec 14).
+        if !repair::loopless_feasibility_check(&problem.strength_out, &problem.strength_in) {
+            return Err(FixedStrengthError::InitializationFailed(
+                "loopless feasibility check failed: 
+                    s_i^out + s_i^in > T for some node"
+                    .into(),
+            ));
+        }
+        // Guaranteed loop repair (spec 15-17).
+        repair::repair_self_loops(&mut state, &problem.domain, &mut rng)?;
+    }
 
     // Build chain.
     let mut chain = FixedStrengthChain::new(state, target, problem.domain, config);
 
     // Run chain.
-    let mut rng = StdRng::seed_from_u64(seed);
     chain.burn_in(&mut rng);
     let network = chain.sample(&mut rng);
 
@@ -260,7 +279,26 @@ pub fn sample_fixed_strength_with_cost<'a>(
     )?;
 
     // Build state.
-    let state = StrengthState::new(problem.domain.node_count(), table);
+    let mut state = StrengthState::new(problem.domain.node_count(), table);
+
+    // Create RNG for repair.
+    let mut rng = StdRng::seed_from_u64(config.seed);
+
+    // Phase D: loop repair for complete loopless ME/W (spec 14-17).
+    if !problem.domain.self_loops_allowed()
+        && (family == OccupationFamily::ME || matches!(family, OccupationFamily::W { .. }))
+    {
+        // O(N) feasibility check (spec 14).
+        if !repair::loopless_feasibility_check(&problem.strength_out, &problem.strength_in) {
+            return Err(FixedStrengthError::InitializationFailed(
+                "loopless feasibility check failed: \
+                    s_i^out + s_i^in > T for some node"
+                    .into(),
+            ));
+        }
+        // Guaranteed loop repair (spec 15-17).
+        repair::repair_self_loops(&mut state, &problem.domain, &mut rng)?;
+    }
 
     // Build target with cost provider (gamma starts at 0.0).
     let target = StrengthTarget::with_costs(family, costs);
