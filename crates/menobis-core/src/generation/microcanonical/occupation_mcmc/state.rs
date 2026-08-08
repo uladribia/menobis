@@ -395,10 +395,7 @@ mod tests {
     #[test]
     fn choose_random_occupied_uniform() {
         use std::collections::HashMap;
-        let state = StrengthState::new(
-            2,
-            vec![((0, 0), 1), ((0, 1), 2), ((1, 0), 3), ((1, 1), 4)],
-        );
+        let state = StrengthState::new(2, vec![((0, 0), 1), ((0, 1), 2), ((1, 0), 3), ((1, 1), 4)]);
         let mut counts = HashMap::new();
         let mut rng = StdRng::seed_from_u64(12345);
         for _ in 0..4000 {
@@ -407,10 +404,7 @@ mod tests {
         }
         // Each of the 4 pairs should appear roughly 1000 times (within 3 std).
         for &count in counts.values() {
-            assert!(
-                count > 800 && count < 1200,
-                "Expected ~1000, got {count}"
-            );
+            assert!(count > 800 && count < 1200, "Expected ~1000, got {count}");
         }
     }
 

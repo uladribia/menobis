@@ -46,12 +46,7 @@ type Deltas = [(u64, u64, i64); 4];
 pub fn build_four_cell(a: u64, c: u64, b: u64, d: u64) -> Deltas {
     debug_assert_ne!(a, c, "source nodes must be distinct");
     debug_assert_ne!(b, d, "target nodes must be distinct");
-    [
-        (a, b, -1i64),
-        (c, d, -1i64),
-        (a, d, 1i64),
-        (c, b, 1i64),
-    ]
+    [(a, b, -1i64), (c, d, -1i64), (a, d, 1i64), (c, b, 1i64)]
 }
 
 /// Validate that all four cells of a rectangle update are admissible.

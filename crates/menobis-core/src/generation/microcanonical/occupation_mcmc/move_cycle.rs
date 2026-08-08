@@ -129,14 +129,12 @@ pub fn occupied_cycle4_step(
 
     // ---- 7. Hastings log-ratio (§23) ----
     // Forward: first selected (a,b) or (c,d).
-    let v_ab = m as i64
-        - state.row_occ_count[a as usize] as i64
-        - state.col_occ_count[b as usize] as i64
-        + 1;
-    let v_cd = m as i64
-        - state.row_occ_count[c as usize] as i64
-        - state.col_occ_count[d as usize] as i64
-        + 1;
+    let v_ab =
+        m as i64 - state.row_occ_count[a as usize] as i64 - state.col_occ_count[b as usize] as i64
+            + 1;
+    let v_cd =
+        m as i64 - state.row_occ_count[c as usize] as i64 - state.col_occ_count[d as usize] as i64
+            + 1;
 
     // Guard: no valid second choice.
     if v_ab <= 0 || v_cd <= 0 {
@@ -156,14 +154,10 @@ pub fn occupied_cycle4_step(
         return McmcOutcome::Held;
     }
 
-    let row_a_prime =
-        state.row_occ_count[a as usize] as i64 + enters_ad - leaves_ab;
-    let row_c_prime =
-        state.row_occ_count[c as usize] as i64 + enters_cb - leaves_cd;
-    let col_b_prime =
-        state.col_occ_count[b as usize] as i64 + enters_cb - leaves_ab;
-    let col_d_prime =
-        state.col_occ_count[d as usize] as i64 + enters_ad - leaves_cd;
+    let row_a_prime = state.row_occ_count[a as usize] as i64 + enters_ad - leaves_ab;
+    let row_c_prime = state.row_occ_count[c as usize] as i64 + enters_cb - leaves_cd;
+    let col_b_prime = state.col_occ_count[b as usize] as i64 + enters_cb - leaves_ab;
+    let col_d_prime = state.col_occ_count[d as usize] as i64 + enters_ad - leaves_cd;
 
     let v_ad_prime = m_prime - row_a_prime - col_d_prime + 1;
     let v_cb_prime = m_prime - row_c_prime - col_b_prime + 1;
@@ -174,10 +168,9 @@ pub fn occupied_cycle4_step(
         return McmcOutcome::Held;
     }
 
-    let log_q_fwd = (1.0 / v_ab as f64 + 1.0 / v_cd as f64).ln()
-        - (m as f64).ln();
-    let log_q_rev = (1.0 / v_ad_prime as f64 + 1.0 / v_cb_prime as f64).ln()
-        - (m_prime as f64).ln();
+    let log_q_fwd = (1.0 / v_ab as f64 + 1.0 / v_cd as f64).ln() - (m as f64).ln();
+    let log_q_rev =
+        (1.0 / v_ad_prime as f64 + 1.0 / v_cb_prime as f64).ln() - (m_prime as f64).ln();
 
     let log_alpha = delta_log_pi + (log_q_rev - log_q_fwd);
 
@@ -256,8 +249,7 @@ mod tests {
         let mut accepted = 0u64;
         let trials = 500;
         for _ in 0..trials {
-            if occupied_cycle4_step(&mut state, &target, &domain, &mut rng)
-                == McmcOutcome::Accepted
+            if occupied_cycle4_step(&mut state, &target, &domain, &mut rng) == McmcOutcome::Accepted
             {
                 accepted += 1;
             }
