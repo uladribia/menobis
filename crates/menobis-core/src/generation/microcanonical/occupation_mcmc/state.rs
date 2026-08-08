@@ -6,6 +6,8 @@
 
 use std::collections::HashMap;
 
+use rand::Rng;
+
 use crate::generation::output::SampledNetwork;
 use crate::OccNum;
 
@@ -34,6 +36,13 @@ pub struct StrengthState {
     occupied_pairs: Vec<(u64, u64)>,
     /// Maps each positive pair to its index in `occupied_pairs`.
     occupied_positions: HashMap<(u64, u64), usize>,
+
+    /// Number of occupied pairs per source node.
+    /// Length = `node_count`.
+    pub(super) row_occ_count: Vec<usize>,
+    /// Number of occupied pairs per target node.
+    /// Length = `node_count`.
+    pub(super) col_occ_count: Vec<usize>,
 }
 
 impl StrengthState {
@@ -78,6 +87,22 @@ impl StrengthState {
             "unbalanced strengths"
         );
 
+        // Compute row/col occupied-pair counts from the initial pairs.
+        let row_occ_count = {
+            let mut counts = vec![0usize; node_count];
+            for &(src, _) in &occupied_pairs {
+                counts[src as usize] += 1;
+            }
+            counts
+        };
+        let col_occ_count = {
+            let mut counts = vec![0usize; node_count];
+            for &(_, tgt) in &occupied_pairs {
+                counts[tgt as usize] += 1;
+            }
+            counts
+        };
+
         Self {
             node_count,
             out_strengths,
@@ -85,6 +110,8 @@ impl StrengthState {
             occupations,
             occupied_pairs,
             occupied_positions,
+            row_occ_count,
+            col_occ_count,
         }
     }
 
@@ -134,6 +161,8 @@ impl StrengthState {
                 self.occupied_pairs.push((src, tgt));
                 self.occupied_positions.insert((src, tgt), idx);
                 self.occupations.insert((src, tgt), new);
+                self.row_occ_count[src as usize] += 1;
+                self.col_occ_count[tgt as usize] += 1;
             }
             (old, 0) if old > 0 => {
                 // Remove (swap-remove).
@@ -144,9 +173,11 @@ impl StrengthState {
                     self.occupied_positions.insert(last, idx);
                 }
                 self.occupations.remove(&(src, tgt));
+                self.row_occ_count[src as usize] -= 1;
+                self.col_occ_count[tgt as usize] -= 1;
             }
             (_, new) => {
-                // Update in place.
+                // Update in place — occupied set unchanged.
                 self.occupations.insert((src, tgt), new);
             }
         }
@@ -199,6 +230,16 @@ impl StrengthState {
         assert_eq!(check_out, self.out_strengths);
         assert_eq!(check_in, self.in_strengths);
 
+        // Check row/col occupied-pair counts.
+        let mut check_row = vec![0usize; self.node_count];
+        let mut check_col = vec![0usize; self.node_count];
+        for &(src, tgt) in &self.occupied_pairs {
+            check_row[src as usize] += 1;
+            check_col[tgt as usize] += 1;
+        }
+        assert_eq!(check_row, self.row_occ_count, "row_occ_count mismatch");
+        assert_eq!(check_col, self.col_occ_count, "col_occ_count mismatch");
+
         // Balanced totals.
         assert_eq!(
             check_out.iter().sum::<OccNum>(),
@@ -214,11 +255,26 @@ impl StrengthState {
     pub fn occupied_pairs(&self) -> &[(u64, u64)] {
         &self.occupied_pairs
     }
+
+    /// Select an occupied pair uniformly at random.
+    ///
+    /// Returns `None` if there are no occupied pairs.
+    pub fn choose_random_occupied(&self, rng: &mut impl Rng) -> Option<((u64, u64), OccNum)> {
+        let m = self.occupied_pairs.len();
+        if m == 0 {
+            return None;
+        }
+        let idx = rng.random_range(0..m);
+        let pair = self.occupied_pairs[idx];
+        Some((pair, self.occupations[&pair]))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::rngs::StdRng;
+    use rand::SeedableRng;
 
     #[test]
     fn empty_state() {
@@ -281,6 +337,78 @@ mod tests {
         assert_eq!(net.occ_nums, vec![3, 2, 7]);
         let total: OccNum = net.occ_nums.iter().sum();
         assert_eq!(total, 12);
+    }
+
+    #[test]
+    fn row_col_occ_counts_initial() {
+        let state = StrengthState::new(3, vec![((0, 1), 3), ((2, 0), 7), ((1, 2), 2)]);
+        assert_eq!(state.row_occ_count, vec![1, 1, 1]);
+        assert_eq!(state.col_occ_count, vec![1, 1, 1]);
+    }
+
+    #[test]
+    fn row_col_occ_counts_on_insert_remove_update() {
+        let mut state = StrengthState::new(3, vec![((0, 1), 3)]);
+        assert_eq!(state.row_occ_count, vec![1, 0, 0]);
+        assert_eq!(state.col_occ_count, vec![0, 1, 0]);
+
+        // Insert new pair
+        state.set(2, 0, 5);
+        assert_eq!(state.row_occ_count, vec![1, 0, 1]);
+        assert_eq!(state.col_occ_count, vec![1, 1, 0]);
+
+        // In-place update (no set change)
+        state.set(2, 0, 7);
+        assert_eq!(state.row_occ_count, vec![1, 0, 1]);
+        assert_eq!(state.col_occ_count, vec![1, 1, 0]);
+
+        // Remove pair
+        state.set(2, 0, 0);
+        assert_eq!(state.row_occ_count, vec![1, 0, 0]);
+        assert_eq!(state.col_occ_count, vec![0, 1, 0]);
+
+        // Remove last pair
+        state.set(0, 1, 0);
+        assert_eq!(state.row_occ_count, vec![0, 0, 0]);
+        assert_eq!(state.col_occ_count, vec![0, 0, 0]);
+    }
+
+    #[test]
+    fn choose_random_occupied_empty() {
+        let state = StrengthState::new(3, vec![]);
+        let mut rng = StdRng::seed_from_u64(42);
+        assert!(state.choose_random_occupied(&mut rng).is_none());
+    }
+
+    #[test]
+    fn choose_random_occupied_single() {
+        let state = StrengthState::new(3, vec![((0, 1), 5)]);
+        let mut rng = StdRng::seed_from_u64(42);
+        let (pair, occ) = state.choose_random_occupied(&mut rng).unwrap();
+        assert_eq!(pair, (0, 1));
+        assert_eq!(occ, 5);
+    }
+
+    #[test]
+    fn choose_random_occupied_uniform() {
+        use std::collections::HashMap;
+        let state = StrengthState::new(
+            2,
+            vec![((0, 0), 1), ((0, 1), 2), ((1, 0), 3), ((1, 1), 4)],
+        );
+        let mut counts = HashMap::new();
+        let mut rng = StdRng::seed_from_u64(12345);
+        for _ in 0..4000 {
+            let (pair, _) = state.choose_random_occupied(&mut rng).unwrap();
+            *counts.entry(pair).or_insert(0) += 1;
+        }
+        // Each of the 4 pairs should appear roughly 1000 times (within 3 std).
+        for &count in counts.values() {
+            assert!(
+                count > 800 && count < 1200,
+                "Expected ~1000, got {count}"
+            );
+        }
     }
 
     #[test]
