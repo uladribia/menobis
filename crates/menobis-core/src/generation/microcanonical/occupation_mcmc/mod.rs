@@ -31,3 +31,4 @@ pub use chain::{sample_fixed_strength, sample_fixed_strength_with_cost, Strength
 pub use cost::{residual_cost_target, state_cost};
 pub use errors::FixedStrengthCostError;
 pub use me_direct::sample_strength_stub_matching;
+pub use repair::{repair_all_violations, repair_capacity, RepairConfig};
