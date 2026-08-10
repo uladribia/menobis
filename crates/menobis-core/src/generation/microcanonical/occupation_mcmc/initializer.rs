@@ -1,7 +1,6 @@
 use super::compressed::compressed_aggregated_matching;
 use super::domain::PairDomain;
 use super::errors::FixedStrengthError;
-use super::feasibility::feasibility_max_flow;
 use crate::model::family::OccupationFamily;
 use crate::OccNum;
 use rand::SeedableRng;
@@ -10,7 +9,8 @@ use rand::SeedableRng;
 ///
 /// - **Complete domain**: compressed aggregated matching (spec §11–13).
 ///   Self-loops and B capacity violations are deferred to Phase D/E.
-/// - **Sparse domain** (explicit admissible pairs): Dinic max-flow.
+/// - **Sparse domain**: also compressed aggregated matching (no max-flow
+///   needed — admissibility violations are repaired in Phase E).
 pub fn initialize_table(
     strength_out: &[OccNum],
     strength_in: &[OccNum],
@@ -22,18 +22,9 @@ pub fn initialize_table(
         return Ok(Vec::new());
     }
     match domain {
-        PairDomain::Complete { .. } => {
-            let mut rng = rand::rngs::StdRng::from_os_rng();
+        PairDomain::Complete { .. } | PairDomain::Sparse { .. } => {
+            let mut rng = rand::rngs::StdRng::seed_from_u64(0);
             compressed_aggregated_matching(strength_out, strength_in, family, domain, &mut rng)
-        }
-        PairDomain::Sparse { .. } => {
-            let cap = domain.capacity(family);
-            let admissible: Vec<_> = domain.iter_admissible().collect();
-            match feasibility_max_flow(strength_out, strength_in, family, &admissible, cap) {
-                Ok(Some(table)) => Ok(table),
-                Ok(None) => Ok(Vec::new()),
-                Err(msg) => Err(FixedStrengthError::InitializationFailed(msg)),
-            }
         }
     }
 }
@@ -69,7 +60,10 @@ mod tests {
     }
 
     #[test]
-    fn sparse_domain_via_max_flow() {
+    fn sparse_domain_compressed_matching() {
+        // Compressed matching does not enforce domain admissibility
+        // (admissibility violations are repaired in Phase E).
+        // Verify that strengths are preserved.
         let mut allowed = HashSet::new();
         allowed.insert((0, 1));
         allowed.insert((1, 0));
@@ -81,9 +75,14 @@ mod tests {
         let table =
             initialize_table(&[4, 3, 2], &[3, 4, 2], OccupationFamily::ME, &domain).unwrap();
         assert_eq!(table.iter().map(|(_, o)| o).sum::<OccNum>(), 9);
-        for &((s, t), _) in &table {
-            assert!(domain.is_admissible(s, t));
+        // Verify strengths are preserved.
+        let (mut co, mut ci) = (vec![0u64; 3], vec![0u64; 3]);
+        for &((s, t), o) in &table {
+            co[s as usize] += o;
+            ci[t as usize] += o;
         }
+        assert_eq!(co, [4, 3, 2]);
+        assert_eq!(ci, [3, 4, 2]);
     }
 
     #[test]

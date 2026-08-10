@@ -591,6 +591,180 @@ fn find_donor_with_forbidden(
 }
 
 // ════════════════════════════════════════════════════════════════
+// Admissibility repair for sparse domains (spec §19)
+// ════════════════════════════════════════════════════════════════
+
+/// Find a donor cell for admissibility repair of sparse domains.
+///
+/// Uses `domain.is_admissible()` checks instead of a forbidden-pair
+/// HashSet.  This avoids materialising the enormous forbidden set for
+/// sparse domains.
+///
+/// We need a cell `(c, d)` with:
+/// - `c ≠ i` and `d ≠ j` (distinct row/col from the violation)
+/// - `domain.is_admissible(c, d)` (donor cell is admissible)
+/// - `domain.is_admissible(i, d)` (increment cell is admissible)
+/// - `domain.is_admissible(c, j)` (other increment cell is admissible)
+/// - If `cap != MAX`: `t_cd.min(cap - t_id).min(cap - t_cj) > 0` (capacity slack)
+///
+/// Returns `None` if no valid donor is found after random sampling
+/// and linear-scan fallback.
+pub fn find_donor_by_admissible(
+    state: &StrengthState,
+    i: u64,
+    j: u64,
+    cap: OccNum,
+    domain: &PairDomain,
+    config: &RepairConfig,
+    rng: &mut impl Rng,
+) -> Option<(u64, u64)> {
+    // Phase 1: random sampling from occupied pairs.
+    for _ in 0..config.max_random_donor_attempts {
+        if let Some(((c, d), t_cd)) = state.choose_random_occupied(rng) {
+            if c == i || d == j {
+                continue;
+            }
+            if !domain.is_admissible(c, d) {
+                continue;
+            }
+            if !domain.is_admissible(i, d) {
+                continue;
+            }
+            if !domain.is_admissible(c, j) {
+                continue;
+            }
+            if cap != OccNum::MAX {
+                let id_slack = cap.saturating_sub(state.get(i, d));
+                let cj_slack = cap.saturating_sub(state.get(c, j));
+                if t_cd.min(id_slack).min(cj_slack) == 0 {
+                    continue;
+                }
+            }
+            return Some((c, d));
+        }
+    }
+
+    // Phase 2: bounded linear scan fallback.
+    for &(c, d) in state.occupied_pairs() {
+        if c == i || d == j {
+            continue;
+        }
+        if !domain.is_admissible(c, d) {
+            continue;
+        }
+        if !domain.is_admissible(i, d) {
+            continue;
+        }
+        if !domain.is_admissible(c, j) {
+            continue;
+        }
+        if cap != OccNum::MAX {
+            let t_cd = state.get(c, d);
+            let id_slack = cap.saturating_sub(state.get(i, d));
+            let cj_slack = cap.saturating_sub(state.get(c, j));
+            if t_cd.min(id_slack).min(cj_slack) == 0 {
+                continue;
+            }
+        }
+        return Some((c, d));
+    }
+
+    None
+}
+
+/// Repair inadmissible-occupation pairs using admissibility checks.
+///
+/// For each occupied pair `(i, j)` where `!domain.is_admissible(i, j)`,
+/// move mass to admissible cells via rectangle transaction.  Uses
+/// `find_donor_by_admissible` which checks admissibility dynamically
+/// rather than looking up a forbidden set, avoiding O(N^2) memory
+/// for sparse domains (spec §19).
+///
+/// # Errors
+///
+/// Returns [`FixedStrengthError::RepairDidNotConverge`] if no donor
+/// can be found for a remaining violation after `config.max_steps`
+/// steps.
+pub fn repair_inadmissible_pairs(
+    state: &mut StrengthState,
+    family: OccupationFamily,
+    domain: &PairDomain,
+    config: &RepairConfig,
+    rng: &mut impl Rng,
+) -> Result<(), FixedStrengthError> {
+    let cap = domain.capacity(family);
+
+    // Collect all occupied pairs that are inadmissible.
+    let mut violations: Vec<(u64, u64)> = state
+        .iter_occupied()
+        .filter_map(|((src, tgt), _)| {
+            if !domain.is_admissible(src, tgt) {
+                Some((src, tgt))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let mut steps: u64 = 0;
+
+    while !violations.is_empty() && steps < config.max_steps {
+        let (i, j) = violations.swap_remove(violations.len() - 1);
+        let t_ij = state.get(i, j);
+        if t_ij == 0 {
+            continue;
+        }
+
+        // Find a donor via admissibility check (no HashSet needed).
+        let (c, d) =
+            find_donor_by_admissible(state, i, j, cap, domain, config, rng).ok_or_else(|| {
+                FixedStrengthError::RepairDidNotConverge {
+                    remaining_loops: 0,
+                    remaining_capacity_violations: 0,
+                    remaining_forbidden_occupations: violations.len() + 1,
+                    restart_count: 0,
+                    steps,
+                }
+            })?;
+
+        let t_cd = state.get(c, d);
+        let delta = if cap == OccNum::MAX {
+            t_ij.min(t_cd)
+        } else {
+            let id_slack = cap.saturating_sub(state.get(i, d));
+            let cj_slack = cap.saturating_sub(state.get(c, j));
+            t_ij.min(t_cd).min(id_slack).min(cj_slack)
+        };
+        debug_assert!(delta > 0, "delta must be positive");
+
+        // Apply rectangle:
+        // Cells: (i,j,-δ), (c,d,-δ), (i,d,+δ), (c,j,+δ)
+        state.set(i, j, state.get(i, j) - delta);
+        state.set(c, d, state.get(c, d) - delta);
+        state.set(i, d, state.get(i, d) + delta);
+        state.set(c, j, state.get(c, j) + delta);
+
+        steps += 1;
+
+        if state.get(i, j) > 0 && !domain.is_admissible(i, j) {
+            violations.push((i, j));
+        }
+    }
+
+    if !violations.is_empty() {
+        return Err(FixedStrengthError::RepairDidNotConverge {
+            remaining_loops: 0,
+            remaining_capacity_violations: 0,
+            remaining_forbidden_occupations: violations.len(),
+            restart_count: 0,
+            steps,
+        });
+    }
+
+    Ok(())
+}
+
+// ════════════════════════════════════════════════════════════════
 // Orchestrator: Bounded restarts (spec §21)
 // ════════════════════════════════════════════════════════════════
 
