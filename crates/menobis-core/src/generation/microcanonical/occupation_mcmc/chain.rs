@@ -454,6 +454,37 @@ mod tests {
     }
 
     #[test]
+    fn chain_deterministic() {
+        // Reproduce the exact Python test: B M=3, strengths=[3,3,3], self_loops=true, seed=42.
+        // Two consecutive runs must produce identical output.
+        let config = McmcConfig::new(50, 10, 42);
+
+        let run = || -> Vec<OccNum> {
+            let prob = make_problem(
+                OccupationFamily::B { layers: 3 },
+                vec![3, 3, 3],
+                vec![3, 3, 3],
+                true,
+            );
+            let (net, _) = sample_fixed_strength(prob, config.clone(), false).unwrap();
+            let mut all: Vec<OccNum> = Vec::new();
+            for i in 0..net.sources.len() {
+                all.push(net.sources[i]);
+                all.push(net.targets[i]);
+                all.push(net.occ_nums[i]);
+            }
+            all
+        };
+
+        let a = run();
+        let b = run();
+        assert_eq!(
+            a, b,
+            "two runs with same seed must produce identical output"
+        );
+    }
+
+    #[test]
     fn set_target_updates_gamma() {
         let prob = make_problem(OccupationFamily::ME, vec![5, 5], vec![5, 5], true);
         let config = McmcConfig::new(10, 5, 42);
