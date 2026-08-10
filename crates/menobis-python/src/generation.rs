@@ -719,6 +719,124 @@ pub(crate) fn sample_fixed_strength(
     }
 }
 
+/// Benchmark-instrumented fixed-strength sampling (§35).
+///
+/// Same as `sample_fixed_strength` but returns per-stage wall-time and
+/// MCMC counters.
+#[pyfunction]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+pub(crate) fn bench_fixed_strength(
+    family: &str,
+    strength_out: Vec<u64>,
+    strength_in: Vec<u64>,
+    self_loops: bool,
+    fixed_sources: Vec<u64>,
+    fixed_targets: Vec<u64>,
+    fixed_occnums: Vec<u64>,
+    layers: u32,
+    burn_in_sweeps: usize,
+    sweeps_per_sample: usize,
+    seed: u64,
+) -> PyResult<(
+    Vec<u64>,
+    Vec<u64>,
+    Vec<u64>,
+    (f64, f64, u64, u32, usize, u64, u64, u64, f64, f64),
+)> {
+    use menobis_core::generation::microcanonical::mcmc::McmcConfig;
+    use menobis_core::generation::microcanonical::occupation_mcmc::chain::sample_fixed_strength_bench;
+    use menobis_core::generation::microcanonical::occupation_mcmc::domain::PairDomain;
+    use menobis_core::generation::microcanonical::occupation_mcmc::problem::FixedStrengthProblem;
+    use menobis_core::model::family::OccupationFamily;
+
+    let family_enum = match family {
+        "ME" => OccupationFamily::ME,
+        "B" => OccupationFamily::B { layers },
+        "W" => OccupationFamily::W { layers },
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "unknown family: {other}. Use ME, B, or W"
+            )))
+        }
+    };
+
+    let n = strength_out.len();
+    let domain = PairDomain::Complete {
+        node_count: n,
+        self_loops,
+    };
+
+    let fixed_pairs: Vec<_> = fixed_sources
+        .iter()
+        .zip(fixed_targets.iter())
+        .zip(fixed_occnums.iter())
+        .map(|((&s, &t), &o)| (s, t, o))
+        .collect();
+    let has_fixed = !fixed_pairs.is_empty();
+
+    let problem = match FixedStrengthProblem::new(
+        family_enum,
+        strength_out,
+        strength_in,
+        domain,
+        fixed_pairs,
+    ) {
+        Ok(p) => p,
+        Err(e) => return Err(PyValueError::new_err(e.to_string())),
+    };
+
+    let residual = match problem.into_residual() {
+        Ok(r) => r,
+        Err(e) => return Err(PyValueError::new_err(e.to_string())),
+    };
+
+    let config = McmcConfig::new(burn_in_sweeps, sweeps_per_sample, seed);
+
+    match sample_fixed_strength_bench(residual, config, has_fixed) {
+        Ok((mut network, metrics)) => {
+            // Merge fixed pairs back into the sampled residual network.
+            if has_fixed {
+                let mut all: Vec<(u64, u64, u64)> = fixed_sources
+                    .iter()
+                    .zip(fixed_targets.iter())
+                    .zip(fixed_occnums.iter())
+                    .map(|((&s, &t), &o)| (s, t, o))
+                    .collect();
+                all.extend(
+                    network
+                        .sources
+                        .iter()
+                        .zip(network.targets.iter())
+                        .zip(network.occ_nums.iter())
+                        .map(|((&s, &t), &o)| (s, t, o)),
+                );
+                all.sort_unstable();
+                network.sources = all.iter().map(|&(s, _, _)| s).collect();
+                network.targets = all.iter().map(|&(_, t, _)| t).collect();
+                network.occ_nums = all.iter().map(|&(_, _, o)| o).collect();
+            }
+            Ok((
+                network.sources,
+                network.targets,
+                network.occ_nums,
+                (
+                    metrics.construction_time_s,
+                    metrics.repair_time_s,
+                    metrics.repair_steps,
+                    metrics.repair_restarts,
+                    metrics.occupied_pairs,
+                    metrics.mcmc_proposals,
+                    metrics.mcmc_accepted,
+                    metrics.mcmc_held,
+                    metrics.mcmc_time_s,
+                    metrics.final_sampling_time_s,
+                ),
+            ))
+        }
+        Err(e) => Err(PyValueError::new_err(e.to_string())),
+    }
+}
+
 /// Sample from the microcanonical fixed-strength ensemble with expected cost.
 ///
 /// Fits gamma via stochastic bisection, then draws one sample at the fitted gamma.
@@ -919,6 +1037,191 @@ pub(crate) fn sample_fixed_strength_with_cost(
         fit_result.mcmc_accepted,
         fit_result.iterations,
     ))
+}
+
+/// Benchmark-instrumented fixed-strength cost-constrained sampling (§35).
+///
+/// Same as `sample_fixed_strength_with_cost` but returns per-stage
+/// wall-time and MCMC counters, plus gamma-fitting time and cost ESS.
+#[pyfunction]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+pub(crate) fn bench_fixed_strength_with_cost(
+    family: &str,
+    strength_out: Vec<u64>,
+    strength_in: Vec<u64>,
+    coord_x: Vec<f64>,
+    coord_y: Vec<f64>,
+    observed_total_cost: f64,
+    self_loops: bool,
+    fixed_sources: Vec<u64>,
+    fixed_targets: Vec<u64>,
+    fixed_occnums: Vec<u64>,
+    layers: u32,
+    adaptation_sweeps: usize,
+    estimation_sweeps: usize,
+    samples_per_iteration: usize,
+    max_iterations: usize,
+    absolute_cost_tolerance: f64,
+    relative_cost_tolerance: f64,
+    confidence_multiplier: f64,
+    batch_count: usize,
+    burn_in_sweeps: usize,
+    sweeps_per_sample: usize,
+    seed: u64,
+) -> PyResult<(
+    Vec<u64>,
+    Vec<u64>,
+    Vec<u64>,
+    (f64, f64, u64, u32, usize, u64, u64, u64, f64, f64, f64, f64),
+)> {
+    use menobis_core::generation::microcanonical::mcmc::McmcConfig;
+    use menobis_core::generation::microcanonical::occupation_mcmc::chain::sample_fixed_strength_with_cost_bench;
+    use menobis_core::generation::microcanonical::occupation_mcmc::cost_fit::FixedStrengthCostFitConfig;
+    use menobis_core::generation::microcanonical::occupation_mcmc::domain::PairDomain;
+    use menobis_core::generation::microcanonical::occupation_mcmc::problem::FixedStrengthProblem;
+    use menobis_core::model::family::OccupationFamily;
+    use menobis_core::pairs::EuclideanCostProvider;
+
+    let family_enum = match family {
+        "ME" => OccupationFamily::ME,
+        "B" => OccupationFamily::B { layers },
+        "W" => OccupationFamily::W { layers },
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "unknown family: {other}. Use ME, B, or W"
+            )))
+        }
+    };
+
+    let n = strength_out.len();
+    let domain = PairDomain::Complete {
+        node_count: n,
+        self_loops,
+    };
+
+    let fixed_pairs: Vec<_> = fixed_sources
+        .iter()
+        .zip(fixed_targets.iter())
+        .zip(fixed_occnums.iter())
+        .map(|((&s, &t), &o)| (s, t, o))
+        .collect();
+    let has_fixed = !fixed_pairs.is_empty();
+
+    let problem = match FixedStrengthProblem::new(
+        family_enum,
+        strength_out,
+        strength_in,
+        domain,
+        fixed_pairs,
+    ) {
+        Ok(p) => p,
+        Err(e) => return Err(PyValueError::new_err(e.to_string())),
+    };
+
+    let residual = match problem.into_residual() {
+        Ok(r) => r,
+        Err(e) => return Err(PyValueError::new_err(e.to_string())),
+    };
+
+    // Build cost provider from coordinates.
+    if coord_x.len() != n || coord_y.len() != n {
+        return Err(PyValueError::new_err(
+            "coord_x and coord_y must match node count",
+        ));
+    }
+    let costs = EuclideanCostProvider {
+        x: &coord_x,
+        y: &coord_y,
+    };
+
+    let mcmc_config = McmcConfig::new(burn_in_sweeps, sweeps_per_sample, seed);
+
+    // Compute fixed-pair cost.
+    let fixed_cost = if has_fixed {
+        match menobis_core::generation::microcanonical::occupation_mcmc::cost::fixed_pairs_cost(
+            &fixed_sources
+                .iter()
+                .zip(fixed_targets.iter())
+                .zip(fixed_occnums.iter())
+                .map(|((&s, &t), &o)| (s, t, o))
+                .collect::<Vec<_>>(),
+            &costs,
+        ) {
+            Ok(c) => c,
+            Err(e) => return Err(PyValueError::new_err(e.to_string())),
+        }
+    } else {
+        0.0
+    };
+
+    // Fit config.
+    let fit_config = FixedStrengthCostFitConfig {
+        adaptation_sweeps,
+        estimation_sweeps,
+        samples_per_iteration,
+        max_iterations,
+        absolute_cost_tolerance,
+        relative_cost_tolerance,
+        confidence_multiplier,
+        batch_count,
+        ..FixedStrengthCostFitConfig::default()
+    };
+
+    let result = sample_fixed_strength_with_cost_bench(
+        residual,
+        &costs,
+        mcmc_config,
+        &fit_config,
+        has_fixed,
+        observed_total_cost,
+        fixed_cost,
+    );
+
+    match result {
+        Ok((mut network, metrics)) => {
+            // Merge fixed pairs back into the sampled residual network.
+            if has_fixed {
+                let mut all: Vec<(u64, u64, u64)> = fixed_sources
+                    .iter()
+                    .zip(fixed_targets.iter())
+                    .zip(fixed_occnums.iter())
+                    .map(|((&s, &t), &o)| (s, t, o))
+                    .collect();
+                all.extend(
+                    network
+                        .sources
+                        .iter()
+                        .zip(network.targets.iter())
+                        .zip(network.occ_nums.iter())
+                        .map(|((&s, &t), &o)| (s, t, o)),
+                );
+                all.sort_unstable();
+                network.sources = all.iter().map(|&(s, _, _)| s).collect();
+                network.targets = all.iter().map(|&(_, t, _)| t).collect();
+                network.occ_nums = all.iter().map(|&(_, _, o)| o).collect();
+            }
+            Ok((
+                network.sources,
+                network.targets,
+                network.occ_nums,
+                (
+                    metrics.construction_time_s,
+                    metrics.repair_time_s,
+                    metrics.repair_steps,
+                    metrics.repair_restarts,
+                    metrics.occupied_pairs,
+                    metrics.mcmc_proposals,
+                    metrics.mcmc_accepted,
+                    metrics.mcmc_held,
+                    metrics.mcmc_time_s,
+                    metrics.final_sampling_time_s,
+                    metrics.gamma_fit_time_s.unwrap_or(0.0),
+                    metrics.cost_ess.unwrap_or(0.0),
+                ),
+            ))
+        }
+        Err(e) => Err(PyValueError::new_err(e.to_string())),
+    }
 }
 
 /// Unified model sampling across ensembles, families, and constraints.

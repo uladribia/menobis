@@ -6,9 +6,13 @@
 //! - `sample_fixed_strength_with_cost` — cost-constrained entry point (Phase 5).
 
 use rand::rngs::StdRng;
+use rand::Rng;
 use rand::SeedableRng;
+use std::time::Instant;
 
+use super::cost_fit;
 use super::domain::PairDomain;
+use super::errors::FixedStrengthCostError;
 use super::errors::FixedStrengthError;
 use super::initializer::initialize_table;
 use super::move_cycle::occupied_cycle4_step;
@@ -27,6 +31,35 @@ use crate::OccNum;
 pub enum StrengthBackend {
     /// 4-cycle Metropolis MCMC.
     CycleMcmc,
+}
+
+/// Per-stage benchmark metrics for the fixed-strength pipeline (§35).
+#[derive(Clone, Debug)]
+pub struct FixedStrengthBenchMetrics {
+    /// Wall time for construction (initialize_table + State::new).
+    pub construction_time_s: f64,
+    /// Wall time for all repairs (loop + capacity + forbidden/inadmissible).
+    pub repair_time_s: f64,
+    /// Total rectangle-repair steps across all repair phases.
+    pub repair_steps: u64,
+    /// Number of reconstruction restarts performed (0 = first try).
+    pub repair_restarts: u32,
+    /// Number of occupied pairs after all repairs.
+    pub occupied_pairs: usize,
+    /// Total MCMC proposals during burn-in + thinning.
+    pub mcmc_proposals: u64,
+    /// Total MCMC acceptances during burn-in + thinning.
+    pub mcmc_accepted: u64,
+    /// Total MCMC held (structurally invalid) during burn-in + thinning.
+    pub mcmc_held: u64,
+    /// Wall time for burn-in + thinning sweeps.
+    pub mcmc_time_s: f64,
+    /// Wall time for the final sample() call alone.
+    pub final_sampling_time_s: f64,
+    /// Wall time for gamma fitting (None if no cost).
+    pub gamma_fit_time_s: Option<f64>,
+    /// Effective sample size of cost samples at fitted gamma (None if no cost).
+    pub cost_ess: Option<f64>,
 }
 
 /// Persistent MCMC chain for fixed-strength sampling.
@@ -135,6 +168,86 @@ impl<'a> FixedStrengthChain<'a> {
     }
 }
 
+// --------------------------------------------------------------------------
+// Shared initialization and repair helpers
+// --------------------------------------------------------------------------
+
+/// Initialize a state from a residual strength problem (no repair).
+fn init_state(problem: &ResidualStrengthProblem) -> Result<StrengthState, FixedStrengthError> {
+    problem.validate()?;
+    let table = initialize_table(
+        &problem.strength_out,
+        &problem.strength_in,
+        problem.family,
+        &problem.domain,
+    )?;
+    Ok(StrengthState::new(problem.domain.node_count(), table))
+}
+
+/// Apply all repair phases to a state.
+///
+/// Returns `(total_repair_steps, repair_restarts, occupied_pairs)`.
+fn repair_state(
+    state: &mut StrengthState,
+    problem: &ResidualStrengthProblem,
+    rng: &mut impl Rng,
+) -> Result<(u64, u32, usize), FixedStrengthError> {
+    let family = problem.family;
+    let mut total_repair_steps: u64 = 0;
+    let mut repair_restarts: u32 = 0;
+
+    // Phase D: loop repair for complete loopless ME/W/B (spec 14-17).
+    if !problem.domain.self_loops_allowed()
+        && (family == OccupationFamily::ME
+            || matches!(family, OccupationFamily::W { .. })
+            || matches!(family, OccupationFamily::B { .. }))
+    {
+        if !repair::loopless_feasibility_check(&problem.strength_out, &problem.strength_in) {
+            return Err(FixedStrengthError::InitializationFailed(
+                "loopless feasibility check failed: \
+                    s_i^out + s_i^in > T for some node"
+                    .into(),
+            ));
+        }
+        total_repair_steps += repair::repair_self_loops(
+            state,
+            &problem.domain,
+            &repair::RepairConfig::default(),
+            rng,
+        )?;
+    }
+
+    // Phase E: B capacity repair (spec 18).
+    if matches!(family, OccupationFamily::B { .. }) {
+        let (steps, restarts) = repair::repair_all_violations(
+            state,
+            family,
+            &problem.domain,
+            None,
+            &repair::RepairConfig::default(),
+            rng,
+            &problem.strength_out,
+            &problem.strength_in,
+        )?;
+        total_repair_steps += steps;
+        repair_restarts = restarts;
+    }
+
+    // Admissibility repair for sparse domains (spec §19).
+    if matches!(problem.domain, PairDomain::Sparse { .. }) {
+        total_repair_steps += repair::repair_inadmissible_pairs(
+            state,
+            family,
+            &problem.domain,
+            &repair::RepairConfig::default(),
+            rng,
+        )?;
+    }
+
+    let occupied_pairs = state.occupied_count();
+    Ok((total_repair_steps, repair_restarts, occupied_pairs))
+}
+
 /// One-shot fixed-strength sampling (Phase 4, no cost).
 ///
 /// Uses the production pipeline: compressed constructor → repair →
@@ -149,82 +262,15 @@ pub fn sample_fixed_strength(
     config: McmcConfig,
     _has_fixed_pairs: bool,
 ) -> Result<(SampledNetwork, StrengthBackend), FixedStrengthError> {
-    problem.validate()?;
-
     let family = problem.family;
     let seed = config.seed;
-
-    // Phase 4 target: no cost.
-    let target = StrengthTarget::new(family);
-
-    // Initialize occupation table.
-    let table = initialize_table(
-        &problem.strength_out,
-        &problem.strength_in,
-        family,
-        &problem.domain,
-    )?;
-
-    // Build state.
-    let mut state = StrengthState::new(problem.domain.node_count(), table);
-
-    // Create RNG for repair and MCMC.
     let mut rng = StdRng::seed_from_u64(seed);
 
-    // Phase D: loop repair for complete loopless ME/W/B (spec 14-17).
-    if !problem.domain.self_loops_allowed()
-        && (family == OccupationFamily::ME
-            || matches!(family, OccupationFamily::W { .. })
-            || matches!(family, OccupationFamily::B { .. }))
-    {
-        // O(N) feasibility check (spec 14).
-        if !repair::loopless_feasibility_check(&problem.strength_out, &problem.strength_in) {
-            return Err(FixedStrengthError::InitializationFailed(
-                "loopless feasibility check failed: 
-                    s_i^out + s_i^in > T for some node"
-                    .into(),
-            ));
-        }
-        // Guaranteed loop repair (spec 15-17).
-        repair::repair_self_loops(
-            &mut state,
-            &problem.domain,
-            &repair::RepairConfig::default(),
-            &mut rng,
-        )?;
-    }
+    let mut state = init_state(&problem)?;
+    let (_, _, _) = repair_state(&mut state, &problem, &mut rng)?;
 
-    // Phase E: B capacity repair (spec 18).
-    if matches!(family, OccupationFamily::B { .. }) {
-        repair::repair_all_violations(
-            &mut state,
-            family,
-            &problem.domain,
-            None,
-            &repair::RepairConfig::default(),
-            &mut rng,
-            &problem.strength_out,
-            &problem.strength_in,
-        )?;
-    }
-
-    // Admissibility repair for sparse domains (spec §19).
-    // The compressed constructor may place mass on inadmissible pairs
-    // for sparse domains; this repair moves it to admissible cells.
-    if matches!(problem.domain, PairDomain::Sparse { .. }) {
-        repair::repair_inadmissible_pairs(
-            &mut state,
-            family,
-            &problem.domain,
-            &repair::RepairConfig::default(),
-            &mut rng,
-        )?;
-    }
-
-    // Build chain.
+    let target = StrengthTarget::new(family);
     let mut chain = FixedStrengthChain::new(state, target, problem.domain, config);
-
-    // Run chain.
     chain.burn_in(&mut rng);
     let network = chain.sample(&mut rng);
 
@@ -248,81 +294,171 @@ pub fn sample_fixed_strength_with_cost<'a>(
     config: McmcConfig,
     _has_fixed_pairs: bool,
 ) -> Result<(FixedStrengthChain<'a>, StrengthBackend), FixedStrengthError> {
-    problem.validate()?;
-
     let family = problem.family;
+    let seed = config.seed;
+    let mut rng = StdRng::seed_from_u64(seed);
 
-    // Initialize occupation table.
-    let table = initialize_table(
-        &problem.strength_out,
-        &problem.strength_in,
-        family,
-        &problem.domain,
-    )?;
+    let mut state = init_state(&problem)?;
+    let (_, _, _) = repair_state(&mut state, &problem, &mut rng)?;
 
-    // Build state.
-    let mut state = StrengthState::new(problem.domain.node_count(), table);
-
-    // Create RNG for repair.
-    let mut rng = StdRng::seed_from_u64(config.seed);
-
-    // Phase D: loop repair for complete loopless ME/W/B (spec 14-17).
-    if !problem.domain.self_loops_allowed()
-        && (family == OccupationFamily::ME
-            || matches!(family, OccupationFamily::W { .. })
-            || matches!(family, OccupationFamily::B { .. }))
-    {
-        // O(N) feasibility check (spec 14).
-        if !repair::loopless_feasibility_check(&problem.strength_out, &problem.strength_in) {
-            return Err(FixedStrengthError::InitializationFailed(
-                "loopless feasibility check failed: \
-                    s_i^out + s_i^in > T for some node"
-                    .into(),
-            ));
-        }
-        // Guaranteed loop repair (spec 15-17).
-        repair::repair_self_loops(
-            &mut state,
-            &problem.domain,
-            &repair::RepairConfig::default(),
-            &mut rng,
-        )?;
-    }
-
-    // Phase E: B capacity repair (spec 18).
-    if matches!(family, OccupationFamily::B { .. }) {
-        repair::repair_all_violations(
-            &mut state,
-            family,
-            &problem.domain,
-            None,
-            &repair::RepairConfig::default(),
-            &mut rng,
-            &problem.strength_out,
-            &problem.strength_in,
-        )?;
-    }
-
-    // Admissibility repair for sparse domains (spec §19).
-    // The compressed constructor may place mass on inadmissible pairs
-    // for sparse domains; this repair moves it to admissible cells.
-    if matches!(problem.domain, PairDomain::Sparse { .. }) {
-        repair::repair_inadmissible_pairs(
-            &mut state,
-            family,
-            &problem.domain,
-            &repair::RepairConfig::default(),
-            &mut rng,
-        )?;
-    }
-
-    // Build target with cost provider (gamma starts at 0.0).
     let target = StrengthTarget::with_costs(family, costs);
-
-    // Build chain.
     let chain = FixedStrengthChain::new(state, target, problem.domain, config);
 
     Ok((chain, StrengthBackend::CycleMcmc))
+}
+
+// --------------------------------------------------------------------------
+// Benchmark entry points (§35)
+// --------------------------------------------------------------------------
+
+/// Fixed-strength sampling with per-stage benchmark instrumentation.
+///
+/// See [`sample_fixed_strength`] for semantics.  This variant additionally
+/// reports wall-time, repair, and MCMC counters useful for benchmarking.
+pub fn sample_fixed_strength_bench(
+    problem: ResidualStrengthProblem,
+    config: McmcConfig,
+    _has_fixed_pairs: bool,
+) -> Result<(SampledNetwork, FixedStrengthBenchMetrics), FixedStrengthError> {
+    let family = problem.family;
+    let seed = config.seed;
+    let mut rng = StdRng::seed_from_u64(seed);
+
+    // Phase 1: Construction (initialize_table + State::new).
+    let t0 = Instant::now();
+    let mut state = init_state(&problem)?;
+    let construction_time_s = t0.elapsed().as_secs_f64();
+
+    // Phase 2: Repair.
+    let t0 = Instant::now();
+    let (repair_steps, repair_restarts, occupied_pairs) =
+        repair_state(&mut state, &problem, &mut rng)?;
+    let repair_time_s = t0.elapsed().as_secs_f64();
+
+    // Phase 3: MCMC burn-in + thinning.
+    let target = StrengthTarget::new(family);
+    let sweeps = config.sweeps_per_sample.max(1);
+    let mut chain = FixedStrengthChain::new(state, target, problem.domain, config);
+    let t0 = Instant::now();
+    chain.burn_in(&mut rng);
+    for _ in 0..sweeps {
+        chain.sweep(&mut rng);
+    }
+    let mcmc_time_s = t0.elapsed().as_secs_f64();
+    let mcmc_proposals = chain.counters.proposals;
+    let mcmc_accepted = chain.counters.accepted;
+    let mcmc_held = chain.counters.held;
+
+    // Phase 4: Final sampling (convert to network).
+    let t0 = Instant::now();
+    let network = chain.state.to_sampled_network();
+    let final_sampling_time_s = t0.elapsed().as_secs_f64();
+
+    Ok((
+        network,
+        FixedStrengthBenchMetrics {
+            construction_time_s,
+            repair_time_s,
+            repair_steps,
+            repair_restarts,
+            occupied_pairs,
+            mcmc_proposals,
+            mcmc_accepted,
+            mcmc_held,
+            mcmc_time_s,
+            final_sampling_time_s,
+            gamma_fit_time_s: None,
+            cost_ess: None,
+        },
+    ))
+}
+
+/// Fixed-strength cost-constrained sampling with per-stage benchmark instrumentation.
+///
+/// See [`sample_fixed_strength_with_cost`] for semantics.  This variant
+/// additionally reports wall-time, repair, gamma-fitting, and MCMC counters.
+pub fn sample_fixed_strength_with_cost_bench(
+    problem: ResidualStrengthProblem,
+    costs: &dyn PairCostProvider,
+    config: McmcConfig,
+    fit_config: &super::cost_fit::FixedStrengthCostFitConfig,
+    _has_fixed_pairs: bool,
+    observed_total_cost: f64,
+    fixed_cost: f64,
+) -> Result<(SampledNetwork, FixedStrengthBenchMetrics), FixedStrengthCostError> {
+    let family = problem.family;
+    let seed = config.seed;
+    let mut rng = StdRng::seed_from_u64(seed);
+
+    // Phase 1: Construction.
+    let t0 = Instant::now();
+    let mut state = init_state(&problem).map_err(FixedStrengthCostError::FixedStrength)?;
+    let construction_time_s = t0.elapsed().as_secs_f64();
+
+    // Phase 2: Repair.
+    let t0 = Instant::now();
+    let (repair_steps, repair_restarts, occupied_pairs) =
+        repair_state(&mut state, &problem, &mut rng)
+            .map_err(FixedStrengthCostError::FixedStrength)?;
+    let repair_time_s = t0.elapsed().as_secs_f64();
+
+    // Phase 3: Cost chain preparation.
+    let target = StrengthTarget::with_costs(family, costs);
+    let sweeps = config.sweeps_per_sample.max(1);
+    let mut chain = FixedStrengthChain::new(state, target, problem.domain, config);
+
+    // Phase 4: Gamma fitting.
+    let t0 = Instant::now();
+    let fit_result = cost_fit::fit_gamma(
+        &mut chain,
+        &mut rng,
+        costs,
+        observed_total_cost,
+        fixed_cost,
+        fit_config,
+    )?;
+    let gamma_fit_time_s = t0.elapsed().as_secs_f64();
+    let cost_ess = Some(cost_fit::effective_sample_size(&fit_result.best_samples));
+
+    // Phase 5: Set fitted gamma and MCMC burn-in + thinning.
+    {
+        let mut target = StrengthTarget::with_costs(family, costs);
+        target.set_gamma(fit_result.gamma);
+        chain.set_target(target);
+    }
+    chain.counters.reset();
+    let t0 = Instant::now();
+    chain.burn_in(&mut rng);
+    for _ in 0..sweeps {
+        chain.sweep(&mut rng);
+    }
+    let mcmc_time_s = t0.elapsed().as_secs_f64();
+    let mcmc_proposals = chain.counters.proposals;
+    let mcmc_accepted = chain.counters.accepted;
+    let mcmc_held = chain.counters.held;
+
+    // Phase 6: Final sampling.
+    let t0 = Instant::now();
+    let network = chain.state.to_sampled_network();
+    let final_sampling_time_s = t0.elapsed().as_secs_f64();
+
+    Ok((
+        network,
+        FixedStrengthBenchMetrics {
+            construction_time_s,
+            repair_time_s,
+            repair_steps,
+            repair_restarts,
+            occupied_pairs,
+            mcmc_proposals,
+            mcmc_accepted,
+            mcmc_held,
+            mcmc_time_s,
+            final_sampling_time_s,
+            gamma_fit_time_s: Some(gamma_fit_time_s),
+            cost_ess,
+        },
+    ))
 }
 
 #[cfg(test)]

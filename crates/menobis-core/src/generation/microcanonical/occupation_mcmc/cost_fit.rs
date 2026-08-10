@@ -124,6 +124,8 @@ pub struct FixedStrengthCostFitResult {
     pub sample_count: usize,
     /// Seed used.
     pub seed: u64,
+    /// Cost samples from the final estimation batch at the fitted gamma.
+    pub best_samples: Vec<f64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -172,6 +174,52 @@ pub fn batch_means_se(samples: &[f64], n_batches: usize) -> f64 {
         / (effective_batches - 1) as f64;
 
     (variance / effective_batches as f64).sqrt()
+}
+
+/// Effective sample size via Geyer's initial positive sequence estimator.
+///
+/// Computes:
+/// \[
+/// \text{ESS} = \frac{n}{1 + 2 \sum_{k=1}^{K} \rho_k}
+/// \]
+/// where \(\rho_k\) is the autocorrelation at lag \(k\) and \(K\) is the
+/// largest lag such that \(\rho_k > 0\) for all \(k \le K\) (initial
+/// positive sequence truncation).
+///
+/// # Guard
+///
+/// - If sample variance ≤ 0, returns 1.0.
+/// - If `n < 3`, returns `n as f64`.
+pub fn effective_sample_size(samples: &[f64]) -> f64 {
+    let n = samples.len();
+    if n < 3 {
+        return n as f64;
+    }
+
+    let mean = samples.iter().sum::<f64>() / n as f64;
+    let var = samples.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / (n - 1) as f64;
+    if var <= 0.0 {
+        return 1.0;
+    }
+
+    // Autocorrelation at lag k: ρ_k = γ_k / γ_0
+    // where γ_k = 1/(n-k) Σ (x_t - μ)(x_{t+k} - μ) and γ_0 = var.
+    // Truncate at first non-positive ρ_k (initial positive sequence).
+    let mut sum_rho = 0.0;
+    for k in 1..n {
+        let mut cov = 0.0;
+        for t in 0..(n - k) {
+            cov += (samples[t] - mean) * (samples[t + k] - mean);
+        }
+        cov /= (n - k) as f64;
+        let rho_k = cov / var;
+        if rho_k <= 0.0 {
+            break;
+        }
+        sum_rho += rho_k;
+    }
+
+    n as f64 / (1.0 + 2.0 * sum_rho)
 }
 
 // ---------------------------------------------------------------------------
@@ -479,6 +527,7 @@ pub fn fit_gamma<'a>(
         family: chain.target.family,
         sample_count: best_samples.len(),
         seed: config.seed,
+        best_samples,
     };
 
     // Return the best result even when not converged (converged=false).
@@ -486,4 +535,62 @@ pub fn fit_gamma<'a>(
     // `FitDidNotConverge` error variant remains available for callers
     // that prefer to treat non-convergence as fatal.
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::rngs::StdRng;
+    use rand::Rng;
+    use rand::SeedableRng;
+
+    /// IID standard normal samples: ESS ≈ n within a generous tolerance.
+    ///
+    /// Generates 2000 independent standard normal samples.  The effective
+    /// sample size for IID data equals n, but due to Monte Carlo noise in
+    /// the autocorrelation estimate we assert ESS > 0.3 * n.
+    #[test]
+    fn ess_iid_samples() {
+        let mut rng = StdRng::seed_from_u64(42);
+        let n = 2000;
+        let samples: Vec<f64> = (0..n).map(|_| rng.random::<f64>()).collect();
+        let ess = effective_sample_size(&samples);
+        assert!(
+            ess > 0.3 * n as f64,
+            "ESS {ess} too low for IID data (n={n})"
+        );
+    }
+
+    /// Perfectly correlated (all identical values): ESS ≈ 1.0.
+    ///
+    /// When all samples are equal, variance is zero → guard returns 1.0.
+    #[test]
+    fn ess_perfectly_correlated() {
+        let samples = vec![42.0; 500];
+        let ess = effective_sample_size(&samples);
+        assert!(ess < 2.0, "ESS {ess} should be ~1.0 for identical samples");
+    }
+
+    /// AR(1) chain with φ = 0.9: ESS strictly less than n.
+    ///
+    /// Generates an AR(1) process x_{t+1} = 0.9 * x_t + ε_t with
+    /// standard normal innovations.  For n=2000 and φ=0.9 the
+    /// theoretical ESS ≈ n * (1 − φ) / (1 + φ) ≈ 105.
+    /// We assert ESS < 0.5 * n as a loose bound.
+    #[test]
+    fn ess_ar1_chain() {
+        let mut rng = StdRng::seed_from_u64(42);
+        let n = 2000;
+        let mut samples = Vec::with_capacity(n);
+        let mut x = 0.0;
+        for _ in 0..n {
+            x = 0.9 * x + rng.random::<f64>() - 0.5;
+            samples.push(x);
+        }
+        let ess = effective_sample_size(&samples);
+        assert!(
+            ess < 0.5 * n as f64,
+            "ESS {ess} too high for AR(1) with φ=0.9 (n={n})"
+        );
+    }
 }

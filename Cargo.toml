@@ -19,4 +19,3 @@ rand = "0.9"
 rand_distr = "0.5"
 rayon = "1.10"
 libm = "0.2"
-criterion = { version = "0.5", features = [] }

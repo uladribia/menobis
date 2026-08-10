@@ -171,7 +171,7 @@ pub fn repair_self_loops(
     domain: &PairDomain,
     config: &RepairConfig,
     rng: &mut impl Rng,
-) -> Result<(), FixedStrengthError> {
+) -> Result<u64, FixedStrengthError> {
     debug_assert!(
         !domain.self_loops_allowed(),
         "repair_self_loops should only be called when self-loops are forbidden"
@@ -251,7 +251,7 @@ pub fn repair_self_loops(
         "repair claimed success but self-loops remain"
     );
 
-    Ok(())
+    Ok(steps)
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -374,11 +374,11 @@ pub fn repair_capacity(
     domain: &PairDomain,
     config: &RepairConfig,
     rng: &mut impl Rng,
-) -> Result<(), FixedStrengthError> {
+) -> Result<u64, FixedStrengthError> {
     let cap = domain.capacity(family);
     if cap == OccNum::MAX {
         // Unbounded: no repair needed.
-        return Ok(());
+        return Ok(0);
     }
 
     let mut violations: Vec<(u64, u64, OccNum)> = find_capacity_violations(state, family, domain);
@@ -438,7 +438,7 @@ pub fn repair_capacity(
         });
     }
 
-    Ok(())
+    Ok(steps)
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -474,7 +474,7 @@ pub fn repair_forbidden_pairs(
     forbidden_pairs: &HashSet<(u64, u64)>,
     config: &RepairConfig,
     rng: &mut impl Rng,
-) -> Result<(), FixedStrengthError> {
+) -> Result<u64, FixedStrengthError> {
     let cap = domain.capacity(family);
     let mut violations: Vec<(u64, u64, OccNum)> =
         find_forbidden_occupations(state, forbidden_pairs);
@@ -529,7 +529,7 @@ pub fn repair_forbidden_pairs(
         });
     }
 
-    Ok(())
+    Ok(steps)
 }
 
 /// Find a donor cell for forbidden-pair repair, avoiding the forbidden set.
@@ -691,7 +691,7 @@ pub fn repair_inadmissible_pairs(
     domain: &PairDomain,
     config: &RepairConfig,
     rng: &mut impl Rng,
-) -> Result<(), FixedStrengthError> {
+) -> Result<u64, FixedStrengthError> {
     let cap = domain.capacity(family);
 
     // Collect all occupied pairs that are inadmissible.
@@ -761,7 +761,7 @@ pub fn repair_inadmissible_pairs(
         });
     }
 
-    Ok(())
+    Ok(steps)
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -783,7 +783,8 @@ pub fn repair_all_violations(
     rng: &mut impl Rng,
     strength_out: &[OccNum],
     strength_in: &[OccNum],
-) -> Result<(), FixedStrengthError> {
+) -> Result<(u64, u32), FixedStrengthError> {
+    let mut last_steps: u64 = 0;
     for restart in 0..config.max_restarts {
         if restart > 0 {
             let table =
@@ -792,18 +793,22 @@ pub fn repair_all_violations(
         }
 
         // Capacity repair (spec §18).
-        if repair_capacity(state, family, domain, config, rng).is_err() {
-            continue;
+        match repair_capacity(state, family, domain, config, rng) {
+            Ok(s) => last_steps = s,
+            Err(_) => continue,
         }
 
         // Forbidden-pair repair (spec §19).
         if let Some(forbidden) = forbidden_pairs {
-            if repair_forbidden_pairs(state, family, domain, forbidden, config, rng).is_err() {
-                continue;
-            }
+            let f_steps =
+                match repair_forbidden_pairs(state, family, domain, forbidden, config, rng) {
+                    Ok(s) => s,
+                    Err(_) => continue,
+                };
+            last_steps += f_steps;
         }
 
-        return Ok(());
+        return Ok((last_steps, restart));
     }
 
     // All restarts exhausted: report remaining violations.
@@ -816,7 +821,7 @@ pub fn repair_all_violations(
         remaining_capacity_violations: remaining_cap.len(),
         remaining_forbidden_occupations: remaining_forbidden.len(),
         restart_count: config.max_restarts,
-        steps: 0,
+        steps: last_steps,
     })
 }
 
