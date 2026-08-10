@@ -195,11 +195,6 @@ def sample_w_fixed_et_explicit(
     residual_total: int,
     seed: int,
 ) -> tuple[list[int], list[int], list[int]]: ...
-def sample_strength_stub_matching(
-    strength_out: list[int],
-    strength_in: list[int],
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
 def sample_fixed_strength(
     family: str,
     strength_out: list[int],

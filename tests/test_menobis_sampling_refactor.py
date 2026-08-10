@@ -3,18 +3,20 @@
 import numpy as np
 
 from menobis.models.generation import (
-    _sample_strength_negative_binomial as sample_strength_negative_binomial,
+    _sample_strength_fixed_strength_mcmc as sample_fixed_strength,
 )
 from menobis.models.generation import (
-    _sample_strength_stub_matching as sample_strength_stub_matching,
+    _sample_strength_negative_binomial as sample_strength_negative_binomial,
 )
 
 
-def test_stub_matching_replaces_stub_matching_name() -> None:
-    """The exact-strength stub-matching sampler is exposed under its precise name."""
-    sample = sample_strength_stub_matching(
-        np.array([2, 1], dtype=np.uint64),
-        np.array([1, 2], dtype=np.uint64),
+def test_fixed_strength_mcmc_preserves_strengths() -> None:
+    """The MCMC fixed-strength sampler preserves exact strengths."""
+    sample = sample_fixed_strength(
+        family="ME",
+        strength_out=np.array([2, 1], dtype=np.uint64),
+        strength_in=np.array([1, 2], dtype=np.uint64),
+        self_loops=True,
         seed=7,
     )
 

@@ -196,30 +196,6 @@ pub(crate) fn sample_edges_events(
 }
 
 #[pyfunction]
-pub(crate) fn sample_strength_stub_matching(
-    strength_out: Vec<u64>,
-    strength_in: Vec<u64>,
-    seed: u64,
-) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
-    if strength_out.len() != strength_in.len() {
-        return Err(PyValueError::new_err(
-            "strength_out and strength_in must have same length",
-        ));
-    }
-    let total_out: u64 = strength_out.iter().sum();
-    let total_in: u64 = strength_in.iter().sum();
-    if total_out != total_in {
-        return Err(PyValueError::new_err(
-            "stub_matching requires balanced strengths",
-        ));
-    }
-    match core_sample_strength_stub_matching(&strength_out, &strength_in, seed) {
-        Ok(sample) => Ok((sample.sources, sample.targets, sample.occ_nums)),
-        Err(e) => Err(PyValueError::new_err(e.to_string())),
-    }
-}
-
-#[pyfunction]
 pub(crate) fn sample_custom_poisson(
     sources: Vec<u64>,
     targets: Vec<u64>,
