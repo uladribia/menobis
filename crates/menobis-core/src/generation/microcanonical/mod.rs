@@ -31,4 +31,3 @@ pub use conditional::fixed_et::{
 
 // Re-exports from occupation_mcmc
 pub use occupation_mcmc::sample_fixed_strength;
-pub use occupation_mcmc::sample_strength_stub_matching;

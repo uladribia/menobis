@@ -121,7 +121,6 @@ use menobis_core::generation::{
     sample_strength_multinomial as core_sample_strength_multinomial,
     sample_strength_negative_binomial as core_sample_strength_negative_binomial,
     sample_strength_poisson as core_sample_strength_poisson,
-    sample_strength_stub_matching as core_sample_strength_stub_matching,
     sample_w_fixed_et as core_sample_w_fixed_et,
     sample_w_fixed_et_explicit as core_sample_w_fixed_et_explicit,
     FixedDegreeMcmcConfig as CoreFixedDegreeMcmcConfig, FixedKTConfig as CoreFixedKTConfig,
@@ -261,7 +260,6 @@ fn _menobis(module: &Bound<'_, PyModule>) -> PyResult<()> {
     add_pyfunction!(module, generation::sample_me_fixed_et_explicit)?;
     add_pyfunction!(module, generation::sample_w_fixed_et)?;
     add_pyfunction!(module, generation::sample_w_fixed_et_explicit)?;
-    add_pyfunction!(module, generation::sample_strength_stub_matching)?;
     add_pyfunction!(module, generation::sample_custom_poisson)?;
     add_pyfunction!(module, generation::sample_custom_multinomial)?;
     add_pyfunction!(module, generation::sample_strength_edges_poisson)?;

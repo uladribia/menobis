@@ -87,35 +87,6 @@ def _sample_edges_events(
     return _edge_table_from_lists(sources, targets, occ_nums)
 
 
-def _sample_strength_stub_matching(
-    strength_out: NDArray[np.integer],
-    strength_in: NDArray[np.integer],
-    *,
-    seed: int = 0,
-) -> EdgeTable:
-    """Exact-strength stub-matching sampler for fixed-strength ME.
-
-    Produces an unbiased uniform sample from the space of all integer-occupation
-    directed graphs with the exact given strength sequence. Self-loops are
-    always allowed because uniform sampling without self-loops requires
-    more sophisticated algorithms to avoid bias.
-
-    Args:
-        strength_out: Exact outgoing strength per node (positive integers).
-        strength_in: Exact incoming strength per node (positive integers).
-        seed: Random seed.
-
-    Returns:
-        EdgeTable with exact strength preservation.
-    """
-    s_out = np.asarray(strength_out, dtype=np.uint64)
-    s_in = np.asarray(strength_in, dtype=np.uint64)
-    sources, targets, occ_nums = _menobis.sample_strength_stub_matching(
-        s_out.tolist(), s_in.tolist(), seed
-    )
-    return _edge_table_from_lists(sources, targets, occ_nums)
-
-
 def _sample_strength_fixed_strength_mcmc(
     *,
     family: str,

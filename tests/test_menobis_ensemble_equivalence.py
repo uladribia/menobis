@@ -25,10 +25,6 @@ from menobis.models.generation import (
 from menobis.models.generation import (
     _sample_strength_poisson as sample_strength_poisson,
 )
-from menobis.models.generation import (
-    _sample_strength_stub_matching as sample_strength_stub_matching,
-)
-
 FIGURES_DIR = Path(__file__).resolve().parent.parent / "docs" / "figures"
 FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -93,7 +89,6 @@ def _ensemble_stats(
 
 def _run_convergence() -> dict[str, dict[int, tuple[np.ndarray, np.ndarray]]]:
     results: dict[str, dict[int, tuple[np.ndarray, np.ndarray]]] = {
-        "stub_matching": {},
         "canonical": {},
         "grand_canonical": {},
     }
@@ -103,12 +98,6 @@ def _run_convergence() -> dict[str, dict[int, tuple[np.ndarray, np.ndarray]]]:
         fit = fit_strength_poisson(s_out, s_in)
 
         _s_out, _s_in, _fit, _total = s_out, s_in, fit, total
-        results["stub_matching"][total] = _ensemble_stats(
-            lambda seed, so=_s_out, si=_s_in: sample_strength_stub_matching(
-                so, si, seed=seed
-            ),
-            REPETITIONS,
-        )
         results["canonical"][total] = _ensemble_stats(
             lambda seed, f=_fit, t=_total: sample_strength_multinomial(
                 f.x, f.y, total_events=t, seed=seed
@@ -131,20 +120,15 @@ def _collect_per_node_stats(
     fit = fit_strength_poisson(s_out, s_in)
 
     ensemble_y2: dict[str, list[np.ndarray]] = {
-        "stub_matching": [],
         "canonical": [],
         "grand_canonical": [],
     }
     ensemble_snn: dict[str, list[np.ndarray]] = {
-        "stub_matching": [],
         "canonical": [],
         "grand_canonical": [],
     }
 
     samplers: dict[str, Callable[[int], EdgeTable]] = {
-        "stub_matching": lambda seed, so=s_out, si=s_in: sample_strength_stub_matching(
-            so, si, seed=seed
-        ),
         "canonical": lambda seed, f=fit, t=total: sample_strength_multinomial(
             f.x, f.y, total_events=t, seed=seed
         ),
@@ -173,10 +157,10 @@ def _collect_per_node_stats(
 
 def _plot_per_node_vs_strength() -> None:
     """Plot Y2 and s_nn vs relative strength p_s for each ensemble and T."""
-    ensemble_names = ["stub_matching", "canonical", "grand_canonical"]
-    ensemble_labels = ["stub_matching", "canonical", "grand-canonical"]
-    markers = ["o", "s", "^"]
-    colors = ["#1f77b4", "#ff7f0e", "#2ca02c"]
+    ensemble_names = ["canonical", "grand_canonical"]
+    ensemble_labels = ["canonical", "grand-canonical"]
+    markers = ["s", "^"]
+    colors = ["#ff7f0e", "#2ca02c"]
 
     fig, axes = plt.subplots(
         2, len(T_VALUES), figsize=(4 * len(T_VALUES), 8), sharey="row"
@@ -259,23 +243,16 @@ def _plot_convergence(
     # 1. Mean convergence: max absolute difference between ensembles vs T.
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
-    # Max |mean_micro - mean_canonical| and |mean_micro - mean_gc| per T.
-    mc_vs_can = []
-    mc_vs_gc = []
+    # Max |mean_canonical - mean_gc| per T.
     can_vs_gc = []
     for total in T_VALUES:
-        m_micro = results["stub_matching"][total][0]
         m_can = results["canonical"][total][0]
         m_gc = results["grand_canonical"][total][0]
         # Normalize by T to compare across scales.
         norm = max(1.0, total)
-        mc_vs_can.append(np.max(np.abs(m_micro - m_can)) / norm)
-        mc_vs_gc.append(np.max(np.abs(m_micro - m_gc)) / norm)
         can_vs_gc.append(np.max(np.abs(m_can - m_gc)) / norm)
 
     ax = axes[0]
-    ax.loglog(T_VALUES, mc_vs_can, "o-", label="micro vs canonical")
-    ax.loglog(T_VALUES, mc_vs_gc, "s-", label="micro vs grand-canonical")
     ax.loglog(T_VALUES, can_vs_gc, "^-", label="canonical vs grand-canonical")
     ax.set_xlabel("T (total events)")
     ax.set_ylabel("max |Δmean| / T")
@@ -286,7 +263,6 @@ def _plot_convergence(
     # 2. Variance decrease: mean std across statistics vs T.
     ax = axes[1]
     for name, marker in [
-        ("stub_matching", "o-"),
         ("canonical", "s-"),
         ("grand_canonical", "^-"),
     ]:
@@ -307,16 +283,14 @@ def _plot_convergence(
 
     # 3. Per-statistic comparison at largest T.
     largest_t = T_VALUES[-1]
-    m_micro = results["stub_matching"][largest_t][0]
     m_can = results["canonical"][largest_t][0]
     m_gc = results["grand_canonical"][largest_t][0]
 
     fig, ax = plt.subplots(figsize=(14, 5))
     x_pos = np.arange(len(stat_labels))
     width = 0.25
-    ax.bar(x_pos - width, m_micro, width, label="stub_matching", alpha=0.8)
-    ax.bar(x_pos, m_can, width, label="canonical", alpha=0.8)
-    ax.bar(x_pos + width, m_gc, width, label="grand-canonical", alpha=0.8)
+    ax.bar(x_pos - width / 2, m_can, width, label="canonical", alpha=0.8)
+    ax.bar(x_pos + width / 2, m_gc, width, label="grand-canonical", alpha=0.8)
     ax.set_xticks(x_pos[::5])
     ax.set_xticklabels(
         [stat_labels[i] for i in range(0, len(stat_labels), 5)],
@@ -333,22 +307,19 @@ def _plot_convergence(
 
 
 def test_me_observable_convergence_smoke() -> None:
-    """Three ensembles converge at large T for all higher-order statistics."""
+    """Canonical and grand-canonical ensembles converge at large T."""
     results = _run_convergence()
-    # Plot generation is intentionally not part of the default test path.
     # At largest T, assert convergence.
     largest_t = T_VALUES[-1]
-    m_micro = results["stub_matching"][largest_t][0]
     m_can = results["canonical"][largest_t][0]
     m_gc = results["grand_canonical"][largest_t][0]
 
     # Relative difference should be small at large T.
-    scale = np.maximum(np.abs(m_micro), 1.0)
-    np.testing.assert_allclose(m_micro / scale, m_can / scale, atol=0.15)
-    np.testing.assert_allclose(m_micro / scale, m_gc / scale, atol=0.15)
+    scale = np.maximum(np.abs(m_can), 1.0)
+    np.testing.assert_allclose(m_can / scale, m_gc / scale, atol=0.15)
 
     # Variances should decrease with T for all ensembles.
-    for name in ["stub_matching", "canonical", "grand_canonical"]:
+    for name in ["canonical", "grand_canonical"]:
         std_small = np.mean(results[name][T_VALUES[0]][1])
         std_large = np.mean(results[name][T_VALUES[-1]][1])
         # Variance per unit T should decrease.
@@ -357,12 +328,19 @@ def test_me_observable_convergence_smoke() -> None:
         )
 
 
-def test_stub_matching_preserves_exact_strengths() -> None:
-    """Stub matching samples preserve exact strength sequences."""
+def test_mcmc_fixed_strength_preserves_exact_strengths() -> None:
+    """MCMC fixed-strength sampler preserves exact strength sequences."""
+    from menobis.models.generation import _sample_strength_fixed_strength_mcmc as mcmc_sampler
     for total in [100, 500]:
         s_out, s_in = _balanced_integer_strengths(P_OUT, P_IN, total)
         for seed in range(10):
-            sample = sample_strength_stub_matching(s_out, s_in, seed=seed)
+            sample = mcmc_sampler(
+                family="ME",
+                strength_out=s_out,
+                strength_in=s_in,
+                self_loops=True,
+                seed=seed,
+            )
             actual_s = directed_strengths(sample)
             np.testing.assert_array_equal(actual_s.out, s_out)
             np.testing.assert_array_equal(actual_s.incoming, s_in)

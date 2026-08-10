@@ -83,8 +83,8 @@ def test_w_fixed_strength_via_mcmc() -> None:
     np.testing.assert_array_equal(inp, s_in)
 
 
-def test_me_direct_still_works() -> None:
-    """ME with self-loops still uses the exact stub-matching fast path."""
+def test_me_mcmc_preserves_strengths_with_self_loops() -> None:
+    """ME with self-loops uses the MCMC chain and preserves strengths."""
     s_out = np.array([10, 20, 30], dtype=np.uint64)
     s_in = np.array([15, 25, 20], dtype=np.uint64)
     net = sample_model(

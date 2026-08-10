@@ -11,7 +11,6 @@ use rand::SeedableRng;
 use super::domain::PairDomain;
 use super::errors::FixedStrengthError;
 use super::initializer::initialize_table;
-use super::me_direct::{sample_strength_stub_matching, MAX_EXPLICIT_STUBS};
 use super::move_cycle::occupied_cycle4_step;
 use super::problem::ResidualStrengthProblem;
 use super::repair;
@@ -26,8 +25,6 @@ use crate::OccNum;
 /// Backend used for the fixed-strength sample.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StrengthBackend {
-    /// Exact stub-matching (ME, complete domain, self-loops allowed).
-    MeDirect,
     /// 4-cycle Metropolis MCMC.
     CycleMcmc,
 }
@@ -138,43 +135,10 @@ impl<'a> FixedStrengthChain<'a> {
     }
 }
 
-/// Check whether the ME direct backend can be used.
-fn can_use_me_direct(
-    family: OccupationFamily,
-    self_loops: bool,
-    domain: &PairDomain,
-    has_fixed_pairs: bool,
-    total: OccNum,
-    target: &StrengthTarget,
-) -> bool {
-    if family != OccupationFamily::ME {
-        return false;
-    }
-    if !self_loops {
-        return false;
-    }
-    if has_fixed_pairs {
-        return false;
-    }
-    if matches!(domain, PairDomain::Sparse { .. }) {
-        return false;
-    }
-    if total > MAX_EXPLICIT_STUBS {
-        return false;
-    }
-    // Cost-constrained problems must use MCMC (Phase 5).
-    if target.costs.is_some() {
-        return false;
-    }
-    true
-}
-
 /// One-shot fixed-strength sampling (Phase 4, no cost).
 ///
-/// Selects the appropriate backend:
-///
-/// 1. **ME direct** (exact stub-matching) if the problem is simple enough.
-/// 2. **Cycle MCMC** (4-cycle Metropolis) for all other cases.
+/// Uses the production pipeline: compressed constructor → repair →
+/// occupied-cell MCMC.
 ///
 /// # Errors
 ///
@@ -183,31 +147,15 @@ fn can_use_me_direct(
 pub fn sample_fixed_strength(
     problem: ResidualStrengthProblem,
     config: McmcConfig,
-    has_fixed_pairs: bool,
+    _has_fixed_pairs: bool,
 ) -> Result<(SampledNetwork, StrengthBackend), FixedStrengthError> {
     problem.validate()?;
 
-    let total = problem.total;
     let family = problem.family;
-    let self_loops = problem.domain.self_loops_allowed();
     let seed = config.seed;
 
     // Phase 4 target: no cost.
     let target = StrengthTarget::new(family);
-
-    // Try ME direct fast path.
-    if can_use_me_direct(
-        family,
-        self_loops,
-        &problem.domain,
-        has_fixed_pairs,
-        total,
-        &target,
-    ) {
-        let result =
-            sample_strength_stub_matching(&problem.strength_out, &problem.strength_in, seed)?;
-        return Ok((result, StrengthBackend::MeDirect));
-    }
 
     // Initialize occupation table.
     let table = initialize_table(
@@ -373,11 +321,11 @@ mod tests {
     }
 
     #[test]
-    fn me_direct_backend_selected() {
+    fn cycle_mcmc_backend_selected() {
         let prob = make_problem(OccupationFamily::ME, vec![5, 5], vec![5, 5], true);
         let config = McmcConfig::new(10, 5, 42);
         let (net, backend) = sample_fixed_strength(prob, config, false).unwrap();
-        assert_eq!(backend, StrengthBackend::MeDirect);
+        assert_eq!(backend, StrengthBackend::CycleMcmc);
         let total: OccNum = net.occ_nums.iter().sum();
         assert_eq!(total, 10);
     }
