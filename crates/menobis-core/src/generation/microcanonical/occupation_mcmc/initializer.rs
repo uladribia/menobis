@@ -1,4 +1,5 @@
 use super::compressed::compressed_aggregated_matching;
+use super::compressed::FlowTable;
 use super::domain::PairDomain;
 use super::errors::FixedStrengthError;
 use crate::model::family::OccupationFamily;
@@ -16,7 +17,7 @@ pub fn initialize_table(
     strength_in: &[OccNum],
     family: OccupationFamily,
     domain: &PairDomain,
-) -> Result<super::feasibility::FlowTable, FixedStrengthError> {
+) -> Result<FlowTable, FixedStrengthError> {
     let total: OccNum = strength_out.iter().sum();
     if total == 0 {
         return Ok(Vec::new());

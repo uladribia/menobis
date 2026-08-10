@@ -1,16 +1,20 @@
-//! Feasibility checking for fixed-strength residual problems.
+//! Legacy Dinic max-flow for fixed-strength feasibility checking.
 //!
 //! Strength feasibility is a capacitated transportation problem: find a
 //! non-negative integer matrix with given row sums (out-strengths),
 //! column sums (in-strengths), and per-cell upper bounds (family
 //! capacity + domain restrictions).
 //!
-//! We use a Dinic max-flow algorithm for exact feasibility testing on
-//! restricted (non-complete) domains.  Complete domains can use the
-//! simpler greedy initializer.
+//! This module provides a Dinic max-flow implementation for exact
+//! feasibility testing on restricted (non-complete) domains.  It is
+//! retained as a **test oracle** for validating faster heuristics.
+//!
+//! ⚠ **Never import this in production code.** Always prefer the
+//! compressed aggregated matching or other scalable algorithms.
 
-use crate::model::family::OccupationFamily;
-use crate::OccNum;
+use menobis_core::generation::microcanonical::occupation_mcmc::FlowTable;
+use menobis_core::model::family::OccupationFamily;
+use menobis_core::OccNum;
 
 // ──────────────────────────────────────────────
 // Dinic max-flow (bounded integer capacities)
@@ -125,10 +129,6 @@ impl Dinic {
 /// out-nodes → in-nodes (cap = min(capacity, s_i^out, s_j^in)) for admissible pairs
 /// in-nodes → sink (cap = s_j^in)
 /// ```
-///
-/// Type alias for the max-flow result: a list of `(pair, occupation)` entries.
-pub type FlowTable = Vec<((u64, u64), OccNum)>;
-
 pub fn feasibility_max_flow(
     strength_out: &[OccNum],
     strength_in: &[OccNum],

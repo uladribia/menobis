@@ -32,6 +32,9 @@ use super::errors::FixedStrengthError;
 use crate::model::family::OccupationFamily;
 use crate::OccNum;
 
+/// Type alias for an occupation table: a list of `(pair, occupation)` entries.
+pub type FlowTable = Vec<((u64, u64), OccNum)>;
+
 /// Compressed aggregated matching for fixed-strength initial states.
 ///
 /// Returns a `FlowTable` (`Vec<((u64, u64), OccNum)>`) that satisfies
@@ -60,7 +63,7 @@ pub fn compressed_aggregated_matching(
     _family: OccupationFamily,
     _domain: &PairDomain,
     rng: &mut impl Rng,
-) -> Result<super::feasibility::FlowTable, FixedStrengthError> {
+) -> Result<FlowTable, FixedStrengthError> {
     let n = strength_out.len();
     let n_in = strength_in.len();
 
