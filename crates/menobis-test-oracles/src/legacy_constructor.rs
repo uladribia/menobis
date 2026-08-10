@@ -7,16 +7,23 @@ use menobis_core::generation::microcanonical::occupation_mcmc::domain::PairDomai
 use menobis_core::model::family::OccupationFamily;
 use menobis_core::OccNum;
 
+/// Table of occupied node pairs.
+type OccTable = Vec<((u64, u64), OccNum)>;
+
 /// Greedy O(N²) construction for complete pair domains (legacy oracle).
 ///
 /// Scans row-by-row, column-by-column.  Always succeeds for ME/W with
 /// self-loops.  Enforces B per-cell capacity.
+#[allow(
+    clippy::needless_range_loop,
+    reason = "Index-based loops preserve row-by-row, column-by-column greedy fill with early break on out[i]==0; iterator conversion would harm clarity"
+)]
 pub fn greedy_complete(
     strength_out: &[OccNum],
     strength_in: &[OccNum],
     family: OccupationFamily,
     domain: &PairDomain,
-) -> Result<Vec<((u64, u64), OccNum)>, String> {
+) -> Result<OccTable, String> {
     let n = strength_out.len();
     let mut out = strength_out.to_vec();
     let mut inp = strength_in.to_vec();

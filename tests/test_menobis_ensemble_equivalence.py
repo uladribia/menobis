@@ -9,10 +9,10 @@ from collections.abc import Callable
 from pathlib import Path
 
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 
 from menobis.analysis import directed_degrees, directed_strengths
 from menobis.analysis.graph_algorithms import clustering_coefficient
@@ -25,6 +25,7 @@ from menobis.models.generation import (
 from menobis.models.generation import (
     _sample_strength_poisson as sample_strength_poisson,
 )
+
 FIGURES_DIR = Path(__file__).resolve().parent.parent / "docs" / "figures"
 FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -330,7 +331,10 @@ def test_me_observable_convergence_smoke() -> None:
 
 def test_mcmc_fixed_strength_preserves_exact_strengths() -> None:
     """MCMC fixed-strength sampler preserves exact strength sequences."""
-    from menobis.models.generation import _sample_strength_fixed_strength_mcmc as mcmc_sampler
+    from menobis.models.generation import (
+        _sample_strength_fixed_strength_mcmc as mcmc_sampler,
+    )
+
     for total in [100, 500]:
         s_out, s_in = _balanced_integer_strengths(P_OUT, P_IN, total)
         for seed in range(10):

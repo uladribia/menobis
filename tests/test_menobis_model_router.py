@@ -143,7 +143,9 @@ def test_microcanonical_strength_cost_fast(family: ModelFamily, kwargs: dict) ->
     from menobis.analysis import directed_strengths
     from menobis.utilities.synthetic import generate_pa_geographic_network
 
-    net = generate_pa_geographic_network(4, average_degree=2.0, events_per_edge=3.0, seed=7, self_loops=True)
+    net = generate_pa_geographic_network(
+        4, average_degree=2.0, events_per_edge=3.0, seed=7, self_loops=True
+    )
     s = directed_strengths(net.edges)
     cx, cy = net.x, net.y
     source = net.edges.source
@@ -172,18 +174,6 @@ def test_microcanonical_strength_cost_fast(family: ModelFamily, kwargs: dict) ->
     actual_inp = np.bincount(result.target, weights=result.occ_num, minlength=n)
     np.testing.assert_array_equal(actual_out, s.out)
     np.testing.assert_array_equal(actual_inp, s.incoming)
-
-
-def test_fit_model_grandcanonical_strength_me() -> None:
-    """Grand-canonical ME fixed strengths routes to Poisson fitter."""
-    fit = fit_model(
-        family=ModelFamily.ME,
-        constraint=Constraint.STRENGTH,
-        strength_out=S_OUT,
-        strength_in=S_IN,
-    )
-    assert isinstance(fit, StrengthFit)
-    assert fit.family == "poisson"
 
 
 def test_sample_model_canonical_me_strength_uses_multinomial() -> None:

@@ -12,7 +12,8 @@ import pytest
 def pytest_configure(config):
     config.addinivalue_line(
         "markers",
-        "heavy: slow E2E / benchmark-level tests (>2s). Skip unless --run-heavy or -m heavy.",
+        "heavy: slow E2E / benchmark-level tests (>2s). "
+        "Skip unless --run-heavy or -m heavy.",
     )
 
 
