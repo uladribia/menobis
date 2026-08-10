@@ -92,6 +92,13 @@ pub enum FixedStrengthCostError {
     },
     /// Could not find a valid bracket after maximum expansions.
     BracketNotFound,
+    /// The MCMC chain did not produce enough accepted transitions for a
+    /// reliable cost estimate (spec §27).
+    InsufficientMobility {
+        proposals: u64,
+        accepted: u64,
+        min_accepted: u64,
+    },
     /// The fit did not converge to the required tolerance.
     FitDidNotConverge { iterations: usize, residual: f64 },
     /// Fixed-pair cost does not match the residual/total decomposition.
@@ -130,6 +137,16 @@ impl fmt::Display for FixedStrengthCostError {
                 write!(
                     f,
                     "cost is constant over the feasible state space; gamma is not identifiable"
+                )
+            }
+            Self::InsufficientMobility {
+                proposals,
+                accepted,
+                min_accepted,
+            } => {
+                write!(
+                    f,
+                    "insufficient MCMC mobility: {accepted}/{proposals} accepted, need at least {min_accepted}"
                 )
             }
             Self::InvalidGamma { value, message } => {

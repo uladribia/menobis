@@ -9,14 +9,14 @@
 //!
 //! # Strategy
 //!
-//! 1. **Warm start**: run a short chain at \(\gamma = 0\), estimate
-//!    \(\mu_C(0)\) and \(\operatorname{Var}_C(0)\), set
-//!    \(\gamma_0 = (\mu_C(0) - C_{\mathrm{obs}}) / \operatorname{Var}_C(0)\).
-//! 2. **Bracket expansion**: geometrically expand around \(\gamma_0\) until
+//! 1. **Bracket expansion**: start at \(\gamma = 0\), estimate
+//!    \(\mu_C(0)\), then geometrically expand until
 //!    \(\mu_C(\gamma_{\mathrm{low}}) \ge C_{\mathrm{obs}} \ge
 //!    \mu_C(\gamma_{\mathrm{high}})\).
-//! 3. **Stochastic bisection**: at each midpoint, run the chain, estimate
+//! 2. **Stochastic bisection**: at each midpoint, run the chain, estimate
 //!    \(\mu_C\) via batch means, update the bracket, check convergence.
+//! 3. **Mobility check**: after each estimation, verify that the MCMC chain
+//!    produced enough accepted transitions (spec §27).
 
 use rand::Rng;
 
@@ -24,6 +24,7 @@ use super::chain::FixedStrengthChain;
 use super::cost::{residual_cost_target, state_cost};
 use super::errors::FixedStrengthCostError;
 use super::target::StrengthTarget;
+use crate::generation::microcanonical::mcmc::McmcCounters;
 use crate::model::family::OccupationFamily;
 use crate::pairs::PairCostProvider;
 
@@ -34,8 +35,10 @@ use crate::pairs::PairCostProvider;
 /// Configuration for gamma fitting via stochastic bisection.
 #[derive(Clone, Debug)]
 pub struct FixedStrengthCostFitConfig {
-    /// Number of sweeps to estimate µ_C(0) and Var_C(0) for the warm start.
-    pub warm_start_sweeps: usize,
+    /// Minimum number of accepted MCMC transitions required per evaluation.
+    /// If the chain accepts fewer than this, the fit fails with
+    /// `InsufficientMobility` (§27).
+    pub min_accepted_transitions: u64,
     /// Number of adaptation sweeps after each gamma change, before
     /// collecting estimation samples.
     pub adaptation_sweeps: usize,
@@ -66,7 +69,7 @@ pub struct FixedStrengthCostFitConfig {
 impl Default for FixedStrengthCostFitConfig {
     fn default() -> Self {
         Self {
-            warm_start_sweeps: 50,
+            min_accepted_transitions: 100,
             adaptation_sweeps: 100,
             estimation_sweeps: 80,
             samples_per_iteration: 20,
@@ -111,6 +114,11 @@ pub struct FixedStrengthCostFitResult {
     pub mcmc_proposals: u64,
     /// Total MCMC acceptances.
     pub mcmc_accepted: u64,
+    /// Total structurally-valid proposals (accepted + Metropolis-rejected)
+    /// during the fit. Equivalently, `mcmc_proposals - mcmc_held`.
+    pub structurally_valid: u64,
+    /// Total MCMC held (structurally invalid) during the fit.
+    pub mcmc_held: u64,
     /// Family used.
     pub family: OccupationFamily,
     /// Number of cost samples collected in the final measurement.
@@ -168,80 +176,19 @@ pub fn batch_means_se(samples: &[f64], n_batches: usize) -> f64 {
 }
 
 // ---------------------------------------------------------------------------
-// Warm-start gamma via moment matching
-// ---------------------------------------------------------------------------
-
-/// Compute a warm-start \(\gamma\) by moment matching at \(\gamma = 0\).
-///
-/// 1. Run `sweeps` of the chain at \(\gamma = 0\), collecting cost per sweep.
-/// 2. Compute sample mean \(\mu_0\) and variance \(\sigma_0^2\).
-/// 3. Return \(\gamma_0 = (\mu_0 - C_{\mathrm{obs}}) / \sigma_0^2\).
-///
-/// If \(\sigma_0^2\) is effectively zero, returns
-/// [`CostNotIdentifiable`](FixedStrengthCostError::CostNotIdentifiable).
-pub fn warm_start_gamma<'a>(
-    chain: &mut FixedStrengthChain<'a>,
-    rng: &mut impl Rng,
-    costs: &'a dyn PairCostProvider,
-    observed_cost: f64,
-    sweeps: usize,
-) -> Result<f64, FixedStrengthCostError> {
-    // Ensure gamma is 0 for warm-start measurement.
-    {
-        let mut target = StrengthTarget::new(chain.target.family);
-        target.costs = chain.target.costs;
-        chain.set_target(target);
-    }
-
-    // Collect cost samples at gamma = 0.
-    // First run a short burn-in at gamma=0 (adaptation_sweeps/2).
-    for _ in 0..sweeps / 2 {
-        chain.sweep(rng);
-    }
-
-    let mut cost_samples = Vec::with_capacity(sweeps);
-    for _ in 0..sweeps {
-        chain.sweep(rng);
-        let total = state_cost(&chain.state, costs)?;
-        cost_samples.push(total);
-    }
-
-    let n = cost_samples.len() as f64;
-    let mu_0 = cost_samples.iter().sum::<f64>() / n;
-    let var_0 = if n > 1.0 {
-        cost_samples
-            .iter()
-            .map(|&c| (c - mu_0).powi(2))
-            .sum::<f64>()
-            / (n - 1.0)
-    } else {
-        0.0
-    };
-
-    // Relative threshold: if std / |mu_0| < 1e-10 (or mu_0 is zero), cost is constant.
-    let std_0 = var_0.sqrt();
-    let relative_spread = if mu_0.abs() > 1e-12 {
-        std_0 / mu_0.abs()
-    } else {
-        std_0
-    };
-
-    if relative_spread < 1e-10 {
-        return Err(FixedStrengthCostError::CostNotIdentifiable);
-    }
-
-    let gamma_0 = (mu_0 - observed_cost) / var_0;
-
-    // Clamp to finite range.
-    Ok(if gamma_0.is_finite() { gamma_0 } else { 0.0 })
-}
-
-// ---------------------------------------------------------------------------
 // Bracket expansion
 // ---------------------------------------------------------------------------
 
-/// Expand a bracket geometrically around `gamma_start` until the expected
+/// Expand a bracket geometrically from \(\gamma = 0\) until the expected
 /// cost at the bracket endpoints brackets `observed_cost`.
+///
+/// 1. Estimate \(\mu_C(0)\) at \(\gamma = 0\).
+/// 2. If already within tolerance, return \((0, 0)\).
+/// 3. If \(\mu_C(0) > C_{\mathrm{obs}}\), expected cost needs to decrease
+///    → need positive \(\gamma\): start bracket \((0, \mathrm{factor})\).
+/// 4. Otherwise \(\mu_C(0) < C_{\mathrm{obs}}\), expected cost needs to
+///    increase → need negative \(\gamma\): start bracket \((-\mathrm{factor}, 0)\).
+/// 5. Geometrically expand in the direction where the bracket is too narrow.
 ///
 /// Returns `(gamma_low, gamma_high)`.
 pub fn expand_bracket<'a>(
@@ -249,56 +196,55 @@ pub fn expand_bracket<'a>(
     rng: &mut impl Rng,
     costs: &'a dyn PairCostProvider,
     observed_cost: f64,
-    gamma_start: f64,
     config: &FixedStrengthCostFitConfig,
 ) -> Result<(f64, f64), FixedStrengthCostError> {
     let factor = config.bracket_expansion_factor;
     let max_expansions = config.max_bracket_expansions;
 
-    // Measure expected cost at gamma_start.
-    let mu_start = estimate_mu_at_gamma(chain, rng, costs, gamma_start, config)?;
+    // Estimate expected cost at γ = 0.
+    let mu_0 = estimate_mu_at_gamma(chain, rng, costs, 0.0, config)?;
+
+    // If already within tolerance, no expansion needed.
+    let tol =
+        (config.absolute_cost_tolerance).max(config.relative_cost_tolerance * observed_cost.abs());
+    if (mu_0 - observed_cost).abs() <= tol {
+        return Ok((0.0, 0.0));
+    }
 
     // Determine search direction.
-    // Since expected cost decreases with gamma:
-    //   mu > observed → gamma too small → need larger gamma
-    //   mu < observed → gamma too large → need smaller gamma
-    let (mut low, mut high) = if mu_start > observed_cost {
-        // Need to go up (positive direction from gamma_start).
-        (gamma_start, gamma_start * (1.0 + factor))
+    let (mut low, mut high) = if mu_0 > observed_cost {
+        // Need positive gamma: expected cost decreases with gamma.
+        (0.0, factor)
     } else {
-        // Need to go down (negative direction from gamma_start).
-        (gamma_start * (1.0 - factor), gamma_start)
+        // Need negative gamma.
+        (-factor, 0.0)
     };
-
-    // Ensure low < high.
-    if low > high {
-        std::mem::swap(&mut low, &mut high);
-    }
 
     for _ in 0..max_expansions {
         let mu_low = estimate_mu_at_gamma(chain, rng, costs, low, config)?;
-        if mu_low >= observed_cost - config.absolute_cost_tolerance {
-            // Low side is above observed cost (within tolerance), good.
-            let mu_high = estimate_mu_at_gamma(chain, rng, costs, high, config)?;
-            if mu_high <= observed_cost + config.absolute_cost_tolerance {
-                // Both sides bracket.
-                return Ok((low, high));
-            }
-            // High side is too high, expand upward.
-            let expansion = if high >= 0.0 {
+        let mu_high = estimate_mu_at_gamma(chain, rng, costs, high, config)?;
+        if mu_low >= observed_cost - config.absolute_cost_tolerance
+            && mu_high <= observed_cost + config.absolute_cost_tolerance
+        {
+            return Ok((low, high));
+        }
+        // Expand in the direction where the bracket is too narrow.
+        if mu_low > observed_cost {
+            // Low side still above target → need higher gamma.
+            low = high;
+            high = if high >= 0.0 {
                 high * (1.0 + factor)
             } else {
                 high * (1.0 - factor)
             };
-            high = expansion;
         } else {
-            // Low side is too low, expand downward.
-            let expansion = if low >= 0.0 {
+            // High side still below target → need lower gamma.
+            high = low;
+            low = if low >= 0.0 {
                 low * (1.0 - factor)
             } else {
                 low * (1.0 + factor)
             };
-            low = expansion.min(high);
         }
     }
 
@@ -342,6 +288,30 @@ fn estimate_mu_at_gamma<'a>(
 }
 
 // ---------------------------------------------------------------------------
+// Mobility check
+// ---------------------------------------------------------------------------
+
+/// Check that the MCMC chain produced enough accepted transitions since
+/// the last checkpoint.
+///
+/// Returns `InsufficientMobility` if `accepted_since_last_check < min_accepted`
+/// (spec §27).
+fn check_mobility(
+    accepted_since_last_check: u64,
+    proposals_since_last_check: u64,
+    min_accepted: u64,
+) -> Result<(), FixedStrengthCostError> {
+    if accepted_since_last_check < min_accepted {
+        return Err(FixedStrengthCostError::InsufficientMobility {
+            proposals: proposals_since_last_check,
+            accepted: accepted_since_last_check,
+            min_accepted,
+        });
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Main fitting routine
 // ---------------------------------------------------------------------------
 
@@ -375,26 +345,33 @@ pub fn fit_gamma<'a>(
     // Compute residual cost target.
     let residual_obs = residual_cost_target(observed_total_cost, fixed_cost)?;
 
-    // --- Warm start ---
-    let mut gamma_0 = warm_start_gamma(chain, rng, costs, residual_obs, config.warm_start_sweeps)?;
+    // Snapshot initial counters for per-iteration mobility tracking (§27).
+    let initial_proposals = chain.counters.proposals;
+    let initial_accepted = chain.counters.accepted;
 
-    // Clamp to avoid extreme gamma values from noisy variance estimates.
-    // If gamma_0 is tiny, pick a sensible default direction.
-    // If gamma_0 is huge (> 1e3), the variance was too small and the
-    // linear approximation is unreliable — clamp to a moderate value.
-    if gamma_0.abs() < 1e-6 {
-        gamma_0 = if gamma_0 >= 0.0 { 0.1 } else { -0.1 };
-    } else if gamma_0.abs() > 100.0 {
-        gamma_0 = gamma_0.signum() * 10.0;
-    }
+    // --- Bracket expansion (starts from γ = 0, spec §26) ---
+    let (gamma_low, gamma_high) = expand_bracket(chain, rng, costs, residual_obs, config)?;
 
-    // --- Bracket expansion ---
-    let (gamma_low, gamma_high) = expand_bracket(chain, rng, costs, residual_obs, gamma_0, config)?;
+    // Mobility check after bracket expansion (per-iteration diff).
+    let proposals_in_phase = chain.counters.proposals - initial_proposals;
+    let accepted_in_phase = chain.counters.accepted - initial_accepted;
+    check_mobility(
+        accepted_in_phase,
+        proposals_in_phase,
+        config.min_accepted_transitions,
+    )?;
 
     // --- Stochastic bisection ---
     let mut low = gamma_low;
     let mut high = gamma_high;
-    let mut best_gamma = gamma_0;
+    // If gamma_low == gamma_high (e.g., both 0.0 from early return), expand
+    // a tiny amount to avoid immediate collapse.
+    if (high - low).abs() < 1e-15 {
+        high = 1e-6;
+        low = -1e-6;
+    }
+
+    let mut best_gamma = 0.0;
     let mut best_residual = f64::MAX;
     let mut best_mu = 0.0;
     let mut best_se = 0.0;
@@ -405,6 +382,10 @@ pub fn fit_gamma<'a>(
     for _iteration in 0..config.max_iterations {
         iteration_count += 1;
         let gamma_mid = (low + high) / 2.0;
+
+        // Snapshot counters for per-iteration mobility tracking.
+        let iter_proposals_before = chain.counters.proposals;
+        let iter_accepted_before = chain.counters.accepted;
 
         // Set gamma and adapt.
         let mut target = StrengthTarget::with_costs(chain.target.family, costs);
@@ -423,6 +404,15 @@ pub fn fit_gamma<'a>(
             let total = state_cost(&chain.state, costs)?;
             samples.push(total);
         }
+
+        // Mobility check after each estimation (per-iteration diff, §27).
+        let iter_proposals = chain.counters.proposals - iter_proposals_before;
+        let iter_accepted = chain.counters.accepted - iter_accepted_before;
+        check_mobility(
+            iter_accepted,
+            iter_proposals,
+            config.min_accepted_transitions,
+        )?;
 
         let n = samples.len() as f64;
         let mu = samples.iter().sum::<f64>() / n;
@@ -465,6 +455,12 @@ pub fn fit_gamma<'a>(
         }
     }
 
+    // Compute differential counters.
+    let mcmc_proposals = chain.counters.proposals;
+    let mcmc_accepted = chain.counters.accepted;
+    let mcmc_held = chain.counters.held;
+    let structurally_valid = mcmc_proposals - mcmc_held;
+
     let result = FixedStrengthCostFitResult {
         gamma: best_gamma,
         expected_cost_estimate: best_mu,
@@ -477,8 +473,10 @@ pub fn fit_gamma<'a>(
         converged,
         bracket_lower: gamma_low,
         bracket_upper: gamma_high,
-        mcmc_proposals: chain.counters.proposals,
-        mcmc_accepted: chain.counters.accepted,
+        mcmc_proposals,
+        mcmc_accepted,
+        structurally_valid,
+        mcmc_held,
         family: chain.target.family,
         sample_count: best_samples.len(),
         seed: config.seed,
