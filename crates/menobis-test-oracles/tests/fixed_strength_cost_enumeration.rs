@@ -8,7 +8,7 @@
 use menobis_core::generation::microcanonical::mcmc::McmcConfig;
 use menobis_core::generation::microcanonical::occupation_mcmc::chain::FixedStrengthChain;
 use menobis_core::generation::microcanonical::occupation_mcmc::cost_fit::{
-    fit_gamma, warm_start_gamma, FixedStrengthCostFitConfig,
+    fit_gamma, FixedStrengthCostFitConfig,
 };
 use menobis_core::generation::microcanonical::occupation_mcmc::domain::PairDomain;
 use menobis_core::generation::microcanonical::occupation_mcmc::initializer::initialize_table;
@@ -315,64 +315,6 @@ fn me_cost_enumeration_agreement_n2() {
     }
 }
 
-#[test]
-fn warm_start_positive_gamma_when_cost_above_uniform() {
-    let s_out = vec![3u64, 3];
-    let s_in = vec![3u64, 3];
-    let n = 2;
-    let domain = PairDomain::Complete {
-        node_count: n,
-        self_loops: true,
-    };
-    let config = McmcConfig::new(5, 2, 42);
-    let costs = LinearCost;
-
-    let table = initialize_table(&s_out, &s_in, OccupationFamily::ME, &domain).unwrap();
-    let state = StrengthState::new(n, table);
-    let mut chain = FixedStrengthChain::new(
-        state,
-        StrengthTarget::with_costs(OccupationFamily::ME, &costs),
-        domain,
-        config,
-    );
-
-    let mut rng = StdRng::seed_from_u64(42);
-    let gamma_0 = warm_start_gamma(&mut chain, &mut rng, &costs, 0.1, 10).unwrap();
-    assert!(
-        gamma_0 > 0.0,
-        "expected positive gamma for low observed cost, got {gamma_0}"
-    );
-}
-
-#[test]
-fn warm_start_negative_gamma_when_cost_below_uniform() {
-    let s_out = vec![3u64, 3];
-    let s_in = vec![3u64, 3];
-    let n = 2;
-    let domain = PairDomain::Complete {
-        node_count: n,
-        self_loops: true,
-    };
-    let config = McmcConfig::new(5, 2, 42);
-    let costs = LinearCost;
-
-    let table = initialize_table(&s_out, &s_in, OccupationFamily::ME, &domain).unwrap();
-    let state = StrengthState::new(n, table);
-    let mut chain = FixedStrengthChain::new(
-        state,
-        StrengthTarget::with_costs(OccupationFamily::ME, &costs),
-        domain,
-        config,
-    );
-
-    let mut rng = StdRng::seed_from_u64(42);
-    let gamma_0 = warm_start_gamma(&mut chain, &mut rng, &costs, 100.0, 10).unwrap();
-    assert!(
-        gamma_0 < 0.0,
-        "expected negative gamma for high observed cost, got {gamma_0}"
-    );
-}
-
 fn assert_gamma_recovery(family: OccupationFamily, target_gamma: f64) {
     let s_out = vec![2u64, 2];
     let s_in = vec![2u64, 2];
@@ -398,7 +340,6 @@ fn assert_gamma_recovery(family: OccupationFamily, target_gamma: f64) {
 
     let mut rng = StdRng::seed_from_u64(42);
     let fit_config = FixedStrengthCostFitConfig {
-        warm_start_sweeps: 200,
         adaptation_sweeps: 200,
         estimation_sweeps: 400,
         samples_per_iteration: 400,

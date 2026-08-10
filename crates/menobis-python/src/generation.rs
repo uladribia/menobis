@@ -760,7 +760,6 @@ pub(crate) fn sample_fixed_strength_with_cost(
     fixed_targets: Vec<u64>,
     fixed_occnums: Vec<u64>,
     layers: u32,
-    warm_start_sweeps: usize,
     adaptation_sweeps: usize,
     estimation_sweeps: usize,
     samples_per_iteration: usize,
@@ -865,7 +864,6 @@ pub(crate) fn sample_fixed_strength_with_cost(
 
     // Fit config.
     let fit_config = FixedStrengthCostFitConfig {
-        warm_start_sweeps,
         adaptation_sweeps,
         estimation_sweeps,
         samples_per_iteration,

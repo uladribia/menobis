@@ -35,12 +35,10 @@ use crate::pairs::PairCostProvider;
 /// Configuration for gamma fitting via stochastic bisection.
 #[derive(Clone, Debug)]
 pub struct FixedStrengthCostFitConfig {
-    /// Minimum number of accepted MCMC transitions required per estimation.
+    /// Minimum number of accepted MCMC transitions required per evaluation.
     /// If the chain accepts fewer than this, the fit fails with
     /// `InsufficientMobility` (§27).
     pub min_accepted_transitions: u64,
-    /// Minimum number of cost samples required for convergence check.
-    pub min_samples: usize,
     /// Number of adaptation sweeps after each gamma change, before
     /// collecting estimation samples.
     pub adaptation_sweeps: usize,
@@ -72,7 +70,6 @@ impl Default for FixedStrengthCostFitConfig {
     fn default() -> Self {
         Self {
             min_accepted_transitions: 100,
-            min_samples: 20,
             adaptation_sweeps: 100,
             estimation_sweeps: 80,
             samples_per_iteration: 20,
@@ -294,18 +291,20 @@ fn estimate_mu_at_gamma<'a>(
 // Mobility check
 // ---------------------------------------------------------------------------
 
-/// Check that the MCMC chain produced enough accepted transitions.
+/// Check that the MCMC chain produced enough accepted transitions since
+/// the last checkpoint.
 ///
-/// Returns `InsufficientMobility` if `counters.accepted < min_accepted`
+/// Returns `InsufficientMobility` if `accepted_since_last_check < min_accepted`
 /// (spec §27).
 fn check_mobility(
-    counters: &McmcCounters,
+    accepted_since_last_check: u64,
+    proposals_since_last_check: u64,
     min_accepted: u64,
 ) -> Result<(), FixedStrengthCostError> {
-    if counters.accepted < min_accepted {
+    if accepted_since_last_check < min_accepted {
         return Err(FixedStrengthCostError::InsufficientMobility {
-            proposals: counters.proposals,
-            accepted: counters.accepted,
+            proposals: proposals_since_last_check,
+            accepted: accepted_since_last_check,
             min_accepted,
         });
     }
@@ -346,11 +345,21 @@ pub fn fit_gamma<'a>(
     // Compute residual cost target.
     let residual_obs = residual_cost_target(observed_total_cost, fixed_cost)?;
 
+    // Snapshot initial counters for per-iteration mobility tracking (§27).
+    let initial_proposals = chain.counters.proposals;
+    let initial_accepted = chain.counters.accepted;
+
     // --- Bracket expansion (starts from γ = 0, spec §26) ---
     let (gamma_low, gamma_high) = expand_bracket(chain, rng, costs, residual_obs, config)?;
 
-    // Mobility check after bracket expansion.
-    check_mobility(&chain.counters, config.min_accepted_transitions)?;
+    // Mobility check after bracket expansion (per-iteration diff).
+    let proposals_in_phase = chain.counters.proposals - initial_proposals;
+    let accepted_in_phase = chain.counters.accepted - initial_accepted;
+    check_mobility(
+        accepted_in_phase,
+        proposals_in_phase,
+        config.min_accepted_transitions,
+    )?;
 
     // --- Stochastic bisection ---
     let mut low = gamma_low;
@@ -374,6 +383,10 @@ pub fn fit_gamma<'a>(
         iteration_count += 1;
         let gamma_mid = (low + high) / 2.0;
 
+        // Snapshot counters for per-iteration mobility tracking.
+        let iter_proposals_before = chain.counters.proposals;
+        let iter_accepted_before = chain.counters.accepted;
+
         // Set gamma and adapt.
         let mut target = StrengthTarget::with_costs(chain.target.family, costs);
         target.set_gamma(gamma_mid);
@@ -392,8 +405,14 @@ pub fn fit_gamma<'a>(
             samples.push(total);
         }
 
-        // Mobility check after each estimation.
-        check_mobility(&chain.counters, config.min_accepted_transitions)?;
+        // Mobility check after each estimation (per-iteration diff, §27).
+        let iter_proposals = chain.counters.proposals - iter_proposals_before;
+        let iter_accepted = chain.counters.accepted - iter_accepted_before;
+        check_mobility(
+            iter_accepted,
+            iter_proposals,
+            config.min_accepted_transitions,
+        )?;
 
         let n = samples.len() as f64;
         let mu = samples.iter().sum::<f64>() / n;

@@ -1043,9 +1043,6 @@ def micro_command(
         int,
         typer.Option("--fit-max-iterations", help="Gamma-fit bisection iterations."),
     ] = 40,
-    fit_warm_start_sweeps: Annotated[
-        int, typer.Option("--fit-warm-start-sweeps", help="Warm-start sweeps.")
-    ] = 50,
     fit_adaptation_sweeps: Annotated[
         int, typer.Option("--fit-adaptation-sweeps", help="Adaptation sweeps per gamma.")
     ] = 100,
@@ -1242,7 +1239,6 @@ def micro_command(
                                 "seed": _seed,
                                 "burn_in_sweeps": _burn_in,
                                 "sweeps_per_sample": _sample_sweeps,
-                                "warm_start_sweeps": fit_warm_start_sweeps,
                                 "adaptation_sweeps": fit_adaptation_sweeps,
                                 "estimation_sweeps": fit_estimation_sweeps,
                                 "samples_per_iteration": fit_samples_per_iteration,

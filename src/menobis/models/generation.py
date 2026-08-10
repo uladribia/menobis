@@ -208,7 +208,6 @@ def _sample_strength_fixed_strength_cost_mcmc(
     seed: int = 0,
     burn_in_sweeps: int = 50,
     sweeps_per_sample: int = 10,
-    warm_start_sweeps: int = 20,
     adaptation_sweeps: int = 50,
     estimation_sweeps: int = 50,
     samples_per_iteration: int = 5,
@@ -238,7 +237,7 @@ def _sample_strength_fixed_strength_cost_mcmc(
         seed: Random seed.
         burn_in_sweeps: Burn-in sweeps after gamma is set.
         sweeps_per_sample: Thinning sweeps for final sample.
-        warm_start_sweeps: Sweeps for warm-start estimate.
+            Sweeps for gamma fitting adaptation.
         adaptation_sweeps: Adaptation sweeps per gamma change.
         estimation_sweeps: Estimation sweeps per iteration.
         samples_per_iteration: Cost samples per iteration.
@@ -300,7 +299,6 @@ def _sample_strength_fixed_strength_cost_mcmc(
         f_tgt,
         f_occ,
         int(layers),
-        int(warm_start_sweeps),
         int(adaptation_sweeps),
         int(estimation_sweeps),
         int(samples_per_iteration),
