@@ -223,9 +223,11 @@ pub fn sample_fixed_strength(
     // Create RNG for repair and MCMC.
     let mut rng = StdRng::seed_from_u64(seed);
 
-    // Phase D: loop repair for complete loopless ME/W (spec 14-17).
+    // Phase D: loop repair for complete loopless ME/W/B (spec 14-17).
     if !problem.domain.self_loops_allowed()
-        && (family == OccupationFamily::ME || matches!(family, OccupationFamily::W { .. }))
+        && (family == OccupationFamily::ME
+            || matches!(family, OccupationFamily::W { .. })
+            || matches!(family, OccupationFamily::B { .. }))
     {
         // O(N) feasibility check (spec 14).
         if !repair::loopless_feasibility_check(&problem.strength_out, &problem.strength_in) {
@@ -236,7 +238,26 @@ pub fn sample_fixed_strength(
             ));
         }
         // Guaranteed loop repair (spec 15-17).
-        repair::repair_self_loops(&mut state, &problem.domain, &mut rng)?;
+        repair::repair_self_loops(
+            &mut state,
+            &problem.domain,
+            &repair::RepairConfig::default(),
+            &mut rng,
+        )?;
+    }
+
+    // Phase E: B capacity repair (spec 18).
+    if matches!(family, OccupationFamily::B { .. }) {
+        repair::repair_all_violations(
+            &mut state,
+            family,
+            &problem.domain,
+            None,
+            &repair::RepairConfig::default(),
+            &mut rng,
+            &problem.strength_out,
+            &problem.strength_in,
+        )?;
     }
 
     // Build chain.
@@ -284,9 +305,11 @@ pub fn sample_fixed_strength_with_cost<'a>(
     // Create RNG for repair.
     let mut rng = StdRng::seed_from_u64(config.seed);
 
-    // Phase D: loop repair for complete loopless ME/W (spec 14-17).
+    // Phase D: loop repair for complete loopless ME/W/B (spec 14-17).
     if !problem.domain.self_loops_allowed()
-        && (family == OccupationFamily::ME || matches!(family, OccupationFamily::W { .. }))
+        && (family == OccupationFamily::ME
+            || matches!(family, OccupationFamily::W { .. })
+            || matches!(family, OccupationFamily::B { .. }))
     {
         // O(N) feasibility check (spec 14).
         if !repair::loopless_feasibility_check(&problem.strength_out, &problem.strength_in) {
@@ -297,7 +320,26 @@ pub fn sample_fixed_strength_with_cost<'a>(
             ));
         }
         // Guaranteed loop repair (spec 15-17).
-        repair::repair_self_loops(&mut state, &problem.domain, &mut rng)?;
+        repair::repair_self_loops(
+            &mut state,
+            &problem.domain,
+            &repair::RepairConfig::default(),
+            &mut rng,
+        )?;
+    }
+
+    // Phase E: B capacity repair (spec 18).
+    if matches!(family, OccupationFamily::B { .. }) {
+        repair::repair_all_violations(
+            &mut state,
+            family,
+            &problem.domain,
+            None,
+            &repair::RepairConfig::default(),
+            &mut rng,
+            &problem.strength_out,
+            &problem.strength_in,
+        )?;
     }
 
     // Build target with cost provider (gamma starts at 0.0).
