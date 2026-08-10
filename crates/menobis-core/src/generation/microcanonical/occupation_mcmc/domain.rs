@@ -97,8 +97,10 @@ impl PairDomain {
 
     /// Iterate over all admissible ordered pairs.
     ///
-    /// For complete domains this materialises the iterator and may be
-    /// expensive for large N.  Use only during initialisation.
+    /// ⚠️ **Complete domains**: This materialises an N×N iterator,
+    /// producing O(N²) pairs.  Only safe for small N or sparse domains.
+    /// For large N with a sparse domain, the O(E_allowed) variant is
+    /// used instead and is safe.
     pub fn iter_admissible(&self) -> Box<dyn Iterator<Item = (u64, u64)> + '_> {
         match self {
             PairDomain::Complete {

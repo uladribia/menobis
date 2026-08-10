@@ -208,6 +208,19 @@ pub fn sample_fixed_strength(
         )?;
     }
 
+    // Admissibility repair for sparse domains (spec §19).
+    // The compressed constructor may place mass on inadmissible pairs
+    // for sparse domains; this repair moves it to admissible cells.
+    if matches!(problem.domain, PairDomain::Sparse { .. }) {
+        repair::repair_inadmissible_pairs(
+            &mut state,
+            family,
+            &problem.domain,
+            &repair::RepairConfig::default(),
+            &mut rng,
+        )?;
+    }
+
     // Build chain.
     let mut chain = FixedStrengthChain::new(state, target, problem.domain, config);
 
@@ -287,6 +300,19 @@ pub fn sample_fixed_strength_with_cost<'a>(
             &mut rng,
             &problem.strength_out,
             &problem.strength_in,
+        )?;
+    }
+
+    // Admissibility repair for sparse domains (spec §19).
+    // The compressed constructor may place mass on inadmissible pairs
+    // for sparse domains; this repair moves it to admissible cells.
+    if matches!(problem.domain, PairDomain::Sparse { .. }) {
+        repair::repair_inadmissible_pairs(
+            &mut state,
+            family,
+            &problem.domain,
+            &repair::RepairConfig::default(),
+            &mut rng,
         )?;
     }
 
