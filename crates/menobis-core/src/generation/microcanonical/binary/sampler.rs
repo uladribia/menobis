@@ -209,7 +209,7 @@ fn invert_complement(state: &mut DegreeSupportState, self_loops: bool) {
     let n = state.node_count;
 
     // Build the complement: all ordered pairs not in the current state.
-    let mut new_edges = Vec::with_capacity(n.saturating_mul(n.saturating_sub(1)));
+    let mut new_edges = Vec::new();
     for i in 0..(n as u64) {
         for j in 0..(n as u64) {
             if !self_loops && i == j {
