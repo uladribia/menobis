@@ -136,7 +136,7 @@ def test_integration_matrix_strength_cost(integration_network, family) -> None:
     )
 
 
-def test_integration_matrix_microcanonical_stub_matching(integration_network) -> None:
+def test_integration_matrix_microcanonical_fixed_strength(integration_network) -> None:
     """Microcanonical ME strength: exact strengths, no fit required."""
     _, c = integration_network
     s_out = np.round(c.strength_out).astype(np.uint64)

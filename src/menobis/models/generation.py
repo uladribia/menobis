@@ -6,7 +6,6 @@ from numpy.typing import NDArray
 import menobis._menobis as _menobis
 from menobis.data.frames import EdgeTable, ProbabilityTable
 from menobis.models.types import (
-    DegreeEventsFit,
     StrengthCostDiagnostics,
     StrengthCostFit,
     StrengthDegreeFit,
@@ -101,10 +100,10 @@ def _sample_strength_fixed_strength_mcmc(
     burn_in_sweeps: int = 50,
     sweeps_per_sample: int = 10,
 ) -> EdgeTable:
-    """Microcanonical fixed-strength sampler via MCMC (or ME direct).
+    """Microcanonical fixed-strength sampler via the 4-cycle Metropolis chain.
 
-    Routes to the ME direct stub-matching backend when eligible, otherwise
-    uses the generic 4-cycle Metropolis chain.
+    Uses the generic occupied-cell 4-cycle MCMC backend on the compressed
+    residual state.
 
     Args:
         family: "ME", "B", or "W".
@@ -258,7 +257,7 @@ def _sample_strength_fixed_strength_cost_mcmc(
         props,
         accs,
         iterations,
-    ) = _menobis.sample_fixed_strength_with_cost(  # type: ignore
+    ) = _menobis.sample_fixed_strength_with_cost(
         family,
         s_out,
         s_in,
@@ -301,42 +300,6 @@ def _sample_strength_fixed_strength_cost_mcmc(
     return edges, diagnostics
 
 
-def _sample_me_fixed_et(
-    node_count: int,
-    *,
-    self_loops: bool = True,
-    residual_edges: int,
-    residual_total: int,
-    seed: int = 0,
-) -> EdgeTable:
-    """Exact ME microcanonical sampler with fixed (E,T) over all pairs.
-
-    Draws an exact sample from the ME microcanonical distribution over
-    the full admissible set of ``node_count`` nodes (all N² or N(N-1)
-    candidate pairs depending on ``self_loops``).  No pair list is
-    materialised: the Rust kernel maps linear indices to pairs on the fly.
-
-    Args:
-        node_count: Number of nodes.
-        self_loops: Whether diagonal pairs are admissible.
-        residual_edges: Number of occupied pairs E.
-        residual_total: Total occupation T.
-        seed: Random seed.
-
-    Returns:
-        EdgeTable with exactly ``residual_edges`` occupied pairs and
-        total occupation ``residual_total``.
-    """
-    sources, targets, occ_nums = _menobis.sample_me_fixed_et(
-        int(node_count),
-        bool(self_loops),
-        int(residual_edges),
-        int(residual_total),
-        int(seed),
-    )
-    return _edge_table_from_lists(sources, targets, occ_nums)
-
-
 def _sample_me_fixed_et_explicit(
     admissible_sources: NDArray[np.uint64],
     admissible_targets: NDArray[np.uint64],
@@ -374,27 +337,6 @@ def _sample_me_fixed_et_explicit(
     return _edge_table_from_lists(sources, targets, occ_nums)
 
 
-def _sample_b_fixed_et(
-    node_count: int,
-    *,
-    self_loops: bool = True,
-    layers: int = 1,
-    residual_edges: int,
-    residual_total: int,
-    seed: int = 0,
-) -> EdgeTable:
-    """Exact B microcanonical sampler with fixed (E,T) and M layers."""
-    sources, targets, occ_nums = _menobis.sample_b_fixed_et(
-        int(node_count),
-        bool(self_loops),
-        int(layers),
-        int(residual_edges),
-        int(residual_total),
-        int(seed),
-    )
-    return _edge_table_from_lists(sources, targets, occ_nums)
-
-
 def _sample_b_fixed_et_explicit(
     admissible_sources: NDArray[np.uint64],
     admissible_targets: NDArray[np.uint64],
@@ -410,27 +352,6 @@ def _sample_b_fixed_et_explicit(
     sources, targets, occ_nums = _menobis.sample_b_fixed_et_explicit(
         sources_list,
         targets_list,
-        int(layers),
-        int(residual_edges),
-        int(residual_total),
-        int(seed),
-    )
-    return _edge_table_from_lists(sources, targets, occ_nums)
-
-
-def _sample_w_fixed_et(
-    node_count: int,
-    *,
-    self_loops: bool = True,
-    layers: int = 1,
-    residual_edges: int,
-    residual_total: int,
-    seed: int = 0,
-) -> EdgeTable:
-    """Exact W microcanonical sampler with fixed (E,T) and M layers."""
-    sources, targets, occ_nums = _menobis.sample_w_fixed_et(
-        int(node_count),
-        bool(self_loops),
         int(layers),
         int(residual_edges),
         int(residual_total),
@@ -522,18 +443,6 @@ def _sample_strength_poisson(
     return _edge_table_from_lists(sources, targets, occ_nums)
 
 
-def _sample_degree_events_poisson(
-    fit: DegreeEventsFit,
-    *,
-    seed: int = 0,
-) -> EdgeTable:
-    """Sample degree-events ME from a fitted zero-truncated Poisson rate."""
-    sources, targets, occ_nums = _menobis.sample_degree_events_poisson(
-        fit.x.tolist(), fit.y.tolist(), fit.q, fit.self_loops, seed
-    )
-    return _edge_table_from_lists(sources, targets, occ_nums)
-
-
 def _sample_strength_degree_poisson(
     fit: StrengthDegreeFit,
     *,
@@ -610,231 +519,6 @@ def _sample_strength_negative_binomial(
     return _edge_table_from_lists(sources, targets, occ_nums)
 
 
-def _sample_strength_cost_binomial(
-    fit: "StrengthCostFit",
-    coord_x: NDArray[np.floating],
-    coord_y: NDArray[np.floating],
-    *,
-    layers: int = 1,
-    seed: int = 0,
-) -> EdgeTable:
-    """Sample strength-cost binomial using Euclidean coordinate costs."""
-    sources, targets, occ_nums = _menobis.sample_strength_cost_binomial_coordinates(
-        fit.x.tolist(),
-        fit.y.tolist(),
-        fit.gamma,
-        np.asarray(coord_x, dtype=np.float64).tolist(),
-        np.asarray(coord_y, dtype=np.float64).tolist(),
-        layers,
-        fit.self_loops,
-        seed,
-    )
-    return _edge_table_from_lists(sources, targets, occ_nums)
-
-
-def _sample_strength_cost_geometric(
-    fit: "StrengthCostFit",
-    coord_x: NDArray[np.floating],
-    coord_y: NDArray[np.floating],
-    *,
-    seed: int = 0,
-) -> EdgeTable:
-    """Sample strength-cost geometric using Euclidean coordinate costs."""
-    sources, targets, occ_nums = _menobis.sample_strength_cost_geometric_coordinates(
-        fit.x.tolist(),
-        fit.y.tolist(),
-        fit.gamma,
-        np.asarray(coord_x, dtype=np.float64).tolist(),
-        np.asarray(coord_y, dtype=np.float64).tolist(),
-        fit.self_loops,
-        seed,
-    )
-    return _edge_table_from_lists(sources, targets, occ_nums)
-
-
-def _sample_strength_cost_negative_binomial(
-    fit: "StrengthCostFit",
-    coord_x: NDArray[np.floating],
-    coord_y: NDArray[np.floating],
-    *,
-    layers: int = 1,
-    seed: int = 0,
-) -> EdgeTable:
-    """Sample strength-cost negative binomial using Euclidean coordinate costs."""
-    sources, targets, occ_nums = (
-        _menobis.sample_strength_cost_negative_binomial_coordinates(
-            fit.x.tolist(),
-            fit.y.tolist(),
-            fit.gamma,
-            np.asarray(coord_x, dtype=np.float64).tolist(),
-            np.asarray(coord_y, dtype=np.float64).tolist(),
-            layers,
-            fit.self_loops,
-            seed,
-        )
-    )
-    return _edge_table_from_lists(sources, targets, occ_nums)
-
-
-def _sample_strength_edges_binomial(
-    fit: "StrengthEdgesFit",
-    *,
-    layers: int = 1,
-    seed: int = 0,
-) -> EdgeTable:
-    """Sample strength-edges zero-inflated binomial."""
-    sources, targets, occ_nums = _menobis.sample_strength_edges_binomial(
-        fit.x.tolist(),
-        fit.y.tolist(),
-        fit.lam,
-        layers,
-        fit.self_loops,
-        seed,
-    )
-    return _edge_table_from_lists(sources, targets, occ_nums)
-
-
-def _sample_strength_degree_binomial(
-    fit: "StrengthDegreeFit",
-    *,
-    layers: int = 1,
-    seed: int = 0,
-) -> EdgeTable:
-    """Sample strength-degree zero-inflated binomial."""
-    sources, targets, occ_nums = _menobis.sample_strength_degree_binomial(
-        fit.x.tolist(),
-        fit.y.tolist(),
-        fit.z.tolist(),
-        fit.w.tolist(),
-        layers,
-        fit.self_loops,
-        seed,
-    )
-    return _edge_table_from_lists(sources, targets, occ_nums)
-
-
-def _sample_degree_events_binomial(
-    fit: "DegreeEventsFit",
-    *,
-    seed: int = 0,
-) -> EdgeTable:
-    """Sample degree-events zero-inflated binomial from a fit result."""
-    sources, targets, occ_nums = _menobis.sample_degree_events_binomial(
-        fit.x.tolist(),
-        fit.y.tolist(),
-        fit.q,
-        fit.layers or 1,
-        fit.self_loops,
-        seed,
-    )
-    return _edge_table_from_lists(sources, targets, occ_nums)
-
-
-def _sample_strength_edges_geometric(
-    fit: "StrengthEdgesFit",
-    *,
-    seed: int = 0,
-) -> EdgeTable:
-    """Sample strength-edges zero-inflated geometric."""
-    sources, targets, occ_nums = _menobis.sample_strength_edges_geometric(
-        fit.x.tolist(),
-        fit.y.tolist(),
-        fit.lam,
-        fit.self_loops,
-        seed,
-    )
-    return _edge_table_from_lists(sources, targets, occ_nums)
-
-
-def _sample_strength_edges_negative_binomial(
-    fit: "StrengthEdgesFit",
-    *,
-    layers: int = 1,
-    seed: int = 0,
-) -> EdgeTable:
-    """Sample strength-edges zero-inflated negative binomial."""
-    sources, targets, occ_nums = _menobis.sample_strength_edges_negative_binomial(
-        fit.x.tolist(),
-        fit.y.tolist(),
-        fit.lam,
-        layers,
-        fit.self_loops,
-        seed,
-    )
-    return _edge_table_from_lists(sources, targets, occ_nums)
-
-
-def _sample_strength_degree_geometric(
-    fit: "StrengthDegreeFit",
-    *,
-    seed: int = 0,
-) -> EdgeTable:
-    """Sample strength-degree zero-inflated geometric."""
-    sources, targets, occ_nums = _menobis.sample_strength_degree_geometric(
-        fit.x.tolist(),
-        fit.y.tolist(),
-        fit.z.tolist(),
-        fit.w.tolist(),
-        fit.self_loops,
-        seed,
-    )
-    return _edge_table_from_lists(sources, targets, occ_nums)
-
-
-def _sample_strength_degree_negative_binomial(
-    fit: "StrengthDegreeFit",
-    *,
-    layers: int = 1,
-    seed: int = 0,
-) -> EdgeTable:
-    """Sample strength-degree zero-inflated negative binomial."""
-    sources, targets, occ_nums = _menobis.sample_strength_degree_negative_binomial(
-        fit.x.tolist(),
-        fit.y.tolist(),
-        fit.z.tolist(),
-        fit.w.tolist(),
-        layers,
-        fit.self_loops,
-        seed,
-    )
-    return _edge_table_from_lists(sources, targets, occ_nums)
-
-
-def _sample_degree_events_geometric(
-    fit: "DegreeEventsFit",
-    *,
-    seed: int = 0,
-) -> EdgeTable:
-    """Sample degree-events zero-inflated geometric."""
-    sources, targets, occ_nums = _menobis.sample_degree_events_geometric(
-        fit.x.tolist(),
-        fit.y.tolist(),
-        fit.q,
-        fit.self_loops,
-        seed,
-    )
-    return _edge_table_from_lists(sources, targets, occ_nums)
-
-
-def _sample_degree_events_negative_binomial(
-    fit: "DegreeEventsFit",
-    *,
-    layers: int | None = None,
-    seed: int = 0,
-) -> EdgeTable:
-    """Sample degree-events zero-inflated negative binomial."""
-    m = layers if layers is not None else (fit.layers or 1)
-    sources, targets, occ_nums = _menobis.sample_degree_events_negative_binomial(
-        fit.x.tolist(),
-        fit.y.tolist(),
-        fit.q,
-        m,
-        fit.self_loops,
-        seed,
-    )
-    return _edge_table_from_lists(sources, targets, occ_nums)
-
-
 def _sample_degree_events_fixed_kt(
     *,
     family: str,
@@ -850,7 +534,7 @@ def _sample_degree_events_fixed_kt(
     """Sample microcanonical DEGREE_EVENTS via MCMC support + occupation allocator."""
     import menobis._menobis as _menobis
 
-    sources, targets, occ_nums = _menobis.sample_degree_events_fixed_kt(  # type: ignore
+    sources, targets, occ_nums = _menobis.sample_degree_events_fixed_kt(
         family,
         degree_out,
         degree_in,

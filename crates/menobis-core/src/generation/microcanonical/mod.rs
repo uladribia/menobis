@@ -14,15 +14,6 @@ pub mod occupation_mcmc;
 pub mod route;
 pub mod support;
 
-// Re-exports from conditional/fixed_total
-pub use conditional::fixed_total::{sample_fixed_total, FixedTotalChain, FixedTotalState};
-
-// Re-exports from binary
-pub use binary::core::sample_fixed_kt_core;
-pub use binary::core::FixedKTConfig;
-pub use binary::diagnostics::FixedDegreeDiagnostics;
-pub use binary::sampler::FixedDegreeMcmcConfig;
-
 // Re-exports from conditional/fixed_et
 pub use conditional::fixed_et::{
     sample_b_fixed_et, sample_b_fixed_et_explicit, sample_me_fixed_et, sample_me_fixed_et_explicit,

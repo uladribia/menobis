@@ -26,13 +26,6 @@ use crate::model::family::OccupationFamily;
 use crate::pairs::PairCostProvider;
 use crate::OccNum;
 
-/// Backend used for the fixed-strength sample.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StrengthBackend {
-    /// 4-cycle Metropolis MCMC.
-    CycleMcmc,
-}
-
 /// Per-stage benchmark metrics for the fixed-strength pipeline (§35).
 #[derive(Clone, Debug)]
 pub struct FixedStrengthBenchMetrics {
@@ -260,8 +253,7 @@ fn repair_state(
 pub fn sample_fixed_strength(
     problem: ResidualStrengthProblem,
     config: McmcConfig,
-    _has_fixed_pairs: bool,
-) -> Result<(SampledNetwork, StrengthBackend), FixedStrengthError> {
+) -> Result<SampledNetwork, FixedStrengthError> {
     let family = problem.family;
     let seed = config.seed;
     let mut rng = StdRng::seed_from_u64(seed);
@@ -274,7 +266,7 @@ pub fn sample_fixed_strength(
     chain.burn_in(&mut rng);
     let network = chain.sample(&mut rng);
 
-    Ok((network, StrengthBackend::CycleMcmc))
+    Ok(network)
 }
 
 /// Fixed-strength sampling with a cost provider (Phase 5).
@@ -282,8 +274,8 @@ pub fn sample_fixed_strength(
 /// The target starts with gamma=0.  The caller should call
 /// `chain.set_target(...)` with a fitted gamma before sampling.
 ///
-/// Unlike [`sample_fixed_strength`], this always uses the MCMC backend
-/// because ME direct is incompatible with cost constraints.
+/// The cost-constrained chain always runs the occupied-cell MCMC kernel
+/// (a direct exact sampler is not applicable when costs are present).
 ///
 /// # Errors
 ///
@@ -292,8 +284,7 @@ pub fn sample_fixed_strength_with_cost<'a>(
     problem: ResidualStrengthProblem,
     costs: &'a dyn PairCostProvider,
     config: McmcConfig,
-    _has_fixed_pairs: bool,
-) -> Result<(FixedStrengthChain<'a>, StrengthBackend), FixedStrengthError> {
+) -> Result<FixedStrengthChain<'a>, FixedStrengthError> {
     let family = problem.family;
     let seed = config.seed;
     let mut rng = StdRng::seed_from_u64(seed);
@@ -304,7 +295,7 @@ pub fn sample_fixed_strength_with_cost<'a>(
     let target = StrengthTarget::with_costs(family, costs);
     let chain = FixedStrengthChain::new(state, target, problem.domain, config);
 
-    Ok((chain, StrengthBackend::CycleMcmc))
+    Ok(chain)
 }
 
 // --------------------------------------------------------------------------
@@ -318,7 +309,6 @@ pub fn sample_fixed_strength_with_cost<'a>(
 pub fn sample_fixed_strength_bench(
     problem: ResidualStrengthProblem,
     config: McmcConfig,
-    _has_fixed_pairs: bool,
 ) -> Result<(SampledNetwork, FixedStrengthBenchMetrics), FixedStrengthError> {
     let family = problem.family;
     let seed = config.seed;
@@ -382,7 +372,6 @@ pub fn sample_fixed_strength_with_cost_bench(
     costs: &dyn PairCostProvider,
     config: McmcConfig,
     fit_config: &super::cost_fit::FixedStrengthCostFitConfig,
-    _has_fixed_pairs: bool,
     observed_total_cost: f64,
     fixed_cost: f64,
 ) -> Result<(SampledNetwork, FixedStrengthBenchMetrics), FixedStrengthCostError> {
@@ -486,8 +475,7 @@ mod tests {
     fn cycle_mcmc_backend_selected() {
         let prob = make_problem(OccupationFamily::ME, vec![5, 5], vec![5, 5], true);
         let config = McmcConfig::new(10, 5, 42);
-        let (net, backend) = sample_fixed_strength(prob, config, false).unwrap();
-        assert_eq!(backend, StrengthBackend::CycleMcmc);
+        let net = sample_fixed_strength(prob, config).unwrap();
         let total: OccNum = net.occ_nums.iter().sum();
         assert_eq!(total, 10);
     }
@@ -496,8 +484,7 @@ mod tests {
     fn me_mcmc_backend_no_self_loops() {
         let prob = make_problem(OccupationFamily::ME, vec![5, 5, 5], vec![5, 5, 5], false);
         let config = McmcConfig::new(20, 10, 42);
-        let (net, backend) = sample_fixed_strength(prob, config, false).unwrap();
-        assert_eq!(backend, StrengthBackend::CycleMcmc);
+        let net = sample_fixed_strength(prob, config).unwrap();
         let total: OccNum = net.occ_nums.iter().sum();
         assert_eq!(total, 15);
         // Looplessness will be guaranteed by Phase D (loop repair).
@@ -530,8 +517,7 @@ mod tests {
             proposals_per_sweep: None,
             seed: 42,
         };
-        let (net, backend) = sample_fixed_strength(prob, config, false).unwrap();
-        assert_eq!(backend, StrengthBackend::CycleMcmc);
+        let net = sample_fixed_strength(prob, config).unwrap();
         let total: OccNum = net.occ_nums.iter().sum();
         assert_eq!(total, 12);
         for &occ in &net.occ_nums {
@@ -553,17 +539,16 @@ mod tests {
             proposals_per_sweep: None,
             seed: 42,
         };
-        let (net, backend) = sample_fixed_strength(prob, config, false).unwrap();
-        assert_eq!(backend, StrengthBackend::CycleMcmc);
+        let net = sample_fixed_strength(prob, config).unwrap();
         let total: OccNum = net.occ_nums.iter().sum();
         assert_eq!(total, 15);
     }
 
     #[test]
-    fn strengths_preserved_across_backends() {
+    fn strengths_preserved() {
         let prob = make_problem(OccupationFamily::ME, vec![4, 7, 2], vec![6, 3, 4], true);
         let config = McmcConfig::new(20, 10, 42);
-        let (net, backend) = sample_fixed_strength(prob, config, false).unwrap();
+        let net = sample_fixed_strength(prob, config).unwrap();
         let mut check_out = vec![0u64; 3];
         let mut check_in = vec![0u64; 3];
         for ((&s, &t), &o) in net
@@ -575,18 +560,8 @@ mod tests {
             check_out[s as usize] += o;
             check_in[t as usize] += o;
         }
-        assert_eq!(
-            check_out,
-            vec![4, 7, 2],
-            "out-strengths not preserved ({:?})",
-            backend
-        );
-        assert_eq!(
-            check_in,
-            vec![6, 3, 4],
-            "in-strengths not preserved ({:?})",
-            backend
-        );
+        assert_eq!(check_out, vec![4, 7, 2], "out-strengths not preserved");
+        assert_eq!(check_in, vec![6, 3, 4], "in-strengths not preserved");
     }
 
     #[test]
@@ -602,7 +577,7 @@ mod tests {
                 vec![3, 3, 3],
                 true,
             );
-            let (net, _) = sample_fixed_strength(prob, config.clone(), false).unwrap();
+            let net = sample_fixed_strength(prob, config.clone()).unwrap();
             let mut all: Vec<OccNum> = Vec::new();
             for i in 0..net.sources.len() {
                 all.push(net.sources[i]);

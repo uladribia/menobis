@@ -1,9 +1,10 @@
 """P0.9 exact ensemble-equivalence tests.
 
 Separate suites for:
-1. exact conditioning identities (canonical total, stub strength);
-2. direct-sampler correctness: ME stub matching matches the theoretical
-   degeneracy-weighted measure on small state spaces;
+1. exact conditioning identities (canonical total, fixed strength);
+2. direct-sampler correctness: microcanonical ME fixed-strength MCMC
+   matches the theoretical degeneracy-weighted measure on small state
+   spaces;
 3. asymptotic observable convergence is covered by the smoke test in
    test_menobis_ensemble_equivalence.py (not duplicated here).
 """

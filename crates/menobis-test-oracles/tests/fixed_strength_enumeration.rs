@@ -114,7 +114,7 @@ fn me_mcmc_enumeration_agreement_n2() {
             proposals_per_sweep: None,
             seed,
         };
-        let (net, _backend) = sample_fixed_strength(prob, config, false).unwrap();
+        let net = sample_fixed_strength(prob, config).unwrap();
         let mut pairs: OccupiedState = net
             .sources
             .iter()
@@ -157,7 +157,7 @@ fn me_mcmc_enumeration_agreement_n2_no_self_loops() {
             proposals_per_sweep: None,
             seed,
         };
-        let (net, _backend) = sample_fixed_strength(prob, config, false).unwrap();
+        let net = sample_fixed_strength(prob, config).unwrap();
         let mut pairs: OccupiedState = net
             .sources
             .iter()

@@ -149,7 +149,7 @@ def test_detailed_canonical_exact_direct() -> None:
     assert res.edges.total_events == 50
 
 
-def test_detailed_microcanonical_exact_direct() -> None:
+def test_detailed_microcanonical_strength_stationary_mcmc() -> None:
     res = sample_model_detailed(
         ensemble=Ensemble.MICROCANONICAL,
         family=ModelFamily.ME,
@@ -158,8 +158,8 @@ def test_detailed_microcanonical_exact_direct() -> None:
         strength_in=np.array([6, 6]),
         seed=1,
     )
-    assert res.exactness == SamplingExactness.EXACT_DIRECT
-    assert res.method == "stub_matching"
+    assert res.exactness == SamplingExactness.EXACT_STATIONARY_MCMC
+    assert res.method == "microcanonical_fixed_strength_mcmc"
 
 
 def test_sample_model_delegates_to_detailed() -> None:

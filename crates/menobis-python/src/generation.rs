@@ -20,26 +20,6 @@ type StrengthCostSample = (
     usize,    // iterations
 );
 
-/// Exact ME microcanonical sampler with fixed (E,T).
-///
-/// Draws an exact sample from the ME microcanonical distribution with
-/// fixed occupied-pair count `E` and fixed total occupation `T`.
-/// Pair indices are computed on the fly from `node_count` + `self_loops`;
-/// no pair list is materialised.
-#[pyfunction]
-pub(crate) fn sample_me_fixed_et(
-    node_count: usize,
-    self_loops: bool,
-    residual_edges: usize,
-    residual_total: u64,
-    seed: u64,
-) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
-    match core_sample_me_fixed_et(node_count, self_loops, residual_edges, residual_total, seed) {
-        Ok(sample) => Ok((sample.sources, sample.targets, sample.occ_nums)),
-        Err(e) => Err(PyValueError::new_err(e.to_string())),
-    }
-}
-
 /// Exact ME microcanonical sampler with fixed (E,T) on an explicit
 /// admissible-pair set (after masks/fixed-pair subtraction).
 #[pyfunction]
@@ -67,29 +47,6 @@ pub(crate) fn sample_me_fixed_et_explicit(
     }
 }
 
-/// Exact B microcanonical sampler with fixed (E,T) and M layers.
-#[pyfunction]
-pub(crate) fn sample_b_fixed_et(
-    node_count: usize,
-    self_loops: bool,
-    layers: u32,
-    residual_edges: usize,
-    residual_total: u64,
-    seed: u64,
-) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
-    match core_sample_b_fixed_et(
-        node_count,
-        self_loops,
-        layers as u64,
-        residual_edges,
-        residual_total,
-        seed,
-    ) {
-        Ok(sample) => Ok((sample.sources, sample.targets, sample.occ_nums)),
-        Err(e) => Err(PyValueError::new_err(e.to_string())),
-    }
-}
-
 /// Exact B microcanonical sampler with explicit pair arrays.
 #[pyfunction]
 pub(crate) fn sample_b_fixed_et_explicit(
@@ -108,29 +65,6 @@ pub(crate) fn sample_b_fixed_et_explicit(
     match core_sample_b_fixed_et_explicit(
         &admissible_sources,
         &admissible_targets,
-        layers as u64,
-        residual_edges,
-        residual_total,
-        seed,
-    ) {
-        Ok(sample) => Ok((sample.sources, sample.targets, sample.occ_nums)),
-        Err(e) => Err(PyValueError::new_err(e.to_string())),
-    }
-}
-
-/// Exact W microcanonical sampler with fixed (E,T) and M layers.
-#[pyfunction]
-pub(crate) fn sample_w_fixed_et(
-    node_count: usize,
-    self_loops: bool,
-    layers: u32,
-    residual_edges: usize,
-    residual_total: u64,
-    seed: u64,
-) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
-    match core_sample_w_fixed_et(
-        node_count,
-        self_loops,
         layers as u64,
         residual_edges,
         residual_total,
@@ -305,200 +239,6 @@ pub(crate) fn sample_strength_binomial(
 }
 
 #[pyfunction]
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn sample_strength_cost_binomial_coordinates(
-    x: Vec<f64>,
-    y: Vec<f64>,
-    gamma: f64,
-    coord_x: Vec<f64>,
-    coord_y: Vec<f64>,
-    layers: u32,
-    self_loops: bool,
-    seed: u64,
-) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
-    if x.len() != y.len() || coord_x.len() != x.len() || coord_y.len() != x.len() {
-        return Err(PyValueError::new_err(
-            "x, y, coord_x, and coord_y must have the same length",
-        ));
-    }
-    let edges = core_sample_strength_cost_binomial_coordinates(
-        &x, &y, gamma, &coord_x, &coord_y, layers, self_loops, seed,
-    );
-    Ok((edges.sources, edges.targets, edges.occ_nums))
-}
-
-#[pyfunction]
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn sample_strength_cost_geometric_coordinates(
-    x: Vec<f64>,
-    y: Vec<f64>,
-    gamma: f64,
-    coord_x: Vec<f64>,
-    coord_y: Vec<f64>,
-    self_loops: bool,
-    seed: u64,
-) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
-    if x.len() != y.len() || coord_x.len() != x.len() || coord_y.len() != x.len() {
-        return Err(PyValueError::new_err(
-            "x, y, coord_x, and coord_y must have the same length",
-        ));
-    }
-    let edges = core_sample_strength_cost_geometric_coordinates(
-        &x, &y, gamma, &coord_x, &coord_y, self_loops, seed,
-    );
-    Ok((edges.sources, edges.targets, edges.occ_nums))
-}
-
-#[pyfunction]
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn sample_strength_cost_negative_binomial_coordinates(
-    x: Vec<f64>,
-    y: Vec<f64>,
-    gamma: f64,
-    coord_x: Vec<f64>,
-    coord_y: Vec<f64>,
-    layers: u32,
-    self_loops: bool,
-    seed: u64,
-) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
-    if x.len() != y.len() || coord_x.len() != x.len() || coord_y.len() != x.len() {
-        return Err(PyValueError::new_err(
-            "x, y, coord_x, and coord_y must have the same length",
-        ));
-    }
-    let edges = core_sample_strength_cost_negative_binomial_coordinates(
-        &x, &y, gamma, &coord_x, &coord_y, layers, self_loops, seed,
-    );
-    Ok((edges.sources, edges.targets, edges.occ_nums))
-}
-
-#[pyfunction]
-pub(crate) fn sample_strength_edges_binomial(
-    x: Vec<f64>,
-    y: Vec<f64>,
-    lam: f64,
-    layers: u32,
-    self_loops: bool,
-    seed: u64,
-) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
-    let edges = core_sample_strength_edges_binomial(&x, &y, lam, layers, self_loops, seed);
-    (edges.sources, edges.targets, edges.occ_nums)
-}
-
-#[pyfunction]
-pub(crate) fn sample_strength_degree_binomial(
-    x: Vec<f64>,
-    y: Vec<f64>,
-    z: Vec<f64>,
-    w: Vec<f64>,
-    layers: u32,
-    self_loops: bool,
-    seed: u64,
-) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
-    let edges = core_sample_strength_degree_binomial(&x, &y, &z, &w, layers, self_loops, seed);
-    (edges.sources, edges.targets, edges.occ_nums)
-}
-
-#[pyfunction]
-pub(crate) fn sample_degree_events_binomial(
-    x: Vec<f64>,
-    y: Vec<f64>,
-    positive_weight_rate: f64,
-    layers: u32,
-    self_loops: bool,
-    seed: u64,
-) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
-    let edges =
-        core_sample_degree_events_binomial(&x, &y, positive_weight_rate, layers, self_loops, seed);
-    (edges.sources, edges.targets, edges.occ_nums)
-}
-
-#[pyfunction]
-pub(crate) fn sample_strength_edges_geometric(
-    x: Vec<f64>,
-    y: Vec<f64>,
-    lam: f64,
-    self_loops: bool,
-    seed: u64,
-) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
-    let edges = core_sample_strength_edges_geometric(&x, &y, lam, self_loops, seed);
-    (edges.sources, edges.targets, edges.occ_nums)
-}
-
-#[pyfunction]
-pub(crate) fn sample_strength_edges_negative_binomial(
-    x: Vec<f64>,
-    y: Vec<f64>,
-    lam: f64,
-    layers: u32,
-    self_loops: bool,
-    seed: u64,
-) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
-    let edges = core_sample_strength_edges_negative_binomial(&x, &y, lam, layers, self_loops, seed);
-    (edges.sources, edges.targets, edges.occ_nums)
-}
-
-#[pyfunction]
-pub(crate) fn sample_strength_degree_geometric(
-    x: Vec<f64>,
-    y: Vec<f64>,
-    z: Vec<f64>,
-    w: Vec<f64>,
-    self_loops: bool,
-    seed: u64,
-) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
-    let edges = core_sample_strength_degree_geometric(&x, &y, &z, &w, self_loops, seed);
-    (edges.sources, edges.targets, edges.occ_nums)
-}
-
-#[pyfunction]
-pub(crate) fn sample_strength_degree_negative_binomial(
-    x: Vec<f64>,
-    y: Vec<f64>,
-    z: Vec<f64>,
-    w: Vec<f64>,
-    layers: u32,
-    self_loops: bool,
-    seed: u64,
-) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
-    let edges =
-        core_sample_strength_degree_negative_binomial(&x, &y, &z, &w, layers, self_loops, seed);
-    (edges.sources, edges.targets, edges.occ_nums)
-}
-
-#[pyfunction]
-pub(crate) fn sample_degree_events_geometric(
-    x: Vec<f64>,
-    y: Vec<f64>,
-    positive_weight_rate: f64,
-    self_loops: bool,
-    seed: u64,
-) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
-    let edges = core_sample_degree_events_geometric(&x, &y, positive_weight_rate, self_loops, seed);
-    (edges.sources, edges.targets, edges.occ_nums)
-}
-
-#[pyfunction]
-pub(crate) fn sample_degree_events_negative_binomial(
-    x: Vec<f64>,
-    y: Vec<f64>,
-    positive_weight_rate: f64,
-    layers: u32,
-    self_loops: bool,
-    seed: u64,
-) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
-    let edges = core_sample_degree_events_negative_binomial(
-        &x,
-        &y,
-        positive_weight_rate,
-        layers,
-        self_loops,
-        seed,
-    );
-    (edges.sources, edges.targets, edges.occ_nums)
-}
-
-#[pyfunction]
 pub(crate) fn sample_strength_negative_binomial(
     x: Vec<f64>,
     y: Vec<f64>,
@@ -508,21 +248,6 @@ pub(crate) fn sample_strength_negative_binomial(
 ) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
     let edges = core_sample_strength_negative_binomial(&x, &y, layers, self_loops, seed);
     (edges.sources, edges.targets, edges.occ_nums)
-}
-
-#[pyfunction]
-pub(crate) fn sample_degree_events_poisson(
-    x: Vec<f64>,
-    y: Vec<f64>,
-    positive_weight_rate: f64,
-    self_loops: bool,
-    seed: u64,
-) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
-    if x.len() != y.len() {
-        return Err(PyValueError::new_err("x and y must have same length"));
-    }
-    let sample = core_sample_degree_events_poisson(&x, &y, positive_weight_rate, self_loops, seed);
-    Ok((sample.sources, sample.targets, sample.occ_nums))
 }
 
 #[pyfunction]
@@ -625,8 +350,8 @@ pub(crate) fn sample_strength_multinomial(
 
 /// Sample from the microcanonical fixed-strength ensemble.
 ///
-/// Routes to the ME direct stub-matching backend or the generic 4-cycle
-/// MCMC backend depending on the problem configuration.
+/// Always uses the generic 4-cycle Metropolis MCMC backend on the
+/// compressed residual state.
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn sample_fixed_strength(
@@ -690,8 +415,8 @@ pub(crate) fn sample_fixed_strength(
 
     let config = McmcConfig::new(burn_in_sweeps, sweeps_per_sample, seed);
 
-    match core_sample_fixed_strength(residual, config, has_fixed) {
-        Ok((mut network, _backend)) => {
+    match core_sample_fixed_strength(residual, config) {
+        Ok(mut network) => {
             // Merge fixed pairs back into the sampled residual network.
             if has_fixed {
                 let mut all: Vec<(u64, u64, u64)> = fixed_sources
@@ -792,7 +517,7 @@ pub(crate) fn bench_fixed_strength(
 
     let config = McmcConfig::new(burn_in_sweeps, sweeps_per_sample, seed);
 
-    match sample_fixed_strength_bench(residual, config, has_fixed) {
+    match sample_fixed_strength_bench(residual, config) {
         Ok((mut network, metrics)) => {
             // Merge fixed pairs back into the sampled residual network.
             if has_fixed {
@@ -932,8 +657,8 @@ pub(crate) fn sample_fixed_strength_with_cost(
 
     // Build chain with cost provider.
     let core_result = menobis_core::generation::microcanonical::occupation_mcmc::chain::
-        sample_fixed_strength_with_cost(residual, &costs, mcmc_config, has_fixed);
-    let (mut chain, _backend) = match core_result {
+        sample_fixed_strength_with_cost(residual, &costs, mcmc_config);
+    let mut chain = match core_result {
         Ok(r) => r,
         Err(e) => return Err(PyValueError::new_err(e.to_string())),
     };
@@ -1172,7 +897,6 @@ pub(crate) fn bench_fixed_strength_with_cost(
         &costs,
         mcmc_config,
         &fit_config,
-        has_fixed,
         observed_total_cost,
         fixed_cost,
     );

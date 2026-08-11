@@ -3,7 +3,7 @@
 //! - [`output`]: shared `SampledNetwork` result type.
 //! - [`grandcanonical`]: independent pair sampling for fitted multipliers.
 //! - [`canonical`]: fixed-total multinomial sampling.
-//! - [`microcanonical`]: exact-constraint direct samplers (stub matching).
+//! - [`microcanonical`]: exact-constraint samplers (MCMC + fixed-total Gibbs).
 //!
 //! This module re-exports the full public generation API so existing callers
 //! keep working; the ensemble submodules own the implementations.
@@ -27,17 +27,10 @@ pub use grandcanonical::{
     sample_strength_poisson,
 };
 pub use microcanonical::binary::core::{sample_fixed_kt_core, FixedKTConfig};
-pub use microcanonical::binary::diagnostics::FixedDegreeDiagnostics;
 pub use microcanonical::binary::sampler::FixedDegreeMcmcConfig;
-pub use microcanonical::occupation_mcmc::cost_fit::{
-    fit_gamma, FixedStrengthCostFitConfig, FixedStrengthCostFitResult,
-};
 pub use microcanonical::occupation_mcmc::sample_fixed_strength;
-pub use microcanonical::occupation_mcmc::sample_fixed_strength_with_cost;
-pub use microcanonical::route::{sample_microcanonical, MicrocanonicalConfig, MicrocanonicalError};
 pub use microcanonical::{
-    sample_b_fixed_et, sample_b_fixed_et_explicit, sample_me_fixed_et, sample_me_fixed_et_explicit,
-    sample_w_fixed_et, sample_w_fixed_et_explicit,
+    sample_b_fixed_et_explicit, sample_me_fixed_et_explicit, sample_w_fixed_et_explicit,
 };
 pub use output::SampledNetwork;
 

@@ -1,87 +1,5 @@
 use super::*;
 
-#[pyfunction]
-pub(crate) fn fit_masked_strength_poisson(
-    strength_out: Vec<f64>,
-    strength_in: Vec<f64>,
-    mask: Vec<bool>,
-    tolerance: f64,
-    max_iterations: usize,
-) -> PyResult<FitPair> {
-    if strength_out.len() != strength_in.len() {
-        return Err(PyValueError::new_err(
-            "strength arrays must have same length",
-        ));
-    }
-    let n = strength_out.len();
-    if mask.len() != n * n {
-        return Err(PyValueError::new_err("mask must have length n*n"));
-    }
-    let pair_mask = PairMask::from_dense(n, &mask);
-    let result = balance_sparse_masked_strength_poisson(
-        &strength_out,
-        &strength_in,
-        &pair_mask,
-        tolerance,
-        max_iterations,
-    );
-    Ok((result.x, result.y, result.converged, result.iterations))
-}
-
-#[pyfunction]
-pub(crate) fn fit_masked_degree_bernoulli(
-    degree_out: Vec<f64>,
-    degree_in: Vec<f64>,
-    mask: Vec<bool>,
-    tolerance: f64,
-    max_iterations: usize,
-) -> PyResult<FitPair> {
-    let n = degree_out.len();
-    if n != degree_in.len() || mask.len() != n * n {
-        return Err(PyValueError::new_err("array length mismatch"));
-    }
-    let pair_mask = PairMask::from_dense(n, &mask);
-    let r = balance_sparse_masked_degree_bernoulli(
-        &degree_out,
-        &degree_in,
-        &pair_mask,
-        tolerance,
-        max_iterations,
-    );
-    Ok((r.x, r.y, r.converged, r.iterations))
-}
-
-#[pyfunction]
-pub(crate) fn fit_masked_strength_degree_poisson(
-    strength_out: Vec<f64>,
-    strength_in: Vec<f64>,
-    degree_out: Vec<f64>,
-    degree_in: Vec<f64>,
-    mask: Vec<bool>,
-    tolerance: f64,
-    max_iterations: usize,
-) -> PyResult<FitStrengthDegree> {
-    let n = strength_out.len();
-    if n != strength_in.len()
-        || n != degree_out.len()
-        || n != degree_in.len()
-        || mask.len() != n * n
-    {
-        return Err(PyValueError::new_err("array length mismatch"));
-    }
-    let pair_mask = PairMask::from_dense(n, &mask);
-    let r = balance_sparse_masked_strength_degree_poisson(
-        &strength_out,
-        &strength_in,
-        &degree_out,
-        &degree_in,
-        &pair_mask,
-        tolerance,
-        max_iterations,
-    );
-    Ok((r.x, r.y, r.z, r.w, r.converged, r.iterations))
-}
-
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
 pub(crate) fn fit_strength_cost_poisson_coordinates(
@@ -188,49 +106,6 @@ pub(crate) fn fit_strength_cost_w_coordinates(
         ));
     }
     let result = core_fit_strength_cost_w_coordinates(
-        &strength_out,
-        &strength_in,
-        &coord_x,
-        &coord_y,
-        target_cost,
-        layers,
-        &CostFitOptions {
-            self_loops,
-            tolerance,
-            max_iterations,
-        },
-    );
-    Ok((
-        result.x,
-        result.y,
-        result.gamma,
-        result.converged,
-        result.iterations,
-    ))
-}
-
-#[allow(clippy::too_many_arguments)]
-#[pyfunction]
-pub(crate) fn fit_strength_cost_w_lbfgs(
-    strength_out: Vec<f64>,
-    strength_in: Vec<f64>,
-    coord_x: Vec<f64>,
-    coord_y: Vec<f64>,
-    target_cost: f64,
-    layers: u32,
-    self_loops: bool,
-    tolerance: f64,
-    max_iterations: usize,
-) -> PyResult<FitStrengthCost> {
-    if strength_out.len() != strength_in.len()
-        || strength_out.len() != coord_x.len()
-        || strength_out.len() != coord_y.len()
-    {
-        return Err(PyValueError::new_err(
-            "strength and coordinate arrays must have same length",
-        ));
-    }
-    let result = core_fit_strength_cost_w_lbfgs(
         &strength_out,
         &strength_in,
         &coord_x,
@@ -374,36 +249,6 @@ pub(crate) fn fit_strength_degree_poisson(
         result.converged,
         result.iterations,
     ))
-}
-
-#[pyfunction]
-pub(crate) fn fit_weighted_factors(
-    excess_out: Vec<f64>,
-    excess_in: Vec<f64>,
-    degree_x: Vec<f64>,
-    degree_y: Vec<f64>,
-    self_loops: bool,
-    tolerance: f64,
-    max_iterations: usize,
-) -> PyResult<FitPair> {
-    if excess_out.len() != excess_in.len()
-        || excess_out.len() != degree_x.len()
-        || excess_out.len() != degree_y.len()
-    {
-        return Err(PyValueError::new_err(
-            "excess and degree multiplier arrays must have same length",
-        ));
-    }
-    let result = balance_weighted_factors(
-        &excess_out,
-        &excess_in,
-        &degree_x,
-        &degree_y,
-        self_loops,
-        tolerance,
-        max_iterations,
-    );
-    Ok((result.x, result.y, result.converged, result.iterations))
 }
 
 #[pyfunction]
@@ -739,22 +584,6 @@ pub(crate) fn fit_strength_degree_negative_binomial(
 }
 
 #[pyfunction]
-pub(crate) fn fit_strength_poisson_no_self_loops(
-    s_out: Vec<f64>,
-    s_in: Vec<f64>,
-    tolerance: f64,
-    max_iterations: usize,
-) -> PyResult<FitPair> {
-    if s_out.len() != s_in.len() {
-        return Err(PyValueError::new_err(
-            "s_out and s_in must have the same length",
-        ));
-    }
-    let result = balance_strength_poisson(&s_out, &s_in, tolerance, max_iterations);
-    Ok((result.x, result.y, result.converged, result.iterations))
-}
-
-#[pyfunction]
 pub(crate) fn fit_strength_binomial(
     strength_out: Vec<f64>,
     strength_in: Vec<f64>,
@@ -873,28 +702,6 @@ pub(crate) fn fit_degree_events_negative_binomial(
         result.converged,
         result.iterations,
     )
-}
-
-#[pyfunction]
-pub(crate) fn fit_masked_strength_binomial(
-    strength_out: Vec<f64>,
-    strength_in: Vec<f64>,
-    mask: Vec<bool>,
-    layers: u32,
-    tolerance: f64,
-    max_iterations: usize,
-) -> (Vec<f64>, Vec<f64>, bool, usize) {
-    let n = strength_out.len();
-    let pair_mask = PairMask::from_dense(n, &mask);
-    let result = balance_sparse_masked_strength_binomial(
-        &strength_out,
-        &strength_in,
-        &pair_mask,
-        layers,
-        tolerance,
-        max_iterations,
-    );
-    (result.x, result.y, result.converged, result.iterations)
 }
 
 type PartialResult = (Vec<u64>, Vec<u64>, Vec<f64>, bool, usize);

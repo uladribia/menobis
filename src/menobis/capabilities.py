@@ -150,7 +150,7 @@ def _build_registry() -> dict[
             result_kind="sampled_network",
         )
     )
-    # Microcanonical ME strength: stub matching + MCMC backend.
+    # Microcanonical ME strength: fixed-strength occupation MCMC.
     registry[
         (Verb.SAMPLE, Ensemble.MICROCANONICAL, ModelFamily.ME, Constraint.STRENGTH)
     ] = ModelCapability(
