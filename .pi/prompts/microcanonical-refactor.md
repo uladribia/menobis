@@ -1,12 +1,21 @@
 ---
-description: "MENoBiS microcanonical refactor orchestration. Execute the microcanonical implementation refactor according to the practical sparse architecture specification. Use for: refactor execution, phase orchestration, reviewing progress, continuing refactor work, implementing remaining phases, checking refactor state. Independent research or small edits should be handled directly, not through this workflow."
+description: "MENoBiS microcanonical refactor orchestration (HISTORICAL — refactor COMPLETE). Documents how the microcanonical implementation refactor was executed per the practical sparse architecture specification. Retained as a template for future multi-phase refactor orchestration: delegation workflow, gate review, state management. Independent research or small edits should be handled directly, not through this workflow."
 argument-hint: "<phase-or-task>"
 ---
 
 # Microcanonical Refactor — Supervisor Orchestration
 
-You are the supervisor for the MENoBiS microcanonical refactor.
-Execute the refactor workflow by delegating to specialist subagents using the `subagent` tool with `agentScope: "both"`.
+> ⚠️ **HISTORICAL — the microcanonical refactor is COMPLETE.** Phases A–H,
+> the §35 benchmark matrix, and docs alignment are all merged into
+> `microcanonical-refactor` (see `_workspace/refactor-state.md` for the final
+> per-phase merge commits). This prompt is retained as a historical record of
+> the orchestration workflow used and as a template for future multi-phase
+> refactors. If reused for new work, adapt the phase list and state file.
+
+This prompt defined the supervisor workflow for the MENoBiS microcanonical
+refactor: delegating to specialist subagents using the `subagent` tool with
+`agentScope: "both"`. The workflow structure below is the historical
+procedure as executed.
 
 ## Phase 0: Context recovery
 
@@ -22,7 +31,10 @@ Before any delegation:
 1. Read the current phase state from `_workspace/refactor-state.md`
 2. Determine what remains for the current phase
 3. Identify the single most actionable bounded task
-4. If no phase is in progress, select the first incomplete phase (B → C → D → E → F → H)
+4. If no phase is in progress, select the first incomplete phase
+
+> Historical note: during the refactor, the incomplete-phase queue was
+> B → C → D → E → F → H. All of these are now COMPLETE.
 
 ## Phase 2: Deploy
 
@@ -110,7 +122,7 @@ cd {project_root} && pi -e 'use subagent to discover all project agents and list
 
 ## Git branches
 
-- Integration: `microcanonical-refactor` (already exists)
+- Integration: `microcanonical-refactor` (all phases merged)
 - Subbranches: `refactor/<phase>-<description>` (e.g., `refactor/B-occupied-cell-mcmc`)
 - Do NOT commit directly to `microcanonical-refactor`
 - Use `/skill:commit` for all git commits (Conventional Commits)

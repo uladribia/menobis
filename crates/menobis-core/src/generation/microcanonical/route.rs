@@ -183,7 +183,7 @@ fn route_occupation_mcmc(
         proposals_per_sweep: None,
         seed: config.seed,
     };
-    let (net, _backend) = sample_fixed_strength(residual, mcmc, false)
+    let net = sample_fixed_strength(residual, mcmc)
         .map_err(|e| MicrocanonicalError::Backend(e.to_string()))?;
     Ok(net)
 }

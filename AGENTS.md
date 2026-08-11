@@ -304,9 +304,9 @@ At the end of each agent session, report:
 
 ## Harness: Microcanonical Refactor
 
-**Objective:** Execute the 8-phase microcanonical refactor (spec: `docs/development/agent-specifications/microcanonical_implementation/11_microcanonical_refactor_practical_final.md`) via multi-agent orchestration.
+**Objective:** COMPLETED — phases A–H + §35 benchmark matrix merged into `microcanonical-refactor` (spec: `docs/development/agent-specifications/microcanonical_implementation/11_microcanonical_refactor_practical_final.md`). This section is retained as historical harness documentation and as a template for future multi-phase refactors.
 
-**Trigger:** For refactor workflow execution, phase management, or continuation, run `/microcanonical-refactor` to start the supervisor orchestration. For isolated analysis, testing, or review tasks, delegate to individual agents directly via `subagent` with `agentScope: "both"`. Simple edits unrelated to the refactor should be handled directly without the orchestrator.
+**Trigger (historical):** The `/microcanonical-refactor` prompt drove the refactor orchestration. It is now a historical record of that workflow. For future isolated analysis, testing, or review tasks, delegate to individual agents directly via `subagent` with `agentScope: "both"`. Simple edits should be handled directly without the orchestrator.
 
 **Integration branch:** `microcanonical-refactor` (already exists). Never implement directly on it — use `refactor/<phase>-<task>` subbranches.
 
@@ -314,7 +314,7 @@ At the end of each agent session, report:
 
 | Agent | Role | Tools | Model |
 |-------|------|-------|-------|
-| `supervisor` | Phase owner, gate enforcer, delegation manager | full | z-ai/glm-5.2 |
+| `supervisor` | Orchestration manager, gate enforcer, delegation manager | full | z-ai/glm-5.2 |
 | `architectural-analyst` | Read-only codebase mapping | read,grep,find,ls,bash | deepseek/deepseek-v4-flash |
 | `implementation-agent` | Bounded implementation per task | full | deepseek/deepseek-v4-flash |
 | `semantic-reviewer` | Mathematical/scientific validation | read,grep,find,ls,bash | z-ai/glm-5.2 |
@@ -327,3 +327,6 @@ At the end of each agent session, report:
 | Date | Change | Target | Reason |
 |------|--------|--------|--------|
 | 2026-08-08 | Initial multi-agent harness creation | .pi/agents/, .pi/skills/, .pi/prompts/, AGENTS.md | Pre-refactor infrastructure setup |
+| 2026-08-10 | Microcanonical refactor phases A–H merged (B `8b588c4`, C `ec8d60f`, D `8d5961b`, E `5aae72c`, F `e6dab9a`, G `ae8a2c3`, H `a19bce8`) | microcanonical-refactor branch, menobis-core, menobis-test-oracles | Refactor completion (spec §36–§40) |
+| 2026-08-10 | §35 benchmark matrix + docs alignment merged (`5de34ea`, `c9aef40`) | benchmarks/, docs/ | Completion gate evidence; docs aligned with post-refactor architecture |
+| 2026-08-10 | Harness/docs updated to reflect refactor completion; historical specs archived | .pi/, AGENTS.md, docs/development/agent-specifications/ | Post-refactor documentation cleanup |

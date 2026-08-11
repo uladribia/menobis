@@ -52,7 +52,7 @@ nav:
       - TODOs: development/todos.md
       - Architecture: development/architecture.md
       - Phase 0 migration notes: development/migration-notes.md
-      - Refactor plan: development/agent-specifications/microcanonical_implementation/09_MENoBiS_microcanonical_refactor_plan.md
+      - Microcanonical refactor spec: development/agent-specifications/microcanonical_implementation/11_microcanonical_refactor_practical_final.md
 
 plugins:
   - search

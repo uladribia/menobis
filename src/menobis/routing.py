@@ -180,7 +180,7 @@ def sample_model(
     confidence_multiplier: float = 2.09,
     batch_count: int = 20,
 ) -> EdgeTable:
-    """Sample a network from a fitted model or directly via stub matching.
+    """Sample a network from a fitted model or directly from microcanonical constraints.
 
     Returns only the sampled occupied-pair table. Use
     :func:`sample_model_detailed` for the full result with metadata.
@@ -322,8 +322,10 @@ def sample_model_detailed(
             method = "microcanonical_fixed_strength_cost"
             exactness = SamplingExactness.EXACT_STATIONARY_MCMC
         else:
-            method = "stub_matching"
-            exactness = SamplingExactness.EXACT_DIRECT
+            # Microcanonical STRENGTH: fixed-strength occupation MCMC
+            # (4-cycle Metropolis chain on the compressed residual state).
+            method = "microcanonical_fixed_strength_mcmc"
+            exactness = SamplingExactness.EXACT_STATIONARY_MCMC
     elif ensemble is Ensemble.CANONICAL:
         method = "canonical_multinomial"
         exactness = SamplingExactness.EXACT_DIRECT
@@ -754,8 +756,7 @@ def _sample_model(
                     else ("B" if family == ModelFamily.B else "W")
                 )
                 if not has_fixed:
-                    # Unified Rust router: selects ME-direct stub matching or
-                    # the 4-cycle occupation MCMC internally.
+                    # Unified Rust router: fixed-strength occupation MCMC.
                     return _sample_model_router(
                         ensemble="microcanonical",
                         family=fam,
@@ -1076,17 +1077,18 @@ def _sample_fixed_et_edges_events(
     subtracted from the constraints, the residual problem is sampled over
     the admissible pairs, and fixed pairs are merged back into the result.
 
-    * No fixed pairs: uses the O(1) index-mapped fast path (no pair list).
-    * With fixed pairs: builds the admissible pair set explicitly, computes
-      residual E/T, and calls the explicit-pair Rust kernel.
+    This function is only reached when fixed pairs are present (the
+    no-fixed-pairs case routes through the unified Rust router).
+
+    NOTE: the admissible-pair enumeration below is a known O(N²) Python
+    loop (AGENTS.md dense-matrix policy; todos.md "minor follow-up"). It
+    is intentionally kept as the reachable fixed-pairs fallback and should
+    be migrated to Rust in a follow-up.
     """
     from menobis.data.frames import EdgeTable
     from menobis.models.generation import (
-        _sample_b_fixed_et,
         _sample_b_fixed_et_explicit,
-        _sample_me_fixed_et,
         _sample_me_fixed_et_explicit,
-        _sample_w_fixed_et,
         _sample_w_fixed_et_explicit,
     )
 
@@ -1094,38 +1096,6 @@ def _sample_fixed_et_edges_events(
     e_total = int(total_edges)
     t_total = int(total_events)
     sl = bool(self_loops)
-
-    has_fixed = not (
-        known_source is None or known_target is None or known_occnum is None
-    )
-    if not has_fixed:
-        # Fast path: all candidate pairs are admissible, no residualization.
-        f_dispatch = {
-            "ME": lambda: _sample_me_fixed_et(
-                n,
-                self_loops=sl,
-                residual_edges=e_total,
-                residual_total=t_total,
-                seed=seed,
-            ),
-            "B": lambda: _sample_b_fixed_et(
-                n,
-                self_loops=sl,
-                layers=layers,
-                residual_edges=e_total,
-                residual_total=t_total,
-                seed=seed,
-            ),
-            "W": lambda: _sample_w_fixed_et(
-                n,
-                self_loops=sl,
-                layers=layers,
-                residual_edges=e_total,
-                residual_total=t_total,
-                seed=seed,
-            ),
-        }
-        return f_dispatch[family]()
 
     # ---- fixed-pair preprocessing ----
     k_src = np.asarray(known_source, dtype=np.uint64)
@@ -1151,8 +1121,7 @@ def _sample_fixed_et_edges_events(
     t_res = t_total - t_fixed
 
     # Build the admissible (non-fixed) pair set.
-    # Pairs are indexed as in the Rust fast path: row-major (i, j),
-    # skipping the diagonal when self_loops=False.
+    # O(N²) Python pair enumeration — see NOTE in the docstring above.
     fixed_keys: set[tuple[int, int]] = {
         (int(s), int(t)) for s, t in zip(k_src, k_tgt, strict=True)
     }

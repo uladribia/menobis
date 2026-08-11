@@ -3,7 +3,6 @@
 //! Provides:
 //! - [`state_cost`] — total cost of a [`StrengthState`] under a [`PairCostProvider`].
 //! - [`validate_cost_value`] — checks a single cost value for NaN/Inf.
-//! - [`validate_state_cost`] — validates all occupied-pair costs in a state.
 //! - [`fixed_pairs_cost`] — total cost contributed by fixed pairs.
 //! - [`residual_cost_target`] — observed cost minus fixed-pair cost.
 
@@ -61,31 +60,6 @@ pub fn state_cost(
         total += c * (occ as f64);
     }
     Ok(total)
-}
-
-/// Validate all occupied-pair costs in a state.
-///
-/// Checks every occupied pair for `None` or non-finite costs.  Returns
-/// the first error encountered.
-///
-/// # Errors
-///
-/// Same as [`state_cost`], but does not compute the total.
-pub fn validate_state_cost(
-    state: &StrengthState,
-    costs: &dyn PairCostProvider,
-) -> Result<(), FixedStrengthCostError> {
-    for ((src, tgt), _occ) in state.iter_occupied() {
-        let c =
-            costs
-                .cost(src as usize, tgt as usize)
-                .ok_or(FixedStrengthCostError::MissingCost {
-                    source: src,
-                    target: tgt,
-                })?;
-        validate_cost_value(src, tgt, c)?;
-    }
-    Ok(())
 }
 
 /// Compute the total cost contributed by a set of fixed (pre-determined) pairs.

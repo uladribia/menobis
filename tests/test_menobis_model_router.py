@@ -197,7 +197,7 @@ def test_sample_model_canonical_me_strength_uses_multinomial() -> None:
     assert sample.total_events == 50
 
 
-def test_sample_model_microcanonical_me_strength_uses_stub_matching() -> None:
+def test_sample_model_microcanonical_me_strength_preserves_strengths() -> None:
     """Microcanonical ME fixed-strength sampling preserves strengths exactly."""
     sample = sample_model(
         ensemble=Ensemble.MICROCANONICAL,

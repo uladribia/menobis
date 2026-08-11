@@ -22,14 +22,5 @@ pub mod repair;
 pub mod state;
 pub mod target;
 
-pub use chain::{
-    sample_fixed_strength, sample_fixed_strength_bench, sample_fixed_strength_with_cost,
-    sample_fixed_strength_with_cost_bench, FixedStrengthBenchMetrics, StrengthBackend,
-};
+pub use chain::sample_fixed_strength;
 pub use compressed::FlowTable;
-pub use cost::{residual_cost_target, state_cost};
-pub use cost_fit::{
-    effective_sample_size, fit_gamma, FixedStrengthCostFitConfig, FixedStrengthCostFitResult,
-};
-pub use errors::FixedStrengthCostError;
-pub use repair::{repair_all_violations, repair_capacity, RepairConfig};

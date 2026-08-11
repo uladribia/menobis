@@ -531,9 +531,7 @@ pub fn fit_gamma<'a>(
     };
 
     // Return the best result even when not converged (converged=false).
-    // The caller can decide whether to accept it.  The
-    // `FitDidNotConverge` error variant remains available for callers
-    // that prefer to treat non-convergence as fatal.
+    // The caller can decide whether to accept it.
     Ok(result)
 }
 
