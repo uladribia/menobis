@@ -8,7 +8,7 @@ description: Microcanonical sampling cases, backends, pipeline, and scaling.
 validated at **N=1000** in the benchmark matrix: hard constraints exact,
 expected-cost constraints in expectation.
 
-!!! warning "Experimental status"
+!!! warning "Validation status"
     Validated at **N=1000** for fixed strengths and strengths+cost (all
     families, sparse/dense); fixed-(E,T) and fixed-(k,T) run on the shared
     pair-Gibbs chain at N≥1000. Gamma fitting at dense N=1000 is slow
@@ -124,17 +124,11 @@ edges, diagnostics = sample_model_detailed(
   plus repairs always yield a feasible state.
 - strength-cost: cost must be identifiable; extreme targets can fail the gamma bracket.
 
-## Scaling (N=1000 benchmark matrix)
+## Scaling
 
-Headline results from the N=1000 benchmark matrix:
-
-| Stage | Sparse | Dense |
-|---|---|---|
-| construction | < 5 ms | < 5 ms |
-| MCMC | 3–5 s | 33–260 s |
-| gamma fit | 11–30 s | 200–1200 s |
-
-Bottleneck: the occupied-cell MCMC and, for strength-cost, the gamma fit; memory stays `O(E_occ)` — no `N²` structures.
+See [Scaling (GC + MC)](../development/scalability.md) for the authoritative
+operating range table, complexity analysis, and benchmark matrix results.
+Memory stays `O(E_occ)` — see the Memory section below.
 
 ## Validation
 

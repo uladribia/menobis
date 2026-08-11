@@ -24,12 +24,15 @@ nav:
       - Filter a network: tutorials/filter-network.md
       - Sample ensemble magnitudes: tutorials/sample-ensemble-magnitudes.md
       - Use spatial costs: tutorials/use-spatial-costs.md
+      - Microcanonical sampling: tutorials/microcanonical-sampling.md
   - Model selection and maths:
       - Choose a null model: concepts/choose-null-model.md
       - Equations: concepts/equations.md
       - Partial constraints: concepts/partial-constraints.md
       - Microcanonical sampling: concepts/microcanonical.md
       - Solvers and scaling: concepts/solvers-and-scaling.md
+      - Scaling (GC + MC): development/scalability.md
+      - Benchmarks (GC + MC): development/benchmarking.md
       - Filtering statistics: concepts/filtering.md
   - Reference:
       - Python API: api/python.md
@@ -41,15 +44,15 @@ nav:
           - Fit: cli/fit.md
           - Generate: cli/generate.md
           - Filter: cli/filter.md
+          - Benchmarks: cli/benchmarks.md
   - Development:
       - Extending thesis cases: development/extending-thesis-cases.md
       - Testing: development/testing.md
-      - Benchmarking: development/benchmarking.md
-      - Scalability: development/scalability.md
       - Fetching real-world data: development/fetching-data.md
       - Release process: development/release-process.md
       - TODOs: development/todos.md
       - Architecture: development/architecture.md
+      - Responsibilities: development/responsibilities.md
 
 exclude_docs: |
   /development/agent-specifications/

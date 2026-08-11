@@ -199,7 +199,7 @@ def test_fit_result_dataclass_fields() -> None:
         },
     }
     for cls, required in expected.items():
-        actual = {f.name for f in fields(cls) if not f.name.startswith("_")}
+        actual = {f.name for f in fields(cls) if not f.name.startswith("_")}  # type: ignore
         missing = required - actual
         assert not missing, f"{cls.__name__} missing fields: {missing}"
 

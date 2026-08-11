@@ -16,7 +16,7 @@ def node_count(edges: EdgeTable) -> int:
     """
     if len(edges) == 0:
         return 0
-    return int(max(edges.source.max(), edges.target.max())) + 1
+    return int(max(edges.source.max(), edges.target.max())) + 1  # type: ignore
 
 
 __all__ = ["node_count"]

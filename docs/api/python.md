@@ -59,11 +59,12 @@ result = filter_model(
 )
 ```
 
-## Microcanonical sampling (experimental, small N)
+## Microcanonical sampling
 
-All microcanonical cases are **experimental and validated only for small N
-(≈10–100)**. They require no fitting step (constraints are hard or matched
-in expectation). ME, B, and W families are supported where applicable.
+Microcanonical cases require no fitting step (constraints are hard or matched
+in expectation). Validated at **N=1000** across all families and regimes
+(see [Microcanonical concept doc](../concepts/microcanonical.md)). ME, B, and W
+families are supported where applicable.
 
 ### Fixed (E,T) — EDGES_EVENTS
 
@@ -106,8 +107,7 @@ net = sample_model(
 
 ### Fixed strengths — STRENGTH
 
-Exact strength sequences. ME with self-loops uses direct stub matching;
-ME without self-loops and B/W use MCMC:
+Exact strength sequences via compressed constructor + repair + occupied-cell MCMC:
 
 ```python
 net = sample_model(

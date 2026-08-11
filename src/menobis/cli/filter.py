@@ -154,7 +154,7 @@ def strength_edges(
 ) -> None:
     """Fit strength-edges ME, then filter against its zero-inflated null."""
     edges = read_edges(input_path)
-    nc = int(max(edges.source.max(), edges.target.max())) + 1
+    nc = int(max(edges.source.max(), edges.target.max())) + 1  # type: ignore
     s_out = np.zeros(nc, dtype=np.float64)
     s_in = np.zeros(nc, dtype=np.float64)
     np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
@@ -225,7 +225,7 @@ def strength_cost(
     coordinate_table = pa_csv.read_csv(coordinates_path)
     coord_x = coordinate_table.column("x").to_numpy().astype(np.float64)
     coord_y = coordinate_table.column("y").to_numpy().astype(np.float64)
-    nc = int(max(edges.source.max(), edges.target.max())) + 1
+    nc = int(max(edges.source.max(), edges.target.max())) + 1  # type: ignore
     s_out = np.zeros(nc, dtype=np.float64)
     s_in = np.zeros(nc, dtype=np.float64)
     np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
@@ -290,7 +290,7 @@ def strength_degree(
 ) -> None:
     """Fit strength-degree ME, then filter against its zero-inflated null."""
     edges = read_edges(input_path)
-    nc = int(max(edges.source.max(), edges.target.max())) + 1
+    nc = int(max(edges.source.max(), edges.target.max())) + 1  # type: ignore
     s_out = np.zeros(nc, dtype=np.float64)
     s_in = np.zeros(nc, dtype=np.float64)
     d_out = np.zeros(nc, dtype=np.float64)
@@ -358,7 +358,7 @@ def degree_events(
 ) -> None:
     """Fit degree-events ME, then filter against its zero-inflated null."""
     edges = read_edges(input_path)
-    nc = int(max(edges.source.max(), edges.target.max())) + 1
+    nc = int(max(edges.source.max(), edges.target.max())) + 1  # type: ignore
     d_out = np.zeros(nc, dtype=np.float64)
     d_in = np.zeros(nc, dtype=np.float64)
     for src in edges.source:

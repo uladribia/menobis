@@ -1,5 +1,5 @@
 ---
-description: Complexity, memory model, and practical scaling guidance.
+description: Complexity, memory model, and practical scaling guidance (grand-canonical and microcanonical).
 ---
 
 # Scalability
@@ -15,7 +15,22 @@ possible when you can afford the all-pairs time required by some constraints.
     The plot uses stored repository benchmark results for ME/B strength routes.
     Re-run the benchmark CLI on your machine for local wall-clock numbers.
 
-## Operation costs
+## Package principles
+
+- **Memory**: production NEVER materializes an N×N matrix. All state is O(N)
+  or O(E_occ). Exact enumeration (no matter how small) lives ONLY in the
+  oracle crate (`menobis-test-oracles`).
+- **Time**: per-constraint iteration sweeps may touch O(N²) pairs in
+  worst-case (grand-canonical fitting). Microcanonical MCMC sweeps are
+  O(E_occ). Neither allocates N² storage.
+- **Exact methods**: enumeration and DP backends are exclusively in
+  `menobis-test-oracles`. Production uses exact-strength compressed
+  constructors + targeted repairs + MCMC chains.
+- **Principle**: share abstractions (`OccupationFamily`, `PairCostProvider`,
+  pair conditionals) across ensembles. Implement the kernel per family;
+  compose constraints on top.
+
+## GC fitting operating ranges
 
 | Operation | Typical complexity | Notes |
 |---|---:|---|
@@ -26,9 +41,33 @@ possible when you can afford the all-pairs time required by some constraints.
 | strength-edges fit | O(N² I) | zero-inflated; inspect convergence |
 | strength-degree fit | O(N² I) | high constant, often slowest |
 | strength-cost fit | O(N² I) | costs computed on the fly or bounded caches |
-| microcanonical MCMC | O(E_occ) per sweep | scales linearly with occupied pairs; no N² memory |
+| microcanonical fixed-strength MCMC | O(E_occ × sweep) | compressed constructor + repair + occupied-cell chain; no N² storage |
+| microcanonical fixed-(E,T) pair-Gibbs | O(E × sweep) | shared pair-Gibbs chain; no N² storage |
 | generation | O(P + E_s) | streams candidate pairs |
 | filtering | O(E) or O(P) | absent-edge filtering scans candidates |
+
+## Microcanonical sampler operating ranges
+
+Validated N per constraint × regime from the benchmark matrix
+(N=100/500/1000; dense regime is `T = E × events_per_edge = 8E`):
+
+| Constraint | Regime | Max N tested | Bottleneck |
+|---|---|---|---|
+| fixed (E,T) | sparse | ≥1000 | pair-Gibbs chain: O(E) |
+| fixed (E,T) | dense | ≥1000 | pair-Gibbs chain: O(E) |
+| fixed (k,T) | sparse | ≥1000 | support MCMC + pair-Gibbs |
+| fixed (k,T) | dense | ≥1000 | support MCMC + pair-Gibbs |
+| fixed strengths | sparse | ≥1000 | compressed constructor + MCMC: O(E_occ) |
+| fixed strengths | dense | ≥1000 | B capacity repair at high occupancy |
+| strengths + cost | sparse | ≥1000 | gamma fitting: 10–30 s per cell |
+| strengths + cost | dense | ≥1000 | gamma fitting: 200–1200 s per cell |
+
+The **pair-Gibbs chain** replaces the earlier DP/rejection approach — see
+[docs/concepts/microcanonical.md](../concepts/microcanonical.md). Production
+backends have no DP tables, no rejection acceptance walls, and no
+family-specific weakness: W runs through the same Gibbs chain with no
+rejection. Fixed-(E,T) and fixed-(k,T) are O(E) memory and scale with the
+number of occupied pairs.
 
 ## Memory principles
 
@@ -55,33 +94,11 @@ possible when you can afford the all-pairs time required by some constraints.
 | W family science | start at small N and inspect diagnostics |
 | absent-edge filtering | cap `max_absent` during exploration |
 
-## Microcanonical sampler operating ranges
-
-Validated N per constraint × regime from the benchmark matrix
-(N=100/500/1000; dense regime is `T = E × events_per_edge = 8E`):
-
-| Constraint | Regime | Max N tested | Bottleneck |
-|---|---|---|---|
-| fixed (E,T) | sparse | ≥1000 | pair-Gibbs chain: O(E) |
-| fixed (E,T) | dense | ≥1000 | pair-Gibbs chain: O(E) |
-| fixed (k,T) | sparse | ≥1000 | support MCMC + pair-Gibbs |
-| fixed (k,T) | dense | ≥1000 | support MCMC + pair-Gibbs |
-| fixed strengths | sparse | ≥1000 | compressed constructor + MCMC: O(E_occ) |
-| fixed strengths | dense | ≥1000 | B capacity repair at high occupancy |
-| strengths + cost | sparse | ≥1000 | gamma fitting: 10–30 s per cell |
-| strengths + cost | dense | ≥1000 | gamma fitting: 200–1200 s per cell |
-
-The **pair-Gibbs chain** replaces the earlier DP/rejection approach — see
-[docs/concepts/microcanonical.md](../concepts/microcanonical.md). Production
-backends have no DP tables, no rejection acceptance walls, and no
-family-specific weakness: W runs through the same Gibbs chain with no
-rejection. Fixed-(E,T) and fixed-(k,T) are O(E) memory and scale with the
-number of occupied pairs.
-
 ## Regenerate local numbers
 
 ```bash
 uv run python -m benchmarks matrix   # microcanonical fixed-strength matrix
+                                    # (full 72-cell matrix across families/regimes)
 
 uv run python -m benchmarks all --nodes 100,1000 --families me,b \
   --constraints strength --regime dense --known-pairs 0.0

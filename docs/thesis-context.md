@@ -46,6 +46,25 @@ GitHub renders this metadata through the **Cite this repository** button.
 | Urban mobility reconstruction | O. Sagarra, M. Szell, P. Santi, A. Díaz-Guilera, C. Ratti, *Supersampling and Network Reconstruction of Urban Mobility*, PLOS ONE. DOI: `10.1371/journal.pone.0134508` |
 | Same constraints with different event nature leads to different statistics | O. Sagarra, C. J. Pérez Vicente, A. Díaz-Guilera, *Role of adjacency-matrix degeneracy in maximum-entropy-weighted network models*, Phys. Rev. E 92, 052816. DOI: `10.1103/PhysRevE.92.052816` |
 
+## Complementary references
+
+These works establish the microcanonical ensemble framework that MENoBiS extends
+to non-binary (weighted) networks with ME, B, and W families.
+
+| Topic | Reference |
+|---|---|
+| **PRIMARY** – Non-binary max-entropy (Sagarra thesis) | See above — the primary scientific reference. |
+| **COMPLEMENTARY** – Microcanonical tailored graph ensembles | A. Annibale, A. C. C. Coolen, L. P. Fernandes, F. Fraternali, J. Kleinjung, *Tailored graph ensembles as proxies for biological network data*, J. Phys. A: Math. Theor. 42, 485001 (2009). DOI: `10.1088/1751-8113/42/48/485001` — Foundational work on microcanonical ensemble null models for binary networks. |
+| **COMPLEMENTARY** – Monograph on network ensemble theory | A. C. C. Coolen, A. Annibale, E. Roberts, *Generating Random Networks and Bipartite Graphs*, Oxford University Press (2017). ISBN 978-0-19-879016-9 — Comprehensive treatment of microcanonical sampling, backbone swaps, and ensemble equivalence. |
+
+!!! note "MENoBiS extension"
+    The Coolen framework targets **binary** networks (edge-presence ensembles).
+    MENoBiS generalises this to **non-binary** occupation numbers with three
+    distinct event natures (ME, B, W), each carrying a different per-pair
+    degeneracy. The microcanonical sampling backends (4-cycle Metropolis
+    for fixed strengths, pair-Gibbs for fixed totals) are the non-binary
+    analogue of Coolen-style backbone swaps.
+
 ## Mapping to MENoBiS names
 
 | Thesis idea | MENoBiS name |

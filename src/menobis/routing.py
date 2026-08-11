@@ -271,7 +271,7 @@ def sample_model_detailed(
         )
         raise UnsupportedModelCaseError(msg)
 
-    _sampled = route_model(
+    _result = route_model(
         Verb.SAMPLE,
         ensemble=ensemble,
         family=family,
@@ -305,10 +305,13 @@ def sample_model_detailed(
         batch_count=batch_count,
     )
 
-    if isinstance(_sampled, tuple):
-        edges, sc_diagnostics = _sampled
+    edges: EdgeTable
+    sc_diagnostics: StrengthCostDiagnostics | None
+    if isinstance(_result, tuple):
+        _result_cast = cast("tuple[EdgeTable, StrengthCostDiagnostics]", _result)
+        edges, sc_diagnostics = _result_cast
     else:
-        edges = _sampled
+        edges = cast("EdgeTable", _result)
         sc_diagnostics = None
 
     if ensemble is Ensemble.MICROCANONICAL:
@@ -977,7 +980,7 @@ def _sample_model(
         if not isinstance(fit, StrengthFit):
             msg = f"strength sampling requires StrengthFit, got {type(fit).__name__}"
             raise TypeError(msg)
-        return _sample_model_router(**common, x=fit.x.tolist(), y=fit.y.tolist())
+        return _sample_model_router(**common, x=fit.x.tolist(), y=fit.y.tolist())  # type: ignore
     if constraint == Constraint.DEGREE_EVENTS:
         if not isinstance(fit, DegreeEventsFit):
             msg = (
@@ -986,7 +989,10 @@ def _sample_model(
             )
             raise TypeError(msg)
         return _sample_model_router(
-            **common, x=fit.x.tolist(), y=fit.y.tolist(), q=fit.q
+            **common,  # type: ignore
+            x=fit.x.tolist(),
+            y=fit.y.tolist(),
+            q=fit.q,
         )
     if constraint == Constraint.EDGES_EVENTS:
         if not isinstance(fit, EdgesEventsFit):
@@ -996,7 +1002,10 @@ def _sample_model(
             )
             raise TypeError(msg)
         return _sample_model_router(
-            **common, node_count=fit.node_count, q=fit.q, occupation=fit.occupation
+            **common,  # type: ignore
+            node_count=fit.node_count,
+            q=fit.q,
+            occupation=fit.occupation,
         )
     if constraint == Constraint.STRENGTH_EDGES:
         if not isinstance(fit, StrengthEdgesFit):
@@ -1006,7 +1015,10 @@ def _sample_model(
             )
             raise TypeError(msg)
         return _sample_model_router(
-            **common, x=fit.x.tolist(), y=fit.y.tolist(), lam=fit.lam
+            **common,  # type: ignore
+            x=fit.x.tolist(),
+            y=fit.y.tolist(),
+            lam=fit.lam,
         )
     if constraint == Constraint.STRENGTH_DEGREE:
         if not isinstance(fit, StrengthDegreeFit):
@@ -1016,7 +1028,7 @@ def _sample_model(
             )
             raise TypeError(msg)
         return _sample_model_router(
-            **common,
+            **common,  # type: ignore
             x=fit.x.tolist(),
             y=fit.y.tolist(),
             z=fit.z.tolist(),
@@ -1033,7 +1045,7 @@ def _sample_model(
             )
             raise TypeError(msg)
         return _sample_model_router(
-            **common,
+            **common,  # type: ignore
             x=fit.x.tolist(),
             y=fit.y.tolist(),
             gamma=fit.gamma,
@@ -1199,7 +1211,7 @@ def _sample_fixed_et_edges_events(
 def _node_count(edges: EdgeTable) -> int:
     if len(edges) == 0:
         return 0
-    return int(max(edges.source.max(), edges.target.max())) + 1
+    return int(max(edges.source.max(), edges.target.max())) + 1  # type: ignore
 
 
 def _strengths(edges: EdgeTable, node_count: int) -> tuple[np.ndarray, np.ndarray]:

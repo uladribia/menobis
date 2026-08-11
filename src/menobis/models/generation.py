@@ -142,7 +142,7 @@ def _sample_strength_fixed_strength_mcmc(
         else []
     )
 
-    sources, targets, occ_nums = _menobis.sample_fixed_strength(  # type: ignore
+    sources, targets, occ_nums = _menobis.sample_fixed_strength(
         family,
         s_out,
         s_in,
