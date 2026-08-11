@@ -126,7 +126,9 @@ edges, diagnostics = sample_model_detailed(
 
 - fixed (E,T): `0 ≤ E ≤ L`, `E = 0 ⟺ T = 0`, `T ≥ E`, B: `T ≤ M·E`.
 - fixed strengths: balanced totals; B occupations ≤ `M`; the constructor
-  plus repairs always yield a feasible state.
+  plus targeted repairs (loop, capacity, admissibility) generate a feasible
+  state for supported configurations; infeasible inputs are rejected at the
+  constraint validation layer.
 - strength-cost: cost must be identifiable; extreme targets can fail the gamma bracket.
 
 ## Scaling
@@ -146,3 +148,7 @@ networks; benchmark matrix at N=100/500/1000 across ME/B/W × sparse/dense.
 No `O(N²)` pair lists are materialised; production state is `O(E_occ)`;
 fixed-total DP tables and rejection backends live only in the oracle crate
 (`menobis-test-oracles`).
+
+!!! note "Deferred microcanonical cases"
+    Fixed `(s,E)` (strength + binary edges) and fixed `(s,k)` (strength +
+    degree sequence) are not currently implemented. See [`development/todos.md`](../development/todos.md).
