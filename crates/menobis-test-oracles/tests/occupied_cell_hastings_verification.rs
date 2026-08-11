@@ -377,7 +377,6 @@ fn empirical_transition_probs(
 // --------------------------------------------------------------------------
 
 #[test]
-#[ignore] // heavy: ~440k MCMC steps
 fn occupied_cell_hastings_kernel_exact_vs_empirical_n3() {
     let n = 3;
     let s_out = vec![2u64; 3];
