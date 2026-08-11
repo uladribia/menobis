@@ -66,5 +66,5 @@ Self-loops are supported across microcanonical backends (guaranteed loop repair)
 
 ## See also
 
-- `docs/development/agent-specifications/microcanonical-phase-0.md`
+- `docs/development/agent-specifications/archive/microcanonical-phase-0.md`
 - `docs/development/migration-notes.md`

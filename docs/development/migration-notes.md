@@ -57,4 +57,4 @@ All generated occupation numbers are positive integers in family support
 ## See also
 
 - `docs/development/architecture.md`
-- `docs/development/agent-specifications/microcanonical-phase-0.md`
+- `docs/development/agent-specifications/archive/microcanonical-phase-0.md`
