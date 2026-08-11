@@ -48,6 +48,7 @@ class FitResult:
 
     diagnostics: OptimizationDiagnostics | None
     converged: bool
+    self_loops: bool
 
     @property
     def status(self) -> str:

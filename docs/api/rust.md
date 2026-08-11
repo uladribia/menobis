@@ -16,7 +16,7 @@ and filtering. Python should reach these through PyO3 wrappers only.
 | `distribution` | Pair laws for ME, B, W, and zero-inflated variants |
 | `pairs` | `PairDistributionProvider` and candidate support abstractions |
 | `fitting` | ME/B/W solvers, support masks, partial excess helpers |
-| `generation` | Seeded samplers over provider-backed pair streams |
+| `generation` | Seeded samplers over provider-backed pair streams; microcanonical backends under `generation::microcanonical` |
 | `filter` | Observed and absent-edge p-value sinks |
 | `graph`, `stats`, `clustering` | Rust-native graph statistics |
 | `cost` / support helpers | Cost and distance utilities used by fitting/provider code |
@@ -31,6 +31,21 @@ and filtering. Python should reach these through PyO3 wrappers only.
 | `CandidateSupport` | All-pairs or sparse-pairs support declaration |
 | `SampledEdges` | Sparse generated edge output |
 | `FitResult` and constraint results | Native fit multipliers and convergence flags |
+
+## Microcanonical generation modules
+
+`generation::microcanonical` dispatches exact-constraint sampling by
+constraint type (`route.rs`):
+
+```text
+generation/microcanonical/
+├── occupation_mcmc/   fixed-strength compressed constructor, repair, occupied-cell MCMC, gamma fit
+├── conditional/       fixed-total pair-Gibbs chain (shared by E,T and k,T)
+├── binary/            binary support sampling (degree-events)
+├── support/           uniform support sampling (edges-events)
+├── mcmc/              shared MCMC config, counters, outcome types
+└── route.rs           constraint dispatcher
+```
 
 ## Provider pipeline
 

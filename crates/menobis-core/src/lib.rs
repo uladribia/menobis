@@ -10,6 +10,7 @@ pub mod filter;
 pub mod fitting;
 pub mod generation;
 pub mod graph;
+pub mod model;
 pub mod pairs;
 pub mod stats;
 

@@ -339,8 +339,8 @@ def test_fixed_et_with_self_loops_dense() -> None:
     keys = sampled.source.astype(np.int64) * node_count + sampled.target
     assert len(np.unique(keys)) == len(keys)
     # Self-loops are allowed, so don't forbid them, but all pairs in range
-    assert sampled.source.max() < node_count
-    assert sampled.target.max() < node_count
+    assert sampled.source.max() < node_count  # type: ignore
+    assert sampled.target.max() < node_count  # type: ignore
 
 
 # ---------------------------------------------------------------------------

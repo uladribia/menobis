@@ -1127,7 +1127,7 @@ def _filter_degree_events_negative_binomial(
 def _node_count(edges: EdgeTable) -> int:
     if len(edges) == 0:
         return 0
-    return int(max(edges.source.max(), edges.target.max())) + 1
+    return int(max(edges.source.max(), edges.target.max())) + 1  # type: ignore
 
 
 def _strengths(edges: EdgeTable, node_count: int) -> tuple[np.ndarray, np.ndarray]:

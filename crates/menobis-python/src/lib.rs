@@ -4,7 +4,6 @@ use menobis_core::clustering::{
     clustering_coefficients as core_clustering,
     occupation_clustering_coefficients as core_occupation_clustering,
 };
-use menobis_core::constraints::mask::PairMask;
 use menobis_core::filter::{
     absent_custom_poisson as core_absent_custom_poisson,
     absent_degree_events_binomial as core_absent_degree_events_binomial,
@@ -54,11 +53,9 @@ use menobis_core::filter::{
 };
 use menobis_core::fitting::edges_events::fit_edges_events as core_fit_edges_events;
 use menobis_core::fitting::{
-    balance_degree_bernoulli, balance_sparse_masked_degree_bernoulli,
-    balance_sparse_masked_strength_binomial, balance_sparse_masked_strength_degree_poisson,
-    balance_sparse_masked_strength_poisson, balance_strength_binomial,
-    balance_strength_degree_poisson, balance_strength_edges_poisson, balance_strength_poisson,
-    balance_weighted_factors, fit_degree_events_geometric as core_fit_degree_events_geometric,
+    balance_degree_bernoulli, balance_strength_binomial, balance_strength_degree_poisson,
+    balance_strength_edges_poisson,
+    fit_degree_events_geometric as core_fit_degree_events_geometric,
     fit_degree_events_negative_binomial as core_fit_degree_events_negative_binomial,
     fit_strength_degree_binomial as core_fit_strength_degree_binomial,
     fit_strength_degree_geometric as core_fit_strength_degree_geometric,
@@ -88,41 +85,23 @@ use menobis_core::fitting::{
 use menobis_core::fitting::{
     fit_strength_cost_binomial_coordinates as core_fit_strength_cost_binomial_coordinates,
     fit_strength_cost_poisson_coordinates as core_fit_strength_cost_coordinates,
-    fit_strength_cost_w_lbfgs as core_fit_strength_cost_w_coordinates,
-    fit_strength_cost_w_lbfgs as core_fit_strength_cost_w_lbfgs, CostFitOptions,
+    fit_strength_cost_w_lbfgs as core_fit_strength_cost_w_coordinates, CostFitOptions,
 };
 use menobis_core::generation::{
-    sample_b_fixed_et as core_sample_b_fixed_et,
     sample_b_fixed_et_explicit as core_sample_b_fixed_et_explicit,
     sample_custom_multinomial as core_sample_custom_multinomial,
     sample_custom_poisson as core_sample_custom_poisson,
-    sample_degree_events_binomial as core_sample_degree_events_binomial,
-    sample_degree_events_geometric as core_sample_degree_events_geometric,
-    sample_degree_events_negative_binomial as core_sample_degree_events_negative_binomial,
-    sample_degree_events_poisson as core_sample_degree_events_poisson,
     sample_edges_events as core_sample_edges_events, sample_fixed_kt_core as core_sample_fixed_kt,
     sample_fixed_strength as core_sample_fixed_strength,
-    sample_me_fixed_et as core_sample_me_fixed_et,
     sample_me_fixed_et_explicit as core_sample_me_fixed_et_explicit,
     sample_strength_binomial as core_sample_strength_binomial,
-    sample_strength_cost_binomial_coordinates as core_sample_strength_cost_binomial_coordinates,
-    sample_strength_cost_geometric_coordinates as core_sample_strength_cost_geometric_coordinates,
-    sample_strength_cost_negative_binomial_coordinates as core_sample_strength_cost_negative_binomial_coordinates,
     sample_strength_cost_poisson_coordinates as core_sample_strength_cost_poisson_coordinates,
-    sample_strength_degree_binomial as core_sample_strength_degree_binomial,
-    sample_strength_degree_geometric as core_sample_strength_degree_geometric,
-    sample_strength_degree_negative_binomial as core_sample_strength_degree_negative_binomial,
     sample_strength_degree_poisson as core_sample_strength_degree_poisson,
-    sample_strength_edges_binomial as core_sample_strength_edges_binomial,
-    sample_strength_edges_geometric as core_sample_strength_edges_geometric,
-    sample_strength_edges_negative_binomial as core_sample_strength_edges_negative_binomial,
     sample_strength_edges_poisson as core_sample_strength_edges_poisson,
     sample_strength_geometric as core_sample_strength_geometric,
     sample_strength_multinomial as core_sample_strength_multinomial,
     sample_strength_negative_binomial as core_sample_strength_negative_binomial,
     sample_strength_poisson as core_sample_strength_poisson,
-    sample_strength_stub_matching as core_sample_strength_stub_matching,
-    sample_w_fixed_et as core_sample_w_fixed_et,
     sample_w_fixed_et_explicit as core_sample_w_fixed_et_explicit,
     FixedDegreeMcmcConfig as CoreFixedDegreeMcmcConfig, FixedKTConfig as CoreFixedKTConfig,
 };
@@ -231,20 +210,15 @@ fn _menobis(module: &Bound<'_, PyModule>) -> PyResult<()> {
     add_pyfunction!(module, stats::directed_degrees)?;
     add_pyfunction!(module, stats::compute_all_node_stats)?;
     add_pyfunction!(module, stats::occupation_distribution)?;
-    add_pyfunction!(module, fitting::fit_masked_degree_bernoulli)?;
-    add_pyfunction!(module, fitting::fit_masked_strength_degree_poisson)?;
-    add_pyfunction!(module, fitting::fit_masked_strength_poisson)?;
     add_pyfunction!(module, fitting::fit_strength_cost_poisson_coordinates)?;
     add_pyfunction!(module, fitting::fit_strength_cost_binomial_coordinates)?;
     add_pyfunction!(module, fitting::fit_strength_cost_w_coordinates)?;
-    add_pyfunction!(module, fitting::fit_strength_cost_w_lbfgs)?;
     add_pyfunction!(module, fitting::fit_degree_bernoulli)?;
     add_pyfunction!(module, fitting::fit_edges_events)?;
     add_pyfunction!(module, fitting::fit_strength_edges_poisson)?;
     add_pyfunction!(module, fitting::fit_strength_degree_poisson)?;
     add_pyfunction!(module, fitting::fit_strength_edges_binomial)?;
     add_pyfunction!(module, fitting::fit_strength_degree_binomial)?;
-    add_pyfunction!(module, fitting::fit_weighted_factors)?;
     add_pyfunction!(module, fitting::fit_strength_poisson)?;
     add_pyfunction!(module, fitting::fit_strength_geometric)?;
     add_pyfunction!(module, fitting::fit_strength_negative_binomial)?;
@@ -252,51 +226,24 @@ fn _menobis(module: &Bound<'_, PyModule>) -> PyResult<()> {
     add_pyfunction!(module, fitting::fit_strength_edges_negative_binomial)?;
     add_pyfunction!(module, fitting::fit_strength_degree_geometric)?;
     add_pyfunction!(module, fitting::fit_strength_degree_negative_binomial)?;
-    add_pyfunction!(module, fitting::fit_strength_poisson_no_self_loops)?;
     add_pyfunction!(module, generation::sample_edges_events)?;
-    add_pyfunction!(module, generation::sample_b_fixed_et)?;
     add_pyfunction!(module, generation::sample_b_fixed_et_explicit)?;
-    add_pyfunction!(module, generation::sample_me_fixed_et)?;
+    add_pyfunction!(module, generation::sample_model)?;
     add_pyfunction!(module, generation::sample_me_fixed_et_explicit)?;
-    add_pyfunction!(module, generation::sample_w_fixed_et)?;
     add_pyfunction!(module, generation::sample_w_fixed_et_explicit)?;
-    add_pyfunction!(module, generation::sample_strength_stub_matching)?;
     add_pyfunction!(module, generation::sample_custom_poisson)?;
     add_pyfunction!(module, generation::sample_custom_multinomial)?;
     add_pyfunction!(module, generation::sample_strength_edges_poisson)?;
     add_pyfunction!(module, generation::sample_strength_cost_poisson_coordinates)?;
     add_pyfunction!(module, generation::sample_strength_poisson)?;
-    add_pyfunction!(module, generation::sample_degree_events_poisson)?;
     add_pyfunction!(module, generation::sample_strength_degree_poisson)?;
     add_pyfunction!(module, generation::sample_strength_multinomial)?;
     add_pyfunction!(module, generation::sample_strength_geometric)?;
     add_pyfunction!(module, generation::sample_strength_binomial)?;
-    add_pyfunction!(
-        module,
-        generation::sample_strength_cost_binomial_coordinates
-    )?;
-    add_pyfunction!(
-        module,
-        generation::sample_strength_cost_geometric_coordinates
-    )?;
-    add_pyfunction!(
-        module,
-        generation::sample_strength_cost_negative_binomial_coordinates
-    )?;
-    add_pyfunction!(module, generation::sample_strength_edges_binomial)?;
-    add_pyfunction!(module, generation::sample_strength_edges_geometric)?;
-    add_pyfunction!(module, generation::sample_strength_edges_negative_binomial)?;
-    add_pyfunction!(module, generation::sample_strength_degree_binomial)?;
-    add_pyfunction!(module, generation::sample_strength_degree_geometric)?;
-    add_pyfunction!(module, generation::sample_strength_degree_negative_binomial)?;
-    add_pyfunction!(module, generation::sample_degree_events_binomial)?;
-    add_pyfunction!(module, generation::sample_degree_events_geometric)?;
-    add_pyfunction!(module, generation::sample_degree_events_negative_binomial)?;
     add_pyfunction!(module, generation::sample_strength_negative_binomial)?;
     add_pyfunction!(module, fitting::fit_strength_binomial)?;
     add_pyfunction!(module, fitting::fit_degree_events_geometric)?;
     add_pyfunction!(module, fitting::fit_degree_events_negative_binomial)?;
-    add_pyfunction!(module, fitting::fit_masked_strength_binomial)?;
     add_pyfunction!(module, fitting::fit_partial_strength_poisson_full)?;
     add_pyfunction!(module, fitting::fit_partial_degree_poisson_full)?;
     add_pyfunction!(module, fitting::fit_partial_strength_degree_poisson_full)?;
@@ -369,5 +316,7 @@ fn _menobis(module: &Bound<'_, PyModule>) -> PyResult<()> {
     add_pyfunction!(module, generation::sample_degree_events_fixed_kt)?;
     add_pyfunction!(module, generation::sample_fixed_strength)?;
     add_pyfunction!(module, generation::sample_fixed_strength_with_cost)?;
+    add_pyfunction!(module, generation::bench_fixed_strength)?;
+    add_pyfunction!(module, generation::bench_fixed_strength_with_cost)?;
     Ok(())
 }

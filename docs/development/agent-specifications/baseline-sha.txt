@@ -1,0 +1,109 @@
+Branch: microcanonical-refactor
+
+> ⚠️ **Historical baseline inventory.** The microcanonical refactor is
+> COMPLETE — phases A–H, the §35 benchmark matrix (`5de34ea`), and docs
+> alignment (`c9aef40`) are all merged into this branch. This file records
+> the baseline inventory and gate audit that were maintained during the
+> refactor; test counts below reflect the post-completion state.
+
+Legacy backends policy: exact fixed-(E,T) rejection/DP code lives in
+menobis-test-oracles/src/legacy_fixed_et/ (reference oracle, compiled
+and tested on every CI run).  No archive branch.
+
+Last updated: post-completion (2026-08-10; test counts refreshed after phases A–H + §35 merged)
+
+=============================================================================
+GATE STATUS
+=============================================================================
+
+  Gate 1 — Folder structure        ✅ DONE
+  Gate 2 — Python E2E test split   ✅ DONE
+  Gate 3 — Exact vs current        ✅ DONE (oracle crate)
+  Gate 4 — Small N                 ✅ DONE (oracle tests)
+  Gate 5 — Large N / benchmarks    ✅ DONE (see docs/benchmarks/microcanonical_gate5.md)
+
+=============================================================================
+FOLDER STRUCTURE (after Gate 1)
+=============================================================================
+
+generation/microcanonical/
+  conditional/
+    fixed_et.rs               — fixed-(E,T) orchestrator (support + Gibbs)
+    fixed_total/              — shared pair-Gibbs chain (O(E) memory)
+    mod.rs
+  binary/                     — fixed-degree binary-support MCMC (was fixed_kt/)
+  mcmc/                       — shared config/counters/outcome types
+  occupation_mcmc/            — fixed-strength MCMC (was fixed_strength/)
+    chain.rs, state.rs, target.rs, domain.rs, problem.rs, initializer.rs,
+    feasibility.rs, move_cycle.rs, cost.rs, cost_fit.rs, me_direct.rs,
+    errors.rs, mod.rs
+  route.rs                    — unified MC router
+  support/                    — shared uniform-edge sampling
+  mod.rs
+
+generation/grandcanonical/
+  mod.rs                      — GrandCanonicalCase + sample_grandcanonical router
+
+model/
+  family.rs                   — OccupationFamily (ME/B/W) — single source of truth
+  problem.rs                  — PreparedProblem
+  sampling_plan.rs            — SamplingPlan enum
+  mod.rs
+
+=============================================================================
+TEST COVERAGE (after Gate 2)
+=============================================================================
+
+Rust tests:
+  cargo test --workspace            = 350 passed (1 heavy test ignored by default)
+  cargo test -p menobis-test-oracles = 47 passed (enumeration + legacy comparison)
+  cargo clippy -p menobis-core --lib --tests = clean
+  cargo fmt --all -- --check = clean
+
+Criterion benchmarks:
+  crates/menobis-core/benches/fixed_total_chain.rs — pair-Gibbs chain
+  crates/menobis-core/benches/grandcanonical.rs    — GC router (added Gate 1)
+
+Python test split (conftest.py):
+  pytest                        — fast suite:    381 passed, 14 skipped, 1 xfailed in ~11s
+                                        (skip @pytest.mark.heavy)
+  pytest --run-heavy            — full suite:    run on demand (includes heavy tests)
+  pytest -m heavy               — heavy only:    run on demand
+
+  Fast suite coverage (all ensembles, constraints, families at small N):
+
+  | Ensemble     | Constraint      | ME    | B     | W     |
+  |--------------|----------------|-------|-------|-------|
+  | GC           | all 6          | ✅    | ✅    | ✅    |
+  | Canonical    | Strength       | ✅    | n/a   | n/a   |
+  | MC           | EdgesEvents    | ✅    | ✅    | ✅    |
+  | MC           | DegreeEvents   | ✅    | ✅    | ✅    |
+  | MC           | Strength       | ✅    | ✅    | ✅    |
+  | MC           | StrengthCost   | ✅    | ✅    | ✅    |
+
+  Heavy tests (11):
+    test_conditioned_grandcanonical_identity          4 parametrisations
+    test_filtering_across_families_and_constraints    3 (STRENGTH_DEGREE × ME/B/W)
+    test_integration_matrix_strength_degree           3 (ME/B/W)
+    test_w_fixed_et_matches_exact_enumeration         1
+
+=============================================================================
+NEXT STEPS — ✅ COMPLETED (post-refactor)
+=============================================================================
+
+Immediate (Gate 5):
+  - Run benchmark CLI (menobis benchmark) at prescribed sizes
+    (N=500, 1000, 5000) to verify no O(N²) blowup        ✅ DONE
+  - Record results in docs/benchmarks/                   ✅ DONE (§35 benchmark matrix,
+                                                            merged at 5de34ea, validated at N=1000)
+
+Deferred (not started, may become separate branches):
+  - Fixed (E,s) — coupled strength + edge count MCMC    → spec §39 deferred, see docs/development/todos.md
+  - Fixed (s,k) — coupled strength + degree MCMC        → spec §39 deferred, see docs/development/todos.md
+  - SamplingPlan::classify rule for future fixed-(E,s)  → not implemented (deferred)
+
+NOTE: the refactor itself is complete; the deferred items above are recorded
+in spec §39 and docs/development/todos.md and are NOT part of this branch's
+remaining work.
+
+=============================================================================

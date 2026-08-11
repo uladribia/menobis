@@ -171,7 +171,6 @@ def sample_model(
     seed: int = 0,
     burn_in_sweeps: int = 50,
     sweeps_per_sample: int = 10,
-    warm_start_sweeps: int = 20,
     adaptation_sweeps: int = 50,
     estimation_sweeps: int = 50,
     samples_per_iteration: int = 5,
@@ -181,7 +180,7 @@ def sample_model(
     confidence_multiplier: float = 2.09,
     batch_count: int = 20,
 ) -> EdgeTable:
-    """Sample a network from a fitted model or directly via stub matching.
+    """Sample a network from a fitted model or directly from microcanonical constraints.
 
     Returns only the sampled occupied-pair table. Use
     :func:`sample_model_detailed` for the full result with metadata.
@@ -212,7 +211,6 @@ def sample_model(
         seed=seed,
         burn_in_sweeps=burn_in_sweeps,
         sweeps_per_sample=sweeps_per_sample,
-        warm_start_sweeps=warm_start_sweeps,
         adaptation_sweeps=adaptation_sweeps,
         estimation_sweeps=estimation_sweeps,
         samples_per_iteration=samples_per_iteration,
@@ -248,7 +246,6 @@ def sample_model_detailed(
     seed: int = 0,
     burn_in_sweeps: int = 50,
     sweeps_per_sample: int = 10,
-    warm_start_sweeps: int = 20,
     adaptation_sweeps: int = 50,
     estimation_sweeps: int = 50,
     samples_per_iteration: int = 5,
@@ -274,7 +271,7 @@ def sample_model_detailed(
         )
         raise UnsupportedModelCaseError(msg)
 
-    _sampled = route_model(
+    _result = route_model(
         Verb.SAMPLE,
         ensemble=ensemble,
         family=family,
@@ -298,7 +295,6 @@ def sample_model_detailed(
         seed=seed,
         burn_in_sweeps=burn_in_sweeps,
         sweeps_per_sample=sweeps_per_sample,
-        warm_start_sweeps=warm_start_sweeps,
         adaptation_sweeps=adaptation_sweeps,
         estimation_sweeps=estimation_sweeps,
         samples_per_iteration=samples_per_iteration,
@@ -309,10 +305,13 @@ def sample_model_detailed(
         batch_count=batch_count,
     )
 
-    if isinstance(_sampled, tuple):
-        edges, sc_diagnostics = _sampled
+    edges: EdgeTable
+    sc_diagnostics: StrengthCostDiagnostics | None
+    if isinstance(_result, tuple):
+        _result_cast = cast("tuple[EdgeTable, StrengthCostDiagnostics]", _result)
+        edges, sc_diagnostics = _result_cast
     else:
-        edges = _sampled
+        edges = cast("EdgeTable", _result)
         sc_diagnostics = None
 
     if ensemble is Ensemble.MICROCANONICAL:
@@ -326,8 +325,10 @@ def sample_model_detailed(
             method = "microcanonical_fixed_strength_cost"
             exactness = SamplingExactness.EXACT_STATIONARY_MCMC
         else:
-            method = "stub_matching"
-            exactness = SamplingExactness.EXACT_DIRECT
+            # Microcanonical STRENGTH: fixed-strength occupation MCMC
+            # (4-cycle Metropolis chain on the compressed residual state).
+            method = "microcanonical_fixed_strength_mcmc"
+            exactness = SamplingExactness.EXACT_STATIONARY_MCMC
     elif ensemble is Ensemble.CANONICAL:
         method = "canonical_multinomial"
         exactness = SamplingExactness.EXACT_DIRECT
@@ -665,7 +666,6 @@ def _sample_model(
     seed: int = 0,
     burn_in_sweeps: int = 50,
     sweeps_per_sample: int = 10,
-    warm_start_sweeps: int = 20,
     adaptation_sweeps: int = 50,
     estimation_sweeps: int = 50,
     samples_per_iteration: int = 5,
@@ -677,32 +677,10 @@ def _sample_model(
 ) -> EdgeTable | tuple[EdgeTable, StrengthCostDiagnostics]:
     from menobis.data.frames import EdgeTable
     from menobis.models.generation import (
-        _sample_degree_events_binomial,
         _sample_degree_events_fixed_kt,
-        _sample_degree_events_geometric,
-        _sample_degree_events_negative_binomial,
-        _sample_degree_events_poisson,
-        _sample_edges_events,
-        _sample_strength_binomial,
-        _sample_strength_cost_binomial,
-        _sample_strength_cost_geometric,
-        _sample_strength_cost_negative_binomial,
-        _sample_strength_cost_poisson,
-        _sample_strength_degree_binomial,
-        _sample_strength_degree_geometric,
-        _sample_strength_degree_negative_binomial,
-        _sample_strength_degree_poisson,
-        _sample_strength_edges_binomial,
-        _sample_strength_edges_geometric,
-        _sample_strength_edges_negative_binomial,
-        _sample_strength_edges_poisson,
+        _sample_model_router,
         _sample_strength_fixed_strength_cost_mcmc,
         _sample_strength_fixed_strength_mcmc,
-        _sample_strength_geometric,
-        _sample_strength_multinomial,
-        _sample_strength_negative_binomial,
-        _sample_strength_poisson,
-        _sample_strength_stub_matching,
     )
     from menobis.models.types import (
         DegreeEventsFit,
@@ -738,6 +716,22 @@ def _sample_model(
                     else ("B" if family == ModelFamily.B else "W")
                 )
                 layers_val = int(layers) if fam in ("B", "W") else 1
+                has_fixed = not (
+                    known_source is None or known_target is None or known_occnum is None
+                )
+                if not has_fixed:
+                    # Unified Rust router: uniform support + fixed-total Gibbs.
+                    return _sample_model_router(
+                        ensemble="microcanonical",
+                        family=fam,
+                        constraint="edges_events",
+                        node_count=int(node_count),
+                        self_loops=bool(self_loops),
+                        residual_edges=int(target_edges),
+                        residual_total=int(total_events),
+                        layers=layers_val,
+                        seed=seed,
+                    )
                 return _sample_fixed_et_edges_events(
                     family=fam,
                     node_count=int(node_count),
@@ -759,20 +753,26 @@ def _sample_model(
                 has_fixed = not (
                     known_source is None or known_target is None or known_occnum is None
                 )
-                # ME direct fast path: eligible when self-loops allowed and
-                # no fixed pairs. The Rust backend handles the routing.
-                if family is ModelFamily.ME and self_loops and not has_fixed:
-                    return _sample_strength_stub_matching(
-                        np.asarray(strength_out, dtype=np.uint64),
-                        np.asarray(strength_in, dtype=np.uint64),
-                        seed=seed,
-                    )
-                # Generic MCMC backend for all other cases.
                 fam = (
                     "ME"
                     if family == ModelFamily.ME
                     else ("B" if family == ModelFamily.B else "W")
                 )
+                if not has_fixed:
+                    # Unified Rust router: fixed-strength occupation MCMC.
+                    return _sample_model_router(
+                        ensemble="microcanonical",
+                        family=fam,
+                        constraint="strength",
+                        self_loops=bool(self_loops),
+                        strength_out=np.asarray(strength_out, dtype=np.uint64).tolist(),
+                        strength_in=np.asarray(strength_in, dtype=np.uint64).tolist(),
+                        layers=int(layers),
+                        seed=seed,
+                        burn_in_sweeps=burn_in_sweeps,
+                        sweeps_per_sample=sweeps_per_sample,
+                    )
+                # Generic MCMC backend for fixed-pair cases.
                 return _sample_strength_fixed_strength_mcmc(
                     family=fam,
                     strength_out=np.asarray(strength_out, dtype=np.uint64),
@@ -819,7 +819,6 @@ def _sample_model(
                     seed=seed,
                     burn_in_sweeps=burn_in_sweeps,
                     sweeps_per_sample=sweeps_per_sample,
-                    warm_start_sweeps=warm_start_sweeps,
                     adaptation_sweeps=adaptation_sweeps,
                     estimation_sweeps=estimation_sweeps,
                     samples_per_iteration=samples_per_iteration,
@@ -847,14 +846,17 @@ def _sample_model(
                     else ("B" if family == ModelFamily.B else "W")
                 )
                 if not has_fixed:
-                    return _sample_degree_events_fixed_kt(
+                    # Unified Rust router: degree-support MCMC + fixed-total Gibbs.
+                    return _sample_model_router(
+                        ensemble="microcanonical",
                         family=fam,
+                        constraint="degree_events",
+                        self_loops=bool(self_loops),
                         degree_out=np.asarray(degree_out, dtype=np.uint32).tolist(),
                         degree_in=np.asarray(degree_in, dtype=np.uint32).tolist(),
-                        total_events=int(total_events),
+                        residual_total=int(total_events),
                         layers=int(layers),
                         seed=seed,
-                        self_loops=bool(self_loops),
                         burn_in_sweeps=burn_in_sweeps,
                         sweeps_per_sample=sweeps_per_sample,
                     )
@@ -946,10 +948,13 @@ def _sample_model(
             if total_events is None:
                 msg = "canonical sampling requires total_events"
                 raise ValueError(msg)
-            return _sample_strength_multinomial(
-                fit.x,
-                fit.y,
-                total_events=total_events,
+            return _sample_model_router(
+                ensemble="canonical",
+                family="ME",
+                constraint="strength",
+                x=fit.x.tolist(),
+                y=fit.y.tolist(),
+                total_events=int(total_events),
                 self_loops=fit.self_loops,
                 seed=seed,
             )
@@ -963,34 +968,19 @@ def _sample_model(
         msg = "grand-canonical sampling requires a fit result"
         raise ValueError(msg)
     fit_layers = getattr(fit, "layers", None) or layers
-    variant = _fit_variant(family, fit_layers)
+    common = {
+        "ensemble": "grandcanonical",
+        "family": _family_name(family),
+        "constraint": constraint.value,
+        "self_loops": fit.self_loops,
+        "layers": fit_layers,
+        "seed": seed,
+    }
     if constraint == Constraint.STRENGTH:
         if not isinstance(fit, StrengthFit):
             msg = f"strength sampling requires StrengthFit, got {type(fit).__name__}"
             raise TypeError(msg)
-        dispatch = {
-            "poisson": lambda: _sample_strength_poisson(
-                fit.x, fit.y, self_loops=fit.self_loops, seed=seed
-            ),
-            "binomial": lambda: _sample_strength_binomial(
-                fit.x,
-                fit.y,
-                layers=fit.layers or 1,
-                self_loops=fit.self_loops,
-                seed=seed,
-            ),
-            "geometric": lambda: _sample_strength_geometric(
-                fit.x, fit.y, self_loops=fit.self_loops, seed=seed
-            ),
-            "negative_binomial": lambda: _sample_strength_negative_binomial(
-                fit.x,
-                fit.y,
-                layers=fit.layers or 1,
-                self_loops=fit.self_loops,
-                seed=seed,
-            ),
-        }
-        return dispatch[variant]()
+        return _sample_model_router(**common, x=fit.x.tolist(), y=fit.y.tolist())  # type: ignore
     if constraint == Constraint.DEGREE_EVENTS:
         if not isinstance(fit, DegreeEventsFit):
             msg = (
@@ -998,15 +988,12 @@ def _sample_model(
                 f"{type(fit).__name__}"
             )
             raise TypeError(msg)
-        dispatch = {
-            "poisson": lambda: _sample_degree_events_poisson(fit, seed=seed),
-            "binomial": lambda: _sample_degree_events_binomial(fit, seed=seed),
-            "geometric": lambda: _sample_degree_events_geometric(fit, seed=seed),
-            "negative_binomial": lambda: _sample_degree_events_negative_binomial(
-                fit, seed=seed
-            ),
-        }
-        return dispatch[variant]()
+        return _sample_model_router(
+            **common,  # type: ignore
+            x=fit.x.tolist(),
+            y=fit.y.tolist(),
+            q=fit.q,
+        )
     if constraint == Constraint.EDGES_EVENTS:
         if not isinstance(fit, EdgesEventsFit):
             msg = (
@@ -1014,14 +1001,11 @@ def _sample_model(
                 f"{type(fit).__name__}"
             )
             raise TypeError(msg)
-        return _sample_edges_events(
-            fit.node_count,
-            fit.q,
-            fit.occupation,
-            fit.family,
-            layers=fit.layers or 1,
-            self_loops=fit.self_loops,
-            seed=seed,
+        return _sample_model_router(
+            **common,  # type: ignore
+            node_count=fit.node_count,
+            q=fit.q,
+            occupation=fit.occupation,
         )
     if constraint == Constraint.STRENGTH_EDGES:
         if not isinstance(fit, StrengthEdgesFit):
@@ -1030,18 +1014,12 @@ def _sample_model(
                 f"{type(fit).__name__}"
             )
             raise TypeError(msg)
-        edges_fit = fit
-        dispatch = {
-            "poisson": lambda: _sample_strength_edges_poisson(edges_fit, seed=seed),
-            "binomial": lambda: _sample_strength_edges_binomial(
-                edges_fit, layers=fit_layers, seed=seed
-            ),
-            "geometric": lambda: _sample_strength_edges_geometric(edges_fit, seed=seed),
-            "negative_binomial": lambda: _sample_strength_edges_negative_binomial(
-                edges_fit, layers=fit_layers, seed=seed
-            ),
-        }
-        return dispatch[variant]()
+        return _sample_model_router(
+            **common,  # type: ignore
+            x=fit.x.tolist(),
+            y=fit.y.tolist(),
+            lam=fit.lam,
+        )
     if constraint == Constraint.STRENGTH_DEGREE:
         if not isinstance(fit, StrengthDegreeFit):
             msg = (
@@ -1049,20 +1027,13 @@ def _sample_model(
                 f"{type(fit).__name__}"
             )
             raise TypeError(msg)
-        degree_fit = fit
-        dispatch = {
-            "poisson": lambda: _sample_strength_degree_poisson(degree_fit, seed=seed),
-            "binomial": lambda: _sample_strength_degree_binomial(
-                degree_fit, layers=fit_layers, seed=seed
-            ),
-            "geometric": lambda: _sample_strength_degree_geometric(
-                degree_fit, seed=seed
-            ),
-            "negative_binomial": lambda: _sample_strength_degree_negative_binomial(
-                degree_fit, layers=fit_layers, seed=seed
-            ),
-        }
-        return dispatch[variant]()
+        return _sample_model_router(
+            **common,  # type: ignore
+            x=fit.x.tolist(),
+            y=fit.y.tolist(),
+            z=fit.z.tolist(),
+            w=fit.w.tolist(),
+        )
     if constraint == Constraint.STRENGTH_COST:
         if coord_x is None or coord_y is None:
             msg = "strength_cost sampling requires coord_x and coord_y"
@@ -1073,24 +1044,30 @@ def _sample_model(
                 f"{type(fit).__name__}"
             )
             raise TypeError(msg)
-        cost_fit = fit
-        dispatch = {
-            "poisson": lambda: _sample_strength_cost_poisson(
-                cost_fit, coord_x, coord_y, seed=seed
-            ),
-            "binomial": lambda: _sample_strength_cost_binomial(
-                cost_fit, coord_x, coord_y, layers=fit_layers, seed=seed
-            ),
-            "geometric": lambda: _sample_strength_cost_geometric(
-                cost_fit, coord_x, coord_y, seed=seed
-            ),
-            "negative_binomial": lambda: _sample_strength_cost_negative_binomial(
-                cost_fit, coord_x, coord_y, layers=fit_layers, seed=seed
-            ),
-        }
-        return dispatch[variant]()
+        return _sample_model_router(
+            **common,  # type: ignore
+            x=fit.x.tolist(),
+            y=fit.y.tolist(),
+            gamma=fit.gamma,
+            coord_x=coord_x.tolist(),
+            coord_y=coord_y.tolist(),
+        )
     msg = f"unsupported constraint: {constraint!r}"
     raise UnsupportedModelCaseError(msg)
+
+
+def _family_name(family: ModelFamily) -> str:
+    """Map the model family enum to the Rust family identifier."""
+    match family:
+        case ModelFamily.ME:
+            return "ME"
+        case ModelFamily.B:
+            return "B"
+        case ModelFamily.W:
+            return "W"
+        case _:
+            msg = f"invalid family: {family!r}"
+            raise UnsupportedModelCaseError(msg)
 
 
 def _sample_fixed_et_edges_events(
@@ -1112,17 +1089,18 @@ def _sample_fixed_et_edges_events(
     subtracted from the constraints, the residual problem is sampled over
     the admissible pairs, and fixed pairs are merged back into the result.
 
-    * No fixed pairs: uses the O(1) index-mapped fast path (no pair list).
-    * With fixed pairs: builds the admissible pair set explicitly, computes
-      residual E/T, and calls the explicit-pair Rust kernel.
+    This function is only reached when fixed pairs are present (the
+    no-fixed-pairs case routes through the unified Rust router).
+
+    NOTE: the admissible-pair enumeration below is a known O(N²) Python
+    loop (AGENTS.md dense-matrix policy; todos.md "minor follow-up"). It
+    is intentionally kept as the reachable fixed-pairs fallback and should
+    be migrated to Rust in a follow-up.
     """
     from menobis.data.frames import EdgeTable
     from menobis.models.generation import (
-        _sample_b_fixed_et,
         _sample_b_fixed_et_explicit,
-        _sample_me_fixed_et,
         _sample_me_fixed_et_explicit,
-        _sample_w_fixed_et,
         _sample_w_fixed_et_explicit,
     )
 
@@ -1130,38 +1108,6 @@ def _sample_fixed_et_edges_events(
     e_total = int(total_edges)
     t_total = int(total_events)
     sl = bool(self_loops)
-
-    has_fixed = not (
-        known_source is None or known_target is None or known_occnum is None
-    )
-    if not has_fixed:
-        # Fast path: all candidate pairs are admissible, no residualization.
-        f_dispatch = {
-            "ME": lambda: _sample_me_fixed_et(
-                n,
-                self_loops=sl,
-                residual_edges=e_total,
-                residual_total=t_total,
-                seed=seed,
-            ),
-            "B": lambda: _sample_b_fixed_et(
-                n,
-                self_loops=sl,
-                layers=layers,
-                residual_edges=e_total,
-                residual_total=t_total,
-                seed=seed,
-            ),
-            "W": lambda: _sample_w_fixed_et(
-                n,
-                self_loops=sl,
-                layers=layers,
-                residual_edges=e_total,
-                residual_total=t_total,
-                seed=seed,
-            ),
-        }
-        return f_dispatch[family]()
 
     # ---- fixed-pair preprocessing ----
     k_src = np.asarray(known_source, dtype=np.uint64)
@@ -1187,8 +1133,7 @@ def _sample_fixed_et_edges_events(
     t_res = t_total - t_fixed
 
     # Build the admissible (non-fixed) pair set.
-    # Pairs are indexed as in the Rust fast path: row-major (i, j),
-    # skipping the diagonal when self_loops=False.
+    # O(N²) Python pair enumeration — see NOTE in the docstring above.
     fixed_keys: set[tuple[int, int]] = {
         (int(s), int(t)) for s, t in zip(k_src, k_tgt, strict=True)
     }
@@ -1266,7 +1211,7 @@ def _sample_fixed_et_edges_events(
 def _node_count(edges: EdgeTable) -> int:
     if len(edges) == 0:
         return 0
-    return int(max(edges.source.max(), edges.target.max())) + 1
+    return int(max(edges.source.max(), edges.target.max())) + 1  # type: ignore
 
 
 def _strengths(edges: EdgeTable, node_count: int) -> tuple[np.ndarray, np.ndarray]:

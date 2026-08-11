@@ -115,7 +115,7 @@ class TestSampleModel:
         )
         assert len(edges.source) > 0
 
-    def test_microcanonical_stub_matching(self):
+    def test_microcanonical_fixed_strength(self):
         s_out = np.array([5, 10, 5], dtype=np.uint64)
         s_in = np.array([8, 7, 5], dtype=np.uint64)
         edges = sample_model(

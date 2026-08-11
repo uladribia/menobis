@@ -7,22 +7,35 @@ description: MENoBiS testing strategy and commands.
 ## TL;DR
 
 Tests prioritize scientific invariants over legacy golden files. Run focused
-checks first, then the full suite before release.
+checks first, then the full suite before merge.
+
+## Fast vs heavy split
+
+Tests marked `@pytest.mark.heavy` are slow E2E / benchmark-level (>2 s).
+
+The fast suite runs by default and completes in ≈11 s.
+
+```bash
+uv run pytest                      # fast (374 tests, ≈11 s)
+uv run pytest --run-heavy          # full  (389 tests, ≈180 s)
+uv run pytest -m heavy             # heavy only (11 tests)
+```
 
 ## Test layers
 
-| Layer | Purpose |
-|---|---|
-| Rust unit tests (54 tests) | Kernels, gradients, overflow safety, mask logic |
-| Python formula tests | Verify E[t], E[Theta] match thesis equations |
-| Python validation tests | Input rejection at the boundary |
-| Python E2E tests | PA-geographic generate -> fit -> sample -> check |
-| Python sampling tests | Reproducibility, non-negativity, preservation |
-| Python filtering tests | FPR under null model |
-| Python saturation tests | Degree saturation edge cases |
-| CLI tests | Command behavior and JSON output |
-| Benchmark CLI tests | Smoke test the benchmark harness |
-| Docs build | Links, nav, API pages |
+| Layer | Count | Purpose |
+|---|---|---|
+| Rust unit tests | 286 | Kernels, gradients, overflow safety, mask logic |
+| Rust oracle tests | 40 | Exact enumeration, legacy-comparison validation |
+| Python formula tests | ≈30 | Verify E[t], E[Θ] match thesis equations |
+| Python validation tests | ≈15 | Input rejection at the boundary |
+| Python E2E tests | ≈40 | PA-geographic generate → fit → sample → check |
+| Python sampling tests | ≈90 | Reproducibility, non-negativity, preservation |
+| Python filtering tests | ≈60 | FPR under null model |
+| Python saturation tests | ≈5 | Degree saturation edge cases |
+| CLI tests | ≈30 | Command behavior and JSON output |
+| Benchmark CLI tests | ≈5 | Smoke test the benchmark harness |
+| Docs build | — | Links, nav, API pages |
 
 ## Test files (fitting/solver related)
 
@@ -38,14 +51,13 @@ checks first, then the full suite before release.
 ## Common commands
 
 ```bash
-uv run pytest
+uv run pytest                      # fast Python suite (≈11 s)
+uv run pytest --run-heavy          # full Python suite (≈180 s)
 cargo test --workspace
-uv run ruff check .
-uv run ruff format --check .
-uv run ty check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 uv run mkdocs build --strict
+cargo bench -p menobis-core        # criterion benchmarks
 ```
 
 ## Canonical synthetic fixture

@@ -48,7 +48,7 @@ menobis generate degree-events-poisson edges.csv --total-events 5000
 | `--target-edges` | Target $E$ (strength-edges) |
 | `--coordinates` | Projected XY coordinate CSV (strength-cost) |
 
-!!! note "Microcanonical (experimental)"
+!!! note "Microcanonical sampling"
     The CLI does not expose microcanonical sampling directly. Use the
     Python API (`sample_model` with `ensemble=Ensemble.MICROCANONICAL`)
     for exact-constraint generation. See

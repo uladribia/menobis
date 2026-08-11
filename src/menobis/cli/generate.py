@@ -68,7 +68,7 @@ def poisson(
 ) -> None:
     """Generate a Poisson sample from a fixed-strength ME model."""
     edges = read_edges(input_path)
-    nc = int(max(edges.source.max(), edges.target.max())) + 1
+    nc = int(max(edges.source.max(), edges.target.max())) + 1  # type: ignore
     s_out = np.zeros(nc, dtype=np.float64)
     s_in = np.zeros(nc, dtype=np.float64)
     np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
@@ -104,7 +104,7 @@ def multinomial(
 ) -> None:
     """Generate a multinomial fixed-strength ME sample."""
     edges = read_edges(input_path)
-    nc = int(max(edges.source.max(), edges.target.max())) + 1
+    nc = int(max(edges.source.max(), edges.target.max())) + 1  # type: ignore
     s_out = np.zeros(nc, dtype=np.float64)
     s_in = np.zeros(nc, dtype=np.float64)
     np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
@@ -146,7 +146,7 @@ def degree_events_me(
 ) -> None:
     """Generate a fixed-degree ME sample with expected total events T."""
     edges = read_edges(input_path)
-    nc = int(max(edges.source.max(), edges.target.max())) + 1
+    nc = int(max(edges.source.max(), edges.target.max())) + 1  # type: ignore
     d_out = np.zeros(nc, dtype=np.float64)
     d_in = np.zeros(nc, dtype=np.float64)
     for src in edges.source:
@@ -189,7 +189,7 @@ def strength_degree_me(
 ) -> None:
     """Generate a sample from the fixed-strength-degree ME model."""
     edges = read_edges(input_path)
-    nc = int(max(edges.source.max(), edges.target.max())) + 1
+    nc = int(max(edges.source.max(), edges.target.max())) + 1  # type: ignore
     s_out = np.zeros(nc, dtype=np.float64)
     s_in = np.zeros(nc, dtype=np.float64)
     d_out = np.zeros(nc, dtype=np.float64)
@@ -243,7 +243,7 @@ def strength_edges_me(
 ) -> None:
     """Generate a sample from the fixed-strength-and-edge-count ME model."""
     edges = read_edges(input_path)
-    nc = int(max(edges.source.max(), edges.target.max())) + 1
+    nc = int(max(edges.source.max(), edges.target.max())) + 1  # type: ignore
     s_out = np.zeros(nc, dtype=np.float64)
     s_in = np.zeros(nc, dtype=np.float64)
     np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))
@@ -329,7 +329,7 @@ def strength_cost_me_cmd(
     import pyarrow.csv as pa_csv
 
     edges = read_edges(input_path)
-    nc = int(max(edges.source.max(), edges.target.max())) + 1
+    nc = int(max(edges.source.max(), edges.target.max())) + 1  # type: ignore
     s_out = np.zeros(nc, dtype=np.float64)
     s_in = np.zeros(nc, dtype=np.float64)
     np.add.at(s_out, edges.source, edges.occ_num.astype(np.float64))

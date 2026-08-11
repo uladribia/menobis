@@ -43,7 +43,7 @@ flowchart TD
   PC --> G
   S --> CME[ME only: canonical total events]
   SC -. ME thesis extension .-> CME
-  S --> MMC["Microcanonical (experimental, small N)"]
+  S --> MMC["Microcanonical (exact-constraint)"]
   SC --> MMC
   DE --> MMC
   EEMC["Edges + events"] -.-> MMC
@@ -74,7 +74,7 @@ flowchart TD
 |---|---|
 | grand canonical | default for ME, B, W; independent pairs |
 | canonical | ME fixed-strength with fixed total events |
-| microcanonical (experimental) | ME/B/W: fixed (E,T), fixed (k,T), fixed strengths, fixed strengths + expected cost. **Small N only** |
+| microcanonical | ME/B/W: fixed (E,T), fixed (k,T), fixed strengths, fixed strengths + expected cost. N≥1000 validated |
 
 !!! warning "Do not relabel families"
     Same constraints with different event nature lead to different statistics.

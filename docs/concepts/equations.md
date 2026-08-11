@@ -69,6 +69,50 @@ $$
 | `DEGREE_EVENTS` | in/out degrees plus total events |
 | partial variants | parent constraints after subtracting frozen pairs |
 
+## Microcanonical (exact-constraint) ensembles
+
+Microcanonical ensembles fix constraints exactly. The target is proportional
+to the **family degeneracy** conditioned on the constraints. Per-pair (local)
+degeneracies (thesis Table 3.1):
+
+| Family | Per-pair degeneracy $d_\mathrm{family}(t_{ij})$ | Support |
+|---|---|---|
+| ME (Poisson) | $d_\mathrm{ME}(t_{ij}) = 1/t_{ij}!$ | $t_{ij} \ge 0$ |
+| B (Binomial, $M$ layers) | $d_\mathrm{B}(t_{ij}) = \binom{M}{t_{ij}}$ | $0 \le t_{ij} \le M$ |
+| W (NegBin, $M$ layers) | $d_\mathrm{W}(t_{ij}) = \binom{M+t_{ij}-1}{t_{ij}}$ | $t_{ij} \ge 0$ |
+
+$M=1$: $d_\mathrm{W}(t)=1$, $d_\mathrm{B}(t)=1$ for $t\in\{0,1\}$.
+
+### Fixed $(E,T)$ — EDGES_EVENTS
+
+Degeneracy for $E$ occupied pairs and $T$ total events:
+
+$$
+\Omega_\mathrm{family}(E, T) = \sum_{\{t_{ij}\}} \Bigl[\prod_{ij} d_\mathrm{family}(t_{ij})\Bigr] \,\delta\!\Bigl(\sum t_{ij} - T\Bigr) \,\delta\!\Bigl(\sum \Theta(t_{ij}) - E\Bigr).
+$$
+
+Conditional: $P(\{t_{ij}\} \mid E, T) \propto \prod_{ij} d_\mathrm{family}(t_{ij}) \cdot \delta(\Sigma t_{ij} = T) \cdot \delta(\#\{ij \mid t_{ij}>0\} = E)$. No closed form for $\Omega$; sampling uses the pair-Gibbs chain (ME: multinomial split; B/W: hypergeometric / negative-hypergeometric conditional).
+
+### Fixed $(k,T)$ — DEGREE_EVENTS
+
+As $(E,T)$ but with per-node degrees $k_i^\text{out}, k_i^\text{in}$ instead of global $E$. Pairs interact through shared nodes — no closed form. Sampling: binary support MCMC (edge switches) + pair-Gibbs occupation allocation.
+
+### Fixed strengths $(s^\text{out}, s^\text{in})$ — STRENGTH
+
+Degeneracy for occupation matrices with exact row/column sums:
+
+$$
+\Omega_\mathrm{family}(\mathbf{s}^\text{out}, \mathbf{s}^\text{in}) = \sum_{\{t_{ij}\}} \Bigl[\prod_{ij} d_\mathrm{family}(t_{ij})\Bigr] \,\prod_i \delta\!\Bigl(\sum_j t_{ij} - s_i^\text{out}\Bigr) \,\prod_j \delta\!\Bigl(\sum_i t_{ij} - s_j^\text{in}\Bigr).
+$$
+
+No closed form. Sampling uses an **occupied-cell Metropolis chain** on the compressed residual table. The elementary **4-cycle (rectangle)** $(i,j),(i,j'),(i',j),(i',j')$ changes occupation by $\pm\delta$, preserving all row/column sums; Hastings correction accounts for non-uniform proposal density. For STRENGTH_COST, the chain is augmented with $\exp(-\gamma d_{ij})$ and $\gamma$ fitted by stochastic bisection.
+
+### References
+
+- Per-pair degeneracy formulas: thesis Table 3.1 (O. Sagarra, 2015).
+- 4-cycle move and MCMC: thesis §5.1, Coolen et al. (2009), Coolen, Annibale, Roberts (2017).
+- Implementation: `OccupationFamily::log_local_degeneracy`, `generation::microcanonical`.
+
 ## Important rule
 
 ME, B, and W are not interchangeable. B and W must use their own equations and

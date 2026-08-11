@@ -19,6 +19,9 @@ data/
 # Docs
 site/
 
+# Pi agent harness workspace artifacts
+_workspace/
+
 # Editors / OS
 .DS_Store
 .idea/

@@ -140,6 +140,7 @@ def test_w_fixed_et_rejects_t_below_e() -> None:
         _sample_w(10, 5, 4, layers=2, seed=1)
 
 
+@pytest.mark.heavy
 def test_w_fixed_et_matches_exact_enumeration() -> None:
     """Tiny system: empirical vs exact W probabilities.
 

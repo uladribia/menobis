@@ -3,7 +3,7 @@
 //! - [`output`]: shared `SampledNetwork` result type.
 //! - [`grandcanonical`]: independent pair sampling for fitted multipliers.
 //! - [`canonical`]: fixed-total multinomial sampling.
-//! - [`microcanonical`]: exact-constraint direct samplers (stub matching).
+//! - [`microcanonical`]: exact-constraint samplers (MCMC + fixed-total Gibbs).
 //!
 //! This module re-exports the full public generation API so existing callers
 //! keep working; the ensemble submodules own the implementations.
@@ -26,17 +26,11 @@ pub use grandcanonical::{
     sample_strength_edges_poisson, sample_strength_geometric, sample_strength_negative_binomial,
     sample_strength_poisson,
 };
-pub use microcanonical::fixed_kt::core::{sample_fixed_kt_core, FixedKTConfig};
-pub use microcanonical::fixed_kt::diagnostics::FixedDegreeDiagnostics;
-pub use microcanonical::fixed_kt::sampler::FixedDegreeMcmcConfig;
-pub use microcanonical::fixed_strength::cost_fit::{
-    fit_gamma, FixedStrengthCostFitConfig, FixedStrengthCostFitResult,
-};
-pub use microcanonical::fixed_strength::sample_fixed_strength;
-pub use microcanonical::fixed_strength::sample_fixed_strength_with_cost;
+pub use microcanonical::binary::core::{sample_fixed_kt_core, FixedKTConfig};
+pub use microcanonical::binary::sampler::FixedDegreeMcmcConfig;
+pub use microcanonical::occupation_mcmc::sample_fixed_strength;
 pub use microcanonical::{
-    sample_b_fixed_et, sample_b_fixed_et_explicit, sample_me_fixed_et, sample_me_fixed_et_explicit,
-    sample_strength_stub_matching, sample_w_fixed_et, sample_w_fixed_et_explicit,
+    sample_b_fixed_et_explicit, sample_me_fixed_et_explicit, sample_w_fixed_et_explicit,
 };
 pub use output::SampledNetwork;
 
@@ -44,7 +38,6 @@ pub use output::SampledNetwork;
 mod tests {
     use super::{
         sample_strength_degree_poisson, sample_strength_multinomial, sample_strength_poisson,
-        sample_strength_stub_matching,
     };
 
     #[test]
@@ -80,30 +73,6 @@ mod tests {
         assert_eq!(a.targets, b.targets);
         assert_eq!(a.occ_nums, b.occ_nums);
         assert!(a.occ_nums.iter().all(|&w| w > 0));
-    }
-
-    #[test]
-    fn stub_matching_preserves_exact_strengths() {
-        let s_out = vec![10, 20, 30];
-        let s_in = vec![15, 25, 20];
-        let result = sample_strength_stub_matching(&s_out, &s_in, 42);
-        assert!(result.is_ok(), "stub matching failed: {:?}", result);
-        let edges = result.unwrap();
-        let total: u64 = edges.occ_nums.iter().sum();
-        assert_eq!(total, 60);
-        let mut actual_out = vec![0u64; 3];
-        let mut actual_in = vec![0u64; 3];
-        for ((&src, &tgt), &w) in edges
-            .sources
-            .iter()
-            .zip(edges.targets.iter())
-            .zip(edges.occ_nums.iter())
-        {
-            actual_out[src as usize] += w;
-            actual_in[tgt as usize] += w;
-        }
-        assert_eq!(actual_out, s_out);
-        assert_eq!(actual_in, s_in);
     }
 
     #[test]

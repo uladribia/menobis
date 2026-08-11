@@ -74,17 +74,17 @@ for stricter recovery.
 
 ## Microcanonical sampling
 
-Microcanonical samplers are **experimental and validated only for small N
-(≈10–100)**. They have no fitting step (constraints are exact or matched in
-expectation), so solver convergence does not apply, but MCMC-based cases have
-their own tuning concerns:
+Microcanonical samplers have no fitting step (constraints are exact or matched
+in expectation), so solver convergence does not apply. Validated at **N=1000**
+across all families and regimes (see [Microcanonical concept doc](../concepts/microcanonical.md)).
+MCMC-based cases have their own tuning concerns:
 
-| Case | Cost model | Notes |
+| Case | Backend | Notes |
 |---|---|---|
-| fixed (E,T) | direct; rejection + capped DP | exact; largest cost is the DP table (≤ ~16 MB) |
-| fixed (k,T) | MCMC sweeps over edge switches | needs `burn_in_sweeps` / `sweeps_per_sample` |
-| fixed strengths | ME stub matching (direct) or MCMC | stub matching is O(T) and exact with self-loops |
-| strength + expected cost | MCMC + gamma bisection | most fragile; see [strength-cost benchmark](../benchmarks/microcanonical_strength_cost.md) |
+| fixed (E,T) | pair-Gibbs chain (production); DP/rejection (oracle) | exact; see [Microcanonical concept doc](../concepts/microcanonical.md) |
+| fixed (k,T) | MCMC support + pair-Gibbs chain | exact at stationarity; needs sweep budget tuning |
+| fixed strengths | compressed constructor + repair + occupied-cell MCMC | exact at stationarity; O(E_occ) memory; all families via same chain |
+| strength + expected cost | same + gamma fitting (bracket + bisection) | exact strengths; cost in expectation; gamma fit dominates runtime |
 
 Check `diagnostics.exactness` on `SamplingResult` (`exact_direct` vs
 `exact_stationary_mcmc`) to know whether a sampled network is exact or exact

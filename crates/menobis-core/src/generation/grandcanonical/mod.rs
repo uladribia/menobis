@@ -2,7 +2,8 @@
 //! multipliers. Pair occupations are drawn independently from the
 //! family pair distribution.
 
-use crate::distribution::{OccupationFamily, PairDistribution};
+use crate::distribution::PairDistribution;
+use crate::model::family::OccupationFamily;
 use crate::pairs::{
     chunk_seed, row_ranges, CandidateSupport, DegreeEventsProvider, EdgesEventsProvider,
     EuclideanCostProvider, FixedStrengthProvider, NormalizedSparsePoissonProvider,
@@ -85,7 +86,7 @@ fn sample_model(model: SamplingModel<'_>, seed: u64) -> SampledNetwork {
             &FixedStrengthProvider {
                 x,
                 y,
-                family,
+                family: family.into(),
                 self_loops,
             },
             seed,
@@ -101,7 +102,7 @@ fn sample_model(model: SamplingModel<'_>, seed: u64) -> SampledNetwork {
                 x,
                 y,
                 positive_intensity,
-                family,
+                family: family.into(),
                 self_loops,
             },
             seed,
@@ -117,7 +118,7 @@ fn sample_model(model: SamplingModel<'_>, seed: u64) -> SampledNetwork {
                 x,
                 y,
                 lambda,
-                family,
+                family: family.into(),
                 self_loops,
             },
             seed,
@@ -135,7 +136,7 @@ fn sample_model(model: SamplingModel<'_>, seed: u64) -> SampledNetwork {
                 y,
                 z,
                 w,
-                family,
+                family: family.into(),
                 self_loops,
             },
             seed,
@@ -313,7 +314,7 @@ pub fn sample_strength_poisson(
         SamplingModel::FixedStrength {
             x,
             y,
-            family: OccupationFamily::Poisson,
+            family: OccupationFamily::ME,
             self_loops,
         },
         seed,
@@ -332,7 +333,7 @@ pub fn sample_strength_geometric(
         SamplingModel::FixedStrength {
             x,
             y,
-            family: OccupationFamily::Geometric,
+            family: OccupationFamily::W { layers: 1 },
             self_loops,
         },
         seed,
@@ -352,7 +353,7 @@ pub fn sample_strength_binomial(
         SamplingModel::FixedStrength {
             x,
             y,
-            family: OccupationFamily::Binomial(layers),
+            family: OccupationFamily::B { layers },
             self_loops,
         },
         seed,
@@ -372,7 +373,7 @@ pub fn sample_strength_negative_binomial(
         SamplingModel::FixedStrength {
             x,
             y,
-            family: OccupationFamily::NegativeBinomial(layers),
+            family: OccupationFamily::W { layers },
             self_loops,
         },
         seed,
@@ -399,7 +400,7 @@ pub fn sample_strength_cost_poisson_coordinates(
         gamma,
         coord_x,
         coord_y,
-        OccupationFamily::Poisson,
+        OccupationFamily::ME,
         self_loops,
         seed,
     )
@@ -426,7 +427,7 @@ fn sample_strength_cost_coordinates(
             y,
             gamma,
             costs: &costs,
-            family,
+            family: family.into(),
             self_loops,
         },
         seed,
@@ -451,7 +452,7 @@ pub fn sample_edges_events(
             node_count,
             q,
             occupation,
-            family,
+            family: family.into(),
             self_loops,
         },
         seed,
@@ -472,7 +473,7 @@ pub fn sample_degree_events_poisson(
             x,
             y,
             positive_intensity,
-            family: OccupationFamily::Poisson,
+            family: OccupationFamily::ME,
             self_loops,
         },
         seed,
@@ -495,7 +496,7 @@ pub fn sample_strength_degree_poisson(
             y,
             z,
             w,
-            family: OccupationFamily::Poisson,
+            family: OccupationFamily::ME,
             self_loops,
         },
         seed,
@@ -516,7 +517,7 @@ pub fn sample_strength_edges_poisson(
             x,
             y,
             lambda: lam,
-            family: OccupationFamily::Poisson,
+            family: OccupationFamily::ME,
             self_loops,
         },
         seed,
@@ -542,7 +543,7 @@ pub fn sample_strength_cost_binomial_coordinates(
         gamma,
         coord_x,
         coord_y,
-        OccupationFamily::Binomial(layers),
+        OccupationFamily::B { layers },
         self_loops,
         seed,
     )
@@ -564,7 +565,7 @@ pub fn sample_strength_cost_geometric_coordinates(
         gamma,
         coord_x,
         coord_y,
-        OccupationFamily::Geometric,
+        OccupationFamily::W { layers: 1 },
         self_loops,
         seed,
     )
@@ -588,7 +589,7 @@ pub fn sample_strength_cost_negative_binomial_coordinates(
         gamma,
         coord_x,
         coord_y,
-        OccupationFamily::NegativeBinomial(layers),
+        OccupationFamily::W { layers },
         self_loops,
         seed,
     )
@@ -608,7 +609,7 @@ pub fn sample_strength_edges_binomial(
             x,
             y,
             lambda: lam,
-            family: OccupationFamily::Binomial(layers),
+            family: OccupationFamily::B { layers },
             self_loops,
         },
         seed,
@@ -632,7 +633,7 @@ pub fn sample_strength_degree_binomial(
             y,
             z,
             w,
-            family: OccupationFamily::Binomial(layers),
+            family: OccupationFamily::B { layers },
             self_loops,
         },
         seed,
@@ -654,7 +655,7 @@ pub fn sample_degree_events_binomial(
             x,
             y,
             positive_intensity,
-            family: OccupationFamily::Binomial(layers),
+            family: OccupationFamily::B { layers },
             self_loops,
         },
         seed,
@@ -675,7 +676,7 @@ pub fn sample_strength_edges_geometric(
             x,
             y,
             lambda: lam,
-            family: OccupationFamily::Geometric,
+            family: OccupationFamily::W { layers: 1 },
             self_loops,
         },
         seed,
@@ -697,7 +698,7 @@ pub fn sample_strength_edges_negative_binomial(
             x,
             y,
             lambda: lam,
-            family: OccupationFamily::NegativeBinomial(layers),
+            family: OccupationFamily::W { layers },
             self_loops,
         },
         seed,
@@ -720,7 +721,7 @@ pub fn sample_strength_degree_geometric(
             y,
             z,
             w,
-            family: OccupationFamily::Geometric,
+            family: OccupationFamily::W { layers: 1 },
             self_loops,
         },
         seed,
@@ -744,7 +745,7 @@ pub fn sample_strength_degree_negative_binomial(
             y,
             z,
             w,
-            family: OccupationFamily::NegativeBinomial(layers),
+            family: OccupationFamily::W { layers },
             self_loops,
         },
         seed,
@@ -765,7 +766,7 @@ pub fn sample_degree_events_geometric(
             x,
             y,
             positive_intensity,
-            family: OccupationFamily::Geometric,
+            family: OccupationFamily::W { layers: 1 },
             self_loops,
         },
         seed,
@@ -787,9 +788,129 @@ pub fn sample_degree_events_negative_binomial(
             x,
             y,
             positive_intensity,
-            family: OccupationFamily::NegativeBinomial(layers),
+            family: OccupationFamily::W { layers },
             self_loops,
         },
         seed,
     )
+}
+
+/// Grand-canonical constraint case for the unified sampler.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GrandCanonicalCase {
+    /// Fixed strength sequence (multipliers x, y).
+    Strength,
+    /// Fixed strength + expected edge count (x, y, lam).
+    StrengthEdges,
+    /// Fixed strength + expected degree (x, y, z, w).
+    StrengthDegree,
+    /// Fixed strength + expected cost (x, y, gamma, coords).
+    StrengthCost,
+    /// Fixed degree + total events (x, y, positive intensity).
+    DegreeEvents,
+    /// Global edges + events (node_count, q, occupation).
+    EdgesEvents,
+}
+
+/// Unified grand-canonical sampling from fitted parameters.
+///
+/// Centralizes the per-constraint dispatch previously exposed as 24
+/// separate family functions.  `x`/`y` are always required; the other
+/// parameters are required per constraint:
+///
+/// - `Strength`: x, y
+/// - `StrengthEdges`: x, y, lam
+/// - `StrengthDegree`: x, y, z, w
+/// - `StrengthCost`: x, y, gamma, coord_x, coord_y
+/// - `DegreeEvents`: x, y, positive_intensity
+/// - `EdgesEvents`: node_count, q, occupation
+///
+/// Returns a [`SampledNetwork`] or a structured error message when a
+/// constraint-required parameter is missing.
+#[allow(clippy::too_many_arguments)]
+pub fn sample_grandcanonical(
+    case: GrandCanonicalCase,
+    family: OccupationFamily,
+    x: &[f64],
+    y: &[f64],
+    lam: Option<f64>,
+    positive_intensity: Option<f64>,
+    z: Option<&[f64]>,
+    w: Option<&[f64]>,
+    gamma: Option<f64>,
+    coord_x: Option<&[f64]>,
+    coord_y: Option<&[f64]>,
+    node_count: Option<usize>,
+    q: Option<f64>,
+    occupation: Option<f64>,
+    self_loops: bool,
+    seed: u64,
+) -> Result<SampledNetwork, String> {
+    match case {
+        GrandCanonicalCase::Strength => Ok(sample_model(
+            SamplingModel::FixedStrength {
+                x,
+                y,
+                family,
+                self_loops,
+            },
+            seed,
+        )),
+        GrandCanonicalCase::StrengthEdges => {
+            let lam = lam.ok_or_else(|| "STRENGTH_EDGES requires lam".to_string())?;
+            Ok(sample_model(
+                SamplingModel::StrengthEdges {
+                    x,
+                    y,
+                    lambda: lam,
+                    family,
+                    self_loops,
+                },
+                seed,
+            ))
+        }
+        GrandCanonicalCase::StrengthDegree => {
+            let z = z.ok_or_else(|| "STRENGTH_DEGREE requires z".to_string())?;
+            let w = w.ok_or_else(|| "STRENGTH_DEGREE requires w".to_string())?;
+            Ok(sample_model(
+                SamplingModel::StrengthDegree {
+                    x,
+                    y,
+                    z,
+                    w,
+                    family,
+                    self_loops,
+                },
+                seed,
+            ))
+        }
+        GrandCanonicalCase::StrengthCost => {
+            let gamma = gamma.ok_or_else(|| "STRENGTH_COST requires gamma".to_string())?;
+            let cx = coord_x.ok_or_else(|| "STRENGTH_COST requires coord_x".to_string())?;
+            let cy = coord_y.ok_or_else(|| "STRENGTH_COST requires coord_y".to_string())?;
+            Ok(sample_strength_cost_coordinates(
+                x, y, gamma, cx, cy, family, self_loops, seed,
+            ))
+        }
+        GrandCanonicalCase::DegreeEvents => {
+            let pi = positive_intensity
+                .ok_or_else(|| "DEGREE_EVENTS requires positive_intensity".to_string())?;
+            Ok(sample_model(
+                SamplingModel::DegreeEvents {
+                    x,
+                    y,
+                    positive_intensity: pi,
+                    family,
+                    self_loops,
+                },
+                seed,
+            ))
+        }
+        GrandCanonicalCase::EdgesEvents => {
+            let n = node_count.ok_or_else(|| "EDGES_EVENTS requires node_count".to_string())?;
+            let q = q.ok_or_else(|| "EDGES_EVENTS requires q".to_string())?;
+            let occ = occupation.ok_or_else(|| "EDGES_EVENTS requires occupation".to_string())?;
+            Ok(sample_edges_events(n, q, occ, family, self_loops, seed))
+        }
+    }
 }

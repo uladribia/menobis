@@ -36,7 +36,7 @@ _LAYERS = {ModelFamily.ME: 1, ModelFamily.B: 12, ModelFamily.W: 1}
     [
         (Constraint.STRENGTH, {}),
         (Constraint.STRENGTH_EDGES, {}),
-        (Constraint.STRENGTH_DEGREE, {}),
+        pytest.param(Constraint.STRENGTH_DEGREE, {}, marks=pytest.mark.heavy),
         (Constraint.DEGREE_EVENTS, {}),
     ],
 )

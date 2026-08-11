@@ -2,6 +2,7 @@
 members = [
   "crates/menobis-core",
   "crates/menobis-python",
+  "crates/menobis-test-oracles",
 ]
 resolver = "2"
 

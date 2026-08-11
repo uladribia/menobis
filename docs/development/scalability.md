@@ -1,5 +1,5 @@
 ---
-description: Complexity, memory model, and practical scaling guidance.
+description: Complexity, memory model, and practical scaling guidance (grand-canonical and microcanonical).
 ---
 
 # Scalability
@@ -15,7 +15,22 @@ possible when you can afford the all-pairs time required by some constraints.
     The plot uses stored repository benchmark results for ME/B strength routes.
     Re-run the benchmark CLI on your machine for local wall-clock numbers.
 
-## Operation costs
+## Package principles
+
+- **Memory**: production NEVER materializes an N×N matrix. All state is O(N)
+  or O(E_occ). Exact enumeration (no matter how small) lives ONLY in the
+  oracle crate (`menobis-test-oracles`).
+- **Time**: per-constraint iteration sweeps may touch O(N²) pairs in
+  worst-case (grand-canonical fitting). Microcanonical MCMC sweeps are
+  O(E_occ). Neither allocates N² storage.
+- **Exact methods**: enumeration and DP backends are exclusively in
+  `menobis-test-oracles`. Production uses exact-strength compressed
+  constructors + targeted repairs + MCMC chains.
+- **Principle**: share abstractions (`OccupationFamily`, `PairCostProvider`,
+  pair conditionals) across ensembles. Implement the kernel per family;
+  compose constraints on top.
+
+## GC fitting operating ranges
 
 | Operation | Typical complexity | Notes |
 |---|---:|---|
@@ -26,8 +41,33 @@ possible when you can afford the all-pairs time required by some constraints.
 | strength-edges fit | O(N² I) | zero-inflated; inspect convergence |
 | strength-degree fit | O(N² I) | high constant, often slowest |
 | strength-cost fit | O(N² I) | costs computed on the fly or bounded caches |
+| microcanonical fixed-strength MCMC | O(E_occ × sweep) | compressed constructor + repair + occupied-cell chain; no N² storage |
+| microcanonical fixed-(E,T) pair-Gibbs | O(E × sweep) | shared pair-Gibbs chain; no N² storage |
 | generation | O(P + E_s) | streams candidate pairs |
 | filtering | O(E) or O(P) | absent-edge filtering scans candidates |
+
+## Microcanonical sampler operating ranges
+
+Validated N per constraint × regime from the benchmark matrix
+(N=100/500/1000; dense regime is `T = E × events_per_edge = 8E`):
+
+| Constraint | Regime | Max N tested | Bottleneck |
+|---|---|---|---|
+| fixed (E,T) | sparse | ≥1000 | pair-Gibbs chain: O(E) |
+| fixed (E,T) | dense | ≥1000 | pair-Gibbs chain: O(E) |
+| fixed (k,T) | sparse | ≥1000 | support MCMC + pair-Gibbs |
+| fixed (k,T) | dense | ≥1000 | support MCMC + pair-Gibbs |
+| fixed strengths | sparse | ≥1000 | compressed constructor + MCMC: O(E_occ) |
+| fixed strengths | dense | ≥1000 | B capacity repair at high occupancy |
+| strengths + cost | sparse | ≥1000 | gamma fitting: 10–30 s per cell |
+| strengths + cost | dense | ≥1000 | gamma fitting: 200–1200 s per cell |
+
+The **pair-Gibbs chain** replaces the earlier DP/rejection approach — see
+[docs/concepts/microcanonical.md](../concepts/microcanonical.md). Production
+backends have no DP tables, no rejection acceptance walls, and no
+family-specific weakness: W runs through the same Gibbs chain with no
+rejection. Fixed-(E,T) and fixed-(k,T) are O(E) memory and scale with the
+number of occupied pairs.
 
 ## Memory principles
 
@@ -54,59 +94,12 @@ possible when you can afford the all-pairs time required by some constraints.
 | W family science | start at small N and inspect diagnostics |
 | absent-edge filtering | cap `max_absent` during exploration |
 
-## Microcanonical sampler operating ranges
-
-The microcanonical samplers (exact-constraint generation) have different
-scaling characteristics depending on the constraint type, regime, and family.
-The table below shows the **maximum N** tested at each regime × constraint
-combination (dense regime, T = E × events_per_edge = 8E).
-
-| Constraint | Regime | ME | B | W | Bottleneck |
-|---|---|---|---|---|---|
-| fixed (E,T) | sparse | ≥500 | ≥500 | ≤100 | W rejection acceptance at λ=3; ME/B work via exact DP (small E×T) |
-| fixed (E,T) | dense | ≤300 | ≤400 | ≤100 | DP table E×T > 2×10⁸; rejection P(acc) ∝ exp(−E·e^{−λ}) ≈ 10⁻⁷ at N=500 |
-| fixed (E,T) | saturated | ≤300 | ≤400 | ≤100 | same as dense, T/E=8 fixed; rejection estimate underflows |
-| fixed (k,T) | sparse | ≥500 | ≥500 | ≤100 | inherits fixed-(E,T) occupation kernel; same E,T bottleneck for W |
-| fixed (k,T) | dense | ≤300 | ≤300 | ≤100 | same as fixed-(E,T) dense |
-| fixed (k,T) | saturated | ≤300 | ≤300 | ≤100 | same as fixed-(E,T) saturated |
-| fixed strengths | any | **≥500** | **≥500** | **≥500** | 4-cycle MCMC; scales linearly with occupied pairs |
-| strengths + cost | any | ≈100 | ≈100 | ≈100 | warm-start variance estimate collapses at larger N; needs per-case tuning |
-
-**Key limitations:**
-
-1. **Fixed-(E,T) and fixed-(k,T)** use an exact DP table (limit 2×10⁸ cells) or
-   brute-force rejection. At λ = T/E = events_per_edge = 8 (dense/saturated),
-   the acceptance probability is (1−e^{−8})^{E} ≈ exp(−0.000335·E), which
-   decays exponentially with E. At N=500 (E≈50000) this is ≈5×10⁻⁸, and the
-   fallback attempt budget is too small. The sparse regime (λ=3) works at
-   N=500 for ME/B because E is smaller and acceptance is higher.
-
-2. **W is the weakest family** for these exact methods: its Negative-Binomial
-   occupation allocation has the lowest rejection acceptance at any given E,T.
-
-3. **Fixed-strength (Phase 4)** is the only microcanonical constraint that
-   genuinely scales to N=500+ in all regimes. The 4-cycle MCMC preserves
-   strengths exactly and has no DP/rejection bottleneck.
-
-4. **Strength + cost (Phase 5)** inherits the Phase 4 chain but adds a gamma
-   fitter whose warm-start variance estimate becomes unreliable at large N.
-   The expected cost variance shrinks relative to its mean as N grows, making
-   the initial γ₀ = (µ₀−C_obs)/Var₀ unstable. A fix would use more sweeps
-   or an autocorrelation-aware estimator.
-
-### Fixing the scaling gap
-
-The fixed-(E,T) and fixed-(k,T) samplers could be made to scale via a simple
-MCMC alternative: sample the E-edge support uniformly, allocate T events
-multinomially across it (some edges will get 0), then run a short corrective
-MCMC that transfers 1 event from an occupied edge to an empty edge until all
-E edges are filled. This replaces the exponential-in-E rejection wall with
-O(E·exp(−λ)) corrective steps — about 17 steps for N=500 dense. The approach
-is family-agnostic (ME/B/W) and preserves the correct stationary distribution.
-
 ## Regenerate local numbers
 
 ```bash
+uv run python -m benchmarks matrix   # microcanonical fixed-strength matrix
+                                    # (full 72-cell matrix across families/regimes)
+
 uv run python -m benchmarks all --nodes 100,1000 --families me,b \
   --constraints strength --regime dense --known-pairs 0.0
 ```

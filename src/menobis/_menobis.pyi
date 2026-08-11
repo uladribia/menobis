@@ -35,29 +35,6 @@ def occupation_distribution(
     targets: list[int],
     weights: list[int],
 ) -> tuple[list[int], list[int]]: ...
-def fit_masked_degree_bernoulli(
-    degree_out: list[float],
-    degree_in: list[float],
-    mask: list[bool],
-    tolerance: float,
-    max_iterations: int,
-) -> tuple[list[float], list[float], bool, int]: ...
-def fit_masked_strength_degree_poisson(
-    strength_out: list[float],
-    strength_in: list[float],
-    degree_out: list[float],
-    degree_in: list[float],
-    mask: list[bool],
-    tolerance: float,
-    max_iterations: int,
-) -> tuple[list[float], list[float], list[float], list[float], bool, int]: ...
-def fit_masked_strength_poisson(
-    strength_out: list[float],
-    strength_in: list[float],
-    mask: list[bool],
-    tolerance: float,
-    max_iterations: int,
-) -> tuple[list[float], list[float], bool, int]: ...
 def fit_strength_cost_poisson_coordinates(
     strength_out: list[float],
     strength_in: list[float],
@@ -133,41 +110,10 @@ def fit_strength_degree_binomial(
     tolerance: float,
     max_iterations: int,
 ) -> tuple[list[float], list[float], list[float], list[float], bool, int]: ...
-def fit_weighted_factors(
-    excess_out: list[float],
-    excess_in: list[float],
-    degree_x: list[float],
-    degree_y: list[float],
-    self_loops: bool,
-    tolerance: float,
-    max_iterations: int,
-) -> tuple[list[float], list[float], bool, int]: ...
-def fit_strength_poisson_no_self_loops(
-    s_out: list[float],
-    s_in: list[float],
-    tolerance: float,
-    max_iterations: int,
-) -> tuple[list[float], list[float], bool, int]: ...
-def sample_b_fixed_et(
-    node_count: int,
-    self_loops: bool,
-    layers: int,
-    residual_edges: int,
-    residual_total: int,
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
 def sample_b_fixed_et_explicit(
     admissible_sources: list[int],
     admissible_targets: list[int],
     layers: int,
-    residual_edges: int,
-    residual_total: int,
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
-def sample_me_fixed_et(
-
-    node_count: int,
-    self_loops: bool,
     residual_edges: int,
     residual_total: int,
     seed: int,
@@ -179,25 +125,12 @@ def sample_me_fixed_et_explicit(
     residual_total: int,
     seed: int,
 ) -> tuple[list[int], list[int], list[int]]: ...
-def sample_w_fixed_et(
-    node_count: int,
-    self_loops: bool,
-    layers: int,
-    residual_edges: int,
-    residual_total: int,
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
 def sample_w_fixed_et_explicit(
     admissible_sources: list[int],
     admissible_targets: list[int],
     layers: int,
     residual_edges: int,
     residual_total: int,
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
-def sample_strength_stub_matching(
-    strength_out: list[int],
-    strength_in: list[int],
     seed: int,
 ) -> tuple[list[int], list[int], list[int]]: ...
 def sample_fixed_strength(
@@ -213,6 +146,91 @@ def sample_fixed_strength(
     sweeps_per_sample: int,
     seed: int,
 ) -> tuple[list[int], list[int], list[int]]: ...
+def sample_fixed_strength_with_cost(
+    family: str,
+    strength_out: list[int],
+    strength_in: list[int],
+    coord_x: list[float],
+    coord_y: list[float],
+    observed_total_cost: float,
+    self_loops: bool,
+    fixed_sources: list[int],
+    fixed_targets: list[int],
+    fixed_occnums: list[int],
+    layers: int,
+    adaptation_sweeps: int,
+    estimation_sweeps: int,
+    samples_per_iteration: int,
+    max_iterations: int,
+    absolute_cost_tolerance: float,
+    relative_cost_tolerance: float,
+    confidence_multiplier: float,
+    batch_count: int,
+    burn_in_sweeps: int,
+    sweeps_per_sample: int,
+    seed: int,
+) -> tuple[
+    list[int],
+    list[int],
+    list[int],
+    float,
+    float,
+    float,
+    bool,
+    float,
+    float,
+    int,
+    int,
+    int,
+]: ...
+def sample_degree_events_fixed_kt(
+    family: str,
+    degree_out: list[int],
+    degree_in: list[int],
+    total_events: int,
+    layers: int,
+    burn_in_sweeps: int,
+    sweeps_per_sample: int,
+    seed: int,
+    self_loops: bool,
+) -> tuple[list[int], list[int], list[int]]: ...
+def bench_fixed_strength(
+    family: str,
+    strength_out: list[int],
+    strength_in: list[int],
+    self_loops: bool,
+    fixed_sources: list[int],
+    fixed_targets: list[int],
+    fixed_occnums: list[int],
+    layers: int,
+    burn_in_sweeps: int,
+    sweeps_per_sample: int,
+    seed: int,
+) -> tuple[list[int], list[int], list[int], tuple[float, float, int, int, int, int, int, int, float, float]]: ...
+def bench_fixed_strength_with_cost(
+    family: str,
+    strength_out: list[int],
+    strength_in: list[int],
+    coord_x: list[float],
+    coord_y: list[float],
+    observed_total_cost: float,
+    self_loops: bool,
+    fixed_sources: list[int],
+    fixed_targets: list[int],
+    fixed_occnums: list[int],
+    layers: int,
+    adaptation_sweeps: int,
+    estimation_sweeps: int,
+    samples_per_iteration: int,
+    max_iterations: int,
+    absolute_cost_tolerance: float,
+    relative_cost_tolerance: float,
+    confidence_multiplier: float,
+    batch_count: int,
+    burn_in_sweeps: int,
+    sweeps_per_sample: int,
+    seed: int,
+) -> tuple[list[int], list[int], list[int], tuple[float, float, int, int, int, int, int, int, float, float, float, float]]: ...
 def sample_custom_poisson(
     sources: list[int],
     targets: list[int],
@@ -246,13 +264,6 @@ def sample_strength_cost_poisson_coordinates(
 def sample_strength_poisson(
     x: list[float],
     y: list[float],
-    self_loops: bool,
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
-def sample_degree_events_poisson(
-    x: list[float],
-    y: list[float],
-    positive_intensity: float,
     self_loops: bool,
     seed: int,
 ) -> tuple[list[int], list[int], list[int]]: ...
@@ -423,14 +434,6 @@ def fit_strength_binomial(
     tolerance: float,
     max_iterations: int,
 ) -> tuple[list[float], list[float], bool, int]: ...
-def fit_masked_binomial_strength(
-    strength_out: list[float],
-    strength_in: list[float],
-    mask: list[bool],
-    layers: int,
-    tolerance: float,
-    max_iterations: int,
-) -> tuple[list[float], list[float], bool, int]: ...
 def filter_strength_geometric(
     x: list[float],
     y: list[float],
@@ -501,41 +504,6 @@ def occupation_clustering_coefficients(
     targets: list[int],
     weights: list[int],
 ) -> list[float]: ...
-def sample_strength_cost_binomial_coordinates(
-    x: list[float],
-    y: list[float],
-    gamma: float,
-    coord_x: list[float],
-    coord_y: list[float],
-    layers: int,
-    self_loops: bool,
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
-def sample_strength_edges_binomial(
-    x: list[float],
-    y: list[float],
-    lam: float,
-    layers: int,
-    self_loops: bool,
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
-def sample_strength_degree_binomial(
-    x: list[float],
-    y: list[float],
-    z: list[float],
-    w: list[float],
-    layers: int,
-    self_loops: bool,
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
-def sample_degree_events_binomial(
-    x: list[float],
-    y: list[float],
-    positive_intensity: float,
-    layers: int,
-    self_loops: bool,
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
 def filter_strength_cost_binomial(
     x: list[float],
     y: list[float],
@@ -773,72 +741,6 @@ def fit_degree_events_negative_binomial(
     tolerance: float,
     max_iterations: int,
 ) -> tuple[list[float], list[float], float, float, bool, int]: ...
-def sample_strength_cost_geometric_coordinates(
-    x: list[float],
-    y: list[float],
-    gamma: float,
-    coord_x: list[float],
-    coord_y: list[float],
-    self_loops: bool,
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
-def sample_strength_cost_negative_binomial_coordinates(
-    x: list[float],
-    y: list[float],
-    gamma: float,
-    coord_x: list[float],
-    coord_y: list[float],
-    layers: int,
-    self_loops: bool,
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
-def sample_strength_edges_geometric(
-    x: list[float],
-    y: list[float],
-    lam: float,
-    self_loops: bool,
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
-def sample_strength_edges_negative_binomial(
-    x: list[float],
-    y: list[float],
-    lam: float,
-    layers: int,
-    self_loops: bool,
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
-def sample_strength_degree_geometric(
-    x: list[float],
-    y: list[float],
-    z: list[float],
-    w: list[float],
-    self_loops: bool,
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
-def sample_strength_degree_negative_binomial(
-    x: list[float],
-    y: list[float],
-    z: list[float],
-    w: list[float],
-    layers: int,
-    self_loops: bool,
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
-def sample_degree_events_geometric(
-    x: list[float],
-    y: list[float],
-    positive_intensity: float,
-    self_loops: bool,
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
-def sample_degree_events_negative_binomial(
-    x: list[float],
-    y: list[float],
-    positive_intensity: float,
-    layers: int,
-    self_loops: bool,
-    seed: int,
-) -> tuple[list[int], list[int], list[int]]: ...
 def filter_strength_cost_geometric(
     x: list[float],
     y: list[float],
@@ -1225,3 +1127,31 @@ def absent_edges_events(
     min_expected: float,
     max_absent: int | None,
 ) -> tuple[list[int], list[int], list[float], list[float], list[float]]: ...
+def sample_model(
+    ensemble: str,
+    family: str,
+    constraint: str,
+    node_count: int | None = None,
+    self_loops: bool = True,
+    layers: int = 1,
+    seed: int = 0,
+    burn_in_sweeps: int = 50,
+    sweeps_per_sample: int = 10,
+    x: list[float] | None = None,
+    y: list[float] | None = None,
+    z: list[float] | None = None,
+    w: list[float] | None = None,
+    lam: float | None = None,
+    q: float | None = None,
+    occupation: float | None = None,
+    gamma: float | None = None,
+    coord_x: list[float] | None = None,
+    coord_y: list[float] | None = None,
+    total_events: int | None = None,
+    strength_out: list[int] | None = None,
+    strength_in: list[int] | None = None,
+    degree_out: list[int] | None = None,
+    degree_in: list[int] | None = None,
+    residual_edges: int | None = None,
+    residual_total: int | None = None,
+) -> tuple[list[int], list[int], list[int]]: ...

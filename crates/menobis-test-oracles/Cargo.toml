@@ -1,0 +1,11 @@
+[package]
+name = "menobis-test-oracles"
+version = "1.0.1"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+menobis-core = { workspace = true }
+rand = { workspace = true }
+libm = { workspace = true }

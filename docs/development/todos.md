@@ -12,12 +12,12 @@ capability registry, and a shared constraints module. The new
 `EDGES_EVENTS` constraint is implemented for ME/B/W grand-canonical
 fit/sample/filter. Microcanonical sampling is implemented for ME, B, and W
 across four constraint families: fixed (E,T), fixed (k,T), fixed strengths,
-and fixed strengths + expected cost. **All microcanonical cases are
-experimental and validated only for small N (≈10–100 nodes).** A
+and fixed strengths + expected cost; the microcanonical refactor (phases A–H
++ benchmark matrix) is complete and validated at N=1000. A
 phase0-baseline benchmark (111 rows, 0 mismatches) is captured. Remaining
 work focuses on solver robustness (especially W zero-inflated),
 sparse-support fitting, cost providers, benchmark tooling, packaging, and
-the remaining microcanonical phases (6–8).
+deferred microcanonical features listed below.
 
 ## Public release status
 
@@ -45,63 +45,28 @@ the remaining microcanonical phases (6–8).
 | More cost providers | add Rust providers instead of dense cost matrices |
 | Sparse-support fitting | `PairMask` and `FixedPairs` extracted as shared abstractions; user-provided masks without dense state still pending |
 
-## Microcanonical backlog
+### Microcanonical deferred work
 
-### Status
+Items explicitly deferred from the current release.
+These are NOT implemented and NOT planned for the current release.
 
-All four implemented cases are **experimental and validated only for small
-N (≈10–100)**; MCMC-based cases need sweep-budget tuning and may fail to
-converge on larger or tighter problems. See
-[docs/concepts/microcanonical.md](../concepts/microcanonical.md).
+| Deferred feature | Description & rationale |
+|---|---|
+| `fixed (s,E)` | Fixed strength + total edges (zero-inflated); requires extending the fixed-strength kernel with an edge-count Lagrange multiplier. Not implemented. |
+| `fixed (s,k)` | Fixed strength + degree sequence (zero-inflated); requires binary multiplier layer `l_ij = w_i z_j` over the fixed-strength kernel. Not implemented. |
+| `generic annealed repair` | No annealing machinery in production (targeted repairs only). |
+| `general alternating-cycle mask repair` | Only targeted loop/capacity/forbidden-pair repairs exist; a general mask repair framework is deferred. |
+| `grand-canonical warm starts` | No warm-start for gamma fitting (zero-centered bracket expansion instead, Phase F). |
+| `universal MCMC kernel framework` | Families keep dedicated kernels (occupied-cell for strength, pair-Gibbs for fixed-total); no unified trait hierarchy. |
 
-### Done (fixed-(E,T))
+### Minor follow-up items
 
 | Item | Notes |
 |---|---|
-| ME fixed-(E,T) | ✅ exact sampler: multinomial rejection + Stirling surjection fallback |
-| B fixed-(E,T) | ✅ cell-subset rejection (complement mode) + bounded composition DP |
-| W fixed-(E,T) | ✅ weak-composition (stars-and-bars) rejection + unbounded composition DP |
-| Shared architecture | ✅ `FixedETOccupancy` trait drives one generic orchestrator; family files under `generation/microcanonical/fixed_et/` |
-| Fixed-pair preprocessing | ✅ residualisation + merge for all three families; B fixed occupations validated against M |
-| Validation | ✅ exact enumeration, E2E dense/sparse with/without fixed pairs, conditioned grand-canonical identity `P_GC(t|E,T)=P_MC(t|E,T)` |
-| Benchmarks | ✅ `python -m benchmarks micro` (ME/B/W × sparse/dense × known pairs) |
-| Docs | ✅ `docs/concepts/microcanonical.md`, API reference, spec docs in `docs/development/agent-specifications/` |
-
-### Pending — reasonable-effort follow-ups
-
-| Item | Notes |
-|---|---|
-| Backend diagnostics | expose selected backend, rejection attempts, estimated rejection (spec 02 §4, 03 §24, 04 §26) — currently hidden behind the public `sample_model` API |
-| DP table caching | reuse `(E,T,M)` partition tables across calls (spec 03 §30, 04 §35) — optional, bounded |
-| Estimated vs observed rejection | benchmark should compare estimate to actual rejection rate to decide whether the selector threshold needs tuning |
-| W fallback performance | the exact DP is O(ET²); optimise via convolution, W-specific recurrences, or saddle-point proposals for larger systems (spec 04 §23.2) |
-| W large-dense hard regime | e.g. E=2000, T=16000, M=8: p_acc ≈ 4×10⁻⁴ exceeds the scaled-rejection work budget → clean error today; needs a better backend |
-| Conditioned-GC validation breadth | add larger systems and near-boundary regimes to `tests/test_menobis_conditioned_grandcanonical_identity.py` |
-| Observable convergence across families/constraints | test the convergence of network observables — y2 (second occupation moment), average weighted neighbour strength, leading entropy per event, and related quantities — across all families (ME/B/W) and all constraints (strength, strength-cost, strength-edges, strength-degree, degree-events, edges-events), for grand-canonical vs canonical vs microcanonical ensembles. Validate ensemble equivalence where the theory predicts it and document deviations (sparse limits, W convergence boundary, B saturation). See `docs/development/agent-specifications/00_intro.md` §13 |
-
-### Done (fixed (k,T), fixed strengths, strength + cost)
-
-| Item | Notes |
-|---|---|
-| ME/B/W fixed (k,T) | ✅ MCMC support (double-edge switch) + fixed-(E,T) occupation allocator; `generation/microcanonical/fixed_kt/` |
-| ME fixed strengths | ✅ stub matching (direct, self-loops) + 4-cycle MCMC backend |
-| B/W fixed strengths | ✅ 4-cycle MCMC backend; B occupations bounded by layers |
-| Fixed-pair support | ✅ residualisation + merge for fixed strengths and fixed (k,T) |
-| ME/B/W strength + expected cost | ✅ MCMC + gamma stochastic bisection; `generation/microcanonical/fixed_strength/`; benchmark in `docs/benchmarks/microcanonical_strength_cost.md` |
-| Validation gap | ⚠️ strength-cost and fixed (k,T) lack dedicated E2E Python tests (only benchmark coverage) |
-
-### Pending — next phases (roadmap, `00_intro.md` §2)
-
-| Phase | Constraint | Notes |
-|---|---|---|
-| 6 | fixed (s,E) | strengths + occupied-pair count |
-| 7 | fixed (s,k) | strengths + degrees |
-| 8 | advanced backends | backbone samplers, pseudo-marginal methods, MCMC kernels |
-
-Phases 3 (fixed k,T), 4 (fixed strengths), and 5 (strength + expected cost)
-are implemented (experimental, small N). See
-`docs/development/agent-specifications/05_microcanonical_sampling_framework_fixed_se_plan.md`
-for the general sampling framework.
+| `fixed (E,T)` oracle coverage | `menobis-test-oracles` has the fixed-total DP/rejection oracle; production-vs-oracle comparison could extend to more (E,T) combinations (currently bounded sizes). |
+| Python `_fixed_et_explicit` O(N²) iteration | `src/menobis/routing.py` ~lines 1100–1210: explicit fixed-(E,T) Python fallback iterates all pairs; out of scope for the refactor, should migrate to Rust or remove (low priority). |
+| `uv run ty check` 160 pre-existing diagnostics | Dataclass type-narrowing issues across `generation.py`/`routing.py`/numpy stubs; not introduced by the refactor. |
+| Cost ESS at dense N | Cost ESS degrades at dense N (4–21 at N=1000); improving cost-chain mixing or ESS reporting is a follow-up. |
 
 ## Benchmarking backlog
 
@@ -120,9 +85,9 @@ for the general sampling framework.
 | Item | Notes |
 |---|---|
 | Reduce wrapper repetition | ✅ **Significant progress.** Capability registry (`capabilities.py`), analysis facade (`analysis/facade.py`), generation split by ensemble, routing refactored. Public API surface reduced. |
-| Migration notes | ✅ **Done.** `docs/development/migration-notes.md` documents all renames and API changes from Phase 0 |
+| Migration notes | ✅ **Done.** Git history records all renames and API changes from Phase 0 |
 | Architecture docs | ✅ **Done.** `docs/development/architecture.md` added |
-| Agent specification | ✅ **Done.** `docs/development/agent-specifications/microcanonical-phase-0.md` added as comprehensive specification |
+| Agent specification | ✅ **Done.** Historical phase specifications are archived in git history |
 | More real-data examples | OpenFlights is available; add more OD datasets carefully |
 | Release packaging | future PyPI wheels and crates.io publication |
 | Extend capabilities registry for new verbs/ensembles | currently covers fit/sample/filter × grand-canonical/canonical/microcanonical |

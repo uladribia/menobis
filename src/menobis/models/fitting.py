@@ -98,7 +98,7 @@ def _validate_binomial_feasibility(
         msg = (
             f"binomial(M={layers}) model cannot achieve strengths exceeding "
             f"M*(N{'' if self_loops else '-1'}) = {max_achievable:.0f}; "
-            f"max(s_out)={strength_out.max():.0f}, max(s_in)={strength_in.max():.0f}"
+            f"max(s_out)={strength_out.max():.0f}, max(s_in)={strength_in.max():.0f}"  # type: ignore
         )
         raise ValueError(msg)
 

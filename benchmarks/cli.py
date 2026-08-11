@@ -97,6 +97,21 @@ class BenchmarkRow:
     gamma_iterations: int | None = None
     status: str = "ok"
     message: str = ""
+    # Microcanonical (Phase III) metrics
+    construction_time_s: float = 0.0
+    repair_time_s: float = 0.0
+    repair_steps: int = 0
+    repair_restarts: int = 0
+    occupied_pairs: int = 0
+    mcmc_proposals: int = 0
+    mcmc_accepted: int = 0
+    mcmc_held: int = 0
+    mcmc_time_s: float = 0.0
+    final_sampling_time_s: float = 0.0
+    gamma_fit_time_s: float | None = None
+    cost_ess: float | None = None
+    structurally_valid_proposals_per_sec: float = 0.0
+    accepted_transitions_per_sec: float = 0.0
 
 
 def _get_rss_mb() -> float:
@@ -560,12 +575,45 @@ def _format_row(row: BenchmarkRow) -> str:
     kp_str = (
         f"{row.known_pair_fraction * 100:.0f}" if row.known_pair_fraction > 0 else "0"
     )
+    micro_str = ""
+    if row.construction_time_s or row.mcmc_proposals:
+        parts = []
+        if row.construction_time_s:
+            parts.append(f"construct={row.construction_time_s * 1000:.3f}ms")
+        if row.repair_time_s:
+            parts.append(f"repair={row.repair_time_s * 1000:.3f}ms")
+        if row.repair_steps:
+            parts.append(f"steps={row.repair_steps}")
+        if row.repair_restarts:
+            parts.append(f"restart={row.repair_restarts}")
+        if row.occupied_pairs:
+            parts.append(f"occ={row.occupied_pairs}")
+        if row.mcmc_proposals:
+            parts.append(f"props={row.mcmc_proposals}")
+        if row.mcmc_accepted:
+            parts.append(f"acc={row.mcmc_accepted}")
+        if row.structurally_valid_proposals_per_sec:
+            parts.append(f"{row.structurally_valid_proposals_per_sec:.0f}/sV")
+        if row.accepted_transitions_per_sec:
+            parts.append(f"{row.accepted_transitions_per_sec:.0f}/sA")
+        if row.mcmc_time_s:
+            parts.append(f"mcmc={row.mcmc_time_s * 1000:.3f}ms")
+        if row.final_sampling_time_s:
+            parts.append(f"final={row.final_sampling_time_s * 1000:.3f}ms")
+        if row.gamma_fit_time_s is not None:
+            parts.append(f"\u03b3fit={row.gamma_fit_time_s * 1000:.3f}ms")
+        if row.cost_ess is not None:
+            parts.append(f"ess={row.cost_ess:.2f}")
+        if row.mcmc_held:
+            parts.append(f"held={row.mcmc_held}")
+        if parts:
+            micro_str = " [" + " ".join(parts) + "]"
     return (
         f"{row.stage:<12} {row.node_count:>5} {row.family:<3} {row.constraint:<16} "
         f"{row.regime:<9} {kp_str:>4} {row.wall_seconds:>8.4f} {row.cpu_seconds:>8.4f} "
         f"{row.parallel_factor:>5.1f} {row.memory_python_peak_mb:>6.1f} "
         f"{row.memory_rss_peak_mb:>7.1f} {conv_str:>5} {iters_str:>6} "
-        f"{max_s:>10} {max_k:>10} {edge_err:>10} {cost_err:>10} {row.status:<8}"
+        f"{max_s:>10} {max_k:>10} {edge_err:>10} {cost_err:>10} {row.status:<8}{micro_str}"
     )
 
 
@@ -1043,17 +1091,19 @@ def micro_command(
         int,
         typer.Option("--fit-max-iterations", help="Gamma-fit bisection iterations."),
     ] = 40,
-    fit_warm_start_sweeps: Annotated[
-        int, typer.Option("--fit-warm-start-sweeps", help="Warm-start sweeps.")
-    ] = 50,
     fit_adaptation_sweeps: Annotated[
-        int, typer.Option("--fit-adaptation-sweeps", help="Adaptation sweeps per gamma.")
+        int,
+        typer.Option("--fit-adaptation-sweeps", help="Adaptation sweeps per gamma."),
     ] = 100,
     fit_estimation_sweeps: Annotated[
-        int, typer.Option("--fit-estimation-sweeps", help="Estimation sweeps per gamma.")
+        int,
+        typer.Option("--fit-estimation-sweeps", help="Estimation sweeps per gamma."),
     ] = 80,
     fit_samples_per_iteration: Annotated[
-        int, typer.Option("--fit-samples-per-iteration", help="Samples per gamma iteration.")
+        int,
+        typer.Option(
+            "--fit-samples-per-iteration", help="Samples per gamma iteration."
+        ),
     ] = 20,
     fit_batch_count: Annotated[
         int, typer.Option("--fit-batch-count", help="Batch count for SE.")
@@ -1075,9 +1125,7 @@ def micro_command(
     with and without fixed pairs.  Use --constraint edges-events, degree-events, or
     strength.
     """
-    if constraint not in (
-        "edges-events", "degree-events", "strength", "strength-cost"
-    ):
+    if constraint not in ("edges-events", "degree-events", "strength", "strength-cost"):
         msg = (
             f"unsupported constraint: {constraint!r}, expected edges-events, "
             "degree-events, strength, or strength-cost"
@@ -1145,14 +1193,18 @@ def micro_command(
 
                     # Compute total observed cost for strength-cost constraint.
                     dists = np.sqrt(
-                        (net.x[edges.source.astype(int)]
-                         - net.x[edges.target.astype(int)])**2
-                        + (net.y[edges.source.astype(int)]
-                           - net.y[edges.target.astype(int)])**2
+                        (
+                            net.x[edges.source.astype(int)]
+                            - net.x[edges.target.astype(int)]
+                        )
+                        ** 2
+                        + (
+                            net.y[edges.source.astype(int)]
+                            - net.y[edges.target.astype(int)]
+                        )
+                        ** 2
                     )
-                    total_cost = float(
-                        np.sum(edges.occ_num.astype(np.float64) * dists)
-                    )
+                    total_cost = float(np.sum(edges.occ_num.astype(np.float64) * dists))
 
                     def _sample_micro(
                         _family=family,
@@ -1242,7 +1294,6 @@ def micro_command(
                                 "seed": _seed,
                                 "burn_in_sweeps": _burn_in,
                                 "sweeps_per_sample": _sample_sweeps,
-                                "warm_start_sweeps": fit_warm_start_sweeps,
                                 "adaptation_sweeps": fit_adaptation_sweeps,
                                 "estimation_sweeps": fit_estimation_sweeps,
                                 "samples_per_iteration": fit_samples_per_iteration,
@@ -1377,6 +1428,328 @@ def micro_command(
                         typer.echo(_format_row(rows[-1]), err=True)
                     else:
                         typer.echo(f"ERROR {family}/{regime}: E,T mismatch", err=True)
+
+    _save_and_display(rows, output, output_json)
+
+
+@app.command("matrix")
+def matrix_command(
+    nodes: Annotated[
+        str, typer.Option("--nodes", help="Comma-separated node sizes.")
+    ] = "100,500,1000",
+    families: Annotated[
+        str, typer.Option("--families", help="Comma-separated families: me,b,w.")
+    ] = "me,b,w",
+    regimes: Annotated[
+        str, typer.Option("--regime", help="Comma-separated regimes: sparse,dense.")
+    ] = "sparse,dense",
+    constraints: Annotated[
+        str,
+        typer.Option(
+            "--constraints",
+            help="Comma-separated constraints: strength, strength-cost.",
+        ),
+    ] = "strength,strength-cost",
+    self_loops: Annotated[bool, typer.Option("--self-loops/--no-self-loops")] = False,
+    seed: Annotated[int, typer.Option("--seed", help="Base random seed.")] = 42,
+    no_memory: Annotated[
+        bool, typer.Option("--no-memory", help="Skip memory profiling.")
+    ] = False,
+    burn_in_sweeps: Annotated[
+        int,
+        typer.Option("--burn-in-sweeps", help="MCMC burn-in sweeps."),
+    ] = 50,
+    sweeps_per_sample: Annotated[
+        int,
+        typer.Option("--sweeps-per-sample", help="MCMC thinning sweeps."),
+    ] = 10,
+    fit_adaptation_sweeps: Annotated[
+        int,
+        typer.Option("--fit-adaptation-sweeps", help="Adaptation sweeps per gamma."),
+    ] = 100,
+    fit_estimation_sweeps: Annotated[
+        int,
+        typer.Option("--fit-estimation-sweeps", help="Estimation sweeps per gamma."),
+    ] = 80,
+    fit_samples_per_iteration: Annotated[
+        int,
+        typer.Option(
+            "--fit-samples-per-iteration", help="Samples per gamma iteration."
+        ),
+    ] = 20,
+    fit_max_iterations: Annotated[
+        int,
+        typer.Option("--fit-max-iterations", help="Gamma-fit bisection iterations."),
+    ] = 40,
+    fit_batch_count: Annotated[
+        int, typer.Option("--fit-batch-count", help="Batch count for SE.")
+    ] = 10,
+    fit_cost_tolerance: Annotated[
+        float,
+        typer.Option("--fit-cost-tolerance", help="Cost convergence tolerance."),
+    ] = 5e-1,
+    output: Annotated[Path, typer.Option("--output", "-o")] = Path(
+        "benchmarks/results/microcanonical-bench-matrix.json"
+    ),
+    output_json: Annotated[
+        bool, typer.Option("--json", help="Print JSON to stdout.")
+    ] = False,
+) -> None:
+    """Benchmark the microcanonical fixed-strength sampler matrix.
+
+    For each family, node count, regime, and constraint type, derives
+    feasible constraints from a synthetic PA-geographic network and
+    samples the microcanonical model directly via the low-level pyo3
+    bench bindings.  Captures per-stage timings and MCMC metrics
+    (\u00a735).
+    """
+    allowed_constraints = ("strength", "strength-cost")
+    _ = _parse_tokens(constraints, allowed_constraints, "constraint")
+    # _parse_tokens already raises for bad tokens, but we need the list.
+    constraint_list = tuple(
+        p.strip().lower() for p in constraints.split(",") if p.strip()
+    )
+    rows: list[BenchmarkRow] = []
+    _print_header()
+
+    node_list = tuple(_parse_ints(nodes))
+    family_list = tuple(_parse_tokens(families, ("me", "b", "w"), "family"))
+    regime_list = tuple(_parse_tokens(regimes, ("sparse", "dense"), "regime"))
+
+    # Map family name to the uppercase string expected by pyo3 bindings.
+    _family_upper_map: dict[str, str] = {"me": "ME", "b": "B", "w": "W"}
+
+    for n_index, node_count in enumerate(node_list):
+        for regime in regime_list:
+            params = _regime_params(regime, node_count)
+            net, _gen_m = _measure(
+                lambda _nc=node_count, _ni=n_index, _p=params: (
+                    generate_pa_geographic_network(
+                        _nc, seed=seed + _ni, self_loops=self_loops, **_p
+                    )
+                ),
+                track_memory=not no_memory,
+            )
+            edges = net.edges
+            e_total = edges.num_edges
+            t_total = edges.total_events
+
+            # Derive out/in strength sequences from the generated network.
+            out_str = np.zeros(node_count, dtype=np.uint64)
+            in_str = np.zeros(node_count, dtype=np.uint64)
+            for s, t, w in zip(edges.source, edges.target, edges.occ_num, strict=True):
+                out_str[int(s)] += int(w)
+                in_str[int(t)] += int(w)
+
+            # Compute distances for cost constraint.
+            dists = np.sqrt(
+                (net.x[edges.source.astype(int)] - net.x[edges.target.astype(int)]) ** 2
+                + (net.y[edges.source.astype(int)] - net.y[edges.target.astype(int)])
+                ** 2
+            )
+            total_cost = float(np.sum(edges.occ_num.astype(np.float64) * dists))
+
+            for family in family_list:
+                # Layer count: must satisfy T <= M*E, and fixed occ <= M.
+                layers = max(1, int(np.ceil(t_total / e_total)))
+                if family == "b":
+                    layers = max(layers, int(edges.occ_num.max()) if len(edges) else 1)
+                layers = max(layers, 1)
+
+                family_upper = _family_upper_map[family]
+
+                for constraint in constraint_list:
+
+                    def _bench(
+                        _family_upper=family_upper,
+                        _out_str=out_str,
+                        _in_str=in_str,
+                        _sl=self_loops,
+                        _layers=layers,
+                        _burn_in=burn_in_sweeps,
+                        _sample_sweeps=sweeps_per_sample,
+                        _seed=seed,
+                        _constraint=constraint,
+                        _net=net,
+                        _total_cost=total_cost,
+                        _fa=fit_adaptation_sweeps,
+                        _fe=fit_estimation_sweeps,
+                        _fs=fit_samples_per_iteration,
+                        _fmi=fit_max_iterations,
+                        _fct=fit_cost_tolerance,
+                        _fbc=fit_batch_count,
+                    ):
+                        _out_str = _out_str.copy()
+                        _in_str = _in_str.copy()
+                        import menobis._menobis as _m
+
+                        if _constraint == "strength":
+                            return _m.bench_fixed_strength(
+                                _family_upper,
+                                _out_str,
+                                _in_str,
+                                _sl,
+                                np.array([], dtype=np.uint64),
+                                np.array([], dtype=np.uint64),
+                                np.array([], dtype=np.uint64),
+                                _layers,
+                                _burn_in,
+                                _sample_sweeps,
+                                _seed,
+                            )
+                        return _m.bench_fixed_strength_with_cost(
+                            _family_upper,
+                            _out_str,
+                            _in_str,
+                            _net.x,
+                            _net.y,
+                            _total_cost,
+                            _sl,
+                            np.array([], dtype=np.uint64),
+                            np.array([], dtype=np.uint64),
+                            np.array([], dtype=np.uint64),
+                            _layers,
+                            _fa,
+                            _fe,
+                            _fs,
+                            _fmi,
+                            _fct,
+                            _fct,
+                            2.09,
+                            _fbc,
+                            _burn_in,
+                            _sample_sweeps,
+                            _seed,
+                        )
+
+                    try:
+                        (sources, targets, occ_nums, metrics), m = _measure(
+                            _bench, track_memory=not no_memory
+                        )
+                    except Exception as exc:  # benchmark error capture
+                        rows.append(
+                            BenchmarkRow(
+                                stage="microcanonical-matrix",
+                                node_count=node_count,
+                                family=family,
+                                constraint=constraint,
+                                self_loops=self_loops,
+                                regime=regime,
+                                known_pair_fraction=0.0,
+                                wall_seconds=0.0,
+                                cpu_seconds=0.0,
+                                parallel_factor=1.0,
+                                memory_python_peak_mb=0.0,
+                                memory_rss_peak_mb=0.0,
+                                sampled_edges=None,
+                                status="error",
+                                message=f"failed: {exc}",
+                            )
+                        )
+                        typer.echo(
+                            f"ERROR {family}/{regime}/{constraint}: {exc}",
+                            err=True,
+                        )
+                        continue
+
+                    # Unpack metrics (10-element tuple for strength,
+                    # 12-element for strength-cost).
+                    (
+                        construction_time_s,
+                        repair_time_s,
+                        repair_steps,
+                        repair_restarts,
+                        occupied_pairs,
+                        mcmc_proposals,
+                        mcmc_accepted,
+                        mcmc_held,
+                        mcmc_time_s,
+                        final_sampling_time_s,
+                    ) = metrics[:10]
+                    gamma_fit_time_s: float | None = None
+                    cost_ess: float | None = None
+                    if constraint == "strength-cost" and len(metrics) >= 12:
+                        gamma_fit_time_s = float(metrics[10])  # type: ignore[assignment]
+                        cost_ess = float(metrics[11])  # type: ignore[assignment]
+
+                    # Verify exact strength recovery.
+                    sampled_out = np.zeros(node_count, dtype=np.uint64)
+                    sampled_in = np.zeros(node_count, dtype=np.uint64)
+                    for s, t, w in zip(sources, targets, occ_nums, strict=True):
+                        sampled_out[int(s)] += int(w)
+                        sampled_in[int(t)] += int(w)
+                    max_s_out_err = float(
+                        np.max(
+                            np.abs(
+                                sampled_out.astype(np.int64) - out_str.astype(np.int64)
+                            )
+                        )
+                    )
+                    max_s_in_err = float(
+                        np.max(
+                            np.abs(
+                                sampled_in.astype(np.int64) - in_str.astype(np.int64)
+                            )
+                        )
+                    )
+                    max_s_err = max(max_s_out_err, max_s_in_err)
+                    ok = max_s_err == 0 and sum(occ_nums) == t_total
+
+                    structurally_valid_proposals_per_sec = (
+                        (mcmc_proposals - mcmc_held) / mcmc_time_s
+                        if mcmc_time_s > 0
+                        else 0.0
+                    )
+                    accepted_transitions_per_sec = (
+                        mcmc_accepted / mcmc_time_s if mcmc_time_s > 0 else 0.0
+                    )
+
+                    row_kwargs: dict[str, Any] = {
+                        "stage": "microcanonical-matrix",
+                        "node_count": node_count,
+                        "family": family,
+                        "constraint": constraint,
+                        "self_loops": self_loops,
+                        "regime": regime,
+                        "known_pair_fraction": 0.0,
+                        "wall_seconds": m.wall_seconds,
+                        "cpu_seconds": m.cpu_seconds,
+                        "parallel_factor": m.parallel_factor,
+                        "memory_python_peak_mb": m.memory_python_peak_mb,
+                        "memory_rss_peak_mb": m.memory_rss_peak_mb,
+                        "sampled_edges": len(sources),
+                        "status": "ok" if ok else "error",
+                        "message": (
+                            f"exact_T={sum(occ_nums)} "
+                            f"layers={layers} "
+                            f"max_s_err={max_s_err}"
+                        ),
+                        "construction_time_s": construction_time_s,
+                        "repair_time_s": repair_time_s,
+                        "repair_steps": repair_steps,
+                        "repair_restarts": repair_restarts,
+                        "occupied_pairs": occupied_pairs,
+                        "mcmc_proposals": mcmc_proposals,
+                        "mcmc_accepted": mcmc_accepted,
+                        "mcmc_held": mcmc_held,
+                        "mcmc_time_s": mcmc_time_s,
+                        "final_sampling_time_s": final_sampling_time_s,
+                        "gamma_fit_time_s": gamma_fit_time_s,
+                        "cost_ess": cost_ess,
+                        "structurally_valid_proposals_per_sec": (
+                            structurally_valid_proposals_per_sec
+                        ),
+                        "accepted_transitions_per_sec": (accepted_transitions_per_sec),
+                    }
+                    rows.append(BenchmarkRow(**row_kwargs))
+                    if ok:
+                        typer.echo(_format_row(rows[-1]), err=True)
+                    else:
+                        typer.echo(
+                            f"ERROR {family}/{regime}/{constraint}: "
+                            f"strength mismatch (max_s_err={max_s_err})",
+                            err=True,
+                        )
 
     _save_and_display(rows, output, output_json)
 

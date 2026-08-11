@@ -83,8 +83,8 @@ def test_w_fixed_strength_via_mcmc() -> None:
     np.testing.assert_array_equal(inp, s_in)
 
 
-def test_me_direct_still_works() -> None:
-    """ME with self-loops still uses the exact stub-matching fast path."""
+def test_me_mcmc_preserves_strengths_with_self_loops() -> None:
+    """ME with self-loops uses the MCMC chain and preserves strengths."""
     s_out = np.array([10, 20, 30], dtype=np.uint64)
     s_in = np.array([15, 25, 20], dtype=np.uint64)
     net = sample_model(
@@ -159,3 +159,72 @@ def test_infeasible_strength_rejected() -> None:
             strength_in=np.array([5, 4], dtype=np.uint64),
             self_loops=True,
         )
+
+
+@pytest.mark.heavy
+@pytest.mark.parametrize(
+    "family,kwargs",
+    [
+        (ModelFamily.ME, {}),
+        (ModelFamily.B, {"layers": 8}),
+        (ModelFamily.W, {"layers": 4}),
+    ],
+)
+def test_microcanonical_strength_cost_e2e(family: ModelFamily, kwargs: dict) -> None:
+    """STRENGTH_COST E2E: strength+cost sampler recovers both constraints.
+
+    Uses PA-geographic network (N=10, dense) to derive feasible strength
+    sequences and an empirical target cost, then verifies the microcanonical
+    STRENGTH_COST sampler recovers both constraints.
+    """
+    from menobis.analysis import directed_strengths
+    from menobis.utilities.synthetic import generate_pa_geographic_network
+
+    # 1. Generate a small PA-geographic network (N=10, dense)
+    net = generate_pa_geographic_network(
+        10, average_degree=4.0, events_per_edge=5.0, seed=42, self_loops=True
+    )
+
+    # 2. Derive strength_out/in, coordinates, and target cost
+    s = directed_strengths(net.edges)
+    cx, cy = net.x, net.y
+    source = net.edges.source
+    target = net.edges.target
+    occ = net.edges.occ_num
+    dx = cx[source] - cx[target]
+    dy = cy[source] - cy[target]
+    target_cost = float(np.sqrt(dx**2 + dy**2) @ occ)
+
+    # 3. Sample via microcanonical STRENGTH_COST
+    result = sample_model(
+        ensemble=Ensemble.MICROCANONICAL,
+        family=family,
+        constraint=Constraint.STRENGTH_COST,
+        strength_out=s.out,
+        strength_in=s.incoming,
+        coord_x=cx,
+        coord_y=cy,
+        target_cost=target_cost,
+        self_loops=True,
+        seed=42,
+        **kwargs,
+    )
+
+    # 4. Verify strengths are exactly preserved
+    n = len(cx)
+    assert result.total_events == int(s.out.sum())
+    actual_out = np.bincount(result.source, weights=result.occ_num, minlength=n)
+    actual_inp = np.bincount(result.target, weights=result.occ_num, minlength=n)
+    np.testing.assert_array_equal(actual_out, s.out)
+    np.testing.assert_array_equal(actual_inp, s.incoming)
+
+    # 5. Verify observed cost is within tolerance of target cost
+    dx_sampled = cx[result.source] - cx[result.target]
+    dy_sampled = cy[result.source] - cy[result.target]
+    observed_cost = float(np.sqrt(dx_sampled**2 + dy_sampled**2) @ result.occ_num)
+    rel_err = abs(observed_cost - target_cost) / target_cost
+    # Allow 20 % relative tolerance for MCMC noise
+    assert rel_err < 0.20, (
+        f"cost rel_err={rel_err:.4f} exceeds 0.20 "
+        f"(target={target_cost:.2f}, observed={observed_cost:.2f})"
+    )

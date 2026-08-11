@@ -1,0 +1,140 @@
+//! Errors for the fixed-strength microcanonical sampler.
+
+use std::fmt;
+
+/// Errors that can occur during fixed-strength sampling.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FixedStrengthError {
+    /// The residual problem is infeasible.
+    InvalidResidual(String),
+    /// Initialization via max flow or greedy construction failed.
+    InitializationFailed(String),
+    /// The repair step did not converge within the configured bounds (spec 21).
+    RepairDidNotConverge {
+        remaining_loops: usize,
+        remaining_capacity_violations: usize,
+        remaining_forbidden_occupations: usize,
+        restart_count: u32,
+        steps: u64,
+    },
+}
+
+impl fmt::Display for FixedStrengthError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidResidual(msg) => write!(f, "invalid residual problem: {msg}"),
+            Self::InitializationFailed(msg) => write!(f, "initialization failed: {msg}"),
+            Self::RepairDidNotConverge {
+                remaining_loops,
+                remaining_capacity_violations,
+                remaining_forbidden_occupations,
+                restart_count,
+                steps,
+            } => {
+                write!(
+                    f,
+                    "repair did not converge after {steps} steps and {restart_count} restarts: \
+                     {remaining_loops} loops, {remaining_capacity_violations} capacity violations, \
+                     {remaining_forbidden_occupations} forbidden occupations remaining"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for FixedStrengthError {}
+
+// ---------------------------------------------------------------------------
+// Cost errors — not PartialEq/Eq because they carry f64 fields.
+// ---------------------------------------------------------------------------
+
+/// Errors during fixed-strength cost-constrained sampling.
+#[derive(Clone, Debug)]
+pub enum FixedStrengthCostError {
+    /// A cost provider returned `None` for an admissible pair.
+    MissingCost { source: u64, target: u64 },
+    /// A cost provider returned a non-finite value (NaN, +inf, -inf).
+    NonFiniteCost {
+        source: u64,
+        target: u64,
+        value: f64,
+    },
+    /// The observed (target) cost is non-finite.
+    NonFiniteObservedCost { value: f64 },
+    /// Could not find a valid bracket after maximum expansions.
+    BracketNotFound,
+    /// The MCMC chain did not produce enough accepted transitions for a
+    /// reliable cost estimate (spec §27).
+    InsufficientMobility {
+        proposals: u64,
+        accepted: u64,
+        min_accepted: u64,
+    },
+    /// Fixed-pair cost does not match the residual/total decomposition.
+    ResidualCostInconsistent {
+        total: f64,
+        fixed: f64,
+        residual: f64,
+    },
+    /// Wraps a non-cost [`FixedStrengthError`].
+    FixedStrength(FixedStrengthError),
+}
+
+impl fmt::Display for FixedStrengthCostError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingCost { source, target } => {
+                write!(
+                    f,
+                    "cost provider returned None for admissible pair ({source}, {target})"
+                )
+            }
+            Self::NonFiniteCost {
+                source,
+                target,
+                value,
+            } => {
+                write!(
+                    f,
+                    "non-finite cost {value} from provider for pair ({source}, {target})"
+                )
+            }
+            Self::NonFiniteObservedCost { value } => {
+                write!(f, "observed (target) cost is non-finite: {value}")
+            }
+            Self::InsufficientMobility {
+                proposals,
+                accepted,
+                min_accepted,
+            } => {
+                write!(
+                    f,
+                    "insufficient MCMC mobility: {accepted}/{proposals} accepted, need at least {min_accepted}"
+                )
+            }
+            Self::BracketNotFound => {
+                write!(
+                    f,
+                    "could not find a valid gamma bracket after maximum expansions"
+                )
+            }
+            Self::ResidualCostInconsistent {
+                total,
+                fixed,
+                residual,
+            } => {
+                write!(f, "cost residual mismatch: total {total:.6e} != fixed {fixed:.6e} + residual {residual:.6e}")
+            }
+            Self::FixedStrength(e) => write!(f, "fixed-strength error: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for FixedStrengthCostError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::FixedStrength(e) => Some(e),
+            _ => None,
+        }
+    }
+}
