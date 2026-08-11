@@ -28,6 +28,7 @@ nav:
   - Model selection and maths:
       - Choose a null model: concepts/choose-null-model.md
       - Equations: concepts/equations.md
+      - Ensemble equivalence at large occupation: concepts/ensemble-equivalence.md
       - Partial constraints: concepts/partial-constraints.md
       - Microcanonical sampling: concepts/microcanonical.md
       - Solvers and scaling: concepts/solvers-and-scaling.md

@@ -8,6 +8,11 @@ description: Microcanonical sampling cases, backends, pipeline, and scaling.
 validated at **N=1000** in the benchmark matrix: hard constraints exact,
 expected-cost constraints in expectation.
 
+When soft (grand-canonical) and hard (microcanonical) formulations of the same
+null hypothesis are interchangeable for theoretical calculations depends on
+occupation scale and constraint type; see
+[Ensemble equivalence at large occupation](ensemble-equivalence.md).
+
 !!! warning "Validation status"
     Validated at **N=1000** for fixed strengths and strengths+cost (all
     families, sparse/dense); fixed-(E,T) and fixed-(k,T) run on the shared
