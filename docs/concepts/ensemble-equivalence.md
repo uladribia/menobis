@@ -155,7 +155,7 @@ Even within ME, the magnitude-concentration argument does **not**
 automatically extend to binary (support) constraints. Define
 
 \[
-a_{ij} = \mathbf 1[t_{ij} > 0],\qquad
+a_{ij} = \mathbf{1}[t_{ij} > 0],\qquad
 E = \sum_{ij} a_{ij},\qquad
 k_i^{\text{out}} = \sum_j a_{ij},\qquad
 k_j^{\text{in}} = \sum_i a_{ij}.
