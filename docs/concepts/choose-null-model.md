@@ -90,3 +90,9 @@ interpretation requires those families and check [Solvers and scaling](solvers-a
 
 Do not fake a model by relabeling another family. Add the correct family kernel
 and constraint layer; see [Extending thesis cases](../development/extending-thesis-cases.md).
+
+!!! note "Large occupation and ensemble choice"
+    At fixed node count and large total occupation, grand-canonical calculations
+    can stand in for harder constrained ensembles in ME magnitude-only cases, but
+    not for W or for ME binary/support constraints. See
+    [Ensemble equivalence at large occupation](ensemble-equivalence.md).

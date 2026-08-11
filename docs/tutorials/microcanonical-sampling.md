@@ -13,14 +13,7 @@ gamma fit).
 
 ## Pipeline
 
-The pipeline (same for all families) consists of:
-
-1. **Derive** constraints from a realistic network (or specify them directly)
-2. **Construct** an exact‑strength occupation table via compressed aggregated matching
-3. **Repair** self‑loops, capacity, and admissibility so the table is feasible
-4. **Sample** via the occupied‑cell Metropolis chain (for strengths) or the
-   pair‑Gibbs chain (for fixed‑(E,T) and fixed‑(k,T))
-5. **Thin** to reduce autocorrelation (`burn_in_sweeps`, `sweeps_per_sample`)
+See [Microcanonical sampling concepts](../concepts/microcanonical.md#pipeline) for the shared pipeline description (derive → construct → repair → sample → thin). The examples below follow the same sequence.
 
 ## When to use which constraint
 
@@ -30,6 +23,10 @@ The pipeline (same for all families) consists of:
 | `DEGREE_EVENTS` | Exact out/in degree + total events | Preserve node activity heterogeneity |
 | `STRENGTH` | Exact out/in strength sequences | Weighted‑network analogue of Configuration Model |
 | `STRENGTH_COST` | Exact strengths + target cost ≈ observed | Spatial or distance‑constrained mobility |
+
+!!! note "Deferred cases"
+    Fixed `(s,E)` and fixed `(s,k)` microcanonical constraints are not
+    currently implemented. See [`development/todos.md`](../development/todos.md).
 
 ## 0. Setup
 

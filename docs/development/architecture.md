@@ -60,7 +60,7 @@ Filtering never calls generation internally; both consume
 |---|---|---|
 | grand-canonical | expected (fitted multipliers) | independent pairs, filters |
 | canonical | one exact global (T) | multinomial |
-| microcanonical | all exact | compressed constructor + repair + occupied-cell MCMC (strength); pair-Gibbs chain (E,T/k,T); stub-matching, DP, max-flow (oracle only) |
+| microcanonical | exact (strengths, E, T, k, T); expected cost (STRENGTH_COST) | compressed constructor + repair + occupied-cell MCMC (strength); pair-Gibbs chain (E,T/k,T); stub matching, DP, max flow (oracle only) |
 
 Self-loops are supported across microcanonical backends (guaranteed loop repair).
 
