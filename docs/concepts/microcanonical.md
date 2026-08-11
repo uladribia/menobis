@@ -5,7 +5,7 @@ description: Microcanonical sampling cases, backends, pipeline, and scaling.
 # Microcanonical sampling
 
 **TL;DR** — Microcanonical sampling for four constraint families (ME/B/W),
-validated at **N=1000** (§35 benchmark matrix): hard constraints exact,
+validated at **N=1000** in the benchmark matrix: hard constraints exact,
 expected-cost constraints in expectation.
 
 !!! warning "Experimental status"
@@ -124,9 +124,9 @@ edges, diagnostics = sample_model_detailed(
   plus repairs always yield a feasible state.
 - strength-cost: cost must be identifiable; extreme targets can fail the gamma bracket.
 
-## Scaling (N=1000, §35 benchmark matrix)
+## Scaling (N=1000 benchmark matrix)
 
-Headline results from `benchmarks/results/microcanonical-bench-matrix.json`:
+Headline results from the N=1000 benchmark matrix:
 
 | Stage | Sparse | Dense |
 |---|---|---|
@@ -140,7 +140,7 @@ Bottleneck: the occupied-cell MCMC and, for strength-cost, the gamma fit; memory
 
 Exact enumeration on tiny systems; conditioned grand-canonical identity
 `P_GC(t | E,T) = P_MC(t | E,T)`; E2E constraint recovery on synthetic
-networks; §35 matrix at N=100/500/1000 across ME/B/W × sparse/dense.
+networks; benchmark matrix at N=100/500/1000 across ME/B/W × sparse/dense.
 
 ## Memory
 

@@ -57,7 +57,7 @@ possible when you can afford the all-pairs time required by some constraints.
 
 ## Microcanonical sampler operating ranges
 
-Validated N per constraint × regime from the §35 benchmark matrix
+Validated N per constraint × regime from the benchmark matrix
 (N=100/500/1000; dense regime is `T = E × events_per_edge = 8E`):
 
 | Constraint | Regime | Max N tested | Bottleneck |
@@ -81,7 +81,7 @@ number of occupied pairs.
 ## Regenerate local numbers
 
 ```bash
-uv run python -m benchmarks matrix   # §35 microcanonical fixed-strength matrix
+uv run python -m benchmarks matrix   # microcanonical fixed-strength matrix
 
 uv run python -m benchmarks all --nodes 100,1000 --families me,b \
   --constraints strength --regime dense --known-pairs 0.0

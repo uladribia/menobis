@@ -84,7 +84,7 @@ their own tuning concerns:
 | fixed (E,T) | direct; rejection + capped DP | exact; largest cost is the DP table (≤ ~16 MB) |
 | fixed (k,T) | MCMC sweeps over edge switches | needs `burn_in_sweeps` / `sweeps_per_sample` |
 | fixed strengths | ME stub matching (direct) or MCMC | stub matching is O(T) and exact with self-loops |
-| strength + expected cost | MCMC + gamma bisection | most fragile; see [strength-cost benchmark](../benchmarks/microcanonical_strength_cost.md) |
+| strength + expected cost | MCMC + gamma bisection | most fragile; see [scaling guidance](../development/scalability.md) |
 
 Check `diagnostics.exactness` on `SamplingResult` (`exact_direct` vs
 `exact_stationary_mcmc`) to know whether a sampled network is exact or exact

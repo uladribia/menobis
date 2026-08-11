@@ -45,14 +45,14 @@ nav:
       - Extending thesis cases: development/extending-thesis-cases.md
       - Testing: development/testing.md
       - Benchmarking: development/benchmarking.md
-      - Microcanonical strength-cost benchmark: benchmarks/microcanonical_strength_cost.md
       - Scalability: development/scalability.md
       - Fetching real-world data: development/fetching-data.md
       - Release process: development/release-process.md
       - TODOs: development/todos.md
       - Architecture: development/architecture.md
-      - Phase 0 migration notes: development/migration-notes.md
-      - Microcanonical refactor spec: development/agent-specifications/microcanonical_implementation/11_microcanonical_refactor_practical_final.md
+
+exclude_docs: |
+  /development/agent-specifications/
 
 plugins:
   - search

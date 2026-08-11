@@ -13,11 +13,11 @@ capability registry, and a shared constraints module. The new
 fit/sample/filter. Microcanonical sampling is implemented for ME, B, and W
 across four constraint families: fixed (E,T), fixed (k,T), fixed strengths,
 and fixed strengths + expected cost; the microcanonical refactor (phases A–H
-+ §35 benchmark matrix) is complete and validated at N=1000. A
++ benchmark matrix) is complete and validated at N=1000. A
 phase0-baseline benchmark (111 rows, 0 mismatches) is captured. Remaining
 work focuses on solver robustness (especially W zero-inflated),
 sparse-support fitting, cost providers, benchmark tooling, packaging, and
-deferred microcanonical features listed in spec §39.
+deferred microcanonical features listed below.
 
 ## Public release status
 
@@ -45,16 +45,16 @@ deferred microcanonical features listed in spec §39.
 | More cost providers | add Rust providers instead of dense cost matrices |
 | Sparse-support fitting | `PairMask` and `FixedPairs` extracted as shared abstractions; user-provided masks without dense state still pending |
 
-### Microcanonical deferred work (spec §39)
+### Microcanonical deferred work
 
-Items explicitly deferred per the microcanonical refactor specification §39.
+Items explicitly deferred from the current release.
 These are NOT implemented and NOT planned for the current release.
 
 | Deferred feature | Description & rationale |
 |---|---|
 | `fixed (s,E)` | Fixed strength + total edges (zero-inflated); requires extending the fixed-strength kernel with an edge-count Lagrange multiplier. Not implemented. |
 | `fixed (s,k)` | Fixed strength + degree sequence (zero-inflated); requires binary multiplier layer `l_ij = w_i z_j` over the fixed-strength kernel. Not implemented. |
-| `generic annealed repair` | No annealing machinery in production (targeted repairs only, per spec §20). |
+| `generic annealed repair` | No annealing machinery in production (targeted repairs only). |
 | `general alternating-cycle mask repair` | Only targeted loop/capacity/forbidden-pair repairs exist; a general mask repair framework is deferred. |
 | `grand-canonical warm starts` | No warm-start for gamma fitting (zero-centered bracket expansion instead, Phase F). |
 | `universal MCMC kernel framework` | Families keep dedicated kernels (occupied-cell for strength, pair-Gibbs for fixed-total); no unified trait hierarchy. |
@@ -63,10 +63,10 @@ These are NOT implemented and NOT planned for the current release.
 
 | Item | Notes |
 |---|---|
-| `fixed (E,T)` oracle coverage | `menobis-test-oracles` has the fixed-total DP/rejection oracle; production-vs-oracle comparison could extend to more (E,T) combinations (currently bounded sizes per spec §40). |
+| `fixed (E,T)` oracle coverage | `menobis-test-oracles` has the fixed-total DP/rejection oracle; production-vs-oracle comparison could extend to more (E,T) combinations (currently bounded sizes). |
 | Python `_fixed_et_explicit` O(N²) iteration | `src/menobis/routing.py` ~lines 1100–1210: explicit fixed-(E,T) Python fallback iterates all pairs; out of scope for the refactor, should migrate to Rust or remove (low priority). |
 | `uv run ty check` 160 pre-existing diagnostics | Dataclass type-narrowing issues across `generation.py`/`routing.py`/numpy stubs; not introduced by the refactor. |
-| Cost ESS at dense N | §35 showed cost ESS degrades (4–21 at dense N=1000); improving cost-chain mixing or ESS reporting is a follow-up. |
+| Cost ESS at dense N | Cost ESS degrades at dense N (4–21 at N=1000); improving cost-chain mixing or ESS reporting is a follow-up. |
 
 ## Benchmarking backlog
 
@@ -85,9 +85,9 @@ These are NOT implemented and NOT planned for the current release.
 | Item | Notes |
 |---|---|
 | Reduce wrapper repetition | ✅ **Significant progress.** Capability registry (`capabilities.py`), analysis facade (`analysis/facade.py`), generation split by ensemble, routing refactored. Public API surface reduced. |
-| Migration notes | ✅ **Done.** `docs/development/migration-notes.md` documents all renames and API changes from Phase 0 |
+| Migration notes | ✅ **Done.** Git history records all renames and API changes from Phase 0 |
 | Architecture docs | ✅ **Done.** `docs/development/architecture.md` added |
-| Agent specification | ✅ **Done.** `docs/development/agent-specifications/archive/microcanonical-phase-0.md` (historical; the authoritative live spec is `docs/development/agent-specifications/microcanonical_implementation/11_microcanonical_refactor_practical_final.md`) |
+| Agent specification | ✅ **Done.** Historical phase specifications are archived in git history |
 | More real-data examples | OpenFlights is available; add more OD datasets carefully |
 | Release packaging | future PyPI wheels and crates.io publication |
 | Extend capabilities registry for new verbs/ensembles | currently covers fit/sample/filter × grand-canonical/canonical/microcanonical |
