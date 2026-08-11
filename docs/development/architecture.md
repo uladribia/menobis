@@ -13,9 +13,15 @@ src/
 │                          ResidualConstraints, common validation
 ├── fitting/               Lagrange multiplier solvers (ME/B/W, partial)
 ├── generation/
-│   ├── grandcanonical/    independent-pair sampling
+│   ├── grandcanonical/    independent-pair sampling (fitted multipliers)
 │   ├── canonical/         fixed-total multinomial
-│   └── microcanonical/    ME fixed-strength stub matching
+│   └── microcanonical/    exact-constraint generation
+│       ├── occupation_mcmc/     fixed-strength MCMC + compressed constructor + repair
+│       ├── conditional/         fixed-total pair-Gibbs chain (shared by E,T and k,T)
+│       ├── binary/              binary support sampling (degree-events)
+│       ├── support/             uniform support sampling (edges-events)
+│       ├── mcmc/                shared MCMC config, counters, outcome types
+│       └── route.rs             constraint dispatcher
 ├── filter.rs              tail probabilities from the same pair laws
 ├── graph.rs               OccupiedPair, SparseGraphView
 ├── stats.rs / clustering.rs  node statistics, clustering (sparse adjacency)
@@ -54,10 +60,9 @@ Filtering never calls generation internally; both consume
 |---|---|---|
 | grand-canonical | expected (fitted multipliers) | independent pairs, filters |
 | canonical | one exact global (T) | multinomial |
-| microcanonical | all exact | ME stub matching (self-loops) |
+| microcanonical | all exact | compressed constructor + repair + occupied-cell MCMC (strength); pair-Gibbs chain (E,T/k,T); stub-matching, DP, max-flow (oracle only) |
 
-The microcanonical no-self-loop case is intentionally unsupported until the
-MCMC backend exists (§11).
+Self-loops are supported across microcanonical backends (guaranteed loop repair).
 
 ## See also
 

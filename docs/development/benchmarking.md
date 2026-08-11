@@ -24,6 +24,7 @@ convergence, and precision.
 | Self-loops | no-self-loops default; self-loops optional |
 | Known-pair fraction | 0%, 2%, or explicit stress values |
 | Regime | dense default, sparse, saturated |
+| Microcanonical metrics | 11 §35 metrics: construction time, repair time, repair steps, repair restarts, occupied pairs, MCMC proposals/sec, accepted/sec, gamma fit time, cost ESS, final sampling time, peak memory |
 
 ## Regimes
 
@@ -48,6 +49,8 @@ convergence, and precision.
 ## Commands
 
 ```bash
+uv run python -m benchmarks matrix   # §35 microcanonical fixed-strength matrix
+
 uv run python -m benchmarks all --nodes 100,1000 --regime dense
 
 uv run python -m benchmarks all --nodes 1000 --families me,b \
@@ -75,6 +78,17 @@ uv run python -m benchmarks compare --nodes 500 --families me,b \
 | partial fitting | frozen pairs are subtracted before fitting free support |
 | sparse memory | masks and outputs stay sparse; no public dense cost/rate matrix |
 | filtering calibration | false-positive rates are measured on null samples |
+
+## Microcanonical benchmarks
+
+The `matrix` command runs the §35 microcanonical fixed-strength matrix
+(N=100/500/1000 × ME/B/W × sparse/dense × strength/strength-cost; 72 cells,
+plus a quick smoke subset with `--nodes 100 --families me,b`). Stored results
+live in `benchmarks/results/microcanonical-*.json` (e.g.
+`microcanonical-bench-matrix.json`, `microcanonical-n100-matrix.json`,
+`microcanonical-strength-cost-n100.json`). Each cell reports the 11 §35
+metrics listed above, including repair steps/restarts, MCMC throughput,
+gamma fit time, cost ESS, and peak memory.
 
 ## Partial fitting
 
