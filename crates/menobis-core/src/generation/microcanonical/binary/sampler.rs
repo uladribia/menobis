@@ -25,6 +25,8 @@ pub struct FixedDegreeMcmcConfig {
     pub proposals_per_sweep: Option<usize>,
     /// Seed for the RNG (deterministic reproducibility).
     pub seed: u64,
+    /// Whether self-loops are admissible in the support.
+    pub self_loops: bool,
 }
 
 impl FixedDegreeMcmcConfig {
@@ -36,18 +38,21 @@ impl FixedDegreeMcmcConfig {
                 sweeps_per_sample: 5,
                 seed: 0,
                 proposals_per_sweep: None,
+                self_loops: false,
             },
             DegreeHeterogeneity::Heterogeneous => Self {
                 burn_in_sweeps: 50,
                 sweeps_per_sample: 10,
                 seed: 0,
                 proposals_per_sweep: None,
+                self_loops: false,
             },
             DegreeHeterogeneity::HubDominated => Self {
                 burn_in_sweeps: 100,
                 sweeps_per_sample: 20,
                 seed: 0,
                 proposals_per_sweep: None,
+                self_loops: false,
             },
         }
     }
@@ -60,6 +65,7 @@ impl Default for FixedDegreeMcmcConfig {
             sweeps_per_sample: 10,
             seed: 0,
             proposals_per_sweep: None,
+            self_loops: false,
         }
     }
 }
@@ -88,7 +94,12 @@ impl FixedDegreeChain {
         admissible_pairs: Option<&[(u64, u64)]>,
     ) -> SwitchOutcome {
         self.diagnostics.mcmc.proposals += 1;
-        let outcome = directed_switch_step(&mut self.state, false, rng, admissible_pairs);
+        let outcome = directed_switch_step(
+            &mut self.state,
+            self.config.self_loops,
+            rng,
+            admissible_pairs,
+        );
         match outcome {
             SwitchOutcome::Switched => {
                 self.diagnostics.mcmc.accepted += 1;
@@ -177,6 +188,7 @@ pub fn sample_fixed_degree_support(
         sweeps_per_sample: config.sweeps_per_sample,
         seed: config.seed,
         proposals_per_sweep: None,
+        self_loops,
     };
     let mut chain = FixedDegreeChain::new(state, effective_config);
     chain.diagnostics.representation = repr;
@@ -236,6 +248,7 @@ mod tests {
             sweeps_per_sample: 5,
             seed: 42,
             proposals_per_sweep: None,
+            self_loops: false,
         };
         let (state, diag) = sample_fixed_degree_support(&out, &inp, false, &config, None).unwrap();
         assert_eq!(state.edge_count(), 4);
@@ -257,6 +270,7 @@ mod tests {
             sweeps_per_sample: 5,
             seed: 99,
             proposals_per_sweep: None,
+            self_loops: false,
         };
         let (state, _diag) = sample_fixed_degree_support(&out, &inp, false, &config, None).unwrap();
         assert_eq!(state.edge_count(), n - 1);
@@ -276,6 +290,7 @@ mod tests {
             sweeps_per_sample: 2,
             seed: 7,
             proposals_per_sweep: None,
+            self_loops: false,
         };
         let (state, diag) = sample_fixed_degree_support(&out, &inp, false, &config, None).unwrap();
         assert_eq!(state.edge_count(), n * (n - 1) - n);
@@ -291,9 +306,125 @@ mod tests {
             sweeps_per_sample: 2,
             seed: 42,
             proposals_per_sweep: None,
+            self_loops: false,
         };
         let (state_a, _) = sample_fixed_degree_support(&out, &inp, false, &config, None).unwrap();
         let (state_b, _) = sample_fixed_degree_support(&out, &inp, false, &config, None).unwrap();
         assert_eq!(state_a.edges, state_b.edges);
+    }
+
+    #[test]
+    fn self_loops_allowed_preserves_degrees() {
+        // N=2 with out=[1,1], in=[1,1] gives E=2.
+        // With self_loops=true, both {(0,0),(1,1)} and {(0,1),(1,0)} are
+        // valid. The chain should accept switches that create self-loops.
+        let out = vec![1u32, 1];
+        let inp = vec![1u32, 1];
+        let config = FixedDegreeMcmcConfig {
+            burn_in_sweeps: 20,
+            sweeps_per_sample: 10,
+            seed: 42,
+            proposals_per_sweep: None,
+            self_loops: true,
+        };
+        let (state, _diag) = sample_fixed_degree_support(&out, &inp, true, &config, None).unwrap();
+        assert_eq!(state.edge_count(), 2);
+        assert_eq!(state.out_degree_sequence(), out);
+        // Verify in-degrees (computed via scan)
+        assert_eq!(state.in_degree(0), 1);
+        assert_eq!(state.in_degree(1), 1);
+        // No duplicates
+        let mut pairs = state.edges.clone();
+        pairs.sort_unstable();
+        pairs.dedup();
+        assert_eq!(pairs.len(), 2);
+    }
+
+    #[test]
+    fn self_loops_chain_accepts_self_loop_switches() {
+        // Start from a state with self-loops and verify the chain
+        // does not reject all self-loop proposals (non-zero acceptance).
+        let edges = vec![(0u64, 0u64), (1u64, 1u64)];
+        let state = DegreeSupportState::new(2, edges, true);
+        let config = FixedDegreeMcmcConfig {
+            burn_in_sweeps: 0,
+            sweeps_per_sample: 1,
+            seed: 42,
+            proposals_per_sweep: None,
+            self_loops: true,
+        };
+        let mut chain = FixedDegreeChain::new(state, config);
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        // Run many steps — with self_loops=true, the chain can switch
+        // between {(0,0),(1,1)} and {(0,1),(1,0)} freely.
+        let mut self_loop_encountered = false;
+        for _ in 0..200 {
+            chain.step(&mut rng, None);
+            assert_eq!(chain.state.edge_count(), 2);
+            assert_eq!(chain.state.out_degree_sequence(), vec![1u32, 1]);
+            if chain.state.edges.iter().any(|(s, t)| s == t) {
+                self_loop_encountered = true;
+            }
+        }
+        // At some point self-loops should appear (the chain visits both
+        // states because the switch is reversible).
+        assert!(
+            self_loop_encountered,
+            "self-loops were never created despite self_loops=true"
+        );
+    }
+
+    #[test]
+    fn self_loops_disabled_never_creates_self_loops() {
+        // Start from a valid loopless state with self_loops=false.
+        // Verify the chain never creates self-loops.
+        let edges = vec![(0u64, 1u64), (1u64, 0u64)];
+        let state = DegreeSupportState::new(2, edges, false);
+        let config = FixedDegreeMcmcConfig {
+            burn_in_sweeps: 0,
+            sweeps_per_sample: 1,
+            seed: 42,
+            proposals_per_sweep: None,
+            self_loops: false,
+        };
+        let mut chain = FixedDegreeChain::new(state, config);
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        for _ in 0..500 {
+            chain.step(&mut rng, None);
+            assert_eq!(chain.state.edge_count(), 2);
+            assert_eq!(chain.state.out_degree_sequence(), vec![1u32, 1]);
+            // The chain with self_loops=false should never have self-loops
+            for &(s, t) in &chain.state.edges {
+                assert_ne!(s, t, "self-loop appeared despite self_loops=false");
+            }
+        }
+    }
+
+    #[test]
+    fn self_loops_with_complement_mode() {
+        // Near-complete directed graph with self_loops=true.
+        // N=3, out=[2,2,2], in=[2,2,2] with self_loops → max_allowed=3.
+        // Direct E=6, complement E=3 (sum(max_allowed - d) = 3*1 = 3).
+        // After inversion, edge_count = 3*3 - 3 = 6 = original E.
+        let n = 3;
+        let out = vec![2u32; n];
+        let inp = vec![2u32; n];
+        let config = FixedDegreeMcmcConfig {
+            burn_in_sweeps: 5,
+            sweeps_per_sample: 2,
+            seed: 42,
+            proposals_per_sweep: None,
+            self_loops: true,
+        };
+        let (state, diag) = sample_fixed_degree_support(&out, &inp, true, &config, None).unwrap();
+        assert_eq!(diag.representation, RepresentationMode::Complement);
+        assert_eq!(state.edge_count(), 6); // 9 - 3 = 6
+                                           // After complement inversion out_adjacency is cleared, so compute
+                                           // out-degrees from the edge list directly.
+        let mut computed_out = vec![0u32; n];
+        for &(s, _) in &state.edges {
+            computed_out[s as usize] += 1;
+        }
+        assert_eq!(computed_out, out);
     }
 }

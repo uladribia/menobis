@@ -118,6 +118,7 @@ fn route_factorized(
                 sweeps_per_sample: config.sweeps_per_sample,
                 proposals_per_sweep: None,
                 seed: config.seed,
+                self_loops: config.self_loops,
             },
             self_loops: config.self_loops,
             admissible_pairs: None,

@@ -193,6 +193,28 @@ mod tests {
     }
 
     #[test]
+    fn self_loops_allowed_accepts_self_loop_switch() {
+        // N=2 with edges {(0,1),(1,0)}. The directed switch proposes
+        // {(0,0),(1,1)}. With self_loops=true this should be accepted.
+        let edges = vec![(0, 1), (1, 0)];
+        let mut state = DegreeSupportState::new(2, edges, true);
+        let mut rng = StdRng::seed_from_u64(0);
+        // Run enough steps to ensure the switch proposal is accepted.
+        let mut saw_self_loop = false;
+        for _ in 0..200 {
+            directed_switch_step(&mut state, true, &mut rng, None);
+            if state.edges.iter().any(|(s, t)| s == t) {
+                saw_self_loop = true;
+                break;
+            }
+        }
+        assert!(
+            saw_self_loop,
+            "switch never created a self-loop despite self_loops=true"
+        );
+    }
+
+    #[test]
     fn switch_respects_admissible_pairs() {
         let edges = vec![(0, 1), (1, 2), (2, 0), (0, 2)];
         let mut state = DegreeSupportState::new(3, edges, false);
