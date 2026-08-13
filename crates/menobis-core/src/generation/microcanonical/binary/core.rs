@@ -156,6 +156,7 @@ mod tests {
                 sweeps_per_sample: 5,
                 proposals_per_sweep: None,
                 seed: 42,
+                self_loops: false,
             },
             self_loops: false,
             admissible_pairs: None,
@@ -186,6 +187,7 @@ mod tests {
                 sweeps_per_sample: 5,
                 proposals_per_sweep: None,
                 seed: 42,
+                self_loops: false,
             },
             self_loops: false,
             admissible_pairs: None,
@@ -211,6 +213,7 @@ mod tests {
                 sweeps_per_sample: 5,
                 proposals_per_sweep: None,
                 seed: 42,
+                self_loops: false,
             },
             self_loops: false,
             admissible_pairs: None,
@@ -232,6 +235,7 @@ mod tests {
                 sweeps_per_sample: 5,
                 proposals_per_sweep: None,
                 seed: 42,
+                self_loops: false,
             },
             self_loops: false,
             admissible_pairs: None,
@@ -262,6 +266,7 @@ mod tests {
                 sweeps_per_sample: 2,
                 proposals_per_sweep: None,
                 seed: 42,
+                self_loops: false,
             },
             self_loops: false,
             admissible_pairs: None,
@@ -271,5 +276,65 @@ mod tests {
         assert_eq!(a.sources, b.sources);
         assert_eq!(a.targets, b.targets);
         assert_eq!(a.occ_nums, b.occ_nums);
+    }
+
+    #[test]
+    fn me_directed_self_loops() {
+        // N=2 with full degree 1 each, self_loops=true, total=2.
+        // Possible supports with out=[1,1], in=[1,1], self_loops=true:
+        //   {(0,0),(1,1)}  or  {(0,1),(1,0)}
+        // Both are valid and the chain should explore both.
+        let out = vec![1u32, 1];
+        let inp = vec![1u32, 1];
+        let config = FixedKTConfig {
+            mcmc: FixedDegreeMcmcConfig {
+                burn_in_sweeps: 20,
+                sweeps_per_sample: 10,
+                proposals_per_sweep: None,
+                seed: 42,
+                self_loops: true,
+            },
+            self_loops: true,
+            admissible_pairs: None,
+        };
+        let result = sample_fixed_kt_core(OccupationFamily::ME, &out, &inp, 2, &config).unwrap();
+        assert_eq!(result.sources.len(), 2);
+        assert_eq!(result.occ_nums.iter().sum::<OccNum>(), 2);
+        // Verify support degrees
+        let mut support_out = vec![0u32; 2];
+        for &s in &result.sources {
+            support_out[s as usize] += 1;
+        }
+        assert_eq!(support_out, out);
+        // Self-loops may or may not be present in this particular sample,
+        // but the chain should have run without panic and with correct degrees.
+    }
+
+    #[test]
+    fn me_self_loops_with_occupation() {
+        // N=2, out=[2,1], in=[1,2], total=5 → E=3
+        // With self_loops=true this is realizable.
+        let out = vec![2u32, 1];
+        let inp = vec![1u32, 2];
+        let config = FixedKTConfig {
+            mcmc: FixedDegreeMcmcConfig {
+                burn_in_sweeps: 20,
+                sweeps_per_sample: 10,
+                proposals_per_sweep: None,
+                seed: 42,
+                self_loops: true,
+            },
+            self_loops: true,
+            admissible_pairs: None,
+        };
+        let result = sample_fixed_kt_core(OccupationFamily::ME, &out, &inp, 5, &config).unwrap();
+        assert_eq!(result.sources.len(), 3);
+        assert_eq!(result.occ_nums.iter().sum::<OccNum>(), 5);
+        // Verify support degrees
+        let mut support_out = vec![0u32; 2];
+        for &s in &result.sources {
+            support_out[s as usize] += 1;
+        }
+        assert_eq!(support_out, out);
     }
 }

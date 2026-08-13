@@ -103,6 +103,7 @@ fn exhaustive_support_uniformity_for_4_cycle() {
                 sweeps_per_sample: 10,
                 proposals_per_sweep: None,
                 seed,
+                self_loops: false,
             },
             self_loops: false,
             admissible_pairs: None,

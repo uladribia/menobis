@@ -298,6 +298,7 @@ pub(crate) fn sample_degree_events_fixed_kt(
             sweeps_per_sample,
             proposals_per_sweep: None,
             seed,
+            self_loops,
         },
         self_loops,
         admissible_pairs: None,
