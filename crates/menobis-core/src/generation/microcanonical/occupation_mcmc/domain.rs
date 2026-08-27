@@ -21,11 +21,22 @@ use crate::OccNum;
 ///
 /// - [`Complete`](PairDomain::Complete): all ordered pairs (optionally
 ///   excluding the diagonal).
+/// - [`CompleteMinus`](PairDomain::CompleteMinus): the complete/self-loop
+///   policy minus a small explicit excluded set (fixed coordinates).
+///   Memory is `O(F)` where `F` is the number of excluded pairs — the
+///   `N × N` coordinate set is never materialized.
 /// - [`Sparse`](PairDomain::Sparse): an explicit set of allowed pairs.
 #[derive(Clone, Debug)]
 pub enum PairDomain {
     /// All `N × N` ordered pairs, optionally excluding self-loops.
     Complete { node_count: usize, self_loops: bool },
+    /// All ordered pairs allowed by the complete/self-loop policy minus a
+    /// small explicit excluded set (e.g., fixed-pair coordinates).
+    CompleteMinus {
+        node_count: usize,
+        self_loops: bool,
+        excluded: HashSet<(u64, u64)>,
+    },
     /// An explicit set of admissible pairs.
     Sparse {
         node_count: usize,
@@ -37,15 +48,17 @@ impl PairDomain {
     /// Number of nodes in the graph.
     pub fn node_count(&self) -> usize {
         match self {
-            PairDomain::Complete { node_count, .. } => *node_count,
-            PairDomain::Sparse { node_count, .. } => *node_count,
+            PairDomain::Complete { node_count, .. }
+            | PairDomain::CompleteMinus { node_count, .. }
+            | PairDomain::Sparse { node_count, .. } => *node_count,
         }
     }
 
     /// Whether self-loops are allowed.
     pub fn self_loops_allowed(&self) -> bool {
         match self {
-            PairDomain::Complete { self_loops, .. } => *self_loops,
+            PairDomain::Complete { self_loops, .. }
+            | PairDomain::CompleteMinus { self_loops, .. } => *self_loops,
             PairDomain::Sparse { allowed, .. } => {
                 // Self-loops are allowed if any (i,i) is in the set.
                 allowed.iter().any(|(s, t)| s == t)
@@ -66,7 +79,61 @@ impl PairDomain {
                 }
                 (src as usize) < *node_count && (tgt as usize) < *node_count
             }
+            PairDomain::CompleteMinus {
+                node_count,
+                self_loops,
+                excluded,
+            } => {
+                if !self_loops && src == tgt {
+                    return false;
+                }
+                if (src as usize) >= *node_count || (tgt as usize) >= *node_count {
+                    return false;
+                }
+                !excluded.contains(&(src, tgt))
+            }
             PairDomain::Sparse { allowed, .. } => allowed.contains(&(src, tgt)),
+        }
+    }
+
+    /// Number of admissible ordered pairs.
+    ///
+    /// - [`Complete`](PairDomain::Complete): `O(1)` arithmetic.
+    /// - [`CompleteMinus`](PairDomain::CompleteMinus): `O(1)` arithmetic
+    ///   plus `excluded.len()` (validated residuals exclude only
+    ///   admissible coordinates).
+    /// - [`Sparse`](PairDomain::Sparse): `allowed.len()`.
+    pub fn admissible_pair_count(&self) -> usize {
+        match self {
+            PairDomain::Complete {
+                node_count,
+                self_loops,
+            } => complete_policy_count(*node_count, *self_loops),
+            PairDomain::CompleteMinus {
+                node_count,
+                self_loops,
+                excluded,
+            } => complete_policy_count(*node_count, *self_loops).saturating_sub(excluded.len()),
+            PairDomain::Sparse { allowed, .. } => allowed.len(),
+        }
+    }
+
+    /// Whether the compressed constructor may leave mass on coordinates
+    /// outside this domain and therefore needs the structural
+    /// inadmissible-pair repair (spec §15.3, §19).
+    ///
+    /// - [`Sparse`](PairDomain::Sparse): always — the constructor ignores
+    ///   the pair set.
+    /// - [`CompleteMinus`](PairDomain::CompleteMinus): only when at least
+    ///   one coordinate is excluded (fixed pairs).
+    /// - [`Complete`](PairDomain::Complete): never — self-loop mass is
+    ///   handled by the Phase D loop repair, and every in-range
+    ///   coordinate is admissible.
+    pub fn requires_admissibility_repair(&self) -> bool {
+        match self {
+            PairDomain::Sparse { .. } => true,
+            PairDomain::CompleteMinus { excluded, .. } => !excluded.is_empty(),
+            PairDomain::Complete { .. } => false,
         }
     }
 
@@ -121,11 +188,42 @@ impl PairDomain {
                     )
                 }))
             }
+            PairDomain::CompleteMinus {
+                node_count,
+                self_loops,
+                excluded,
+            } => {
+                let n = *node_count;
+                let sl = *self_loops;
+                let ex = excluded;
+                Box::new((0..n as u64).flat_map(move |i| {
+                    (0..n as u64).filter_map(move |j| {
+                        if (!sl && i == j) || ex.contains(&(i, j)) {
+                            None
+                        } else {
+                            Some((i, j))
+                        }
+                    })
+                }))
+            }
             PairDomain::Sparse { allowed, .. } => {
                 let pairs: Vec<_> = allowed.iter().copied().collect();
                 Box::new(pairs.into_iter())
             }
         }
+    }
+}
+
+/// Number of ordered pairs allowed by the complete/self-loop policy.
+///
+/// `O(1)`: `N × N` minus the diagonal when self-loops are disabled.
+#[inline]
+fn complete_policy_count(node_count: usize, self_loops: bool) -> usize {
+    let all = node_count.saturating_mul(node_count);
+    if self_loops {
+        all
+    } else {
+        all.saturating_sub(node_count)
     }
 }
 
@@ -157,18 +255,130 @@ mod tests {
     }
 
     #[test]
-    fn sparse_domain() {
+    fn complete_minus_excludes_fixed() {
+        let mut excluded = HashSet::new();
+        excluded.insert((0, 1));
+        excluded.insert((2, 2));
+        let d = PairDomain::CompleteMinus {
+            node_count: 3,
+            self_loops: true,
+            excluded,
+        };
+        assert!(!d.is_admissible(0, 1));
+        assert!(!d.is_admissible(2, 2));
+        assert!(d.is_admissible(0, 0));
+        assert!(d.is_admissible(2, 0));
+        assert!(!d.is_admissible(3, 0)); // out of range
+        assert!(!d.is_admissible(0, 3));
+    }
+
+    #[test]
+    fn complete_minus_loopless_policy() {
+        let mut excluded = HashSet::new();
+        excluded.insert((1, 2));
+        let d = PairDomain::CompleteMinus {
+            node_count: 3,
+            self_loops: false,
+            excluded,
+        };
+        assert!(!d.is_admissible(0, 0)); // self-loop blocked by policy
+        assert!(!d.is_admissible(1, 2)); // excluded
+        assert!(d.is_admissible(1, 0));
+        assert!(d.is_admissible(2, 1));
+    }
+
+    #[test]
+    fn admissible_pair_count_complete() {
+        let with_loops = PairDomain::Complete {
+            node_count: 4,
+            self_loops: true,
+        };
+        assert_eq!(with_loops.admissible_pair_count(), 16);
+        let loopless = PairDomain::Complete {
+            node_count: 4,
+            self_loops: false,
+        };
+        assert_eq!(loopless.admissible_pair_count(), 12);
+    }
+
+    #[test]
+    fn admissible_pair_count_complete_minus() {
+        let mut excluded = HashSet::new();
+        excluded.insert((0, 1));
+        excluded.insert((3, 3));
+        excluded.insert((1, 0));
+        let d = PairDomain::CompleteMinus {
+            node_count: 4,
+            self_loops: true,
+            excluded,
+        };
+        assert_eq!(d.admissible_pair_count(), 13); // 16 - 3
+                                                   // Loopless policy removes the diagonal in addition to exclusions.
+        let mut excluded = HashSet::new();
+        excluded.insert((0, 1));
+        let d = PairDomain::CompleteMinus {
+            node_count: 3,
+            self_loops: false,
+            excluded,
+        };
+        assert_eq!(d.admissible_pair_count(), 5); // 9 - 3 (diagonal) - 1
+    }
+
+    #[test]
+    fn admissible_pair_count_sparse() {
         let mut allowed = HashSet::new();
         allowed.insert((0, 1));
         allowed.insert((1, 0));
+        allowed.insert((2, 2));
         let d = PairDomain::Sparse {
-            node_count: 2,
+            node_count: 3,
             allowed,
         };
-        assert!(d.is_admissible(0, 1));
-        assert!(d.is_admissible(1, 0));
-        assert!(!d.is_admissible(0, 0));
-        assert!(!d.is_admissible(1, 1));
+        assert_eq!(d.admissible_pair_count(), 3);
+    }
+
+    #[test]
+    fn iter_admissible_complete_minus_count() {
+        let mut excluded = HashSet::new();
+        excluded.insert((0, 1));
+        excluded.insert((2, 2));
+        let d = PairDomain::CompleteMinus {
+            node_count: 4,
+            self_loops: true,
+            excluded,
+        };
+        assert_eq!(d.iter_admissible().count(), d.admissible_pair_count());
+        let mut seen = d.iter_admissible().collect::<Vec<_>>();
+        seen.sort_unstable();
+        assert!(!seen.contains(&(0, 1)));
+        assert!(!seen.contains(&(2, 2)));
+        assert_eq!(seen.len(), 14);
+    }
+
+    #[test]
+    fn requires_admissibility_repair_policy() {
+        assert!(!PairDomain::Complete {
+            node_count: 3,
+            self_loops: true,
+        }
+        .requires_admissibility_repair());
+        assert!(!PairDomain::CompleteMinus {
+            node_count: 3,
+            self_loops: true,
+            excluded: HashSet::new(),
+        }
+        .requires_admissibility_repair());
+        assert!(PairDomain::CompleteMinus {
+            node_count: 3,
+            self_loops: true,
+            excluded: HashSet::from([(0, 1)]),
+        }
+        .requires_admissibility_repair());
+        assert!(PairDomain::Sparse {
+            node_count: 3,
+            allowed: HashSet::new(),
+        }
+        .requires_admissibility_repair());
     }
 
     #[test]

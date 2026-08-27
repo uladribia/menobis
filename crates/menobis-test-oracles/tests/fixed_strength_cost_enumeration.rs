@@ -164,7 +164,8 @@ fn constant_cost_does_not_affect_distribution() {
     let config = McmcConfig::new(10, 5, 42);
     let costs = ConstantCost;
 
-    let table = initialize_table(&s_out, &s_in, OccupationFamily::ME, &domain).unwrap();
+    let mut rng = StdRng::seed_from_u64(99);
+    let table = initialize_table(&s_out, &s_in, OccupationFamily::ME, &domain, &mut rng).unwrap();
     let state = StrengthState::new(n, table);
     let mut chain = FixedStrengthChain::new(
         state,
@@ -179,7 +180,6 @@ fn constant_cost_does_not_affect_distribution() {
 
     // Run a few steps — constant cost means ΔC=0 always, so moves are
     // identical to the no-cost case.
-    let mut rng = StdRng::seed_from_u64(99);
     for _ in 0..50 {
         let outcome = chain.step(&mut rng);
         // Just verify it doesn't crash
@@ -204,7 +204,8 @@ fn zero_gamma_cost_equals_no_cost() {
     let config = McmcConfig::new(10, 5, 42);
     let costs = LinearCost;
 
-    let table = initialize_table(&s_out, &s_in, OccupationFamily::ME, &domain).unwrap();
+    let mut rng = StdRng::seed_from_u64(7);
+    let table = initialize_table(&s_out, &s_in, OccupationFamily::ME, &domain, &mut rng).unwrap();
     let state = StrengthState::new(n, table);
     let chain = FixedStrengthChain::new(
         state,
@@ -260,11 +261,13 @@ fn me_cost_enumeration_agreement_n2() {
         .into_residual()
         .unwrap();
 
+        let mut rng = StdRng::seed_from_u64(seed);
         let table = initialize_table(
             &problem.strength_out,
             &problem.strength_in,
             problem.family,
             &problem.domain,
+            &mut rng,
         )
         .unwrap();
         let state = StrengthState::new(2, table);
@@ -288,7 +291,6 @@ fn me_cost_enumeration_agreement_n2() {
             mcmc_config,
         );
 
-        let mut rng = StdRng::seed_from_u64(seed);
         chain.burn_in(&mut rng);
         let net = chain.sample(&mut rng);
 
@@ -328,7 +330,8 @@ fn assert_gamma_recovery(family: OccupationFamily, target_gamma: f64) {
         node_count: 2,
         self_loops: true,
     };
-    let table = initialize_table(&s_out, &s_in, family, &domain).unwrap();
+    let mut rng = StdRng::seed_from_u64(42);
+    let table = initialize_table(&s_out, &s_in, family, &domain, &mut rng).unwrap();
     let state = StrengthState::new(2, table);
     let config = McmcConfig::new(10, 5, 42);
     let mut chain = FixedStrengthChain::new(
@@ -338,7 +341,6 @@ fn assert_gamma_recovery(family: OccupationFamily, target_gamma: f64) {
         config,
     );
 
-    let mut rng = StdRng::seed_from_u64(42);
     let fit_config = FixedStrengthCostFitConfig {
         adaptation_sweeps: 200,
         estimation_sweeps: 400,

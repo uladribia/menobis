@@ -166,13 +166,20 @@ impl<'a> FixedStrengthChain<'a> {
 // --------------------------------------------------------------------------
 
 /// Initialize a state from a residual strength problem (no repair).
-fn init_state(problem: &ResidualStrengthProblem) -> Result<StrengthState, FixedStrengthError> {
+///
+/// Uses the caller's RNG so the initial construction is reproducible per
+/// seed and every reconstruction restart differs (§13.4).
+fn init_state(
+    problem: &ResidualStrengthProblem,
+    rng: &mut impl Rng,
+) -> Result<StrengthState, FixedStrengthError> {
     problem.validate()?;
     let table = initialize_table(
         &problem.strength_out,
         &problem.strength_in,
         problem.family,
         &problem.domain,
+        rng,
     )?;
     Ok(StrengthState::new(problem.domain.node_count(), table))
 }
@@ -226,8 +233,8 @@ fn repair_state(
         repair_restarts = restarts;
     }
 
-    // Admissibility repair for sparse domains (spec §19).
-    if matches!(problem.domain, PairDomain::Sparse { .. }) {
+    // Admissibility repair for sparse/excluded domains (spec §15.3, §19).
+    if problem.domain.requires_admissibility_repair() {
         total_repair_steps += repair::repair_inadmissible_pairs(
             state,
             family,
@@ -258,7 +265,7 @@ pub fn sample_fixed_strength(
     let seed = config.seed;
     let mut rng = StdRng::seed_from_u64(seed);
 
-    let mut state = init_state(&problem)?;
+    let mut state = init_state(&problem, &mut rng)?;
     let (_, _, _) = repair_state(&mut state, &problem, &mut rng)?;
 
     let target = StrengthTarget::new(family);
@@ -289,7 +296,7 @@ pub fn sample_fixed_strength_with_cost<'a>(
     let seed = config.seed;
     let mut rng = StdRng::seed_from_u64(seed);
 
-    let mut state = init_state(&problem)?;
+    let mut state = init_state(&problem, &mut rng)?;
     let (_, _, _) = repair_state(&mut state, &problem, &mut rng)?;
 
     let target = StrengthTarget::with_costs(family, costs);
@@ -316,7 +323,7 @@ pub fn sample_fixed_strength_bench(
 
     // Phase 1: Construction (initialize_table + State::new).
     let t0 = Instant::now();
-    let mut state = init_state(&problem)?;
+    let mut state = init_state(&problem, &mut rng)?;
     let construction_time_s = t0.elapsed().as_secs_f64();
 
     // Phase 2: Repair.
@@ -381,7 +388,8 @@ pub fn sample_fixed_strength_with_cost_bench(
 
     // Phase 1: Construction.
     let t0 = Instant::now();
-    let mut state = init_state(&problem).map_err(FixedStrengthCostError::FixedStrength)?;
+    let mut state =
+        init_state(&problem, &mut rng).map_err(FixedStrengthCostError::FixedStrength)?;
     let construction_time_s = t0.elapsed().as_secs_f64();
 
     // Phase 2: Repair.
@@ -600,12 +608,14 @@ mod tests {
         let prob = make_problem(OccupationFamily::ME, vec![5, 5], vec![5, 5], true);
         let config = McmcConfig::new(10, 5, 42);
         let mut chain = {
+            let mut rng = StdRng::seed_from_u64(42);
             let target = StrengthTarget::new(OccupationFamily::ME);
             let table = initialize_table(
                 &prob.strength_out,
                 &prob.strength_in,
                 prob.family,
                 &prob.domain,
+                &mut rng,
             )
             .unwrap();
             let state = StrengthState::new(prob.domain.node_count(), table);
