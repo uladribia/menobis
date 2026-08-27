@@ -44,6 +44,7 @@ def _sample(
     fixed: tuple | None = None,
     seed: int = 42,
     self_loops: bool = False,
+    burn: int = 50,
 ):
     fixed = fixed or ([], [], [])
     sources, targets, occ_nums = _menobis.sample_fixed_strength_edges(
@@ -56,7 +57,7 @@ def _sample(
         list(fixed[1]),
         list(fixed[2]),
         int(layers),
-        50,  # burn_in_sweeps
+        int(burn),  # burn_in_sweeps
         10,  # sweeps_per_sample
         int(seed),
     )
@@ -172,3 +173,104 @@ def test_public_route_still_capability_gated() -> None:
             target_edges=8,
             seed=1,
         )
+
+
+# --------------------------------------------------------------------------
+# Phase 10: N=1000 heavy scalability gates (§32) via the direct binding
+# --------------------------------------------------------------------------
+
+
+def _derive_from_generated(net, events_per_edge: float):
+    """Derive constraints from a generated network.
+
+    Rebalances rounding drift (guaranteed feasible by construction).
+    """
+    constraints = derive_synthetic_constraints(net)
+    n = len(net.x)
+    s_out = np.round(constraints.strength_out).astype(np.uint64)
+    s_in = np.round(constraints.strength_in).astype(np.uint64)
+    diff = int(s_out.sum()) - int(s_in.sum())
+    if diff > 0:
+        s_in[np.argmax(s_in)] += diff
+    elif diff < 0:
+        s_out[np.argmax(s_out)] -= diff
+    edges = int(np.round(constraints.total_edges))
+    return n, s_out, s_in, edges
+
+
+@pytest.mark.heavy
+@pytest.mark.parametrize(
+    "family,layers,events_per_edge",
+    [("ME", 1, 5.0), ("B", 5, 2.0), ("W", 3, 3.0)],
+)
+def test_n1000_scalability_exact_recovery(family, layers, events_per_edge) -> None:
+    """N=1000 sparse generated network: exact constraints, loopless.
+
+    Runs through the Rust binding; the public route stays
+    capability-gated until the final phase.
+    """
+    net = generate_pa_geographic_network(
+        1000,
+        seed=5,
+        self_loops=False,
+        average_degree=6.0,
+        events_per_edge=events_per_edge,
+    )
+    n, s_out, s_in, edges = _derive_from_generated(net, events_per_edge)
+    source, target, occ_num = _sample(
+        family, s_out, s_in, edges, layers=layers, seed=42, self_loops=False
+    )
+    assert len(source) == edges, f"{family}: E={len(source)} != {edges}"
+    out, inp = _strengths(source, target, occ_num, n)
+    np.testing.assert_array_equal(out, s_out, err_msg=f"{family}: out-strength drift")
+    np.testing.assert_array_equal(inp, s_in, err_msg=f"{family}: in-strength drift")
+    assert not bool((source == target).any()), f"{family}: self-loop appeared"
+    assert bool((occ_num >= 1).all())
+
+
+@pytest.mark.heavy
+def test_n1000_fixed_pair_scalability() -> None:
+    """N=1000 fixed pairs: exact recovery, unique output coordinates.
+
+    The sparse residual domain is verified at the Rust core level by the
+    CompleteMinus oracle tests.
+    """
+    net = generate_pa_geographic_network(
+        1000, seed=5, self_loops=False, average_degree=6.0, events_per_edge=5.0
+    )
+    n, s_out, s_in, edges = _derive_from_generated(net, 5.0)
+    fixed = (
+        np.array([0, 1, 2, 3], dtype=np.uint64),
+        np.array([10, 11, 12, 13], dtype=np.uint64),
+        np.array([1, 1, 1, 1], dtype=np.uint64),
+    )
+    source, target, occ_num = _sample(
+        "ME", s_out, s_in, edges, fixed=fixed, seed=42, self_loops=False
+    )
+    assert len(source) == edges
+    out, inp = _strengths(source, target, occ_num, n)
+    np.testing.assert_array_equal(out, s_out)
+    np.testing.assert_array_equal(inp, s_in)
+    assert not bool((source == target).any())
+    assert len(set(zip(source.tolist(), target.tolist(), strict=True))) == len(source)
+
+
+@pytest.mark.heavy
+def test_n5000_smoke() -> None:
+    """N=5000 sparse ME smoke (§33): exact recovery, no quadratic blowup.
+
+    Timing is informational; the hard requirement is completion without
+    dense materialization.
+    """
+    net = generate_pa_geographic_network(
+        5000, seed=9, self_loops=False, average_degree=4.0, events_per_edge=4.0
+    )
+    n, s_out, s_in, edges = _derive_from_generated(net, 4.0)
+    source, target, occ_num = _sample(
+        "ME", s_out, s_in, edges, seed=7, self_loops=False, burn=10
+    )
+    assert len(source) == edges
+    out, inp = _strengths(source, target, occ_num, n)
+    np.testing.assert_array_equal(out, s_out)
+    np.testing.assert_array_equal(inp, s_in)
+    assert not bool((source == target).any())
