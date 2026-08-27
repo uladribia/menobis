@@ -275,7 +275,7 @@ pub(crate) fn log_alpha_with_extra(
 /// is consumed only when `log_alpha < 0`, exactly as in the pre-refactor
 /// kernel.
 #[inline]
-fn metropolis_accept(log_alpha: f64, rng: &mut impl Rng) -> bool {
+pub(crate) fn metropolis_accept(log_alpha: f64, rng: &mut impl Rng) -> bool {
     if log_alpha < 0.0 {
         let log_u = (rng.random::<f64>() + f64::MIN_POSITIVE).ln();
         if log_u >= log_alpha {
