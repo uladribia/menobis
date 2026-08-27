@@ -77,11 +77,24 @@ fn enumerate_fiber(
     s_in: &[OccNum],
     self_loops: bool,
 ) -> Vec<WeightedState> {
+    let empty = std::collections::HashSet::new();
+    enumerate_fiber_excluding(family, s_out, s_in, self_loops, &empty)
+}
+
+/// Enumerate over a complete domain minus an explicit excluded set
+/// (residualized fixed coordinates; the `CompleteMinus` residual domain).
+fn enumerate_fiber_excluding(
+    family: OccupationFamily,
+    s_out: &[OccNum],
+    s_in: &[OccNum],
+    self_loops: bool,
+    excluded: &std::collections::HashSet<(u64, u64)>,
+) -> Vec<WeightedState> {
     let n = s_out.len();
     let cap = family_capacity(family);
     let cells: Vec<(u64, u64)> = (0..n as u64)
         .flat_map(|i| (0..n as u64).map(move |j| (i, j)))
-        .filter(|&(i, j)| self_loops || i != j)
+        .filter(|&(i, j)| (self_loops || i != j) && !excluded.contains(&(i, j)))
         .collect();
 
     let mut results = Vec::new();
@@ -210,6 +223,7 @@ fn mh_matrix(
     family: OccupationFamily,
     self_loops: bool,
     log_weight: &[f64],
+    excluded: &std::collections::HashSet<(u64, u64)>,
 ) -> Vec<Vec<f64>> {
     let k = states.len();
     debug_assert_eq!(log_weight.len(), k);
@@ -249,8 +263,12 @@ fn mh_matrix(
                 let new_cb = occ_cb + 1;
 
                 // Production `validate_four_cell`: domain admissibility
-                // (self-loops) and family capacity on the cross cells.
+                // (self-loops and residual exclusions) and family
+                // capacity on the cross cells.
                 if !self_loops && (a == d || c == b) {
+                    continue;
+                }
+                if excluded.contains(&(a, d)) || excluded.contains(&(c, b)) {
                     continue;
                 }
                 if new_ad > cap || new_cb > cap {
@@ -280,7 +298,14 @@ fn mh_matrix(
                 let q_rev = (1.0 / v_ad_prime as f64 + 1.0 / v_cb_prime as f64) / m_prime as f64;
 
                 let dest = apply_proposal(state, a, b, c, d);
-                let di = index[&dest];
+                let di = index.get(&dest).copied().unwrap_or_else(|| {
+                    panic!(
+                        "mh_matrix: destination {dest:?} not enumerated; \
+                         family={family:?} source={state:?} proposal=({a},{b},{c},{d}) \
+                         excluded.len()={}",
+                        excluded.len()
+                    )
+                });
 
                 // Independent Hastings acceptance: pi(y) q_rev / (pi(x) q_fwd).
                 let log_alpha = (log_weight[di] - lw) + q_rev.ln() - q_fwd.ln();
@@ -461,6 +486,7 @@ fn aux_log_weights(states: &[WeightedState], lambda: f64, edge_target: usize) ->
 ///   accumulates into `B[x,y]` and stops;
 /// - at the maximum step all remaining outside mass becomes `B[x,x]`
 ///   (production undoes and restores the origin).
+#[allow(clippy::too_many_arguments)]
 fn bridge_matrix(
     states: &[WeightedState],
     n: usize,
@@ -469,10 +495,11 @@ fn bridge_matrix(
     edge_target: usize,
     lambda: f64,
     max_steps: usize,
+    excluded: &std::collections::HashSet<(u64, u64)>,
 ) -> Vec<Vec<f64>> {
     let k = states.len();
     let aux_lw = aux_log_weights(states, lambda, edge_target);
-    let aux = mh_matrix(states, n, family, self_loops, &aux_lw);
+    let aux = mh_matrix(states, n, family, self_loops, &aux_lw, excluded);
     let in_fiber = |i: usize| states[i].0.len() == edge_target;
 
     let mut b = vec![vec![0.0_f64; k]; k];
@@ -533,7 +560,14 @@ fn local_fixed_e_kernel_checks(family: OccupationFamily, so: &[OccNum], si: &[Oc
         "enumeration returned no states for {family:?}"
     );
     let n = so.len();
-    let base = mh_matrix(&states, n, family, sl, &fixed_strength_log_weights(&states));
+    let base = mh_matrix(
+        &states,
+        n,
+        family,
+        sl,
+        &fixed_strength_log_weights(&states),
+        &Default::default(),
+    );
 
     // Distinct feasible edge counts in the fiber.
     let mut edges: Vec<usize> = states.iter().map(|(s, _)| s.len()).collect();
@@ -634,6 +668,7 @@ fn local_fixed_e_kernel_singleton_fiber_is_stationary() {
         family,
         true,
         &fixed_strength_log_weights(&states),
+        &Default::default(),
     );
     let e = 2usize;
     let fiber: Vec<usize> = states
@@ -734,7 +769,14 @@ fn edge_repair_reaches_every_feasible_tiny_target() {
 
         // Connected components of the ordinary fixed-strength chain under
         // the 4-cycle proposal (positive probability in either direction).
-        let base = mh_matrix(&states, n, family, sl, &fixed_strength_log_weights(&states));
+        let base = mh_matrix(
+            &states,
+            n,
+            family,
+            sl,
+            &fixed_strength_log_weights(&states),
+            &Default::default(),
+        );
         let comp = connected_components(&base);
         let k = states.len();
 
@@ -868,7 +910,7 @@ fn auxiliary_kernel_exact_detailed_balance() {
         edges.dedup();
         for &e in &edges {
             let mu_log = aux_log_weights(&states, lambda, e);
-            let aux = mh_matrix(&states, n, family, sl, &mu_log);
+            let aux = mh_matrix(&states, n, family, sl, &mu_log, &Default::default());
             let label = format!("aux {family:?} sl={sl} E={e}");
             assert_row_sums(&aux, None);
             // Pairwise DB over the full space (all pairs, not just fiber).
@@ -907,7 +949,16 @@ fn bridge_kernel_exact_detailed_balance() {
         edges.sort_unstable();
         edges.dedup();
         for &e in &edges {
-            let b = bridge_matrix(&states, n, family, sl, e, lambda, max_steps);
+            let b = bridge_matrix(
+                &states,
+                n,
+                family,
+                sl,
+                e,
+                lambda,
+                max_steps,
+                &Default::default(),
+            );
             let fiber: Vec<usize> = states
                 .iter()
                 .enumerate()
@@ -942,7 +993,7 @@ fn bridge_matrix_connects_counterexample() {
         .collect();
     assert_eq!(fiber.len(), 2, "§5 fiber must contain exactly two states");
 
-    let b = bridge_matrix(&states, n, family, true, e, 1.0, 16);
+    let b = bridge_matrix(&states, n, family, true, e, 1.0, 16, &Default::default());
     let (a, bb) = (fiber[0], fiber[1]);
     assert!(
         b[a][bb] > 0.0 && b[bb][a] > 0.0,
@@ -958,7 +1009,253 @@ fn bridge_matrix_connects_counterexample() {
         family,
         true,
         &fixed_strength_log_weights(&states),
+        &Default::default(),
     );
     assert_eq!(base[a][bb], 0.0, "local kernel must not connect §5 states");
     assert_eq!(base[bb][a], 0.0);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7: full mixed kernel (§22.7) and mandatory connectivity grid (§23)
+// ---------------------------------------------------------------------------
+
+/// Exact full production kernel on a fiber:
+/// `P = (1 − ρ) P_local + ρ P_bridge` (§18, §42).
+#[allow(clippy::too_many_arguments)]
+fn full_mixed_matrix(
+    states: &[WeightedState],
+    n: usize,
+    family: OccupationFamily,
+    self_loops: bool,
+    edge_target: usize,
+    lambda: f64,
+    max_steps: usize,
+    rho: f64,
+    excluded: &std::collections::HashSet<(u64, u64)>,
+) -> Vec<Vec<f64>> {
+    let k = states.len();
+    let base = mh_matrix(
+        states,
+        n,
+        family,
+        self_loops,
+        &fixed_strength_log_weights(states),
+        excluded,
+    );
+    let local = local_fixed_e_matrix(&base, states, edge_target);
+    let bridge = bridge_matrix(
+        states,
+        n,
+        family,
+        self_loops,
+        edge_target,
+        lambda,
+        max_steps,
+        excluded,
+    );
+    let mut p = vec![vec![0.0_f64; k]; k];
+    for i in 0..k {
+        if states[i].0.len() != edge_target {
+            continue;
+        }
+        for j in 0..k {
+            p[i][j] = (1.0 - rho) * local[i][j] + rho * bridge[i][j];
+        }
+    }
+    p
+}
+
+/// Connected components of the undirected graph induced by `matrix` over
+/// the fiber states (edges where either direction has positive mass).
+fn fiber_components(matrix: &[Vec<f64>], fiber: &[usize]) -> Vec<usize> {
+    let mut comp = vec![usize::MAX; fiber.len()];
+    let mut next = 0usize;
+    for fi in 0..fiber.len() {
+        if comp[fi] != usize::MAX {
+            continue;
+        }
+        let mut stack = vec![fi];
+        comp[fi] = next;
+        while let Some(fu) = stack.pop() {
+            let u = fiber[fu];
+            for (fv, &v) in fiber.iter().enumerate() {
+                if comp[fv] == usize::MAX && (matrix[u][v] > 0.0 || matrix[v][u] > 0.0) {
+                    comp[fv] = next;
+                    stack.push(fv);
+                }
+            }
+        }
+        next += 1;
+    }
+    comp
+}
+
+/// Run the exact §22.7 gates on every feasible fiber of one case:
+/// row sums, pairwise detailed balance, stationarity of the full mixed
+/// kernel, and — where the underlying 4-cycle chain connects the fiber —
+/// connectedness of the mixed kernel.  Returns failure strings.
+#[allow(clippy::too_many_arguments)]
+fn check_full_mixed_kernel(
+    family: OccupationFamily,
+    so: &[OccNum],
+    si: &[OccNum],
+    sl: bool,
+    excluded: &std::collections::HashSet<(u64, u64)>,
+    lambda: f64,
+    max_steps: usize,
+    rho: f64,
+) -> Vec<String> {
+    let states = enumerate_fiber_excluding(family, so, si, sl, excluded);
+    assert!(!states.is_empty(), "empty fiber for {family:?}");
+    let n = so.len();
+    let base = mh_matrix(
+        &states,
+        n,
+        family,
+        sl,
+        &fixed_strength_log_weights(&states),
+        excluded,
+    );
+    let mut edges: Vec<usize> = states.iter().map(|(s, _)| s.len()).collect();
+    edges.sort_unstable();
+    edges.dedup();
+    let _k = states.len();
+
+    let mut failures = Vec::new();
+    for &e in &edges {
+        let fiber: Vec<usize> = states
+            .iter()
+            .enumerate()
+            .filter(|(_, (s, _))| s.len() == e)
+            .map(|(i, _)| i)
+            .collect();
+        let label = format!("{family:?} sl={sl} E={e} |excluded|={}", excluded.len());
+        let p = full_mixed_matrix(&states, n, family, sl, e, lambda, max_steps, rho, excluded);
+
+        assert_row_sums(&p, Some(&fiber));
+        assert_pairwise_detailed_balance(&states, &p, &fiber, &label);
+        assert_stationarity(&states, &p, &fiber, &label);
+
+        if fiber.len() <= 1 {
+            continue;
+        }
+        // Underlying base-chain connectivity over the fiber.
+        let base_comps = fiber_components(&base, &fiber);
+        let underlying_connected = base_comps
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            == 1;
+        if !underlying_connected {
+            // Genuine 4-cycle-kernel limitation (e.g. loopless perfect
+            // matchings): not a bridge defect; skip connectivity.
+            continue;
+        }
+        let mixed_comps = fiber_components(&p, &fiber);
+        let mixed_connected = mixed_comps
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            == 1;
+        if !mixed_connected {
+            failures.push(format!(
+                "{label}: fiber of {} states is DISCONNECTED under the mixed kernel",
+                fiber.len()
+            ));
+        }
+    }
+    failures
+}
+
+/// Mandatory fixed-pair residual grid cases (§23: no fixed pairs handled by
+/// `mandatory_cases`; here one positive and one zero fixed pair).
+#[allow(clippy::type_complexity)]
+fn fixed_pair_residual_cases() -> Vec<(
+    String,
+    OccupationFamily,
+    Vec<OccNum>,
+    Vec<OccNum>,
+    bool,
+    std::collections::HashSet<(u64, u64)>,
+)> {
+    let mut out = Vec::new();
+    // Positive fixed pair (0,1,1) on ME N=3 s=[3,3,3]: residual strengths
+    // [2,3,3]/[3,2,3] and coordinate (0,1) excluded.
+    let mut ex = std::collections::HashSet::new();
+    ex.insert((0, 1));
+    out.push((
+        "positive-fixed".into(),
+        OccupationFamily::ME,
+        vec![2, 3, 3],
+        vec![3, 2, 3],
+        true,
+        ex,
+    ));
+    // Zero fixed pair (0,1,0) on ME N=3 s=[2,2,2]: strengths unchanged,
+    // coordinate excluded.
+    let mut ex = std::collections::HashSet::new();
+    ex.insert((0, 1));
+    out.push((
+        "zero-fixed".into(),
+        OccupationFamily::ME,
+        vec![2, 2, 2],
+        vec![2, 2, 2],
+        true,
+        ex,
+    ));
+    out
+}
+
+/// Mandatory connectivity grid with bridge-cap selection (§23):
+/// try cap = 16 (the initial default), then 32, then 64; use the smallest
+/// passing value.  If 64 still leaves a mandatory fiber disconnected,
+/// report the smallest failing case (capability must NOT be exposed).
+#[test]
+fn full_mixed_kernel_stationarity_and_connectivity_grid() {
+    let lambda = 1.0;
+    let rho = 0.05;
+
+    let run_grid = |max_steps: usize| -> Vec<String> {
+        let mut failures = Vec::new();
+        for (family, so, si, sl) in mandatory_cases() {
+            failures.extend(check_full_mixed_kernel(
+                family,
+                &so,
+                &si,
+                sl,
+                &Default::default(),
+                lambda,
+                max_steps,
+                rho,
+            ));
+        }
+        for (_name, family, so, si, sl, excluded) in fixed_pair_residual_cases() {
+            failures.extend(check_full_mixed_kernel(
+                family, &so, &si, sl, &excluded, lambda, max_steps, rho,
+            ));
+        }
+        failures
+    };
+
+    let mut selected = None;
+    let mut last_failures = Vec::new();
+    for cap in [16usize, 32, 64] {
+        last_failures = run_grid(cap);
+        if last_failures.is_empty() {
+            selected = Some(cap);
+            break;
+        }
+        eprintln!(
+            "[connectivity] cap={cap} leaves {} disconnected fibers",
+            last_failures.len()
+        );
+    }
+
+    match selected {
+        Some(cap) => eprintln!("[connectivity] smallest passing bridge cap = {cap}"),
+        None => panic!(
+            "connectivity grid fails even at bridge_max_steps=64; smallest failing cases:\n{}",
+            last_failures.join("\n")
+        ),
+    }
 }

@@ -298,6 +298,72 @@ pub fn bridge_step(
 }
 
 // ---------------------------------------------------------------------------
+// Production mixed kernel (§18, §42)
+// ---------------------------------------------------------------------------
+
+/// One outer proposal of the production fixed-(s,E) kernel: a constant,
+/// state-independent mixture
+///
+/// ```text
+/// P = (1 − ρ) P_local + ρ P_bridge            ρ = bridge_probability
+/// ```
+///
+/// The uniform mixture draw is the only scheduling decision; both
+/// sub-kernels are reversible for the exact conditional target
+/// `pi_(s,E)`, so the mixture is exactly stationary (§11, §42).
+pub fn fixed_edge_step(
+    state: &mut StrengthState,
+    target: &StrengthTarget,
+    domain: &PairDomain,
+    rng: &mut impl Rng,
+    edge_target: usize,
+    config: &BridgeConfig,
+    counters: &mut FixedEdgeCounters,
+) {
+    counters.outer_proposals += 1;
+    if rng.random::<f64>() < config.bridge_probability {
+        counters.bridge_attempts += 1;
+        let outcome = bridge_step(state, target, domain, rng, edge_target, config);
+        counters.bridge_auxiliary_substeps += outcome.substeps as u64;
+        counters.bridge_auxiliary_accepted += outcome.accepted_substeps as u64;
+        if outcome.departed {
+            counters.bridge_departures += 1;
+        }
+        if outcome.success {
+            counters.bridge_successful_returns += 1;
+        } else if outcome.departed {
+            // Cap exhaustion restoring the origin: an exact self-loop.
+            counters.bridge_timeouts += 1;
+        }
+    } else {
+        match exact_e_local_step(state, target, domain, rng, edge_target) {
+            EdgeLocalOutcome::Accepted => counters.local_accepted += 1,
+            EdgeLocalOutcome::HeldInvalid => counters.local_held_invalid += 1,
+            EdgeLocalOutcome::HeldEdgeVeto => counters.local_held_edge_veto += 1,
+            EdgeLocalOutcome::Rejected => counters.local_mh_rejected += 1,
+        }
+    }
+}
+
+/// One fixed-(s,E) sweep (§18): `max(current occupied pairs, 2·N, 1)`
+/// outer proposals — the same sweep-size convention as the fixed-strength
+/// chain.
+pub fn fixed_edge_sweep(
+    state: &mut StrengthState,
+    target: &StrengthTarget,
+    domain: &PairDomain,
+    rng: &mut impl Rng,
+    edge_target: usize,
+    config: &BridgeConfig,
+    counters: &mut FixedEdgeCounters,
+) {
+    let per_sweep = state.occupied_count().max(2 * state.node_count).max(1);
+    for _ in 0..per_sweep {
+        fixed_edge_step(state, target, domain, rng, edge_target, config, counters);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Edge-target feasibility (§14)
 // ---------------------------------------------------------------------------
 
@@ -1094,5 +1160,100 @@ mod tests {
             }
         }
         assert!(successes > 0, "expected some successful bridges");
+    }
+
+    #[test]
+    fn mixed_kernel_connects_counterexample_empirically() {
+        // The §5 fiber, but through the production mixed kernel: running
+        // fixed_edge_step from A must reach B (local kernel alone is a
+        // pure self-loop here).
+        let n = 2;
+        let so = vec![2u64; 2];
+        let si = vec![2u64; 2];
+        let target = StrengthTarget::new(OccupationFamily::ME);
+        let domain = PairDomain::Complete {
+            node_count: n,
+            self_loops: true,
+        };
+        let config = BridgeConfig::default();
+        let mut rng = StdRng::seed_from_u64(21);
+        let mut counters = FixedEdgeCounters::default();
+        let mut state = StrengthState::new(n, vec![((0, 0), 2), ((1, 1), 2)]);
+        let mut landed_on_b = false;
+        for _ in 0..4000 {
+            fixed_edge_step(
+                &mut state,
+                &target,
+                &domain,
+                &mut rng,
+                2,
+                &config,
+                &mut counters,
+            );
+            assert_eq!(state.occupied_count(), 2);
+            assert_eq!(state.out_strengths, so);
+            assert_eq!(state.in_strengths, si);
+            if sorted_pairs(&state)
+                == sorted_pairs(&StrengthState::new(n, vec![((0, 1), 2), ((1, 0), 2)]))
+            {
+                landed_on_b = true;
+                break;
+            }
+        }
+        assert!(
+            landed_on_b,
+            "mixed kernel never reached B: counters={counters:?}"
+        );
+        assert!(
+            counters.bridge_successful_returns > 0,
+            "expected bridge returns, counters={counters:?}"
+        );
+    }
+
+    #[test]
+    fn mixed_sweep_preserves_invariants_and_moves() {
+        // ME N=2 s=[3,3] sl=true, E=4, started inside the fiber with all
+        // four cells occupied (in-fiber local moves exist).  A few sweeps
+        // must preserve strengths and the exact edge count and register
+        // local traffic.
+        let n = 2;
+        let so = vec![3u64; 2];
+        let si = vec![3u64; 2];
+        let start = vec![((0, 0), 2), ((1, 1), 2), ((0, 1), 1), ((1, 0), 1)];
+        let target = StrengthTarget::new(OccupationFamily::ME);
+        let domain = PairDomain::Complete {
+            node_count: n,
+            self_loops: true,
+        };
+        let config = BridgeConfig::default();
+        let mut rng = StdRng::seed_from_u64(5);
+        let mut counters = FixedEdgeCounters::default();
+        let mut state = StrengthState::new(n, start.clone());
+        for _ in 0..5 {
+            fixed_edge_sweep(
+                &mut state,
+                &target,
+                &domain,
+                &mut rng,
+                4,
+                &config,
+                &mut counters,
+            );
+        }
+        assert_eq!(state.occupied_count(), 4);
+        assert_eq!(state.out_strengths, so);
+        assert_eq!(state.in_strengths, si);
+        state.debug_validate();
+        assert!(counters.outer_proposals > 0);
+        assert_eq!(
+            counters.outer_proposals as usize,
+            5 * 4, // 5 sweeps × max(4, 4, 1)
+            "sweep size must be max(E, 2N, 1)"
+        );
+        assert!(
+            counters.local_accepted + counters.bridge_successful_returns > 0,
+            "no movement on a non-singleton connected fiber: {counters:?}"
+        );
+        let _ = start;
     }
 }
