@@ -203,6 +203,13 @@ pub struct FixedEdgeCounters {
     pub bridge_auxiliary_accepted: u64,
 }
 
+impl FixedEdgeCounters {
+    /// Zero all counters (e.g. to report sampling-only diagnostics).
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+}
+
 /// One bridge attempt (§10): a censored excursion of the exact reversible
 /// auxiliary chain, starting and ending in the exact-E fiber.
 ///
@@ -348,6 +355,7 @@ pub fn fixed_edge_step(
 /// One fixed-(s,E) sweep (§18): `max(current occupied pairs, 2·N, 1)`
 /// outer proposals — the same sweep-size convention as the fixed-strength
 /// chain.
+#[allow(clippy::too_many_arguments)]
 pub fn fixed_edge_sweep(
     state: &mut StrengthState,
     target: &StrengthTarget,
@@ -356,8 +364,10 @@ pub fn fixed_edge_sweep(
     edge_target: usize,
     config: &BridgeConfig,
     counters: &mut FixedEdgeCounters,
+    proposals_per_sweep: Option<usize>,
 ) {
-    let per_sweep = state.occupied_count().max(2 * state.node_count).max(1);
+    let per_sweep = proposals_per_sweep
+        .unwrap_or_else(|| state.occupied_count().max(2 * state.node_count).max(1));
     for _ in 0..per_sweep {
         fixed_edge_step(state, target, domain, rng, edge_target, config, counters);
     }
@@ -1238,6 +1248,7 @@ mod tests {
                 4,
                 &config,
                 &mut counters,
+                None,
             );
         }
         assert_eq!(state.occupied_count(), 4);
