@@ -22,11 +22,12 @@ See [Microcanonical sampling concepts](../concepts/microcanonical.md#pipeline) f
 | `EDGES_EVENTS` | Exact edge count + total events | Baseline null model with fixed density |
 | `DEGREE_EVENTS` | Exact out/in degree + total events | Preserve node activity heterogeneity |
 | `STRENGTH` | Exact out/in strength sequences | Weighted‑network analogue of Configuration Model |
+| `STRENGTH_EDGES` | Exact out/in strengths + exact occupied‑pair count | Strengths with controlled network density |
 | `STRENGTH_COST` | Exact strengths + target cost ≈ observed | Spatial or distance‑constrained mobility |
 
 !!! note "Deferred cases"
-    Fixed `(s,E)` and fixed `(s,k)` microcanonical constraints are not
-    currently implemented. See [`development/todos.md`](../development/todos.md).
+    Fixed `(s,k)` microcanonical constraints are not currently
+    implemented. See [`development/todos.md`](../development/todos.md).
 
 ## 0. Setup
 
@@ -82,7 +83,32 @@ net = sample_model(
 # out/in strengths are exactly preserved
 ```
 
-## 4. Fixed strengths + expected cost
+## 4. Fixed strengths + exact edge count (s, E)
+
+```python
+from menobis.models.spec import Constraint, Ensemble, ModelFamily
+from menobis.routing import sample_model
+
+net = sample_model(
+    ensemble=Ensemble.MICROCANONICAL,
+    family=ModelFamily.ME,
+    constraint=Constraint.STRENGTH_EDGES,
+    strength_out=np.array([3, 4, 2], dtype=np.uint64),
+    strength_in=np.array([4, 3, 2], dtype=np.uint64),
+    target_edges=4,        # exact occupied-pair count E
+    self_loops=True,
+    seed=42,
+)
+# len(net) == 4 and the out/in strengths are exactly preserved
+```
+
+`target_edges` counts pairs with `occ_num > 0` (not events): here the
+strengths sum to `T = 9` and all three rows/columns are positive, so the
+feasible values are `E ∈ {3, 4}`.  Pass `layers` for `B`/`W`.  This is an
+exact stationary MCMC; see
+[Fixed strengths + exact edge count](../concepts/fixed-strength-edges.md).
+
+## 5. Fixed strengths + expected cost
 
 ```python
 edges, diagnostics = sample_model_detailed(
@@ -122,6 +148,7 @@ sample = sample_model(
 |---|---|
 | `EDGES_EVENTS` | 0 ≤ E ≤ N(N−1), T ≥ E, B: T ≤ M·E |
 | `STRENGTH` | Σ s_out = Σ s_in; B: occupancy ≤ M layers |
+| `STRENGTH_EDGES` | Σ s_out = Σ s_in; E ≤ T; E ≤ admissible pairs; B: E ≥ ⌈T/M⌉ and row/col capacity bounds |
 | `STRENGTH_COST` | Must be cost‑identifiable (extreme targets may fail) |
 
 Chains have tunable `burn_in_sweeps` and `sweeps_per_sample`. Strength‑cost
