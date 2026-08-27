@@ -343,7 +343,6 @@ pub fn sample_fixed_strength_edges_bench(
             config.proposals_per_sweep,
         );
     }
-    counters.reset(); // sampling-only diagnostics
     for _ in 0..config.sweeps_per_sample.max(1) {
         fixed_edge_sweep(
             &mut state,

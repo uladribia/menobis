@@ -413,14 +413,9 @@ pub(crate) fn sample_fixed_strength_edges(
         .map(|((&s, &t), &o)| (s, t, o))
         .collect();
 
-    let problem = FixedStrengthProblem::new(
-        family_enum,
-        strength_out,
-        strength_in,
-        domain,
-        fixed_pairs,
-    )
-    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let problem =
+        FixedStrengthProblem::new(family_enum, strength_out, strength_in, domain, fixed_pairs)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
     let config = McmcConfig::new(burn_in_sweeps, sweeps_per_sample, seed);
     match core_sample(problem, target_edges, config, BridgeConfig::default()) {
