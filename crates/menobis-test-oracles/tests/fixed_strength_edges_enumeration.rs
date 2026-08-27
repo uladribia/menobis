@@ -296,6 +296,32 @@ fn mh_matrix(
     p
 }
 
+/// Connected components of the undirected graph induced by the transition
+/// matrix (edges where either direction has positive probability).  Used
+/// to identify genuine 4-cycle-kernel connectivity limits (§23).
+fn connected_components(matrix: &[Vec<f64>]) -> Vec<usize> {
+    let k = matrix.len();
+    let mut comp = vec![usize::MAX; k];
+    let mut next = 0usize;
+    for start in 0..k {
+        if comp[start] != usize::MAX {
+            continue;
+        }
+        let mut stack = vec![start];
+        comp[start] = next;
+        while let Some(u) = stack.pop() {
+            for v in 0..k {
+                if comp[v] == usize::MAX && (matrix[u][v] > 0.0 || matrix[v][u] > 0.0) {
+                    comp[v] = next;
+                    stack.push(v);
+                }
+            }
+        }
+        next += 1;
+    }
+    comp
+}
+
 /// Exact-E local kernel (§22.4): from the base matrix, any transition
 /// whose destination leaves the exact-`E` fiber collapses to the
 /// diagonal.
@@ -531,4 +557,163 @@ fn local_fixed_e_kernel_singleton_fiber_is_stationary() {
     assert_row_sums(&local, Some(&fiber));
     assert_pairwise_detailed_balance(&states, &local, &fiber, "§5 fiber");
     assert_stationarity(&states, &local, &fiber, "§5 fiber");
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: edge-repair feasibility oracle (§24.1)
+// ---------------------------------------------------------------------------
+
+/// §24.1: for every enumerated start state **in the same connected
+/// component** as the target fiber and every feasible edge target (derived
+/// from the enumeration itself), the biased initialization repair must
+/// reach the exact edge target preserving strengths, admissibility, and
+/// family capacity.
+///
+/// Disconnected components are genuine 4-cycle-kernel limitations (e.g.
+/// loopless perfect matchings, where every 4-cycle creates an
+/// inadmissible self-loop); the plan documents those (§23/§41) and the
+/// production orchestrator surfaces them as structured errors, so they
+/// are silently skipped here and counted for the report.
+#[test]
+fn edge_repair_reaches_every_feasible_tiny_target() {
+    use menobis_core::generation::microcanonical::occupation_mcmc::domain::PairDomain;
+    use menobis_core::generation::microcanonical::occupation_mcmc::fixed_edges::{
+        repair_to_edge_target, EdgeRepairConfig,
+    };
+    use menobis_core::generation::microcanonical::occupation_mcmc::problem::FixedStrengthProblem;
+    use menobis_core::generation::microcanonical::occupation_mcmc::state::StrengthState;
+    use rand::rngs::StdRng;
+    use rand::SeedableRng;
+
+    let cases: Vec<(OccupationFamily, Vec<OccNum>, Vec<OccNum>, bool)> = vec![
+        (OccupationFamily::ME, vec![2u64, 2], vec![2, 2], true),
+        (OccupationFamily::ME, vec![2u64, 2], vec![2, 2], false),
+        (OccupationFamily::ME, vec![3u64, 1], vec![1, 3], true),
+        (OccupationFamily::ME, vec![2u64; 3], vec![2; 3], true),
+        (OccupationFamily::ME, vec![2u64; 3], vec![2; 3], false),
+        (OccupationFamily::ME, vec![3u64, 2, 1], vec![1, 2, 3], true),
+        (
+            OccupationFamily::B { layers: 2 },
+            vec![2u64, 2],
+            vec![2, 2],
+            true,
+        ),
+        (
+            OccupationFamily::B { layers: 3 },
+            vec![3u64, 3, 3],
+            vec![3, 3, 3],
+            true,
+        ),
+        (
+            OccupationFamily::W { layers: 1 },
+            vec![2u64, 2],
+            vec![2, 2],
+            true,
+        ),
+        (
+            OccupationFamily::W { layers: 2 },
+            vec![3u64; 3],
+            vec![3; 3],
+            true,
+        ),
+    ];
+
+    let mut repaired_pairs = 0usize;
+    let mut skipped_disconnected = 0usize;
+
+    for (family, so, si, sl) in cases {
+        let states = enumerate_fiber(family, &so, &si, sl);
+        assert!(!states.is_empty(), "empty fiber for {family:?}");
+        let mut edges: Vec<usize> = states.iter().map(|(s, _)| s.len()).collect();
+        edges.sort_unstable();
+        edges.dedup();
+
+        let n = so.len();
+        let domain = PairDomain::Complete {
+            node_count: n,
+            self_loops: sl,
+        };
+        let problem = FixedStrengthProblem::new(family, so.clone(), si.clone(), domain, vec![])
+            .unwrap()
+            .into_residual()
+            .unwrap();
+
+        // Connected components of the ordinary fixed-strength chain under
+        // the 4-cycle proposal (positive probability in either direction).
+        let base = mh_matrix(&states, n, family, sl);
+        let comp = connected_components(&base);
+        let k = states.len();
+
+        for &e in &edges {
+            // Components that contain at least one exact-E target state.
+            let target_comps: std::collections::HashSet<usize> = (0..k)
+                .filter(|&i| states[i].0.len() == e)
+                .map(|i| comp[i])
+                .collect();
+            for (start_idx, (start_state, _)) in states.iter().enumerate() {
+                if !target_comps.contains(&comp[start_idx]) {
+                    // Genuinely disconnected under the 4-cycle kernel
+                    // (e.g. loopless perfect matching components).
+                    skipped_disconnected += 1;
+                    continue;
+                }
+                let mut rng = StdRng::seed_from_u64(42 + start_idx as u64 * 7919);
+                let mut state = StrengthState::new(n, start_state.clone());
+                repair_to_edge_target(
+                    &mut state,
+                    &problem,
+                    &mut rng,
+                    e,
+                    &EdgeRepairConfig::default(),
+                )
+                .unwrap_or_else(|err| {
+                    panic!(
+                        "repair failed: {family:?} sl={sl} start={start_state:?} target E={e}: {err}"
+                    )
+                });
+                repaired_pairs += 1;
+                assert_eq!(
+                    state.occupied_count(),
+                    e,
+                    "{family:?} sl={sl} start={start_state:?} target E={e}"
+                );
+                // Exact strengths.
+                let (mut co, mut ci) = (vec![0u64; n], vec![0u64; n]);
+                for ((s, t), o) in state.iter_occupied() {
+                    co[s as usize] += o;
+                    ci[t as usize] += o;
+                }
+                assert_eq!(
+                    co, so,
+                    "{family:?} sl={sl} target E={e}: out-strength drift"
+                );
+                assert_eq!(ci, si, "{family:?} sl={sl} target E={e}: in-strength drift");
+                // Domain validity.
+                for ((s, t), _) in state.iter_occupied() {
+                    assert!(
+                        problem.domain.is_admissible(s, t),
+                        "{family:?} sl={sl} target E={e}: inadmissible pair ({s},{t})"
+                    );
+                }
+                // Family capacity.
+                if let OccupationFamily::B { layers } = family {
+                    for (_, o) in state.iter_occupied() {
+                        assert!(
+                            o <= layers as OccNum,
+                            "{family:?} sl={sl} target E={e}: B occupation {o} > M={layers}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    assert!(
+        repaired_pairs > 0,
+        "no (start, target) pair was repaired; the grid is vacuous"
+    );
+    eprintln!(
+        "[edge-repair oracle] repaired {repaired_pairs} (start, target) pairs; \
+         {skipped_disconnected} pairs skipped across disconnected components"
+    );
 }

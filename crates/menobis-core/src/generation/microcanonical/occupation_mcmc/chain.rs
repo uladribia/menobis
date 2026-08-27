@@ -187,7 +187,9 @@ fn init_state(
 /// Apply all repair phases to a state.
 ///
 /// Returns `(total_repair_steps, repair_restarts, occupied_pairs)`.
-fn repair_state(
+/// Exposed to sibling modules so the fixed-(s,E) edge repair can
+/// reconstruct fresh states exactly as the fixed-strength pipeline does.
+pub(crate) fn repair_state(
     state: &mut StrengthState,
     problem: &ResidualStrengthProblem,
     rng: &mut impl Rng,

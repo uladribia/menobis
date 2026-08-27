@@ -27,16 +27,21 @@
 
 use rand::Rng;
 
+use super::chain::repair_state;
 use super::domain::PairDomain;
+use super::errors::FixedStrengthError;
+use super::initializer::initialize_table;
 use super::move_cycle::{draw_cycle4_proposal, log_alpha_with_extra, metropolis_accept};
+use super::problem::ResidualStrengthProblem;
 use super::state::StrengthState;
 use super::target::StrengthTarget;
+use crate::model::family::OccupationFamily;
+use crate::OccNum;
 
 /// Outcome of one exact-E local step, distinguishing the edge-count veto
 /// from ordinary holds for mobility diagnostics (§20).
-#[allow(dead_code)] // production sweep consumes this in a later phase
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum EdgeLocalOutcome {
+pub enum EdgeLocalOutcome {
     /// The in-fiber proposal was applied.
     Accepted,
     /// Proposal invalid at the family/domain/capacity level.
@@ -53,8 +58,7 @@ pub(crate) enum EdgeLocalOutcome {
 /// the occupied-pair count away from `edge_target`; otherwise evaluates
 /// the ordinary fixed-strength acceptance (`extra_log_weight = 0`).
 /// Fixed-E logic lives here, never inside [`StrengthTarget`] (§12.3).
-#[allow(dead_code)] // production sweep consumes this in a later phase
-pub(crate) fn exact_e_local_step(
+pub fn exact_e_local_step(
     state: &mut StrengthState,
     target: &StrengthTarget,
     domain: &PairDomain,
@@ -75,6 +79,301 @@ pub(crate) fn exact_e_local_step(
     }
     proposal.apply(state);
     EdgeLocalOutcome::Accepted
+}
+
+// ---------------------------------------------------------------------------
+// Edge-target feasibility (§14)
+// ---------------------------------------------------------------------------
+
+/// Internal edge-repair tuning knobs (§13.3).  Safety limits only, not
+/// correctness constants; kept out of the public API.
+#[derive(Clone, Copy, Debug)]
+pub struct EdgeRepairConfig {
+    /// Maximum rectangle-repair steps per reconstruction restart.
+    pub max_steps_per_restart: u64,
+    /// Maximum reconstruction restarts before giving up.
+    pub max_restarts: u32,
+}
+
+impl Default for EdgeRepairConfig {
+    fn default() -> Self {
+        Self {
+            max_steps_per_restart: 1_000_000,
+            max_restarts: 5,
+        }
+    }
+}
+
+/// Result summary of a successful (or best-effort) edge repair.
+#[derive(Clone, Copy, Debug)]
+pub struct EdgeRepairOutcome {
+    /// Total repair steps used across all restarts.
+    pub steps: u64,
+    /// Reconstruction restarts performed (0 = first attempt).
+    pub restarts: u32,
+    /// Occupied-pair count of the first constructed state.
+    pub initial_edges: usize,
+    /// Best occupied-pair count reached.
+    pub best_edges: usize,
+    /// Absolute distance `|best − target|` of the best state.
+    pub best_distance: usize,
+}
+
+/// Validate the residual edge target against necessary feasibility bounds
+/// (§14).  These are necessary conditions only — a target passing them
+/// may still be infeasible for sparse structural-zero domains, in which
+/// case the repair exhausts with [`EdgeRepairExhausted`] instead of
+/// [`InvalidEdgeTarget`](FixedStrengthError::InvalidEdgeTarget).
+///
+/// With `T = Σ residual strengths` and `A = admissible pair count`:
+///
+/// - `T == 0 ⇒ E_target == 0`;
+/// - `T > 0 ⇒ E_target ≥ 1`;
+/// - `E_target ≤ T` (every occupied pair carries at least one event);
+/// - `E_target ≤ A` (cannot occupy more coordinates than exist);
+/// - B: `E_target ≥ ceil(T/M)` and `E_target ≥ Σ_rows ceil(s/M)` and
+///   the column analogue;
+/// - ME/W: `E_target ≥` number of positive-strength rows/columns.
+pub fn validate_edge_target(
+    residual: &ResidualStrengthProblem,
+    target_edges: usize,
+) -> Result<(), FixedStrengthError> {
+    let t: OccNum = residual.total;
+    let a: usize = residual.domain.admissible_pair_count();
+    let e = target_edges;
+
+    if t == 0 {
+        if e != 0 {
+            return Err(FixedStrengthError::InvalidEdgeTarget(format!(
+                "total occupation is 0, edge target must be 0, got {e}"
+            )));
+        }
+        return Ok(());
+    }
+
+    if e == 0 {
+        return Err(FixedStrengthError::InvalidEdgeTarget(format!(
+            "edge target {e} must be at least 1 when total occupation {t} > 0"
+        )));
+    }
+    if e > t as usize {
+        return Err(FixedStrengthError::InvalidEdgeTarget(format!(
+            "edge target {e} exceeds total occupation {t}"
+        )));
+    }
+    if e > a {
+        return Err(FixedStrengthError::InvalidEdgeTarget(format!(
+            "edge target {e} exceeds admissible pairs {a}"
+        )));
+    }
+
+    match residual.family {
+        OccupationFamily::B { layers } => {
+            let m = layers as OccNum;
+            // Each occupied pair carries at most M events.
+            let min_m = (t as f64 / m as f64).ceil() as usize;
+            if e < min_m {
+                return Err(FixedStrengthError::InvalidEdgeTarget(format!(
+                    "edge target {e} below required minimum {min_m} (B capacity M={layers}, total {t})"
+                )));
+            }
+            // Each row/column occupied coordinate carries at most M events.
+            let min_rows: OccNum = residual.strength_out.iter().map(|&s| s.div_ceil(m)).sum();
+            if e < min_rows as usize {
+                return Err(FixedStrengthError::InvalidEdgeTarget(format!(
+                    "edge target {e} below required minimum {min_rows} (out-strength capacity M={layers})"
+                )));
+            }
+            let min_cols: OccNum = residual.strength_in.iter().map(|&s| s.div_ceil(m)).sum();
+            if e < min_cols as usize {
+                return Err(FixedStrengthError::InvalidEdgeTarget(format!(
+                    "edge target {e} below required minimum {min_cols} (in-strength capacity M={layers})"
+                )));
+            }
+        }
+        _ => {
+            // ME / W: every positive-strength row/column needs at least
+            // one occupied pair.
+            let min_nodes = residual
+                .strength_out
+                .iter()
+                .filter(|&&s| s > 0)
+                .count()
+                .max(residual.strength_in.iter().filter(|&&s| s > 0).count());
+            if e < min_nodes {
+                return Err(FixedStrengthError::InvalidEdgeTarget(format!(
+                    "edge target {e} below required minimum {min_nodes} (positive node rows/columns)"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Residual edge target: `E_residual = E_full − E_fixed`, where
+/// `E_fixed` is the number of **unique** fixed coordinates with positive
+/// occupation (§16).  Zero-occupation fixed pairs contribute 0 but still
+/// exclude their coordinate from the residual domain (§3).
+///
+/// Precondition: duplicate fixed coordinates must already have been
+/// rejected (see [`FixedStrengthProblem::into_residual`](
+/// super::problem::FixedStrengthProblem::into_residual)).  The unique
+/// count is computed defensively regardless.
+//
+// # Errors
+//
+// - [`InvalidEdgeTarget`](FixedStrengthError::InvalidEdgeTarget) if
+//   `E_full < E_fixed`.
+pub fn residual_edge_target(
+    full_target: usize,
+    fixed_pairs: &[(u64, u64, OccNum)],
+) -> Result<usize, FixedStrengthError> {
+    let mut seen = std::collections::HashSet::with_capacity(fixed_pairs.len());
+    let mut fixed_positive = 0usize;
+    for &(src, tgt, occ) in fixed_pairs {
+        if occ > 0 && seen.insert((src, tgt)) {
+            fixed_positive += 1;
+        }
+    }
+    if full_target < fixed_positive {
+        return Err(FixedStrengthError::InvalidEdgeTarget(format!(
+            "edge target {full_target} is below the {fixed_positive} positive fixed pairs"
+        )));
+    }
+    Ok(full_target - fixed_positive)
+}
+
+// ---------------------------------------------------------------------------
+// Edge-count initialization repair (§13)
+// ---------------------------------------------------------------------------
+
+/// Fresh randomized fixed-strength state: compressed construction + the
+/// same structural repair phases as the fixed-strength pipeline.
+///
+/// Each call continues from the caller's RNG stream, so reconstruction
+/// restarts produce different states (§13.4).
+pub fn edge_repair_rebuild(
+    problem: &ResidualStrengthProblem,
+    rng: &mut impl Rng,
+) -> Result<StrengthState, FixedStrengthError> {
+    let table = initialize_table(
+        &problem.strength_out,
+        &problem.strength_in,
+        problem.family,
+        &problem.domain,
+        rng,
+    )?;
+    let mut state = StrengthState::new(problem.domain.node_count(), table);
+    let (_, _, _) = repair_state(&mut state, problem, rng)?;
+    Ok(state)
+}
+
+/// Bring a state to the exact residual edge count using the **biased**
+/// initialization-only acceptance rule (§13.2):
+///
+/// ```text
+/// d_old = |occupied_before − E_target|
+/// d_new = |occupied_after  − E_target|
+///
+/// if d_new < d_old:                     accept
+/// else if d_new == d_old:                accept with probability 0.10
+/// else:                                  accept with probability exp(−2·(d_new−d_old))
+/// ```
+///
+/// The proposal law is exactly the shared fixed-direction cycle candidate
+/// (no separate rectangle selection, §13.1).  This phase only needs to
+/// find *one* feasible exact-`E` start; it is never part of the
+/// stationary sampler (§4, §41).
+///
+/// On exhaustion of a restart budget, the state is discarded, a fresh
+/// randomized fixed-strength state is reconstructed (structural repair
+/// included), and the repair retries (§13.3).  If every restart fails,
+/// an [`EdgeRepairExhausted`](FixedStrengthError::EdgeRepairExhausted)
+/// error is returned with best/target E and restart/step diagnostics.
+pub fn repair_to_edge_target(
+    state: &mut StrengthState,
+    problem: &ResidualStrengthProblem,
+    rng: &mut impl Rng,
+    edge_target: usize,
+    config: &EdgeRepairConfig,
+) -> Result<EdgeRepairOutcome, FixedStrengthError> {
+    let target = &StrengthTarget::new(problem.family);
+    let domain = &problem.domain;
+
+    let initial_edges = state.occupied_count();
+    let mut best_edges = initial_edges;
+    let mut best_distance = initial_edges.abs_diff(edge_target);
+    let mut total_steps: u64 = 0;
+
+    for restart in 0..config.max_restarts {
+        if restart > 0 {
+            // Discard and reconstruct from the same RNG stream.
+            *state = edge_repair_rebuild(problem, rng)?;
+        }
+
+        let mut steps: u64 = 0;
+        loop {
+            if state.occupied_count() == edge_target {
+                if best_distance != 0 {
+                    best_edges = edge_target;
+                    best_distance = 0;
+                }
+                return Ok(EdgeRepairOutcome {
+                    steps: total_steps,
+                    restarts: restart,
+                    initial_edges,
+                    best_edges,
+                    best_distance,
+                });
+            }
+            if steps >= config.max_steps_per_restart {
+                break;
+            }
+
+            let Some(proposal) = draw_cycle4_proposal(state, target, domain, rng) else {
+                // Structurally invalid proposal: no move; keep trying.
+                steps += 1;
+                total_steps += 1;
+                continue;
+            };
+            steps += 1;
+            total_steps += 1;
+
+            // Track the best state reached (for structured diagnostics).
+            let d_cur = state.occupied_count().abs_diff(edge_target);
+            if d_cur < best_distance {
+                best_distance = d_cur;
+                best_edges = state.occupied_count();
+            }
+
+            let d_old = proposal.occupied_before.abs_diff(edge_target);
+            let d_new = proposal.occupied_after.abs_diff(edge_target);
+
+            let accept = if d_new < d_old {
+                true
+            } else if d_new == d_old {
+                rng.random::<f64>() < 0.10
+            } else {
+                rng.random::<f64>() < (-2.0 * (d_new - d_old) as f64).exp()
+            };
+            if accept {
+                proposal.apply(state);
+                let d_after = state.occupied_count().abs_diff(edge_target);
+                if d_after < best_distance {
+                    best_distance = d_after;
+                    best_edges = state.occupied_count();
+                }
+            }
+        }
+    }
+
+    Err(FixedStrengthError::EdgeRepairExhausted {
+        best_edges,
+        target_edges: edge_target,
+        best_distance,
+        restarts: config.max_restarts,
+        total_steps,
+    })
 }
 
 #[cfg(test)]
@@ -196,5 +495,268 @@ mod tests {
         };
 
         assert_eq!(run(42), run(42), "same seed must reproduce the walk");
+    }
+
+    // -------------------------------------------------------------------
+    // Phase 5: edge-target validation + initialization repair
+    // -------------------------------------------------------------------
+
+    fn make_problem(
+        family: OccupationFamily,
+        so: Vec<OccNum>,
+        si: Vec<OccNum>,
+        sl: bool,
+    ) -> ResidualStrengthProblem {
+        let domain = PairDomain::Complete {
+            node_count: so.len(),
+            self_loops: sl,
+        };
+        crate::generation::microcanonical::occupation_mcmc::problem::FixedStrengthProblem::new(
+            family,
+            so,
+            si,
+            domain,
+            vec![],
+        )
+        .unwrap()
+        .into_residual()
+        .unwrap()
+    }
+
+    fn sorted_pairs(state: &StrengthState) -> Vec<((u64, u64), OccNum)> {
+        let mut pairs: Vec<_> = state.iter_occupied().collect();
+        pairs.sort_unstable();
+        pairs
+    }
+
+    #[test]
+    fn validate_edge_target_enforces_bounds() {
+        // E > T: strengths [4;4], T=16.
+        let problem = make_problem(
+            OccupationFamily::ME,
+            vec![4, 4, 4, 4],
+            vec![4, 4, 4, 4],
+            true,
+        );
+        assert!(matches!(
+            validate_edge_target(&problem, 17),
+            Err(FixedStrengthError::InvalidEdgeTarget(msg)) if msg.contains("exceeds total occupation")
+        ));
+        assert!(validate_edge_target(&problem, 16).is_ok());
+
+        // E == 0 with T > 0.
+        assert!(matches!(
+            validate_edge_target(&problem, 0),
+            Err(FixedStrengthError::InvalidEdgeTarget(msg)) if msg.contains("at least 1")
+        ));
+
+        // T == 0 ⇒ E == 0.
+        let zero = make_problem(OccupationFamily::ME, vec![0, 0], vec![0, 0], true);
+        assert!(validate_edge_target(&zero, 0).is_ok());
+        assert!(matches!(
+            validate_edge_target(&zero, 1),
+            Err(FixedStrengthError::InvalidEdgeTarget(_))
+        ));
+
+        // E > A: ME N=2 s=[3,3], T=6, A=4 → E=5 passes E ≤ T but fails E ≤ A.
+        let problem = make_problem(OccupationFamily::ME, vec![3, 3], vec![3, 3], true);
+        assert!(matches!(
+            validate_edge_target(&problem, 5),
+            Err(FixedStrengthError::InvalidEdgeTarget(msg)) if msg.contains("exceeds admissible pairs")
+        ));
+        assert!(validate_edge_target(&problem, 4).is_ok());
+
+        // B capacity: M=2, strengths [4;4], T=16 → min ceil(16/2)=8.
+        let b = make_problem(
+            OccupationFamily::B { layers: 2 },
+            vec![4, 4, 4, 4],
+            vec![4, 4, 4, 4],
+            true,
+        );
+        assert!(matches!(
+            validate_edge_target(&b, 7),
+            Err(FixedStrengthError::InvalidEdgeTarget(msg)) if msg.contains("required minimum")
+        ));
+        assert!(validate_edge_target(&b, 8).is_ok());
+
+        // B row bound dominates: M=2, strengths [5,1,1,1] → rows ⌈5/2⌉=3+1+1+1=6.
+        let b = make_problem(
+            OccupationFamily::B { layers: 2 },
+            vec![5, 1, 1, 1],
+            vec![1, 1, 1, 5],
+            true,
+        );
+        assert!(matches!(
+            validate_edge_target(&b, 5),
+            Err(FixedStrengthError::InvalidEdgeTarget(msg)) if msg.contains("required minimum")
+        ));
+        assert!(validate_edge_target(&b, 6).is_ok());
+
+        // ME positive rows/columns bound: strengths [2,2,2] → min 3.
+        let me = make_problem(OccupationFamily::ME, vec![2, 2, 2], vec![2, 2, 2], true);
+        assert!(matches!(
+            validate_edge_target(&me, 2),
+            Err(FixedStrengthError::InvalidEdgeTarget(msg)) if msg.contains("required minimum")
+        ));
+        assert!(validate_edge_target(&me, 3).is_ok());
+    }
+
+    #[test]
+    fn residual_edge_target_subtracts_positive_fixed() {
+        // Two unique positive fixed pairs and one zero pair: E_res = E_full − 2.
+        let fixed = vec![(0, 1, 3), (1, 0, 0), (2, 2, 5)];
+        assert_eq!(residual_edge_target(10, &fixed).unwrap(), 8);
+        // Duplicates are counted once (defensive; upstream rejects them).
+        let dup = vec![(0, 1, 3), (0, 1, 4)];
+        assert_eq!(residual_edge_target(5, &dup).unwrap(), 4);
+        // E_full below fixed positive count.
+        assert!(matches!(
+            residual_edge_target(1, &fixed),
+            Err(FixedStrengthError::InvalidEdgeTarget(_))
+        ));
+    }
+
+    #[test]
+    fn repair_reaches_exact_e_on_known_feasible_fibers() {
+        type RepairCase = (OccupationFamily, Vec<OccNum>, Vec<OccNum>, bool, Vec<usize>);
+        // Feasible E values proven by explicit constructions:
+        // - ME N=2 sl s=2: E=2 {(0,0)=2,(1,1)=2}; E=4 all-ones.
+        // - ME N=2 loopless s=2: the only state is the cross matching, E=2.
+        // - ME N=2 sl s=[3,1]/[1,3]: E=2 {(0,1)=3,(1,0)=1}; E=3 {(0,0)=1,(0,1)=2,(1,1)=1}.
+        // - W M=1, B M=2: same N=2 topologies as ME.
+        let cases: Vec<RepairCase> = vec![
+            (
+                OccupationFamily::ME,
+                vec![2, 2],
+                vec![2, 2],
+                true,
+                vec![2, 4],
+            ),
+            (OccupationFamily::ME, vec![2, 2], vec![2, 2], false, vec![2]),
+            (
+                OccupationFamily::ME,
+                vec![3, 1],
+                vec![1, 3],
+                true,
+                vec![2, 3],
+            ),
+            (
+                OccupationFamily::W { layers: 1 },
+                vec![2, 2],
+                vec![2, 2],
+                true,
+                vec![2, 4],
+            ),
+            (
+                OccupationFamily::B { layers: 2 },
+                vec![2, 2],
+                vec![2, 2],
+                true,
+                vec![2, 4],
+            ),
+        ];
+        for (family, so, si, sl, feasible) in cases {
+            let problem = make_problem(family, so.clone(), si.clone(), sl);
+            for e in feasible {
+                let mut rng = StdRng::seed_from_u64(42);
+                let mut state = edge_repair_rebuild(&problem, &mut rng).unwrap();
+                let outcome = repair_to_edge_target(
+                    &mut state,
+                    &problem,
+                    &mut rng,
+                    e,
+                    &EdgeRepairConfig::default(),
+                )
+                .unwrap();
+                assert_eq!(state.occupied_count(), e, "{family:?} sl={sl} E={e}");
+                assert_eq!(state.out_strengths, so, "out-strengths changed");
+                assert_eq!(state.in_strengths, si, "in-strengths changed");
+                assert_eq!(outcome.best_distance, 0);
+                state.debug_validate();
+            }
+        }
+    }
+
+    #[test]
+    fn repair_infeasible_target_exhausts_with_structured_error() {
+        // ME N=2 s=[2,2]: feasible E ∈ {2,4}; E=3 passes the necessary
+        // bounds (3 ≤ T=4, 3 ≤ A=4, ≥ 2 positive rows) but is infeasible.
+        let problem = make_problem(OccupationFamily::ME, vec![2, 2], vec![2, 2], true);
+        validate_edge_target(&problem, 3).unwrap();
+
+        let mut rng = StdRng::seed_from_u64(42);
+        let mut state = edge_repair_rebuild(&problem, &mut rng).unwrap();
+        let config = EdgeRepairConfig {
+            max_steps_per_restart: 40,
+            max_restarts: 2,
+        };
+        match repair_to_edge_target(&mut state, &problem, &mut rng, 3, &config) {
+            Err(FixedStrengthError::EdgeRepairExhausted {
+                best_edges,
+                target_edges,
+                best_distance,
+                restarts,
+                total_steps,
+            }) => {
+                assert_eq!(target_edges, 3);
+                assert_eq!(restarts, 2);
+                assert!(
+                    best_edges == 2 || best_edges == 4,
+                    "best_edges {best_edges}"
+                );
+                assert!(best_distance >= 1);
+                assert!(total_steps > 0);
+            }
+            other => panic!("expected EdgeRepairExhausted, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn repair_reproducible_by_seed() {
+        let run = |seed: u64| -> Vec<((u64, u64), OccNum)> {
+            let problem = make_problem(
+                OccupationFamily::ME,
+                vec![3, 3, 3, 3],
+                vec![3, 3, 3, 3],
+                true,
+            );
+            let mut rng = StdRng::seed_from_u64(seed);
+            let mut state = edge_repair_rebuild(&problem, &mut rng).unwrap();
+            repair_to_edge_target(
+                &mut state,
+                &problem,
+                &mut rng,
+                6,
+                &EdgeRepairConfig::default(),
+            )
+            .unwrap();
+            assert_eq!(state.occupied_count(), 6);
+            sorted_pairs(&state)
+        };
+        assert_eq!(run(1), run(1), "same seed must reproduce the repair");
+    }
+
+    #[test]
+    fn repair_rebuild_restarts_differ_on_same_stream() {
+        // Repeated reconstruction from one RNG stream must produce
+        // different initial states (§13.4: restarts reconstruct
+        // differently), while staying reproducible per seed.
+        let problem = make_problem(
+            OccupationFamily::ME,
+            vec![7, 5, 3, 9, 2],
+            vec![4, 8, 6, 3, 5],
+            true,
+        );
+        let mut rng = StdRng::seed_from_u64(42);
+        let mut distinct = std::collections::HashSet::new();
+        for _ in 0..8 {
+            let state = edge_repair_rebuild(&problem, &mut rng).unwrap();
+            distinct.insert(sorted_pairs(&state));
+        }
+        assert!(
+            distinct.len() > 1,
+            "restarts from the same stream should produce distinct states, got {}",
+            distinct.len()
+        );
     }
 }
