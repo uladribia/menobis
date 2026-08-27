@@ -5,47 +5,22 @@
 //! A Metropolis–Hastings correction (§23) accounts for the state-dependent
 //! proposal probability.
 //!
-//! # Proposal (spec §22, fixed direction)
+//! # Structure (§12)
 //!
-//! 1. Select `P1 = (a,b)` uniformly from the occupied pairs.
-//! 2. Select `P2 = (c,d)` from the remaining occupied pairs by rejection
-//!    sampling, rejecting if `src == a` or `tgt == b`.
-//! 3. Apply fixed-direction deltas:
+//! The kernel is factored into three reusable pieces sharing one proposal
+//! record (§12.1–12.3):
 //!
-//!    \[
-//!    \begin{aligned}
-//!    t_{ab} &\to t_{ab} - 1,\\
-//!    t_{cd} &\to t_{cd} - 1,\\
-//!    t_{ad} &\to t_{ad} + 1,\\
-//!    t_{cb} &\to t_{cb} + 1.
-//!    \end{aligned}
-//!    \]
+//! 1. [`draw_cycle4_proposal`] — draws a proposal under exactly the
+//!    original selection law (no allocation, fixed-size proposal record).
+//! 2. [`log_alpha_with_extra`] — one shared Metropolis log-ratio evaluator
+//!    (`Δlog π + log q_reverse − log q_forward + extra_log_weight`).
+//! 3. [`metropolis_accept`] — the acceptance decision.
 //!
-//! Every source and target strength is preserved exactly (each row and
-//! column receives one \(-1\) and one \(+1\)).
-//!
-//! # Hastings correction (§23)
-//!
-//! The occupied-cell selection is state-dependent, so the proposal is
-//! *not* symmetric.  We compute the exact log-ratio:
-//!
-//! \[
-//! \Delta\log A = \Delta\log D_F - \gamma\Delta C
-//!     + \log q(\mathbf t'\to\mathbf t) - \log q(\mathbf t\to\mathbf t')
-//! \]
-//!
-//! where \(\Delta\log D_F - \gamma\Delta C\) is obtained from
-//! [`StrengthTarget::delta_log_weight`] (reused — no family formulas
-//! duplicated here, §23) and the proposal probabilities use the maintained
-//! `row_occ_count`/`col_occ_count` for \(O(1)\) computation (§24).
-//!
-//! # Hot path
-//!
-//! - **No heap allocation** (§24): four-cell delta array on the stack,
-//!   \(O(1)\) selection and Hastings computation via maintained counts.
-//! - The decrement cells are *guaranteed occupied* by construction, so the
-//!   structural-validity rate is much higher than the old uniform-coordinate
-//!   kernel on sparse states (§22 motivation).
+//! [`occupied_cycle4_step`] composes the three with `extra_log_weight = 0`
+//! and is behaviorally identical to the pre-refactor kernel (same proposal
+//! law, same acceptance, same RNG consumption).  The exact-E local kernel,
+//! the auxiliary edge-biased bridge, and the edge initialization repair
+//! reuse the same machinery in later modules.
 
 use rand::Rng;
 
@@ -54,38 +29,128 @@ use super::rectangle::{build_four_cell, validate_four_cell};
 use super::state::StrengthState;
 use super::target::StrengthTarget;
 use crate::generation::microcanonical::mcmc::McmcOutcome;
+use crate::OccNum;
 
-/// Perform one occupied-cell 4-cycle MCMC step (allocation-free).
+/// A single occupied-cell 4-cycle proposal, fully precomputed on the stack.
 ///
-/// Returns [`McmcOutcome::Held`] if fewer than 2 occupied pairs exist or
-/// no valid second pair exists for the drawn first pair (`v_ab <= 0`).
-pub fn occupied_cycle4_step(
-    state: &mut StrengthState,
+/// Carries the four cell occupations before/after, the occupied-pair
+/// counts before/after, and the exact forward/reverse proposal
+/// log-probabilities under the `master` selection law (§12.1).  No heap
+/// allocation — the record is `Copy`.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Cycle4Proposal {
+    /// First decrement cell `(a, b)`.
+    pub a: u64,
+    /// First decrement cell `(a, b)`.
+    pub b: u64,
+    /// Second decrement cell `(c, d)`.
+    pub c: u64,
+    /// Second decrement cell `(c, d)`.
+    pub d: u64,
+
+    /// Old occupation of `(a, b)`.
+    pub old_ab: OccNum,
+    /// Old occupation of `(c, d)`.
+    pub old_cd: OccNum,
+    /// Old occupation of `(a, d)`.
+    pub old_ad: OccNum,
+    /// Old occupation of `(c, b)`.
+    pub old_cb: OccNum,
+
+    /// New occupation of `(a, b)`.
+    pub new_ab: OccNum,
+    /// New occupation of `(c, d)`.
+    pub new_cd: OccNum,
+    /// New occupation of `(a, d)`.
+    pub new_ad: OccNum,
+    /// New occupation of `(c, b)`.
+    pub new_cb: OccNum,
+
+    /// Occupied-pair count of the current state.
+    #[allow(dead_code)] // consumed by the exact-E veto and repair phases
+    pub occupied_before: usize,
+    /// Occupied-pair count of the proposed state.
+    #[allow(dead_code)] // consumed by the exact-E veto and repair phases
+    pub occupied_after: usize,
+
+    /// `log q(x → y)` under the exact `master` selection law.
+    pub log_q_forward: f64,
+    /// `log q(y → x)` under the exact `master` selection law.
+    pub log_q_reverse: f64,
+}
+
+impl Cycle4Proposal {
+    /// Change in the occupied-pair count: `occupied_after − occupied_before`.
+    #[inline]
+    #[allow(dead_code)] // consumed by the exact-E veto and repair phases
+    pub fn delta_edges(&self) -> i64 {
+        self.occupied_after as i64 - self.occupied_before as i64
+    }
+
+    /// Apply the four cell updates to `state`.
+    pub fn apply(&self, state: &mut StrengthState) {
+        state.set(self.a, self.b, self.new_ab);
+        state.set(self.c, self.d, self.new_cd);
+        state.set(self.a, self.d, self.new_ad);
+        state.set(self.c, self.b, self.new_cb);
+    }
+
+    /// Undo the proposal: restore the four old occupations exactly via
+    /// [`StrengthState::set`].
+    #[allow(dead_code)] // consumed by the bridge undo path
+    pub fn undo(&self, state: &mut StrengthState) {
+        state.set(self.a, self.b, self.old_ab);
+        state.set(self.c, self.d, self.old_cd);
+        state.set(self.a, self.d, self.old_ad);
+        state.set(self.c, self.b, self.old_cb);
+    }
+}
+
+/// Draw a 4-cycle proposal under the exact `master` selection law (§12.2).
+///
+/// 1. chooses the first occupied cell uniformly;
+/// 2. computes the valid-partner count `v_ab`;
+/// 3. chooses the second occupied cell with the existing unbounded
+///    rejection logic;
+/// 4. uses the fixed direction (decrement `(a,b)`, `(c,d)`; increment
+///    `(a,d)`, `(c,b)`);
+/// 5. validates the rectangle through the shared [`validate_four_cell`];
+/// 6. computes proposed occupations, `occupied_after`, and the exact
+///    forward/reverse proposal log-probabilities.
+///
+/// Returns `None` whenever the original step would have returned
+/// `Held` before the acceptance phase; callers map `None` to `Held`.
+///
+/// No random orientation, no bounded partner rejection, no candidate
+/// vectors, no allocation.  Here `draw` never consumes RNG beyond the
+/// original law, so composing it with the evaluator leaves the RNG
+/// stream identical to the pre-refactor kernel.
+pub(crate) fn draw_cycle4_proposal(
+    state: &StrengthState,
     target: &StrengthTarget,
     domain: &PairDomain,
     rng: &mut impl Rng,
-) -> McmcOutcome {
+) -> Option<Cycle4Proposal> {
     let m = state.occupied_count();
     if m < 2 {
-        return McmcOutcome::Held;
+        return None;
     }
+
     // ---- 1. Select P1 = (a,b) uniformly from occupied pairs ----
     let a_idx = rng.random_range(0..m);
     let (a, b) = state.occupied_pairs()[a_idx];
 
     // ---- 2. Compute v_ab (valid P2 candidates for P1=(a,b)) ----
     // Inclusion–exclusion: m − row_occ[a] − col_occ[b] + 1.
-    // P1 is counted in both its row and column; +1 corrects the double-count.
     let v_ab =
         m as i64 - state.row_occ_count[a as usize] as i64 - state.col_occ_count[b as usize] as i64
             + 1;
     if v_ab <= 0 {
-        return McmcOutcome::Held;
+        return None;
     }
     debug_assert!(v_ab >= 1);
 
     // ---- 3. Select P2 = (c,d) by unbounded rejection ----
-    // Guaranteed to succeed since v_ab >= 1 (pre-guard above).
     let (c, d) = loop {
         let idx = rng.random_range(0..m);
         if idx == a_idx {
@@ -107,14 +172,11 @@ pub fn occupied_cycle4_step(
     let old_cb = state.get(c, b);
 
     // ---- 6. Validate all four cells ----
-    // (a,b) and (c,d) are occupied by construction, so positivity holds.
-    // But (a,d) and (c,b) might be self-loops or capacity-violating.
-    // Check all four cells using the shared validator.
     if !validate_four_cell(state, target, domain, &deltas) {
-        return McmcOutcome::Held;
+        return None;
     }
 
-    // ---- 7. Compute Δlogπ = Σ target.delta_log_weight(…) ----
+    // ---- 7. Proposed occupations ----
     // Bounds are guaranteed by validate_four_cell, so checked arithmetic
     // is safe.
     let new_ab = old_ab.checked_sub(1).unwrap();
@@ -122,21 +184,12 @@ pub fn occupied_cycle4_step(
     let new_ad = old_ad.checked_add(1).unwrap();
     let new_cb = old_cb.checked_add(1).unwrap();
 
-    let delta_log_pi = target.delta_log_weight(a, b, old_ab, new_ab).unwrap()
-        + target.delta_log_weight(c, d, old_cd, new_cd).unwrap()
-        + target.delta_log_weight(a, d, old_ad, new_ad).unwrap()
-        + target.delta_log_weight(c, b, old_cb, new_cb).unwrap();
-
-    // ---- 8. Hastings log-ratio (§23) ----
-    // Forward: first selected (a,b) or (c,d).  `v_ab` was computed at the
-    // pre-guard (step 2) and is unchanged (state not yet mutated).
+    // ---- 8. Hastings proposal log-ratio (§23) ----
     let v_cd =
         m as i64 - state.row_occ_count[c as usize] as i64 - state.col_occ_count[d as usize] as i64
             + 1;
-
-    // Guard: no valid second choice.
-    if v_ab <= 0 || v_cd <= 0 {
-        return McmcOutcome::Held;
+    if v_cd <= 0 {
+        return None;
     }
 
     // Compute m', row_occ'_a/c, col_occ'_b/d O(1) from transitions.
@@ -149,7 +202,7 @@ pub fn occupied_cycle4_step(
 
     let m_prime = m as i64 + enters - leaves;
     if m_prime <= 0 {
-        return McmcOutcome::Held;
+        return None;
     }
 
     let row_a_prime = state.row_occ_count[a as usize] as i64 + enters_ad - leaves_ab;
@@ -162,30 +215,103 @@ pub fn occupied_cycle4_step(
 
     if v_ad_prime <= 0 || v_cb_prime <= 0 {
         // The reverse move would have no valid second choice.
-        // This should not happen in a valid state, but guard against it.
-        return McmcOutcome::Held;
+        return None;
     }
 
-    let log_q_fwd = (1.0 / v_ab as f64 + 1.0 / v_cd as f64).ln() - (m as f64).ln();
-    let log_q_rev =
+    let log_q_forward = (1.0 / v_ab as f64 + 1.0 / v_cd as f64).ln() - (m as f64).ln();
+    let log_q_reverse =
         (1.0 / v_ad_prime as f64 + 1.0 / v_cb_prime as f64).ln() - (m_prime as f64).ln();
 
-    let log_alpha = delta_log_pi + (log_q_rev - log_q_fwd);
+    Some(Cycle4Proposal {
+        a,
+        b,
+        c,
+        d,
+        old_ab,
+        old_cd,
+        old_ad,
+        old_cb,
+        new_ab,
+        new_cd,
+        new_ad,
+        new_cb,
+        occupied_before: m,
+        occupied_after: m_prime as usize,
+        log_q_forward,
+        log_q_reverse,
+    })
+}
 
-    // ---- 9. Metropolis–Hastings accept/reject ----
+/// Shared Metropolis log-ratio evaluator (§12.3).
+///
+/// `log_alpha = Δlog π_family + log q_reverse − log q_forward + extra_log_weight`
+///
+/// - Ordinary fixed strength: `extra_log_weight = 0`.
+/// - Auxiliary edge-biased bridge: `extra_log_weight = delta_edge_potential`
+///   (Phase 6).
+/// - Exact-E local moves must veto proposals that change the occupied-pair
+///   count *before* calling this evaluator; fixed-E logic never enters
+///   [`StrengthTarget`].
+///
+/// Returns `None` only if the family target rejects a cell change (`Held`
+/// for the caller); `validate_four_cell` inside the draw prevents this for
+/// every proposal this function receives.
+pub(crate) fn log_alpha_with_extra(
+    proposal: &Cycle4Proposal,
+    target: &StrengthTarget,
+    extra_log_weight: f64,
+) -> Option<f64> {
+    let delta_log_pi =
+        target.delta_log_weight(proposal.a, proposal.b, proposal.old_ab, proposal.new_ab)?
+            + target.delta_log_weight(proposal.c, proposal.d, proposal.old_cd, proposal.new_cd)?
+            + target.delta_log_weight(proposal.a, proposal.d, proposal.old_ad, proposal.new_ad)?
+            + target.delta_log_weight(proposal.c, proposal.b, proposal.old_cb, proposal.new_cb)?;
+    Some(delta_log_pi + proposal.log_q_reverse - proposal.log_q_forward + extra_log_weight)
+}
+
+/// Metropolis decision for a precomputed log-ratio.
+///
+/// Accepts with probability `min(1, exp(log_alpha))`.  The uniform draw
+/// is consumed only when `log_alpha < 0`, exactly as in the pre-refactor
+/// kernel.
+#[inline]
+fn metropolis_accept(log_alpha: f64, rng: &mut impl Rng) -> bool {
     if log_alpha < 0.0 {
         let log_u = (rng.random::<f64>() + f64::MIN_POSITIVE).ln();
         if log_u >= log_alpha {
-            return McmcOutcome::Rejected;
+            return false;
         }
     }
+    true
+}
 
-    // ---- 10. Apply ----
-    state.set(a, b, new_ab);
-    state.set(c, d, new_cd);
-    state.set(a, d, new_ad);
-    state.set(c, b, new_cb);
-
+/// Perform one occupied-cell 4-cycle MCMC step (allocation-free).
+///
+/// Composes [`draw_cycle4_proposal`] → [`log_alpha_with_extra`] →
+/// [`metropolis_accept`] with `extra_log_weight = 0`.  Mathematically
+/// identical to the pre-refactor kernel (same proposal law, same
+/// acceptance, same RNG consumption) — verified by the exact Hastings
+/// oracle in `menobis-test-oracles`.
+///
+/// Returns [`McmcOutcome::Held`] if fewer than 2 occupied pairs exist,
+/// no valid second pair exists for the drawn first pair, the rectangle
+/// is invalid, or the reverse move would be infeasible.
+pub fn occupied_cycle4_step(
+    state: &mut StrengthState,
+    target: &StrengthTarget,
+    domain: &PairDomain,
+    rng: &mut impl Rng,
+) -> McmcOutcome {
+    let Some(proposal) = draw_cycle4_proposal(state, target, domain, rng) else {
+        return McmcOutcome::Held;
+    };
+    let Some(log_alpha) = log_alpha_with_extra(&proposal, target, 0.0) else {
+        return McmcOutcome::Held;
+    };
+    if !metropolis_accept(log_alpha, rng) {
+        return McmcOutcome::Rejected;
+    }
+    proposal.apply(state);
     McmcOutcome::Accepted
 }
 
@@ -398,6 +524,104 @@ mod tests {
                     || outcome == McmcOutcome::Rejected
             );
             state.debug_validate();
+        }
+    }
+
+    /// Full sparse snapshot of a state for exact round-trip comparison.
+    type StateSnapshot = (Vec<((u64, u64), OccNum)>, Vec<OccNum>, Vec<OccNum>);
+    fn state_snapshot(state: &StrengthState) -> StateSnapshot {
+        let mut pairs: Vec<((u64, u64), OccNum)> = state.iter_occupied().collect();
+        pairs.sort_unstable();
+        (
+            pairs,
+            state.out_strengths.clone(),
+            state.in_strengths.clone(),
+        )
+    }
+
+    #[test]
+    fn proposal_apply_undo_roundtrip() {
+        // Cycle4Proposal::apply then undo must restore the exact state
+        // (occupied pairs, marginals) — the bridge undo contract (§19).
+        let n = 4;
+        let so = vec![5u64, 3, 7, 2];
+        let si = vec![4u64, 6, 3, 4];
+        let mut state = make_state(n, &so, &si, OccupationFamily::ME, true);
+        let target = StrengthTarget::new(OccupationFamily::ME);
+        let domain = PairDomain::Complete {
+            node_count: n,
+            self_loops: true,
+        };
+        let mut rng = StdRng::seed_from_u64(1234);
+        let mut applied = 0usize;
+        for _ in 0..500 {
+            let before = state_snapshot(&state);
+            let Some(proposal) = draw_cycle4_proposal(&state, &target, &domain, &mut rng) else {
+                continue;
+            };
+            proposal.apply(&mut state);
+            applied += 1;
+            // occupied_after delta_edges must agree with the applied state.
+            assert_eq!(state.occupied_count(), proposal.occupied_after);
+            assert_eq!(
+                state.occupied_count() as i64 - proposal.occupied_before as i64,
+                proposal.delta_edges()
+            );
+            state.debug_validate();
+            proposal.undo(&mut state);
+            assert_eq!(
+                state_snapshot(&state),
+                before,
+                "undo must restore the exact pre-proposal state"
+            );
+            state.debug_validate();
+        }
+        assert!(applied > 0, "no proposals were applied");
+    }
+
+    #[test]
+    fn composed_path_matches_step_with_same_seed() {
+        // The refactored draw → evaluate → accept → apply sequence must be
+        // indistinguishable (same RNG consumption, same outcomes) from the
+        // public occupied_cycle4_step wrapper.
+        let n = 4;
+        let so = vec![5u64, 3, 7, 2];
+        let si = vec![4u64, 6, 3, 4];
+        let target = StrengthTarget::new(OccupationFamily::ME);
+        let domain = PairDomain::Complete {
+            node_count: n,
+            self_loops: true,
+        };
+
+        let run_composed = |seed: u64| -> Vec<McmcOutcome> {
+            let mut state = make_state(n, &so, &si, OccupationFamily::ME, true);
+            let mut rng = StdRng::seed_from_u64(seed);
+            (0..100usize)
+                .map(|_| {
+                    let Some(proposal) = draw_cycle4_proposal(&state, &target, &domain, &mut rng)
+                    else {
+                        return McmcOutcome::Held;
+                    };
+                    let log_alpha = log_alpha_with_extra(&proposal, &target, 0.0).unwrap();
+                    if !metropolis_accept(log_alpha, &mut rng) {
+                        return McmcOutcome::Rejected;
+                    }
+                    proposal.apply(&mut state);
+                    McmcOutcome::Accepted
+                })
+                .collect()
+        };
+
+        let run_step = |seed: u64| -> Vec<McmcOutcome> {
+            let mut state = make_state(n, &so, &si, OccupationFamily::ME, true);
+            let mut rng = StdRng::seed_from_u64(seed);
+            (0..100usize)
+                .map(|_| occupied_cycle4_step(&mut state, &target, &domain, &mut rng))
+                .collect()
+        };
+
+        for seed in [1u64, 42, 99, 12345] {
+            assert_eq!(run_composed(seed), run_step(seed), "seed {seed}");
         }
     }
 }
