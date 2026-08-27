@@ -287,6 +287,30 @@ def _build_registry() -> dict[
             result_kind="sampled_network",
         )
 
+    # Microcanonical fixed strengths + exact occupied-pair count (s,E):
+    # exact stationary MCMC (local 4-cycles + censored bridge), no fit.
+    for fam, needs_layers in [
+        (ModelFamily.ME, False),
+        (ModelFamily.B, True),
+        (ModelFamily.W, True),
+    ]:
+        req_args = {"strength_out", "strength_in", "target_edges"}
+        opt_args = {"seed", "self_loops", "burn_in_sweeps", "sweeps_per_sample"}
+        if needs_layers:
+            opt_args.add("layers")
+        registry[
+            (Verb.SAMPLE, Ensemble.MICROCANONICAL, fam, Constraint.STRENGTH_EDGES)
+        ] = ModelCapability(
+            supported=True,
+            requires_fit=False,
+            backend="microcanonical_fixed_strength_edges",
+            required_arguments=frozenset(req_args),
+            optional_arguments=frozenset(opt_args),
+            supports_self_loops=True,
+            supports_no_self_loops=True,
+            result_kind="sampled_network",
+        )
+
     # --- FILTER ---
     for family in _FAMILIES:
         for constraint in _CONSTRAINTS:
@@ -329,6 +353,9 @@ def unsupported_cases() -> list[tuple[Verb, Ensemble, ModelFamily, Constraint]]:
         (ModelFamily.ME, Constraint.STRENGTH_COST),
         (ModelFamily.B, Constraint.STRENGTH_COST),
         (ModelFamily.W, Constraint.STRENGTH_COST),
+        (ModelFamily.ME, Constraint.STRENGTH_EDGES),
+        (ModelFamily.B, Constraint.STRENGTH_EDGES),
+        (ModelFamily.W, Constraint.STRENGTH_EDGES),
         (ModelFamily.ME, Constraint.EDGES_EVENTS),
         (ModelFamily.B, Constraint.EDGES_EVENTS),
         (ModelFamily.W, Constraint.EDGES_EVENTS),

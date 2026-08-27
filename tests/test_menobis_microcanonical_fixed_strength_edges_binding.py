@@ -18,8 +18,8 @@ import numpy as np
 import pytest
 
 import menobis._menobis as _menobis
-from menobis.models.spec import Constraint, Ensemble, ModelFamily
-from menobis.routing import sample_model
+from menobis.models.spec import Constraint, Ensemble, ModelFamily, Verb
+from menobis.routing import sample_model, sample_model_detailed
 from menobis.utilities.synthetic import (
     derive_synthetic_constraints,
     generate_pa_geographic_network,
@@ -153,26 +153,53 @@ def test_binding_rejects_infeasible_targets() -> None:
         _sample("ME", s_out, s_in, 20)
 
 
-def test_public_route_still_capability_gated() -> None:
-    """Phase 9: the router exists but STRENGTH_EDGES is unadvertised.
+def test_public_route_now_supported_and_labeled() -> None:
+    """Phase 11: the public sample_model route is advertised.
 
-    The capability registry must not expose the route until the final
-    gate.
+    sample_model_detailed must label the method explicitly as the
+    fixed-strength-edges exact stationary MCMC, never the generic
+    fixed-strength else-branch.
     """
-    from menobis.models.spec import UnsupportedModelCaseError
+    from menobis.capabilities import SamplingExactness, capability
 
-    s_out = np.array([4, 4, 4, 4], dtype=np.uint64)
-    s_in = np.array([4, 4, 4, 4], dtype=np.uint64)
-    with pytest.raises(UnsupportedModelCaseError):
-        sample_model(
-            ensemble=Ensemble.MICROCANONICAL,
-            family=ModelFamily.ME,
-            constraint=Constraint.STRENGTH_EDGES,
-            strength_out=s_out,
-            strength_in=s_in,
-            target_edges=8,
-            seed=1,
-        )
+    n, s_out, s_in, edges = _dense_case()
+    sample = sample_model(
+        ensemble=Ensemble.MICROCANONICAL,
+        family=ModelFamily.ME,
+        constraint=Constraint.STRENGTH_EDGES,
+        strength_out=s_out,
+        strength_in=s_in,
+        target_edges=edges,
+        self_loops=False,
+        seed=11,
+    )
+    assert len(sample) == edges
+    out, inp = _strengths(sample.source, sample.target, sample.occ_num, n)
+    np.testing.assert_array_equal(out, s_out)
+    np.testing.assert_array_equal(inp, s_in)
+
+    detailed = sample_model_detailed(
+        ensemble=Ensemble.MICROCANONICAL,
+        family=ModelFamily.ME,
+        constraint=Constraint.STRENGTH_EDGES,
+        strength_out=s_out,
+        strength_in=s_in,
+        target_edges=edges,
+        self_loops=False,
+        seed=11,
+    )
+    assert detailed.method == "microcanonical_fixed_strength_edges"
+    assert detailed.exactness == SamplingExactness.EXACT_STATIONARY_MCMC
+
+    cap = capability(
+        Verb.SAMPLE,
+        Ensemble.MICROCANONICAL,
+        ModelFamily.ME,
+        Constraint.STRENGTH_EDGES,
+    )
+    assert cap is not None and cap.supported
+    assert not cap.requires_fit
+    assert cap.backend == "microcanonical_fixed_strength_edges"
 
 
 # --------------------------------------------------------------------------
@@ -180,7 +207,7 @@ def test_public_route_still_capability_gated() -> None:
 # --------------------------------------------------------------------------
 
 
-def _derive_from_generated(net, events_per_edge: float):
+def _derive_from_generated(net):
     """Derive constraints from a generated network.
 
     Rebalances rounding drift (guaranteed feasible by construction).
@@ -216,7 +243,7 @@ def test_n1000_scalability_exact_recovery(family, layers, events_per_edge) -> No
         average_degree=6.0,
         events_per_edge=events_per_edge,
     )
-    n, s_out, s_in, edges = _derive_from_generated(net, events_per_edge)
+    n, s_out, s_in, edges = _derive_from_generated(net)
     source, target, occ_num = _sample(
         family, s_out, s_in, edges, layers=layers, seed=42, self_loops=False
     )
@@ -238,7 +265,7 @@ def test_n1000_fixed_pair_scalability() -> None:
     net = generate_pa_geographic_network(
         1000, seed=5, self_loops=False, average_degree=6.0, events_per_edge=5.0
     )
-    n, s_out, s_in, edges = _derive_from_generated(net, 5.0)
+    n, s_out, s_in, edges = _derive_from_generated(net)
     fixed = (
         np.array([0, 1, 2, 3], dtype=np.uint64),
         np.array([10, 11, 12, 13], dtype=np.uint64),
@@ -265,7 +292,7 @@ def test_n5000_smoke() -> None:
     net = generate_pa_geographic_network(
         5000, seed=9, self_loops=False, average_degree=4.0, events_per_edge=4.0
     )
-    n, s_out, s_in, edges = _derive_from_generated(net, 4.0)
+    n, s_out, s_in, edges = _derive_from_generated(net)
     source, target, occ_num = _sample(
         "ME", s_out, s_in, edges, seed=7, self_loops=False, burn=10
     )
