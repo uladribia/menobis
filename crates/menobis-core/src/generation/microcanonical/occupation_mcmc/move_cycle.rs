@@ -38,7 +38,7 @@ use crate::OccNum;
 /// log-probabilities under the `master` selection law (§12.1).  No heap
 /// allocation — the record is `Copy`.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Cycle4Proposal {
+pub struct Cycle4Proposal {
     /// First decrement cell `(a, b)`.
     pub a: u64,
     /// First decrement cell `(a, b)`.

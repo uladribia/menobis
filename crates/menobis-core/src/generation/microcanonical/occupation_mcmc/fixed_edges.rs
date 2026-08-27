@@ -31,7 +31,9 @@ use super::chain::repair_state;
 use super::domain::PairDomain;
 use super::errors::FixedStrengthError;
 use super::initializer::initialize_table;
-use super::move_cycle::{draw_cycle4_proposal, log_alpha_with_extra, metropolis_accept};
+use super::move_cycle::{
+    draw_cycle4_proposal, log_alpha_with_extra, metropolis_accept, Cycle4Proposal,
+};
 use super::problem::ResidualStrengthProblem;
 use super::state::StrengthState;
 use super::target::StrengthTarget;
@@ -79,6 +81,220 @@ pub fn exact_e_local_step(
     }
     proposal.apply(state);
     EdgeLocalOutcome::Accepted
+}
+
+// ---------------------------------------------------------------------------
+// Auxiliary bridge kernel (§8–§10)
+// ---------------------------------------------------------------------------
+
+/// Tuning constants for the auxiliary edge-biased bridge (§6, §8–§10).
+///
+/// These are performance parameters, not correctness parameters — any
+/// `lambda > 0` and any finite step cap preserve the exact stationary
+/// proof (§11).  Kept internal; not exposed through the public API.
+#[derive(Clone, Copy, Debug)]
+pub struct BridgeConfig {
+    /// Mixture weight `ρ`: probability of attempting a bridge per outer
+    /// proposal (§6, §18).
+    pub bridge_probability: f64,
+    /// Edge-distance potential strength `λ` (§8).
+    pub bridge_lambda: f64,
+    /// Maximum auxiliary substeps inside one bridge attempt (§10).
+    pub bridge_max_steps: usize,
+}
+
+impl Default for BridgeConfig {
+    fn default() -> Self {
+        Self {
+            bridge_probability: 0.05,
+            bridge_lambda: 1.0,
+            bridge_max_steps: 16,
+        }
+    }
+}
+
+/// Outcome of one auxiliary edge-potential MH substep.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AuxSubstepOutcome {
+    /// Proposal applied.
+    Accepted,
+    /// Proposal invalid at the family/domain/capacity level.
+    HeldInvalid,
+    /// Valid proposal rejected by the Metropolis criterion.
+    Rejected,
+}
+
+/// One auxiliary MH substep targeting `mu_lambda(t) ∝ pi_s(t) exp(−λ
+/// |E(t) − E_target|)` (§9).
+///
+/// Uses exactly the same occupied-cell proposal law and Hastings proposal
+/// ratio; the only difference from the ordinary fixed-strength acceptance
+/// is the edge-distance potential:
+///
+/// ```text
+/// log_alpha_aux = delta_log_family + log_q_reverse − log_q_forward
+///                 − λ (|E_new − E_target| − |E_old − E_target|)
+/// ```
+///
+/// Returns the outcome plus the applied proposal when accepted (the
+/// bridge records accepted proposals for deterministic undo, §19).
+pub fn auxiliary_substep(
+    state: &mut StrengthState,
+    target: &StrengthTarget,
+    domain: &PairDomain,
+    rng: &mut impl Rng,
+    edge_target: usize,
+    lambda: f64,
+) -> (AuxSubstepOutcome, Option<Cycle4Proposal>) {
+    let Some(proposal) = draw_cycle4_proposal(state, target, domain, rng) else {
+        return (AuxSubstepOutcome::HeldInvalid, None);
+    };
+    let d_old = proposal.occupied_before.abs_diff(edge_target) as f64;
+    let d_new = proposal.occupied_after.abs_diff(edge_target) as f64;
+    let delta_edge_potential = -lambda * (d_new - d_old);
+    let Some(log_alpha) = log_alpha_with_extra(&proposal, target, delta_edge_potential) else {
+        return (AuxSubstepOutcome::HeldInvalid, None);
+    };
+    if !metropolis_accept(log_alpha, rng) {
+        return (AuxSubstepOutcome::Rejected, None);
+    }
+    proposal.apply(state);
+    (AuxSubstepOutcome::Accepted, Some(proposal))
+}
+
+/// Result of one bridge attempt, for mobility diagnostics (§20).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct BridgeOutcome {
+    /// Whether the bridge returned to the exact-E fiber with a new state.
+    pub success: bool,
+    /// Whether the first substep left the exact-E fiber.
+    pub departed: bool,
+    /// Auxiliary substeps executed.
+    pub substeps: usize,
+    /// Accepted auxiliary substeps.
+    pub accepted_substeps: usize,
+}
+
+/// Bridge counters for the production mixed kernel (§20).  Diagnostics
+/// only; a timeout is a self-loop in the exact chain, never an error.
+#[derive(Clone, Debug, Default)]
+pub struct FixedEdgeCounters {
+    /// Outer proposals (local steps + bridge attempts).
+    pub outer_proposals: u64,
+    /// Local kernel: accepted in-fiber moves.
+    pub local_accepted: u64,
+    /// Local kernel: invalid proposals.
+    pub local_held_invalid: u64,
+    /// Local kernel: live proposals vetoed because they would change E.
+    pub local_held_edge_veto: u64,
+    /// Local kernel: Metropolis rejections.
+    pub local_mh_rejected: u64,
+    /// Bridge attempts.
+    pub bridge_attempts: u64,
+    /// Bridge attempts whose first substep left the fiber.
+    pub bridge_departures: u64,
+    /// Bridge attempts that returned to the fiber with a new state.
+    pub bridge_successful_returns: u64,
+    /// Bridge attempts that timed out and restored the origin.
+    pub bridge_timeouts: u64,
+    /// Total auxiliary substeps executed inside bridges.
+    pub bridge_auxiliary_substeps: u64,
+    /// Accepted auxiliary substeps inside bridges.
+    pub bridge_auxiliary_accepted: u64,
+}
+
+/// One bridge attempt (§10): a censored excursion of the exact reversible
+/// auxiliary chain, starting and ending in the exact-E fiber.
+///
+/// A successful bridge path has exactly the form
+///
+/// ```text
+/// x ∈ A, z1 ∉ A, ..., z_(k−1) ∉ A, y ∈ A        (2 ≤ k ≤ bridge_max_steps)
+/// ```
+///
+/// - the first substep must depart the fiber (held/rejected or an
+///   accepted in-fiber move aborts and restores the origin);
+/// - the first return to the fiber stops and keeps the returned state;
+/// - if no return occurs within the cap, every accepted substep is undone
+///   deterministically (no state cloning, §19) and the origin is
+///   restored — a self-loop in the exact chain.
+///
+/// Precondition: `state.occupied_count() == edge_target` (in the fiber).
+pub fn bridge_step(
+    state: &mut StrengthState,
+    target: &StrengthTarget,
+    domain: &PairDomain,
+    rng: &mut impl Rng,
+    edge_target: usize,
+    config: &BridgeConfig,
+) -> BridgeOutcome {
+    let mut accepted_proposals: Vec<Cycle4Proposal> = Vec::with_capacity(config.bridge_max_steps);
+    let mut substeps = 0usize;
+    let mut aux_accepted = 0usize;
+
+    for step in 0..config.bridge_max_steps {
+        substeps += 1;
+        let (outcome, applied) = auxiliary_substep(
+            state,
+            target,
+            domain,
+            rng,
+            edge_target,
+            config.bridge_lambda,
+        );
+        match outcome {
+            AuxSubstepOutcome::Accepted => {
+                aux_accepted += 1;
+                let proposal = applied.expect("accepted substep must return the proposal");
+                if state.occupied_count() == edge_target {
+                    if step == 0 {
+                        // In-fiber move on the first substep: abort and
+                        // restore the origin.
+                        proposal.undo(state);
+                        return BridgeOutcome {
+                            success: false,
+                            departed: false,
+                            substeps,
+                            accepted_substeps: aux_accepted,
+                        };
+                    }
+                    // First return to the fiber: keep the state.
+                    return BridgeOutcome {
+                        success: true,
+                        departed: true,
+                        substeps,
+                        accepted_substeps: aux_accepted,
+                    };
+                }
+                accepted_proposals.push(proposal);
+            }
+            AuxSubstepOutcome::HeldInvalid | AuxSubstepOutcome::Rejected => {
+                if step == 0 {
+                    // First substep held or rejected: still in the fiber
+                    // (we started there).  Abort as a bridge self-loop.
+                    return BridgeOutcome {
+                        success: false,
+                        departed: false,
+                        substeps,
+                        accepted_substeps: aux_accepted,
+                    };
+                }
+                // Outside the fiber, no move: keep exploring.
+            }
+        }
+    }
+
+    // Cap reached without a return: undo every accepted substep in
+    // reverse order and restore the origin (§19).
+    for proposal in accepted_proposals.iter().rev() {
+        proposal.undo(state);
+    }
+    BridgeOutcome {
+        success: false,
+        departed: true,
+        substeps,
+        accepted_substeps: aux_accepted,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -758,5 +974,125 @@ mod tests {
             "restarts from the same stream should produce distinct states, got {}",
             distinct.len()
         );
+    }
+
+    // -------------------------------------------------------------------
+    // Phase 6: auxiliary bridge
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn bridge_connects_counterexample_fiber() {
+        // The §5 fiber: ME N=2 s=[2,2] sl=true, E=2, states A={(0,0)=2,
+        // (1,1)=2} and B={(0,1)=2,(1,0)=2}.  The local kernel alone is a
+        // pure self-loop here; the bridge must connect A and B.
+        let n = 2;
+        let so = vec![2u64; 2];
+        let si = vec![2u64; 2];
+        let _state_a = sorted_pairs(&StrengthState::new(n, vec![((0, 0), 2), ((1, 1), 2)]));
+        let state_b = sorted_pairs(&StrengthState::new(n, vec![((0, 1), 2), ((1, 0), 2)]));
+        let target = StrengthTarget::new(OccupationFamily::ME);
+        let domain = PairDomain::Complete {
+            node_count: n,
+            self_loops: true,
+        };
+        let config = BridgeConfig::default();
+
+        let mut rng = StdRng::seed_from_u64(7);
+        let mut landed_on_b = 0usize;
+        let mut successes = 0usize;
+        for _ in 0..500 {
+            // Reset to A before each bridge attempt.
+            let mut state = StrengthState::new(n, vec![((0, 0), 2), ((1, 1), 2)]);
+            let outcome = bridge_step(&mut state, &target, &domain, &mut rng, 2, &config);
+            assert_eq!(state.occupied_count(), 2, "bridge left the fiber");
+            assert_eq!(state.out_strengths, so);
+            assert_eq!(state.in_strengths, si);
+            if outcome.success {
+                successes += 1;
+                if sorted_pairs(&state) == state_b {
+                    landed_on_b += 1;
+                }
+            }
+        }
+        assert!(successes > 0, "expected some successful bridge returns");
+        assert!(
+            landed_on_b > 0,
+            "bridge never reached the other fiber state B ({landed_on_b}/500)"
+        );
+    }
+
+    #[test]
+    fn bridge_max_steps_one_always_undoes() {
+        // With bridge_max_steps = 1 no bridge can complete (a success
+        // needs at least depart + return).  Every accepted departure must
+        // be deterministically undone, restoring the exact origin.
+        let n = 2;
+        let start = vec![((0, 0), 2), ((1, 1), 2)];
+        let origin = sorted_pairs(&StrengthState::new(n, start.clone()));
+        let target = StrengthTarget::new(OccupationFamily::ME);
+        let domain = PairDomain::Complete {
+            node_count: n,
+            self_loops: true,
+        };
+        let config = BridgeConfig {
+            bridge_max_steps: 1,
+            ..BridgeConfig::default()
+        };
+        let mut rng = StdRng::seed_from_u64(9);
+        let mut departed = 0usize;
+        let mut timeouts = 0usize;
+        for _ in 0..100 {
+            let mut state = StrengthState::new(n, start.clone());
+            let outcome = bridge_step(&mut state, &target, &domain, &mut rng, 2, &config);
+            assert!(!outcome.success, "max_steps=1 cannot succeed");
+            assert_eq!(
+                sorted_pairs(&state),
+                origin,
+                "failed bridge must restore the exact origin"
+            );
+            if outcome.departed {
+                departed += 1;
+            }
+            assert_eq!(state.occupied_count(), 2);
+            if outcome.substeps == 1 && outcome.accepted_substeps == 1 {
+                timeouts += 1; // departed then undid
+            }
+        }
+        assert!(departed > 0, "expected some departures with max_steps=1");
+        assert!(
+            timeouts > 0,
+            "expected some accepted-departure-then-undo transitions"
+        );
+    }
+
+    #[test]
+    fn bridge_preserves_strengths_and_fiber_invariants() {
+        // Larger fiber: ME N=3 s=[2,2,2] sl=true, E=3, started on the
+        // diagonal state.  Bridges must never leave the fiber or drift
+        // the strengths, and some must succeed.
+        let n = 3;
+        let so = vec![2u64; 3];
+        let si = vec![2u64; 3];
+        let start = vec![((0, 0), 2), ((1, 1), 2), ((2, 2), 2)];
+        let target = StrengthTarget::new(OccupationFamily::ME);
+        let domain = PairDomain::Complete {
+            node_count: n,
+            self_loops: true,
+        };
+        let config = BridgeConfig::default();
+        let mut rng = StdRng::seed_from_u64(123);
+        let mut successes = 0usize;
+        for _ in 0..300 {
+            let mut state = StrengthState::new(n, start.clone());
+            let outcome = bridge_step(&mut state, &target, &domain, &mut rng, 3, &config);
+            assert_eq!(state.occupied_count(), 3, "bridge left the fiber");
+            assert_eq!(state.out_strengths, so);
+            assert_eq!(state.in_strengths, si);
+            state.debug_validate();
+            if outcome.success {
+                successes += 1;
+            }
+        }
+        assert!(successes > 0, "expected some successful bridges");
     }
 }

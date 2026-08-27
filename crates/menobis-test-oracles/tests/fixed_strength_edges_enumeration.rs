@@ -209,13 +209,17 @@ fn mh_matrix(
     n: usize,
     family: OccupationFamily,
     self_loops: bool,
+    log_weight: &[f64],
 ) -> Vec<Vec<f64>> {
     let k = states.len();
+    debug_assert_eq!(log_weight.len(), k);
     let cap = family_capacity(family);
     let index = state_index_map(states);
     let mut p = vec![vec![0.0_f64; k]; k];
 
-    for (si, (state, lw)) in states.iter().enumerate() {
+    for si in 0..k {
+        let (state, _) = &states[si];
+        let lw = log_weight[si];
         let m = state.len();
         if m < 2 {
             p[si][si] = 1.0;
@@ -279,7 +283,7 @@ fn mh_matrix(
                 let di = index[&dest];
 
                 // Independent Hastings acceptance: pi(y) q_rev / (pi(x) q_fwd).
-                let log_alpha = (states[di].1 - lw) + q_rev.ln() - q_fwd.ln();
+                let log_alpha = (log_weight[di] - lw) + q_rev.ln() - q_fwd.ln();
                 let acceptance = if log_alpha >= 0.0 {
                     1.0
                 } else {
@@ -434,6 +438,90 @@ fn assert_stationarity(
     }
 }
 
+/// Log family-degeneracy weights of the enumerated states (the ordinary
+/// fixed-strength target `pi_s`).
+fn fixed_strength_log_weights(states: &[WeightedState]) -> Vec<f64> {
+    states.iter().map(|(_, w)| *w).collect()
+}
+
+/// Auxiliary bridge target weights `mu_lambda(t) ∝ pi_s(t) exp(−λ |E(t)
+/// − E_target|)` in log space (§8).
+fn aux_log_weights(states: &[WeightedState], lambda: f64, edge_target: usize) -> Vec<f64> {
+    states
+        .iter()
+        .map(|(s, w)| w - lambda * s.len().abs_diff(edge_target) as f64)
+        .collect()
+}
+
+/// Exact bridge matrix by dynamic propagation (§22.6):
+///
+/// - first auxiliary substep: in-fiber destinations abort into `B[x,x]`,
+///   outside destinations start the excursion;
+/// - further substeps: outside→outside stays active, outside→fiber
+///   accumulates into `B[x,y]` and stops;
+/// - at the maximum step all remaining outside mass becomes `B[x,x]`
+///   (production undoes and restores the origin).
+fn bridge_matrix(
+    states: &[WeightedState],
+    n: usize,
+    family: OccupationFamily,
+    self_loops: bool,
+    edge_target: usize,
+    lambda: f64,
+    max_steps: usize,
+) -> Vec<Vec<f64>> {
+    let k = states.len();
+    let aux_lw = aux_log_weights(states, lambda, edge_target);
+    let aux = mh_matrix(states, n, family, self_loops, &aux_lw);
+    let in_fiber = |i: usize| states[i].0.len() == edge_target;
+
+    let mut b = vec![vec![0.0_f64; k]; k];
+    for x in 0..k {
+        if !in_fiber(x) {
+            continue;
+        }
+        let mut mass = vec![0.0_f64; k];
+        // Departure step: in-fiber destinations abort into B[x,x];
+        // outside destinations start the excursion.
+        for z in 0..k {
+            let p = aux[x][z];
+            if p == 0.0 {
+                continue;
+            }
+            if in_fiber(z) {
+                b[x][x] += p; // abort (held / rejected / delta-E=0)
+            } else {
+                mass[z] += p;
+            }
+        }
+        // Substeps 2..=max_steps.
+        for _ in 1..max_steps {
+            let mut next = vec![0.0_f64; k];
+            for z in 0..k {
+                let mz = mass[z];
+                if mz == 0.0 {
+                    continue;
+                }
+                for w in 0..k {
+                    let p = aux[z][w];
+                    if p == 0.0 {
+                        continue;
+                    }
+                    if in_fiber(w) {
+                        b[x][w] += mz * p;
+                    } else {
+                        next[w] += mz * p;
+                    }
+                }
+            }
+            mass = next;
+        }
+        let remaining: f64 = mass.iter().sum();
+        b[x][x] += remaining; // cap: undo -> origin
+    }
+    b
+}
+
 // ---------------------------------------------------------------------------
 // Phase 4: exact-E local kernel detailed balance on tiny fibers (§22.4)
 // ---------------------------------------------------------------------------
@@ -445,7 +533,7 @@ fn local_fixed_e_kernel_checks(family: OccupationFamily, so: &[OccNum], si: &[Oc
         "enumeration returned no states for {family:?}"
     );
     let n = so.len();
-    let base = mh_matrix(&states, n, family, sl);
+    let base = mh_matrix(&states, n, family, sl, &fixed_strength_log_weights(&states));
 
     // Distinct feasible edge counts in the fiber.
     let mut edges: Vec<usize> = states.iter().map(|(s, _)| s.len()).collect();
@@ -540,7 +628,13 @@ fn local_fixed_e_kernel_singleton_fiber_is_stationary() {
     let family = OccupationFamily::ME;
     let states = enumerate_fiber(family, &[2, 2], &[2, 2], true);
     let n = 2;
-    let base = mh_matrix(&states, n, family, true);
+    let base = mh_matrix(
+        &states,
+        n,
+        family,
+        true,
+        &fixed_strength_log_weights(&states),
+    );
     let e = 2usize;
     let fiber: Vec<usize> = states
         .iter()
@@ -640,7 +734,7 @@ fn edge_repair_reaches_every_feasible_tiny_target() {
 
         // Connected components of the ordinary fixed-strength chain under
         // the 4-cycle proposal (positive probability in either direction).
-        let base = mh_matrix(&states, n, family, sl);
+        let base = mh_matrix(&states, n, family, sl, &fixed_strength_log_weights(&states));
         let comp = connected_components(&base);
         let k = states.len();
 
@@ -716,4 +810,155 @@ fn edge_repair_reaches_every_feasible_tiny_target() {
         "[edge-repair oracle] repaired {repaired_pairs} (start, target) pairs; \
          {skipped_disconnected} pairs skipped across disconnected components"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6: auxiliary kernel (§22.5) and bridge matrix (§22.6)
+// ---------------------------------------------------------------------------
+
+/// Shared mandatory tiny-case grid (§23).
+fn mandatory_cases() -> Vec<(OccupationFamily, Vec<OccNum>, Vec<OccNum>, bool)> {
+    vec![
+        (OccupationFamily::ME, vec![2u64, 2], vec![2, 2], true),
+        (OccupationFamily::ME, vec![2u64, 2], vec![2, 2], false),
+        (OccupationFamily::ME, vec![3u64, 1], vec![1, 3], true),
+        (OccupationFamily::ME, vec![2u64; 3], vec![2; 3], true),
+        (OccupationFamily::ME, vec![2u64; 3], vec![2; 3], false),
+        (OccupationFamily::ME, vec![3u64, 2, 1], vec![1, 2, 3], true),
+        (
+            OccupationFamily::B { layers: 2 },
+            vec![2u64, 2],
+            vec![2, 2],
+            true,
+        ),
+        (
+            OccupationFamily::B { layers: 3 },
+            vec![3u64, 3, 3],
+            vec![3, 3, 3],
+            true,
+        ),
+        (
+            OccupationFamily::W { layers: 1 },
+            vec![2u64, 2],
+            vec![2, 2],
+            true,
+        ),
+        (
+            OccupationFamily::W { layers: 2 },
+            vec![3u64; 3],
+            vec![3; 3],
+            true,
+        ),
+    ]
+}
+
+/// §22.5: exact detailed balance of the auxiliary edge-biased MH kernel
+/// `K_lambda` against `mu_lambda(t) ∝ pi_s(t) exp(−λ|E(t)−E_target|)`
+/// across the **full** fixed-strength state space, for every feasible
+/// edge target.
+#[test]
+fn auxiliary_kernel_exact_detailed_balance() {
+    let lambda = 1.0;
+    for (family, so, si, sl) in mandatory_cases() {
+        let states = enumerate_fiber(family, &so, &si, sl);
+        let n = so.len();
+        let k = states.len();
+        let mut edges: Vec<usize> = states.iter().map(|(s, _)| s.len()).collect();
+        edges.sort_unstable();
+        edges.dedup();
+        for &e in &edges {
+            let mu_log = aux_log_weights(&states, lambda, e);
+            let aux = mh_matrix(&states, n, family, sl, &mu_log);
+            let label = format!("aux {family:?} sl={sl} E={e}");
+            assert_row_sums(&aux, None);
+            // Pairwise DB over the full space (all pairs, not just fiber).
+            for i in 0..k {
+                let wi = mu_log[i].exp();
+                for j in 0..k {
+                    let wj = mu_log[j].exp();
+                    let lhs = wi * aux[i][j];
+                    let rhs = wj * aux[j][i];
+                    if lhs == 0.0 && rhs == 0.0 {
+                        continue;
+                    }
+                    let rel = (lhs - rhs).abs() / lhs.abs().max(rhs.abs());
+                    assert!(
+                        rel < 1e-9,
+                        "{label}: auxiliary DB violated {i}->{j}: {lhs:.3e} vs {rhs:.3e} (rel {rel:.3e})"
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// §22.6: exact bridge matrix by dynamic propagation — row sums on the
+/// fiber, pairwise detailed balance against the conditional target
+/// `pi_(s,E)`, and the mandatory N=2 counterexample is connected.
+#[test]
+fn bridge_kernel_exact_detailed_balance() {
+    let lambda = 1.0;
+    let max_steps = 16usize;
+    let mut connected_fibers = 0usize;
+    for (family, so, si, sl) in mandatory_cases() {
+        let states = enumerate_fiber(family, &so, &si, sl);
+        let n = so.len();
+        let mut edges: Vec<usize> = states.iter().map(|(s, _)| s.len()).collect();
+        edges.sort_unstable();
+        edges.dedup();
+        for &e in &edges {
+            let b = bridge_matrix(&states, n, family, sl, e, lambda, max_steps);
+            let fiber: Vec<usize> = states
+                .iter()
+                .enumerate()
+                .filter(|(_, (s, _))| s.len() == e)
+                .map(|(i, _)| i)
+                .collect();
+            let label = format!("bridge {family:?} sl={sl} E={e}");
+            assert_row_sums(&b, Some(&fiber));
+            assert_pairwise_detailed_balance(&states, &b, &fiber, &label);
+            if fiber.len() > 1 {
+                connected_fibers += 1;
+            }
+        }
+    }
+    assert!(connected_fibers > 0, "no non-singleton fiber checked");
+}
+
+/// The mandatory §5 counterexample: ME N=2, self-loops, s=[2,2]/[2,2],
+/// E=2.  The bridge matrix must connect the two fiber states (positive
+/// probability in both directions), which the local kernel cannot.
+#[test]
+fn bridge_matrix_connects_counterexample() {
+    let family = OccupationFamily::ME;
+    let states = enumerate_fiber(family, &[2, 2], &[2, 2], true);
+    let n = 2;
+    let e = 2usize;
+    let fiber: Vec<usize> = states
+        .iter()
+        .enumerate()
+        .filter(|(_, (s, _))| s.len() == e)
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(fiber.len(), 2, "§5 fiber must contain exactly two states");
+
+    let b = bridge_matrix(&states, n, family, true, e, 1.0, 16);
+    let (a, bb) = (fiber[0], fiber[1]);
+    assert!(
+        b[a][bb] > 0.0 && b[bb][a] > 0.0,
+        "bridge must connect the §5 states: B[A][B]={:.4}, B[B][A]={:.4}",
+        b[a][bb],
+        b[bb][a]
+    );
+
+    // The local kernel alone must be a pure self-loop on this fiber.
+    let base = mh_matrix(
+        &states,
+        n,
+        family,
+        true,
+        &fixed_strength_log_weights(&states),
+    );
+    assert_eq!(base[a][bb], 0.0, "local kernel must not connect §5 states");
+    assert_eq!(base[bb][a], 0.0);
 }
