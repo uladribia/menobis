@@ -103,23 +103,7 @@ def _sample_strength_fixed_strength_mcmc(
     """Microcanonical fixed-strength sampler via the 4-cycle Metropolis chain.
 
     Uses the generic occupied-cell 4-cycle MCMC backend on the compressed
-    residual state.
-
-    Args:
-        family: "ME", "B", or "W".
-        strength_out: Exact outgoing strength per node.
-        strength_in: Exact incoming strength per node.
-        self_loops: Whether self-loops are allowed.
-        known_source: Source nodes of fixed pairs.
-        known_target: Target nodes of fixed pairs.
-        known_occnum: Occupations of fixed pairs.
-        layers: Layer count M for B/W.
-        seed: Random seed.
-        burn_in_sweeps: Number of MCMC burn-in sweeps.
-        sweeps_per_sample: Number of thinning sweeps per sample.
-
-    Returns:
-        EdgeTable with exact strength preservation.
+    residual state.  Exact strength preservation.
     """
     import menobis._menobis as _menobis
 
@@ -146,6 +130,68 @@ def _sample_strength_fixed_strength_mcmc(
         family,
         s_out,
         s_in,
+        bool(self_loops),
+        f_src,
+        f_tgt,
+        f_occ,
+        int(layers),
+        int(burn_in_sweeps),
+        int(sweeps_per_sample),
+        int(seed),
+    )
+    return EdgeTable(
+        source=np.asarray(sources, dtype=np.uint64),
+        target=np.asarray(targets, dtype=np.uint64),
+        occ_num=np.asarray(occ_nums, dtype=np.uint64),
+    )
+
+
+def _sample_fixed_strength_edges_mcmc(
+    *,
+    family: str,
+    strength_out: NDArray[np.integer],
+    strength_in: NDArray[np.integer],
+    target_edges: int,
+    self_loops: bool = True,
+    known_source: NDArray[np.integer] | None = None,
+    known_target: NDArray[np.integer] | None = None,
+    known_occnum: NDArray[np.integer] | None = None,
+    layers: int = 1,
+    seed: int = 0,
+    burn_in_sweeps: int = 50,
+    sweeps_per_sample: int = 10,
+) -> EdgeTable:
+    """Microcanonical fixed-strength + fixed-edge-count sampler.
+
+    Rust residualizes fixed pairs exactly once (strengths, domain
+    exclusion, edge-target subtraction) and merges positive fixed pairs
+    back into the full network.  The output carries exact full strengths
+    and the exact full occupied-pair count.
+    """
+    import menobis._menobis as _menobis
+
+    s_out = np.asarray(strength_out, dtype=np.uint64).tolist()
+    s_in = np.asarray(strength_in, dtype=np.uint64).tolist()
+    f_src = (
+        np.asarray(known_source, dtype=np.uint64).tolist()
+        if known_source is not None
+        else []
+    )
+    f_tgt = (
+        np.asarray(known_target, dtype=np.uint64).tolist()
+        if known_target is not None
+        else []
+    )
+    f_occ = (
+        np.asarray(known_occnum, dtype=np.uint64).tolist()
+        if known_occnum is not None
+        else []
+    )
+    sources, targets, occ_nums = _menobis.sample_fixed_strength_edges(
+        family,
+        s_out,
+        s_in,
+        int(target_edges),
         bool(self_loops),
         f_src,
         f_tgt,

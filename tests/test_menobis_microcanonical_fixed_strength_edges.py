@@ -43,7 +43,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def _edge_count(net) -> int:
-    return int(len(net.source))
+    return len(net.source)
 
 
 def _strengths(net, n: int) -> tuple[np.ndarray, np.ndarray]:
@@ -75,11 +75,10 @@ def _dense_case() -> tuple:
 
 
 def _b_feasible_case() -> tuple[int, np.ndarray, np.ndarray, int]:
-    """B-feasible variant: lower occupations so every margin fits within
-    M × (available cells) under the family capacity.
+    """B-feasible variant: lower occupations within the family capacity.
 
     The dense fixture's rounded margins concentrate up to 81 events on a
-    single node, which exceeds the B M=4 capacity budget of 4 × 14 cells
+    single node, which exceeds the B M=4 capacity budget of 4 x 14 cells
     (plain microcanonical STRENGTH fails there too); events_per_edge=2
     keeps occupations within capacity.
     """
@@ -104,10 +103,10 @@ def test_fixed_se_exact_recovery(family) -> None:
     """Strengths and edge count are recovered exactly (all families)."""
     if family is ModelFamily.B:
         n, s_out, s_in, edges = _b_feasible_case()
-        kwargs = {"layers": 4}
+        layers = 4
     else:
         _, n, s_out, s_in, edges = _dense_case()
-        kwargs = {}
+        layers = 1
     sample = sample_model(
         ensemble=Ensemble.MICROCANONICAL,
         family=family,
@@ -117,14 +116,14 @@ def test_fixed_se_exact_recovery(family) -> None:
         target_edges=edges,
         self_loops=False,
         seed=42,
-        **kwargs,
+        layers=layers,
     )
     assert _edge_count(sample) == edges
     out, inp = _strengths(sample, n)
     np.testing.assert_array_equal(out, s_out)
     np.testing.assert_array_equal(inp, s_in)
     if family is ModelFamily.B:
-        assert int(sample.occ_num.max()) <= 4
+        assert int(np.max(sample.occ_num)) <= 4
     assert bool((sample.occ_num >= 1).all())
 
 
@@ -134,7 +133,7 @@ def test_fixed_se_families_differ() -> None:
     _, s_out, s_in, edges = _b_feasible_case()
     samples = {}
     for family in (ModelFamily.ME, ModelFamily.B, ModelFamily.W):
-        kwargs = {"layers": 4} if family is not ModelFamily.ME else {}
+        layers = 4 if family is not ModelFamily.ME else 1
         samples[family] = sample_model(
             ensemble=Ensemble.MICROCANONICAL,
             family=family,
@@ -144,7 +143,7 @@ def test_fixed_se_families_differ() -> None:
             target_edges=edges,
             self_loops=False,
             seed=7,
-            **kwargs,
+            layers=layers,
         )
     me, b, w = (
         samples[ModelFamily.ME],

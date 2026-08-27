@@ -349,6 +349,86 @@ pub(crate) fn sample_strength_multinomial(
     (edges.sources, edges.targets, edges.occ_nums)
 }
 
+/// Sample from the microcanonical fixed-strength + fixed-edge-count
+/// ensemble (ME/B/W) (§28 of the fixed-sE plan).
+///
+/// Rust residualizes fixed pairs exactly once (strengths, domain
+/// exclusion, and edge-target subtraction) and merges positive fixed
+/// pairs back into the full sampled network; the returned arrays carry
+/// exact full strengths and the exact full occupied-pair count.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn sample_fixed_strength_edges(
+    family: &str,
+    strength_out: Vec<u64>,
+    strength_in: Vec<u64>,
+    target_edges: usize,
+    self_loops: bool,
+    fixed_sources: Vec<u64>,
+    fixed_targets: Vec<u64>,
+    fixed_occnums: Vec<u64>,
+    layers: u32,
+    burn_in_sweeps: usize,
+    sweeps_per_sample: usize,
+    seed: u64,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    use menobis_core::generation::microcanonical::mcmc::McmcConfig;
+    use menobis_core::generation::microcanonical::occupation_mcmc::chain::sample_fixed_strength_edges as core_sample;
+    use menobis_core::generation::microcanonical::occupation_mcmc::domain::PairDomain;
+    use menobis_core::generation::microcanonical::occupation_mcmc::fixed_edges::BridgeConfig;
+    use menobis_core::generation::microcanonical::occupation_mcmc::problem::FixedStrengthProblem;
+    use menobis_core::model::family::OccupationFamily;
+
+    let family_enum = match family {
+        "ME" => OccupationFamily::ME,
+        "B" => OccupationFamily::B { layers },
+        "W" => OccupationFamily::W { layers },
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "unknown family: {other}. Use ME, B, or W"
+            )))
+        }
+    };
+
+    if strength_out.len() != strength_in.len() {
+        return Err(PyValueError::new_err(
+            "strength_out and strength_in must have the same length",
+        ));
+    }
+    if fixed_sources.len() != fixed_targets.len() || fixed_sources.len() != fixed_occnums.len() {
+        return Err(PyValueError::new_err(
+            "fixed_sources, fixed_targets, fixed_occnums must have the same length",
+        ));
+    }
+
+    let n = strength_out.len();
+    let domain = PairDomain::Complete {
+        node_count: n,
+        self_loops,
+    };
+    let fixed_pairs: Vec<_> = fixed_sources
+        .iter()
+        .zip(fixed_targets.iter())
+        .zip(fixed_occnums.iter())
+        .map(|((&s, &t), &o)| (s, t, o))
+        .collect();
+
+    let problem = FixedStrengthProblem::new(
+        family_enum,
+        strength_out,
+        strength_in,
+        domain,
+        fixed_pairs,
+    )
+    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+    let config = McmcConfig::new(burn_in_sweeps, sweeps_per_sample, seed);
+    match core_sample(problem, target_edges, config, BridgeConfig::default()) {
+        Ok(network) => Ok((network.sources, network.targets, network.occ_nums)),
+        Err(e) => Err(PyValueError::new_err(e.to_string())),
+    }
+}
+
 /// Sample from the microcanonical fixed-strength ensemble.
 ///
 /// Always uses the generic 4-cycle Metropolis MCMC backend on the
