@@ -32,10 +32,17 @@
 //! family log-weight changes always flow through
 //! [`super::target::StrengthTarget`] / `OccupationFamily`.
 
+use super::domain::PairDomain;
 use super::errors::FixedStrengthError;
-use super::fixed_edges::validate_edge_target;
+use super::fixed_edges::{
+    fixed_edge_step_recorded, validate_edge_target, BridgeConfig, FixedEdgeCounters,
+};
+use super::move_cycle::Cycle4Proposal;
 use super::problem::ResidualStrengthProblem;
+use super::state::StrengthState;
+use super::target::StrengthTarget;
 use crate::OccNum;
+use rand::Rng;
 
 /// Residual directed degree target after fixed-pair subtraction (§9).
 ///
@@ -284,8 +291,7 @@ pub(crate) fn degree_distance(
 }
 
 /// O(1) raw L1 degree-distance delta of one 4-cycle proposal (§11,
-/// §16.4).
-///
+/// §16.4).///
 /// The cycle touches rows `a` and `c` (out-degrees) and columns `b` and
 /// `d` (in-degrees); because `a != c` and `b != d` no term is duplicated.
 /// The per-cell before/after counts are cached in
@@ -773,5 +779,362 @@ mod tests {
             running_raw
         );
         assert_eq!(running_raw, start_raw as i64);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6: degree-biased auxiliary step (§16, §24)
+// ---------------------------------------------------------------------------
+
+/// One degree-biased auxiliary substep (§16): propose one **complete**
+/// production fixed-(s,E) transition `K_E` (recorded variant) and apply
+/// the outer degree-potential MH decision
+///
+/// ```text
+/// alpha(x,y) = min(1, exp(−λ·(D(y)−D(x))))
+/// ```
+///
+/// where `D` is the half-normalized degree distance (§12).  Because `K_E`
+/// is reversible for `pi_(s,E)`, every internal factor (family
+/// degeneracy, occupied-cell Hastings q, fixed-E bridge path, internal
+/// edge bias) cancels at this outer level — never recomputed here.
+///
+/// The caller maintains:
+/// - `record`: the flat undo log (may already hold the excursion
+///   prefix); `record[start..]` appended by this call is exactly the
+///   deterministic undo log of this one `K_E` transition;
+/// - `running_raw`: the current raw `D_raw(x)` (even), updated by the
+///   telescoped O(1) per-cycle deltas — never an O(N) scan (§16.4).
+///
+/// Returns `true` if the endpoint is accepted (state changed, `running_raw`
+/// advanced); `false` if the outer MH rejects (the recorded transition is
+/// undone in reverse, the log truncated, `running_raw` unchanged).
+///
+/// Both degree repair (§15) and the production trace (§17) use this exact
+/// primitive — one stochastic policy, two stopping rules (§24).
+#[allow(clippy::too_many_arguments)]
+#[allow(dead_code)] // consumed by Phase 7 repair / Phase 8 trace
+pub(crate) fn degree_auxiliary_step(
+    state: &mut StrengthState,
+    target: &StrengthTarget,
+    domain: &PairDomain,
+    rng: &mut impl Rng,
+    edge_target: usize,
+    bridge_config: &BridgeConfig,
+    counters: &mut FixedEdgeCounters,
+    degree_target: &ResidualDegreeTarget,
+    lambda: f64,
+    record: &mut Vec<Cycle4Proposal>,
+    running_raw: &mut u64,
+) -> bool {
+    let start = record.len();
+    fixed_edge_step_recorded(
+        state,
+        target,
+        domain,
+        rng,
+        edge_target,
+        bridge_config,
+        counters,
+        record,
+    );
+    let delta_t: i64 = record[start..]
+        .iter()
+        .map(|p| proposal_degree_delta_l1(p, &degree_target.out, &degree_target.in_))
+        .sum();
+    if delta_t > 0 {
+        // alpha = exp(−λ·ΔT/2) < 1; consume one uniform draw only when
+        // the acceptance is proper (consistent with `metropolis_accept`).
+        let log_alpha = -lambda * delta_t as f64 / 2.0;
+        let log_u = (rng.random::<f64>() + f64::MIN_POSITIVE).ln();
+        if log_u >= log_alpha {
+            for p in record[start..].iter().rev() {
+                p.undo(state);
+            }
+            record.truncate(start);
+            return false;
+        }
+    }
+    *running_raw = ((*running_raw) as i64 + delta_t) as u64;
+    true
+}
+
+#[cfg(test)]
+mod phase6_tests {
+    use super::*;
+    use crate::model::family::OccupationFamily;
+    use rand::rngs::StdRng;
+    use rand::SeedableRng;
+
+    fn me_target(deg: &ResidualDegreeTarget) -> (StrengthTarget<'static>, PairDomain) {
+        let target = StrengthTarget::new(OccupationFamily::ME);
+        let domain = PairDomain::Complete {
+            node_count: deg.out.len(),
+            self_loops: true,
+        };
+        (target, domain)
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn full_snapshot(state: &StrengthState) -> (Vec<((u64, u64), OccNum)>, Vec<usize>, Vec<usize>) {
+        let mut pairs: Vec<_> = state.iter_occupied().collect();
+        pairs.sort_unstable();
+        (
+            pairs,
+            state.row_occ_count.clone(),
+            state.col_occ_count.clone(),
+        )
+    }
+
+    #[test]
+    fn auxiliary_step_lambda_zero_accepts_every_endpoint() {
+        // λ = 0 (§39): the outer degree potential never rejects; every
+        // recorded K_E endpoint is applied and the running raw distance
+        // must track the independently recomputed D_raw after every step.
+        // Strengths are exact invariants of the state (never a target).
+        let n = 3;
+        let so = vec![3u64, 3, 0];
+        let si = vec![2u64, 2, 2];
+        let deg = ResidualDegreeTarget {
+            out: vec![2, 1, 1],
+            in_: vec![1, 1, 2],
+            edge_count: 4,
+        };
+        let (target, domain) = me_target(&deg);
+        let mut rng = StdRng::seed_from_u64(11);
+        let mut state =
+            StrengthState::new(n, vec![((0, 0), 2), ((1, 1), 2), ((0, 2), 1), ((1, 2), 1)]);
+        let mut running = degree_distance_raw(&state.row_occ_count, &state.col_occ_count, &deg);
+        let mut counters = FixedEdgeCounters::default();
+        let mut record = Vec::new();
+        for _ in 0..500 {
+            let accepted = degree_auxiliary_step(
+                &mut state,
+                &target,
+                &domain,
+                &mut rng,
+                deg.edge_count,
+                &BridgeConfig::default(),
+                &mut counters,
+                &deg,
+                0.0,
+                &mut record,
+                &mut running,
+            );
+            assert!(accepted, "λ=0 must accept every endpoint");
+            let scan = degree_distance_raw(&state.row_occ_count, &state.col_occ_count, &deg);
+            assert_eq!(running, scan, "running raw must equal independent scan");
+            assert_eq!(state.occupied_count(), deg.edge_count);
+            assert_eq!(state.out_strengths, so);
+            assert_eq!(state.in_strengths, si);
+            state.debug_validate();
+            record.clear();
+        }
+    }
+
+    #[test]
+    fn auxiliary_step_rejection_restores_exact_state() {
+        // When the outer MH rejects, the recorded K_E transition must be
+        // undone deterministically: exact occupied pairs, strengths,
+        // degree caches, E, and the running distance.
+        let n = 3;
+        let so = vec![3u64, 4, 1];
+        let si = vec![1u64, 3, 4];
+        let deg = ResidualDegreeTarget {
+            out: vec![1, 2, 2],
+            in_: vec![2, 2, 1],
+            edge_count: 5,
+        };
+        let (target, domain) = me_target(&deg);
+        let mut rng = StdRng::seed_from_u64(5);
+        let mut state = StrengthState::new(
+            n,
+            vec![
+                ((0, 0), 1),
+                ((0, 1), 2),
+                ((1, 1), 1),
+                ((1, 2), 3),
+                ((2, 2), 1),
+            ],
+        );
+        let mut running = degree_distance_raw(&state.row_occ_count, &state.col_occ_count, &deg);
+        let mut counters = FixedEdgeCounters::default();
+        let mut record = Vec::new();
+        let mut rejections = 0usize;
+        for _ in 0..2000 {
+            let origin = full_snapshot(&state);
+            let origin_running = running;
+            let start = record.len();
+            let accepted = degree_auxiliary_step(
+                &mut state,
+                &target,
+                &domain,
+                &mut rng,
+                deg.edge_count,
+                &BridgeConfig::default(),
+                &mut counters,
+                &deg,
+                1.0,
+                &mut record,
+                &mut running,
+            );
+            if accepted {
+                let scan = degree_distance_raw(&state.row_occ_count, &state.col_occ_count, &deg);
+                assert_eq!(running, scan, "accepted: running raw must equal scan");
+                if record.len() > start {
+                    let _ = true; // genuine K_E endpoint move
+                } else {
+                    // Accepted K_E self-loop (§16.3): nothing applied, so
+                    // the state must be the exact origin.
+                    assert_eq!(full_snapshot(&state), origin);
+                }
+                record.clear();
+            } else {
+                rejections += 1;
+                assert_eq!(
+                    full_snapshot(&state),
+                    origin,
+                    "rejection must restore the exact pre-K_E state"
+                );
+                assert_eq!(
+                    running, origin_running,
+                    "rejection must not touch running raw"
+                );
+                assert_eq!(record.len(), start, "rejection must truncate the record");
+            }
+            assert_eq!(state.occupied_count(), deg.edge_count);
+            assert_eq!(state.out_strengths, so);
+            assert_eq!(state.in_strengths, si);
+            state.debug_validate();
+        }
+        assert!(rejections > 0, "expected some degree-MH rejections");
+    }
+
+    #[test]
+    fn auxiliary_step_deterministic_by_seed() {
+        let deg = ResidualDegreeTarget {
+            out: vec![1, 1, 1],
+            in_: vec![1, 1, 1],
+            edge_count: 3,
+        };
+        let (target, domain) = me_target(&deg);
+        let run = |seed: u64| -> Vec<OccNum> {
+            let mut rng = StdRng::seed_from_u64(seed);
+            let mut state = StrengthState::new(3, vec![((0, 0), 1), ((1, 1), 1), ((2, 2), 1)]);
+            let mut running = degree_distance_raw(&state.row_occ_count, &state.col_occ_count, &deg);
+            let mut counters = FixedEdgeCounters::default();
+            let mut record = Vec::new();
+            for _ in 0..300 {
+                degree_auxiliary_step(
+                    &mut state,
+                    &target,
+                    &domain,
+                    &mut rng,
+                    deg.edge_count,
+                    &BridgeConfig::default(),
+                    &mut counters,
+                    &deg,
+                    1.0,
+                    &mut record,
+                    &mut running,
+                );
+                record.clear();
+            }
+            let mut pairs: Vec<_> = state.iter_occupied().collect();
+            pairs.sort_unstable();
+            pairs
+                .into_iter()
+                .flat_map(|((s, t), o)| vec![s, t, o])
+                .collect()
+        };
+        assert_eq!(run(3), run(3), "same seed must reproduce the walk");
+    }
+
+    /// Exact auxiliary row on the ME N=2 s=[3,3]/[3,3] loops fiber
+    /// (§39 independent exact math): the E=4 fiber has exactly two states
+    /// with degree (2,2)/(2,2),
+    ///
+    /// ```text
+    /// s1 = {(0,0):1,(0,1):2,(1,0):2,(1,1):1}   a=1
+    /// s2 = {(0,0):2,(0,1):1,(1,0):1,(1,1):2}   a=2
+    /// ```
+    ///
+    /// Exact law: from s1 the only 4-cycle proposals are (0,0),(1,1)
+    /// -> s0 and (0,1),(1,0) -> s2, each with q_fwd = (1/v+1/v)/4 = 0.5
+    /// (v_ab = 4−row−col+1 = 1 for every involved P1).  E=4 local kernel
+    /// vetoes the s0 move: local[s1->s2] = 0.5.  The bridge from s1
+    /// departs only through the aux move to s0 (mass ≈ 0.015) and every
+    /// such departure returns to s1 (s0's only move is back), so the
+    /// bridge is a pure self-loop.  Hence
+    /// K[s1][s2] = 0.95·0.5 and K[s1][s1] = 0.95·0.5 + 0.05.
+    fn expected_aux_row_s1() -> (f64, f64) {
+        let k12 = 0.95 * 0.5; // 0.475
+        let k11 = 0.95 * 0.5 + 0.05; // 0.525
+        (k11, k12)
+    }
+
+    #[test]
+    fn auxiliary_step_matches_exact_q_row() {
+        // Production one-step endpoint frequencies from the same origin
+        // must match the independent exact Q row (§39 / §22.1).
+        let (p_self, p_to_s2) = expected_aux_row_s1();
+        let deg = ResidualDegreeTarget {
+            out: vec![2, 2],
+            in_: vec![2, 2],
+            edge_count: 4,
+        };
+        let (target, domain) = me_target(&deg);
+        let s1 = || StrengthState::new(2, vec![((0, 0), 1), ((0, 1), 2), ((1, 0), 2), ((1, 1), 1)]);
+        let s2_pairs = || -> Vec<((u64, u64), OccNum)> {
+            let mut p: Vec<_> =
+                StrengthState::new(2, vec![((0, 0), 2), ((0, 1), 1), ((1, 0), 1), ((1, 1), 2)])
+                    .iter_occupied()
+                    .collect();
+            p.sort_unstable();
+            p
+        };
+
+        let trials = 200_000usize;
+        let mut rng = StdRng::seed_from_u64(2026);
+        let mut counters = FixedEdgeCounters::default();
+        let mut record = Vec::new();
+        let mut landed_s2 = 0usize;
+        for _ in 0..trials {
+            let mut state = s1();
+            let mut running = degree_distance_raw(&state.row_occ_count, &state.col_occ_count, &deg);
+            let start = record.len();
+            let accepted = degree_auxiliary_step(
+                &mut state,
+                &target,
+                &domain,
+                &mut rng,
+                deg.edge_count,
+                &BridgeConfig::default(),
+                &mut counters,
+                &deg,
+                1.0,
+                &mut record,
+                &mut running,
+            );
+            assert!(accepted, "in-fiber ΔD=0 endpoint must always be accepted");
+            record.truncate(start);
+            let mut pairs: Vec<_> = state.iter_occupied().collect();
+            pairs.sort_unstable();
+            if pairs == s2_pairs() {
+                landed_s2 += 1;
+            } else {
+                assert_eq!(pairs.len(), 4, "unexpected endpoint");
+            }
+        }
+        let empirical = landed_s2 as f64 / trials as f64;
+        assert!(
+            (empirical - p_to_s2).abs() < 0.01,
+            "empirical P(->s2) {empirical:.4} vs exact {p_to_s2:.4}"
+        );
+        assert!(
+            (1.0 - empirical - p_self).abs() < 0.01,
+            "empirical P(->s1) {} vs exact {p_self:.4}",
+            1.0 - empirical
+        );
     }
 }
