@@ -67,6 +67,20 @@ pub fn exact_e_local_step(
     rng: &mut impl Rng,
     edge_target: usize,
 ) -> EdgeLocalOutcome {
+    exact_e_local_step_impl(state, target, domain, rng, edge_target, None)
+}
+
+/// Implementation of one exact-E local step; when `capture` is `Some`,
+/// an accepted proposal is handed back (for the fixed-(s,k) recorder,
+/// §13.2) without changing the RNG consumption or transition law.
+pub(crate) fn exact_e_local_step_impl(
+    state: &mut StrengthState,
+    target: &StrengthTarget,
+    domain: &PairDomain,
+    rng: &mut impl Rng,
+    edge_target: usize,
+    capture: Option<&mut Option<Cycle4Proposal>>,
+) -> EdgeLocalOutcome {
     let Some(proposal) = draw_cycle4_proposal(state, target, domain, rng) else {
         return EdgeLocalOutcome::HeldInvalid;
     };
@@ -78,6 +92,9 @@ pub fn exact_e_local_step(
     };
     if !metropolis_accept(log_alpha, rng) {
         return EdgeLocalOutcome::Rejected;
+    }
+    if let Some(cap) = capture {
+        *cap = Some(proposal);
     }
     proposal.apply(state);
     EdgeLocalOutcome::Accepted
@@ -227,6 +244,9 @@ impl FixedEdgeCounters {
 ///   restored — a self-loop in the exact chain.
 ///
 /// Precondition: `state.occupied_count() == edge_target` (in the fiber).
+///
+/// See [`bridge_step_impl`] — the public entry keeps the historical
+/// signature and never records.
 pub fn bridge_step(
     state: &mut StrengthState,
     target: &StrengthTarget,
@@ -235,6 +255,28 @@ pub fn bridge_step(
     edge_target: usize,
     config: &BridgeConfig,
 ) -> BridgeOutcome {
+    bridge_step_impl(state, target, domain, rng, edge_target, config, None)
+}
+
+/// Implementation of one bridge attempt with optional external recording
+/// (§13.2).
+///
+/// Recording semantics inside a successful bridge: every accepted
+/// auxiliary substep **that remains applied** is appended to `record`,
+/// including the final first-return cycle.  If the bridge aborts (first
+/// substep in-fiber) or times out and restores the origin, the record is
+/// truncated back to its entry length — the caller sees nothing appended
+/// for a net self-loop.
+pub(crate) fn bridge_step_impl(
+    state: &mut StrengthState,
+    target: &StrengthTarget,
+    domain: &PairDomain,
+    rng: &mut impl Rng,
+    edge_target: usize,
+    config: &BridgeConfig,
+    mut record: Option<&mut Vec<Cycle4Proposal>>,
+) -> BridgeOutcome {
+    let record_start = record.as_ref().map_or(0, |r| r.len());
     let mut accepted_proposals: Vec<Cycle4Proposal> = Vec::with_capacity(config.bridge_max_steps);
     let mut substeps = 0usize;
     let mut aux_accepted = 0usize;
@@ -258,6 +300,9 @@ pub fn bridge_step(
                         // In-fiber move on the first substep: abort and
                         // restore the origin.
                         proposal.undo(state);
+                        if let Some(rec) = record.as_deref_mut() {
+                            rec.truncate(record_start);
+                        }
                         return BridgeOutcome {
                             success: false,
                             departed: false,
@@ -265,7 +310,12 @@ pub fn bridge_step(
                             accepted_substeps: aux_accepted,
                         };
                     }
-                    // First return to the fiber: keep the state.
+                    // First return to the fiber: keep the state.  The
+                    // final return cycle is part of the net applied
+                    // change, so it must be recorded when recording.
+                    if let Some(rec) = record.as_deref_mut() {
+                        rec.push(proposal);
+                    }
                     return BridgeOutcome {
                         success: true,
                         departed: true,
@@ -274,11 +324,17 @@ pub fn bridge_step(
                     };
                 }
                 accepted_proposals.push(proposal);
+                if let Some(rec) = record.as_deref_mut() {
+                    rec.push(proposal);
+                }
             }
             AuxSubstepOutcome::HeldInvalid | AuxSubstepOutcome::Rejected => {
                 if step == 0 {
                     // First substep held or rejected: still in the fiber
                     // (we started there).  Abort as a bridge self-loop.
+                    if let Some(rec) = record.as_deref_mut() {
+                        rec.truncate(record_start);
+                    }
                     return BridgeOutcome {
                         success: false,
                         departed: false,
@@ -292,9 +348,13 @@ pub fn bridge_step(
     }
 
     // Cap reached without a return: undo every accepted substep in
-    // reverse order and restore the origin (§19).
+    // reverse order and restore the origin (§19).  Nothing in the record
+    // may leak out of this net self-loop.
     for proposal in accepted_proposals.iter().rev() {
         proposal.undo(state);
+    }
+    if let Some(rec) = record {
+        rec.truncate(record_start);
     }
     BridgeOutcome {
         success: false,
@@ -318,6 +378,10 @@ pub fn bridge_step(
 /// The uniform mixture draw is the only scheduling decision; both
 /// sub-kernels are reversible for the exact conditional target
 /// `pi_(s,E)`, so the mixture is exactly stationary (§11, §42).
+///
+/// This public entry **never records**: it consumes exactly the same RNG
+/// stream and has exactly the same transition law as the recorded variant
+/// (recording adds no draws).  See [`fixed_edge_step_impl`].
 pub fn fixed_edge_step(
     state: &mut StrengthState,
     target: &StrengthTarget,
@@ -327,10 +391,48 @@ pub fn fixed_edge_step(
     config: &BridgeConfig,
     counters: &mut FixedEdgeCounters,
 ) {
+    fixed_edge_step_impl(
+        state,
+        target,
+        domain,
+        rng,
+        edge_target,
+        config,
+        counters,
+        None,
+    );
+}
+
+/// Reversible-production-step implementation with optional external
+/// recording (§13).
+///
+/// Recording semantics for one complete `K_E` transition (§13.2):
+///
+/// - local subkernel accepts one cycle → append that proposal;
+/// - local subkernel holds/rejects → append nothing;
+/// - successful bridge → append every cycle that remains applied in the
+///   successful path, including the final return cycle;
+/// - bridge aborts/times out and restores its origin → append nothing
+///   (the bridge truncates its own records).
+///
+/// A caller marks `start = record.len()`, runs one recorded transition,
+/// and then `record[start..]` is exactly the deterministic undo log of
+/// that transition's net state change.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn fixed_edge_step_impl(
+    state: &mut StrengthState,
+    target: &StrengthTarget,
+    domain: &PairDomain,
+    rng: &mut impl Rng,
+    edge_target: usize,
+    config: &BridgeConfig,
+    counters: &mut FixedEdgeCounters,
+    record: Option<&mut Vec<Cycle4Proposal>>,
+) {
     counters.outer_proposals += 1;
     if rng.random::<f64>() < config.bridge_probability {
         counters.bridge_attempts += 1;
-        let outcome = bridge_step(state, target, domain, rng, edge_target, config);
+        let outcome = bridge_step_impl(state, target, domain, rng, edge_target, config, record);
         counters.bridge_auxiliary_substeps += outcome.substeps as u64;
         counters.bridge_auxiliary_accepted += outcome.accepted_substeps as u64;
         if outcome.departed {
@@ -343,13 +445,52 @@ pub fn fixed_edge_step(
             counters.bridge_timeouts += 1;
         }
     } else {
-        match exact_e_local_step(state, target, domain, rng, edge_target) {
+        let mut captured: Option<Cycle4Proposal> = None;
+        let outcome = if record.is_some() {
+            exact_e_local_step_impl(state, target, domain, rng, edge_target, Some(&mut captured))
+        } else {
+            exact_e_local_step(state, target, domain, rng, edge_target)
+        };
+        match outcome {
             EdgeLocalOutcome::Accepted => counters.local_accepted += 1,
             EdgeLocalOutcome::HeldInvalid => counters.local_held_invalid += 1,
             EdgeLocalOutcome::HeldEdgeVeto => counters.local_held_edge_veto += 1,
             EdgeLocalOutcome::Rejected => counters.local_mh_rejected += 1,
         }
+        if let (Some(rec), Some(proposal)) = (record, captured) {
+            rec.push(proposal);
+        }
     }
+}
+
+/// Recorded variant of one production fixed-(s,E) transition (§13.1).
+///
+/// Same RNG consumption and transition law as
+/// [`fixed_edge_step`], but every `Cycle4Proposal` that remains applied
+/// at the end of the transition is appended to `record`.  A caller
+/// marking `start = record.len()` before the call can later undo the
+/// whole transition by applying `record[start..]` in reverse.
+#[allow(clippy::too_many_arguments, dead_code)] // dead_code: consumed by Phase 6 degree auxiliary step
+pub(crate) fn fixed_edge_step_recorded(
+    state: &mut StrengthState,
+    target: &StrengthTarget,
+    domain: &PairDomain,
+    rng: &mut impl Rng,
+    edge_target: usize,
+    config: &BridgeConfig,
+    counters: &mut FixedEdgeCounters,
+    record: &mut Vec<Cycle4Proposal>,
+) {
+    fixed_edge_step_impl(
+        state,
+        target,
+        domain,
+        rng,
+        edge_target,
+        config,
+        counters,
+        Some(record),
+    );
 }
 
 /// One fixed-(s,E) sweep (§18): `max(current occupied pairs, 2·N, 1)`
@@ -1266,5 +1407,217 @@ mod tests {
             "no movement on a non-singleton connected fiber: {counters:?}"
         );
         let _ = start;
+    }
+
+    // -------------------------------------------------------------------
+    // Phase 5: recordable K_E (§13)
+    // -------------------------------------------------------------------
+
+    /// Full sparse snapshot for exact round-trip comparison.
+    #[allow(clippy::type_complexity)]
+    fn state_snapshot(
+        state: &StrengthState,
+    ) -> (Vec<((u64, u64), OccNum)>, Vec<OccNum>, Vec<OccNum>) {
+        let mut pairs: Vec<_> = state.iter_occupied().collect();
+        pairs.sort_unstable();
+        (
+            pairs,
+            state.out_strengths.clone(),
+            state.in_strengths.clone(),
+        )
+    }
+
+    #[test]
+    fn recorded_k_e_same_endpoint_as_ordinary_same_rng() {
+        // Same seed + same initial state: the recorded transition must
+        // consume the same RNG and reach the same endpoint as the
+        // ordinary transition (§13.3).  Both variants are deterministic
+        // functions of the RNG stream, so 200-step endpoint equality also
+        // proves identical RNG consumption.
+        let n = 3;
+        let so = vec![3u64; 3];
+        let si = vec![3u64; 3];
+        let target = StrengthTarget::new(OccupationFamily::ME);
+        let domain = PairDomain::Complete {
+            node_count: n,
+            self_loops: true,
+        };
+        let config = BridgeConfig::default();
+        let edge_target = 5usize;
+
+        let prepared = || {
+            let mut state = make_state(n, &so, &si, OccupationFamily::ME, true);
+            repair_to_edge_target(
+                &mut state,
+                &make_problem(OccupationFamily::ME, so.clone(), si.clone(), true),
+                &mut StdRng::seed_from_u64(99),
+                edge_target,
+                &EdgeRepairConfig::default(),
+            )
+            .unwrap();
+            state
+        };
+
+        let run_unrecorded = |seed: u64| -> Vec<((u64, u64), OccNum)> {
+            let mut state = prepared();
+            let mut rng = StdRng::seed_from_u64(seed);
+            let mut counters = FixedEdgeCounters::default();
+            for _ in 0..200 {
+                fixed_edge_step(
+                    &mut state,
+                    &target,
+                    &domain,
+                    &mut rng,
+                    edge_target,
+                    &config,
+                    &mut counters,
+                );
+            }
+            sorted_pairs(&state)
+        };
+
+        let run_recorded = |seed: u64| -> Vec<((u64, u64), OccNum)> {
+            let mut state = prepared();
+            let mut rng = StdRng::seed_from_u64(seed);
+            let mut counters = FixedEdgeCounters::default();
+            let mut record: Vec<Cycle4Proposal> = Vec::new();
+            for _ in 0..200 {
+                fixed_edge_step_recorded(
+                    &mut state,
+                    &target,
+                    &domain,
+                    &mut rng,
+                    edge_target,
+                    &config,
+                    &mut counters,
+                    &mut record,
+                );
+                // The undo log is per-transition; clear between transitions.
+                record.clear();
+            }
+            sorted_pairs(&state)
+        };
+
+        for seed in [1u64, 7, 42, 1234] {
+            assert_eq!(
+                run_unrecorded(seed),
+                run_recorded(seed),
+                "seed {seed}: recorded endpoint differs from ordinary"
+            );
+        }
+    }
+
+    #[test]
+    fn recorded_k_e_undo_restores_exact_origin() {
+        // Execute a recorded K_E transition, then undo record[start..] in
+        // reverse: exactly the original state, occupied coordinates,
+        // strengths, and degree caches (§13.3).
+        let n = 3;
+        let so = vec![4u64, 3, 2];
+        let si = vec![2u64, 4, 3];
+        let target = StrengthTarget::new(OccupationFamily::ME);
+        let domain = PairDomain::Complete {
+            node_count: n,
+            self_loops: true,
+        };
+        let config = BridgeConfig::default();
+        let edge_target = 5usize;
+
+        let mut rng = StdRng::seed_from_u64(77);
+        let mut state = make_state(n, &so, &si, OccupationFamily::ME, true);
+        repair_to_edge_target(
+            &mut state,
+            &make_problem(OccupationFamily::ME, so.clone(), si.clone(), true),
+            &mut rng,
+            edge_target,
+            &EdgeRepairConfig::default(),
+        )
+        .unwrap();
+
+        let mut record: Vec<Cycle4Proposal> = Vec::new();
+        let mut counters = FixedEdgeCounters::default();
+        for _ in 0..300 {
+            let origin = state_snapshot(&state);
+            let origin_row = state.row_occ_count.clone();
+            let origin_col = state.col_occ_count.clone();
+            let start = record.len();
+            fixed_edge_step_recorded(
+                &mut state,
+                &target,
+                &domain,
+                &mut rng,
+                edge_target,
+                &config,
+                &mut counters,
+                &mut record,
+            );
+
+            // Undo the net change of this one transition deterministically
+            // from the flat log — never a state clone (§19, §45).
+            let applied = &record[start..];
+            for proposal in applied.iter().rev() {
+                proposal.undo(&mut state);
+            }
+            record.truncate(start);
+
+            assert_eq!(
+                state_snapshot(&state),
+                origin,
+                "undo of record[start..] must restore the exact origin"
+            );
+            assert_eq!(state.row_occ_count, origin_row, "row caches drifted");
+            assert_eq!(state.col_occ_count, origin_col, "col caches drifted");
+            assert_eq!(state.occupied_count(), edge_target);
+            state.debug_validate();
+        }
+    }
+
+    #[test]
+    fn failed_bridge_leaks_no_external_record() {
+        // With a tiny bridge cap the bridge usually times out and restores
+        // its origin: the recorded transition must then append nothing,
+        // and the undo contract must hold for every transition.
+        let n = 2;
+        let target = StrengthTarget::new(OccupationFamily::ME);
+        let domain = PairDomain::Complete {
+            node_count: n,
+            self_loops: true,
+        };
+        let config = BridgeConfig {
+            bridge_probability: 1.0, // force the bridge path
+            bridge_max_steps: 1,     // can never complete: guaranteed timeout
+            ..BridgeConfig::default()
+        };
+        // E=2 fiber: the only states are the two diagonal/cross matchings.
+        let edge_target = 2usize;
+        let mut rng = StdRng::seed_from_u64(3);
+        let mut state = StrengthState::new(n, vec![((0, 0), 2), ((1, 1), 2)]);
+        let mut record: Vec<Cycle4Proposal> = Vec::new();
+        let mut counters = FixedEdgeCounters::default();
+        for _ in 0..40 {
+            let origin = state_snapshot(&state);
+            let start = record.len();
+            fixed_edge_step_recorded(
+                &mut state,
+                &target,
+                &domain,
+                &mut rng,
+                edge_target,
+                &config,
+                &mut counters,
+                &mut record,
+            );
+            assert_eq!(
+                record.len(),
+                start,
+                "a timed-out bridge must leak no external record"
+            );
+            assert_eq!(
+                state_snapshot(&state),
+                origin,
+                "timeout must restore the origin"
+            );
+        }
+        assert!(counters.bridge_timeouts > 0, "expected bridge timeouts");
     }
 }
