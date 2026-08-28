@@ -113,8 +113,100 @@ impl PairDomain {
                 node_count,
                 self_loops,
                 excluded,
-            } => complete_policy_count(*node_count, *self_loops).saturating_sub(excluded.len()),
+            } => {
+                let base = complete_policy_count(*node_count, *self_loops);
+                // Subtract only excluded coordinates that would otherwise be
+                // admissible (in-range and allowed by the self-loop policy) —
+                // consistent with [`PairDomain::admissible_degree_caps`], so
+                // the per-node cap sums always equal this count.
+                let subtracted = excluded
+                    .iter()
+                    .filter(|&&(s, t)| {
+                        let (s, t) = (s as usize, t as usize);
+                        (*self_loops || s != t) && s < *node_count && t < *node_count
+                    })
+                    .count();
+                base.saturating_sub(subtracted)
+            }
             PairDomain::Sparse { allowed, .. } => allowed.len(),
+        }
+    }
+
+    /// Per-node admissible-coordinate caps `(out_caps, in_caps)`:
+    /// `out_caps[i]` counts admissible residual coordinates `(i, ·)` and
+    /// `in_caps[j]` counts admissible residual coordinates `(·, j)`.
+    ///
+    /// Used by the fixed-(s,k) degree-target validation (§10.6): the
+    /// residual out/in degree of every node must fit in its admissible
+    /// slot count.
+    ///
+    /// Complexity:
+    ///
+    /// - [`Complete`](PairDomain::Complete): `O(N)`.
+    /// - [`CompleteMinus`](PairDomain::CompleteMinus): `O(N + F)` where
+    ///   `F` is the excluded-coordinate count — never enumerates the
+    ///   `N × N` grid.
+    /// - [`Sparse`](PairDomain::Sparse): `O(N + A)` over explicit pairs.
+    pub fn admissible_degree_caps(&self) -> (Vec<usize>, Vec<usize>) {
+        match self {
+            PairDomain::Complete {
+                node_count,
+                self_loops,
+            } => {
+                let cap = if *self_loops {
+                    *node_count
+                } else {
+                    node_count.saturating_sub(1)
+                };
+                (vec![cap; *node_count], vec![cap; *node_count])
+            }
+            PairDomain::CompleteMinus {
+                node_count,
+                self_loops,
+                excluded,
+            } => {
+                let mut out_caps = vec![0usize; *node_count];
+                let mut in_caps = vec![0usize; *node_count];
+                for i in 0..*node_count {
+                    let base = if *self_loops {
+                        *node_count
+                    } else {
+                        node_count.saturating_sub(1)
+                    };
+                    out_caps[i] = base;
+                    in_caps[i] = base;
+                }
+                // An excluded coordinate reduces the row/column cap by 1
+                // exactly when it would otherwise have been admissible
+                // (in-range and allowed by the self-loop policy).
+                for &(s, t) in excluded {
+                    let (s, t) = (s as usize, t as usize);
+                    let otherwise_admissible =
+                        (*self_loops || s != t) && s < *node_count && t < *node_count;
+                    if otherwise_admissible {
+                        out_caps[s] = out_caps[s].saturating_sub(1);
+                        in_caps[t] = in_caps[t].saturating_sub(1);
+                    }
+                }
+                (out_caps, in_caps)
+            }
+            PairDomain::Sparse {
+                node_count,
+                allowed,
+            } => {
+                let mut out_caps = vec![0usize; *node_count];
+                let mut in_caps = vec![0usize; *node_count];
+                for &(s, t) in allowed {
+                    let (s, t) = (s as usize, t as usize);
+                    if s < *node_count {
+                        out_caps[s] += 1;
+                    }
+                    if t < *node_count {
+                        in_caps[t] += 1;
+                    }
+                }
+                (out_caps, in_caps)
+            }
         }
     }
 
@@ -379,6 +471,84 @@ mod tests {
             allowed: HashSet::new(),
         }
         .requires_admissibility_repair());
+    }
+
+    #[test]
+    fn admissible_degree_caps_complete() {
+        let with_loops = PairDomain::Complete {
+            node_count: 4,
+            self_loops: true,
+        };
+        let (out, inp) = with_loops.admissible_degree_caps();
+        assert_eq!(out, vec![4; 4]);
+        assert_eq!(inp, vec![4; 4]);
+
+        let loopless = PairDomain::Complete {
+            node_count: 4,
+            self_loops: false,
+        };
+        let (out, inp) = loopless.admissible_degree_caps();
+        assert_eq!(out, vec![3; 4]);
+        assert_eq!(inp, vec![3; 4]);
+    }
+
+    #[test]
+    fn admissible_degree_caps_complete_minus() {
+        let mut excluded = std::collections::HashSet::new();
+        excluded.insert((0, 1));
+        excluded.insert((2, 2));
+        excluded.insert((1, 0));
+        let d = PairDomain::CompleteMinus {
+            node_count: 3,
+            self_loops: true,
+            excluded,
+        };
+        let (out, inp) = d.admissible_degree_caps();
+        // Row 0 loses (0,1); row 1 loses (1,0); row 2 loses (2,2).
+        assert_eq!(out, vec![2, 2, 2]);
+        // Col 1 loses (0,1); col 0 loses (1,0); col 2 loses (2,2).
+        assert_eq!(inp, vec![2, 2, 2]);
+        assert_eq!(out.iter().sum::<usize>(), d.admissible_pair_count());
+        assert_eq!(inp.iter().sum::<usize>(), d.admissible_pair_count());
+    }
+
+    #[test]
+    fn admissible_degree_caps_complete_minus_loopless_diagonal() {
+        // Loopless policy already excludes the diagonal; an explicit
+        // diagonal exclusion must not double-subtract.
+        let mut excluded = std::collections::HashSet::new();
+        excluded.insert((0, 0));
+        excluded.insert((0, 1));
+        let d = PairDomain::CompleteMinus {
+            node_count: 3,
+            self_loops: false,
+            excluded,
+        };
+        let (out, inp) = d.admissible_degree_caps();
+        // Row 0: policy gives 2, excluded (0,0) is not otherwise admissible,
+        // excluded (0,1) subtracts 1 -> 1.
+        assert_eq!(out, vec![1, 2, 2]);
+        assert_eq!(inp, vec![2, 1, 2]);
+        assert_eq!(out.iter().sum::<usize>(), d.admissible_pair_count());
+        assert_eq!(inp.iter().sum::<usize>(), d.admissible_pair_count());
+    }
+
+    #[test]
+    fn admissible_degree_caps_sparse() {
+        let mut allowed = std::collections::HashSet::new();
+        allowed.insert((0, 1));
+        allowed.insert((1, 0));
+        allowed.insert((2, 2));
+        allowed.insert((1, 1));
+        let d = PairDomain::Sparse {
+            node_count: 3,
+            allowed,
+        };
+        let (out, inp) = d.admissible_degree_caps();
+        assert_eq!(out, vec![1, 2, 1]);
+        assert_eq!(inp, vec![1, 2, 1]);
+        assert_eq!(out.iter().sum::<usize>(), d.admissible_pair_count());
+        assert_eq!(inp.iter().sum::<usize>(), d.admissible_pair_count());
     }
 
     #[test]

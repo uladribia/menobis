@@ -10,6 +10,9 @@ pub enum FixedStrengthError {
     /// The residual edge target violates a necessary feasibility bound
     /// (§14 of the fixed-sE plan).
     InvalidEdgeTarget(String),
+    /// The residual degree target violates a necessary feasibility bound
+    /// (§10 of the fixed-(s,k) plan).
+    InvalidDegreeTarget(String),
     /// Edge-count repair exhausted its restart budget without reaching the
     /// exact edge target (§13.3).
     EdgeRepairExhausted {
@@ -41,6 +44,7 @@ impl fmt::Display for FixedStrengthError {
         match self {
             Self::InvalidResidual(msg) => write!(f, "invalid residual problem: {msg}"),
             Self::InvalidEdgeTarget(msg) => write!(f, "invalid edge target: {msg}"),
+            Self::InvalidDegreeTarget(msg) => write!(f, "invalid degree target: {msg}"),
             Self::EdgeRepairExhausted {
                 best_edges,
                 target_edges,
