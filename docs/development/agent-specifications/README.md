@@ -35,6 +35,7 @@ These documents are intentionally more detailed than end-user documentation. The
 | `archive/08_scalable_fixed_total_gibbs_migration_final.md` | Archived | Scalable fixed-(E,T)/fixed-(k,T) pair-Gibbs migration design (implemented) |
 | `archive/09_MENoBiS_microcanonical_refactor_plan.md` | Archived | Overall refactor plan (superseded by the practical final spec) |
 | `archive/microcanonical-phase-0.md` | Archived | Foundation refactor: terminology migration, shared abstractions, generation split, filtering adaptation, and benchmark baseline |
+| `archive/12_microcanonical_fixed_strength_edges_master_implementation_plan.md` | Archived | Master implementation plan for exact microcanonical fixed strengths + exact edge count (ME/B/W; completed on `feature/microcanonical-fixed-strength-edges`) |
 | `archive/README.md` | Index | Explains why the historical specs are archived and what to read instead |
 
 ## Benchmark results
