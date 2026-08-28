@@ -283,6 +283,57 @@ pub(crate) fn degree_distance(
     degree_distance_raw(state_out, state_in, target) / 2
 }
 
+/// O(1) raw L1 degree-distance delta of one 4-cycle proposal (§11,
+/// §16.4).
+///
+/// The cycle touches rows `a` and `c` (out-degrees) and columns `b` and
+/// `d` (in-degrees); because `a != c` and `b != d` no term is duplicated.
+/// The per-cell before/after counts are cached in
+/// [`Cycle4Proposal`] (super::move_cycle::Cycle4Proposal), so the
+/// result is
+///
+/// ```text
+/// |out_a_after − k*[a]| − |out_a_before − k*[a]|
+/// + |out_c_after − k*[c]| − |out_c_before − k*[c]|
+/// + |in_b_after  − k*[b]| − |in_b_before  − k*[b]|
+/// + |in_d_after  − k*[d]| − |in_d_before  − k*[d]|
+/// ```
+///
+/// For a sequence of proposals these deltas telescope to the full
+/// endpoint change; the auxiliary hot path never scans all `N` nodes.
+#[allow(dead_code)] // consumed by the degree repair/trace phases
+pub(crate) fn proposal_degree_delta_l1(
+    proposal: &super::move_cycle::Cycle4Proposal,
+    target_out: &[u32],
+    target_in: &[u32],
+) -> i64 {
+    let pop = |before: usize, after: usize, tgt: &[u32], node: usize| {
+        let t = tgt[node] as i64;
+        (after as i64 - t).abs() - (before as i64 - t).abs()
+    };
+    pop(
+        proposal.out_a_before,
+        proposal.out_a_after,
+        target_out,
+        proposal.a as usize,
+    ) + pop(
+        proposal.out_c_before,
+        proposal.out_c_after,
+        target_out,
+        proposal.c as usize,
+    ) + pop(
+        proposal.in_b_before,
+        proposal.in_b_after,
+        target_in,
+        proposal.b as usize,
+    ) + pop(
+        proposal.in_d_before,
+        proposal.in_d_after,
+        target_in,
+        proposal.d as usize,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -527,5 +578,200 @@ mod tests {
         assert_eq!(degree_distance(&out, &inp, &target), 2);
         // Exact match -> 0.
         assert_eq!(degree_distance_raw(&[2, 1], &[1, 2], &target), 0);
+    }
+
+    // -------------------------------------------------------------------
+    // §37: cached proposal degree deltas vs independent recomputation
+    // -------------------------------------------------------------------
+
+    /// Independent recomputation of `(k_out, k_in)` from the sparse state.
+    fn recompute_degrees(
+        state: &crate::generation::microcanonical::occupation_mcmc::state::StrengthState,
+    ) -> (Vec<usize>, Vec<usize>) {
+        let n = state.node_count;
+        let mut out = vec![0usize; n];
+        let mut inp = vec![0usize; n];
+        for &(s, t) in state.occupied_pairs() {
+            out[s as usize] += 1;
+            inp[t as usize] += 1;
+        }
+        (out, inp)
+    }
+
+    /// Draw a proposal from `state`, apply it, and verify:
+    ///  1. the cached before/after counts equal an independent scan;
+    ///  2. the cached O(1) delta equals an independent full-scan delta.
+    fn assert_proposal_metadata_matches_scan(
+        state: &mut crate::generation::microcanonical::occupation_mcmc::state::StrengthState,
+    ) {
+        use crate::generation::microcanonical::occupation_mcmc::move_cycle::draw_cycle4_proposal;
+        use crate::generation::microcanonical::occupation_mcmc::target::StrengthTarget;
+        use crate::model::family::OccupationFamily;
+        use rand::SeedableRng;
+        let target = StrengthTarget::new(OccupationFamily::ME);
+        let n = state.node_count;
+        // Arbitrary but feasible-looking targets sized to the state.
+        let target_out = vec![2u32; n];
+        let target_in = vec![2u32; n];
+        let degree_target = ResidualDegreeTarget {
+            out: target_out.clone(),
+            in_: target_in.clone(),
+            edge_count: 2 * n,
+        };
+        let domain = PairDomain::Complete {
+            node_count: n,
+            self_loops: true,
+        };
+        let Some(proposal) = draw_cycle4_proposal(
+            state,
+            &target,
+            &domain,
+            &mut rand::rngs::StdRng::seed_from_u64(1),
+        ) else {
+            return;
+        };
+
+        let (before_out, before_in) = recompute_degrees(state);
+        assert_eq!(
+            proposal.out_a_before, before_out[proposal.a as usize],
+            "out_a_before mismatch"
+        );
+        assert_eq!(
+            proposal.out_c_before, before_out[proposal.c as usize],
+            "out_c_before mismatch"
+        );
+        assert_eq!(
+            proposal.in_b_before, before_in[proposal.b as usize],
+            "in_b_before mismatch"
+        );
+        assert_eq!(
+            proposal.in_d_before, before_in[proposal.d as usize],
+            "in_d_before mismatch"
+        );
+
+        proposal.apply(state);
+        let (after_out, after_in) = recompute_degrees(state);
+        assert_eq!(
+            proposal.out_a_after, after_out[proposal.a as usize],
+            "out_a_after mismatch"
+        );
+        assert_eq!(
+            proposal.out_c_after, after_out[proposal.c as usize],
+            "out_c_after mismatch"
+        );
+        assert_eq!(
+            proposal.in_b_after, after_in[proposal.b as usize],
+            "in_b_after mismatch"
+        );
+        assert_eq!(
+            proposal.in_d_after, after_in[proposal.d as usize],
+            "in_d_after mismatch"
+        );
+
+        // Independent full-scan raw delta.
+        let delta_scan = degree_distance_raw(&after_out, &after_in, &degree_target) as i64
+            - degree_distance_raw(&before_out, &before_in, &degree_target) as i64;
+        assert_eq!(
+            proposal_degree_delta_l1(&proposal, &target_out, &target_in),
+            delta_scan,
+            "cached delta must equal independent scan"
+        );
+
+        // Undo must restore the exact degree vectors (round-trip).
+        proposal.undo(state);
+        let (restored_out, restored_in) = recompute_degrees(state);
+        assert_eq!(restored_out, before_out);
+        assert_eq!(restored_in, before_in);
+    }
+
+    #[test]
+    fn proposal_degree_metadata_matches_scan_across_patterns() {
+        use crate::generation::microcanonical::occupation_mcmc::state::StrengthState;
+
+        // Pattern A — no support change: all four cells stay occupied.
+        //       (0,0)=2  (1,1)=2  (0,1)=1  (1,0)=1
+        let state_a =
+            StrengthState::new(2, vec![((0, 0), 2), ((1, 1), 2), ((0, 1), 1), ((1, 0), 1)]);
+        // Pattern B — two decrements disappear, two cross cells appear:
+        //       (0,0)=1  (1,1)=1  and (0,1),(1,0) absent.
+        let state_b = StrengthState::new(2, vec![((0, 0), 1), ((1, 1), 1)]);
+        // Pattern C — one decrement disappears: (0,0)=1 leaves the support.
+        let state_c =
+            StrengthState::new(2, vec![((0, 0), 1), ((1, 1), 2), ((0, 1), 1), ((1, 0), 1)]);
+        // Pattern D — one cross cell enters: (0,1) appears while others stay.
+        let state_d = StrengthState::new(2, vec![((0, 0), 2), ((1, 1), 2), ((1, 0), 1)]);
+        // Mixed dense state.
+        let state_e = StrengthState::new(
+            3,
+            vec![
+                ((0, 0), 3),
+                ((1, 1), 2),
+                ((2, 2), 3),
+                ((0, 2), 1),
+                ((2, 0), 1),
+            ],
+        );
+
+        for mut state in [state_a, state_b, state_c, state_d, state_e] {
+            for _ in 0..200 {
+                assert_proposal_metadata_matches_scan(&mut state);
+                state.debug_validate();
+            }
+        }
+    }
+
+    #[test]
+    fn proposal_delta_telescopes_over_sequences() {
+        use crate::generation::microcanonical::occupation_mcmc::move_cycle::draw_cycle4_proposal;
+        use crate::generation::microcanonical::occupation_mcmc::state::StrengthState;
+        use crate::generation::microcanonical::occupation_mcmc::target::StrengthTarget;
+        use crate::model::family::OccupationFamily;
+        use rand::SeedableRng;
+
+        let mut state =
+            StrengthState::new(2, vec![((0, 0), 2), ((1, 1), 2), ((0, 1), 1), ((1, 0), 1)]);
+        let target = StrengthTarget::new(OccupationFamily::ME);
+        let domain = PairDomain::Complete {
+            node_count: 2,
+            self_loops: true,
+        };
+        let degree_target = degree(vec![2, 2], vec![2, 2]);
+        let mut rng = rand::rngs::StdRng::seed_from_u64(7);
+
+        let mut applied: Vec<
+            crate::generation::microcanonical::occupation_mcmc::move_cycle::Cycle4Proposal,
+        > = Vec::new();
+        let (start_out, start_in) = recompute_degrees(&state);
+        let start_raw = degree_distance_raw(&start_out, &start_in, &degree_target);
+        let mut running_raw = start_raw as i64;
+
+        for _ in 0..50 {
+            let Some(p) = draw_cycle4_proposal(&state, &target, &domain, &mut rng) else {
+                continue;
+            };
+            running_raw += proposal_degree_delta_l1(&p, &degree_target.out, &degree_target.in_);
+            p.apply(&mut state);
+            applied.push(p);
+        }
+
+        // Summed cached deltas must equal the full-scan endpoint change.
+        let (end_out, end_in) = recompute_degrees(&state);
+        let end_raw = degree_distance_raw(&end_out, &end_in, &degree_target) as i64;
+        assert_eq!(
+            running_raw, end_raw,
+            "deltas must telescope to the endpoint change"
+        );
+
+        // Undo in reverse: the running scalar must return to the origin.
+        for p in applied.iter().rev() {
+            running_raw -= proposal_degree_delta_l1(p, &degree_target.out, &degree_target.in_);
+            p.undo(&mut state);
+        }
+        let (restored_out, restored_in) = recompute_degrees(&state);
+        assert_eq!(
+            degree_distance_raw(&restored_out, &restored_in, &degree_target) as i64,
+            running_raw
+        );
+        assert_eq!(running_raw, start_raw as i64);
     }
 }
