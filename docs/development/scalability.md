@@ -59,6 +59,8 @@ Validated N per constraint × regime from the benchmark matrix
 | fixed (k,T) | dense | ≥1000 | support MCMC + pair-Gibbs |
 | fixed strengths | sparse | ≥1000 | compressed constructor + MCMC: O(E_occ) |
 | fixed strengths | dense | ≥1000 | B capacity repair at high occupancy |
+| fixed (s,E) | sparse | ≥1000 | edge-count repair + mixed kernel; N=5000 smoke passes |
+| fixed (s,E) | dense | ≥1000 | same; B edge repair may need a reconstruction restart |
 | strengths + cost | sparse | ≥1000 | gamma fitting: 10–30 s per cell |
 | strengths + cost | dense | ≥1000 | gamma fitting: 200–1200 s per cell |
 

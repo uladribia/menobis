@@ -13,6 +13,7 @@ from menobis.models import (
     fit_model,
     sample_model,
 )
+from menobis.routing import sample_model_detailed
 
 S_OUT = np.array([3.0, 2.0], dtype=np.float64)
 S_IN = np.array([2.0, 3.0], dtype=np.float64)
@@ -228,16 +229,42 @@ def test_canonical_rejects_non_me_family() -> None:
 
 
 def test_microcanonical_rejects_unsupported_constraint() -> None:
-    """Microcanonical does not support STRENGTH_EDGES."""
+    """Microcanonical does not support STRENGTH_DEGREE.
+
+    Only the fixed-(s,E) feature adds its own microcanonical route.
+    """
     with pytest.raises(UnsupportedModelCaseError, match=r"unsupported sampling case"):
         sample_model(
             ensemble=Ensemble.MICROCANONICAL,
             family=ModelFamily.ME,
-            constraint=Constraint.STRENGTH_EDGES,
-            strength_out=np.array([1], dtype=np.uint64),
-            strength_in=np.array([1], dtype=np.uint64),
-            target_edges=1,
+            constraint=Constraint.STRENGTH_DEGREE,
+            strength_out=np.array([2], dtype=np.uint64),
+            strength_in=np.array([2], dtype=np.uint64),
+            degree_out=np.array([1], dtype=np.uint64),
+            degree_in=np.array([1], dtype=np.uint64),
         )
+
+
+def test_microcanonical_strength_edges_now_supported() -> None:
+    """The fixed-(s,E) feature exposes microcanonical STRENGTH_EDGES.
+
+    Exact stationary MCMC, no fit required.
+    """
+    from menobis.capabilities import SamplingExactness
+
+    res = sample_model_detailed(
+        ensemble=Ensemble.MICROCANONICAL,
+        family=ModelFamily.ME,
+        constraint=Constraint.STRENGTH_EDGES,
+        strength_out=np.array([2, 2], dtype=np.uint64),
+        strength_in=np.array([2, 2], dtype=np.uint64),
+        target_edges=2,
+        self_loops=True,
+        seed=1,
+    )
+    assert res.method == "microcanonical_fixed_strength_edges"
+    assert res.exactness == SamplingExactness.EXACT_STATIONARY_MCMC
+    assert len(res.edges) == 2
 
 
 def test_fit_model_rejects_invalid_enum_value() -> None:

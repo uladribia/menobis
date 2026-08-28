@@ -89,6 +89,13 @@ are in JSON format in the local `benchmarks/results/` directory
 Each cell reports the 11 per-stage metrics listed above, including repair
 steps/restarts, MCMC throughput, gamma fit time, cost ESS, and peak memory.
 
+The fixed-(s,E) route has the same repair/MCMC metric shape; its per-stage
+timings and counters (local acceptance, bridge departures/returns/timeouts)
+are exposed by the Rust bench entry point
+(`sample_fixed_strength_edges_bench`) and exercised by the `#[ignore]`
+N=1000 scalability oracle (ME/B/W + fixed pairs) and the Python `--run-heavy`
+gates, so no separate CLI matrix cell is required.
+
 ## Partial fitting
 
 Partial benchmarks freeze a fraction of observed pairs as known and fit the free

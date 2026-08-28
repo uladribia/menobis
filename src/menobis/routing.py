@@ -324,6 +324,11 @@ def sample_model_detailed(
         elif constraint is Constraint.STRENGTH_COST:
             method = "microcanonical_fixed_strength_cost"
             exactness = SamplingExactness.EXACT_STATIONARY_MCMC
+        elif constraint is Constraint.STRENGTH_EDGES:
+            # Microcanonical fixed strengths + exact occupied-pair count:
+            # exact stationary MCMC (local 4-cycles + censored bridge).
+            method = "microcanonical_fixed_strength_edges"
+            exactness = SamplingExactness.EXACT_STATIONARY_MCMC
         else:
             # Microcanonical STRENGTH: fixed-strength occupation MCMC
             # (4-cycle Metropolis chain on the compressed residual state).
@@ -678,6 +683,7 @@ def _sample_model(
     from menobis.data.frames import EdgeTable
     from menobis.models.generation import (
         _sample_degree_events_fixed_kt,
+        _sample_fixed_strength_edges_mcmc,
         _sample_model_router,
         _sample_strength_fixed_strength_cost_mcmc,
         _sample_strength_fixed_strength_mcmc,
@@ -827,6 +833,37 @@ def _sample_model(
                     relative_cost_tolerance=relative_cost_tolerance,
                     confidence_multiplier=confidence_multiplier,
                     batch_count=batch_count,
+                )
+            if constraint is Constraint.STRENGTH_EDGES:
+                if strength_out is None or strength_in is None:
+                    msg = (
+                        "microcanonical strength_edges requires "
+                        "strength_out and strength_in"
+                    )
+                    raise ValueError(msg)
+                if target_edges is None:
+                    msg = "microcanonical strength_edges requires target_edges"
+                    raise ValueError(msg)
+                fam = (
+                    "ME"
+                    if family == ModelFamily.ME
+                    else ("B" if family == ModelFamily.B else "W")
+                )
+                # Rust residualizes fixed pairs once and merges positive
+                # fixed pairs back (§16, §27).
+                return _sample_fixed_strength_edges_mcmc(
+                    family=fam,
+                    strength_out=np.asarray(strength_out, dtype=np.uint64),
+                    strength_in=np.asarray(strength_in, dtype=np.uint64),
+                    target_edges=int(target_edges),
+                    self_loops=bool(self_loops),
+                    known_source=known_source,
+                    known_target=known_target,
+                    known_occnum=known_occnum,
+                    layers=int(layers),
+                    seed=seed,
+                    burn_in_sweeps=burn_in_sweeps,
+                    sweeps_per_sample=sweeps_per_sample,
                 )
             if constraint is Constraint.DEGREE_EVENTS:
                 if degree_out is None or degree_in is None:

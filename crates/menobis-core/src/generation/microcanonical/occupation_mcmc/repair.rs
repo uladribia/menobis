@@ -309,6 +309,7 @@ pub fn find_donor_with_capacity(
     i: u64,
     j: u64,
     cap: OccNum,
+    domain: &PairDomain,
     config: &RepairConfig,
     rng: &mut impl Rng,
 ) -> Option<(u64, u64)> {
@@ -316,6 +317,12 @@ pub fn find_donor_with_capacity(
     for _ in 0..config.max_random_donor_attempts {
         if let Some(((c, d), t_cd)) = state.choose_random_occupied(rng) {
             if c == i || d == j {
+                continue;
+            }
+            // Increment cells (i,d) and (c,j) must be admissible (e.g.
+            // not self-loops when the domain forbids them) — otherwise
+            // the rectangle would place them outside the domain.
+            if !domain.is_admissible(i, d) || !domain.is_admissible(c, j) {
                 continue;
             }
             let id_slack = cap.saturating_sub(state.get(i, d));
@@ -331,6 +338,9 @@ pub fn find_donor_with_capacity(
     // Phase 2: bounded linear scan fallback.
     for &(c, d) in state.occupied_pairs() {
         if c == i || d == j {
+            continue;
+        }
+        if !domain.is_admissible(i, d) || !domain.is_admissible(c, j) {
             continue;
         }
         let t_cd = state.get(c, d);
@@ -394,15 +404,16 @@ pub fn repair_capacity(
         let over = t_ij - cap;
 
         // Find a donor cell with spare capacity at increment cells.
-        let (c, d) = find_donor_with_capacity(state, i, j, cap, config, rng).ok_or_else(|| {
-            FixedStrengthError::RepairDidNotConverge {
-                remaining_loops: 0,
-                remaining_capacity_violations: violations.len() + 1,
-                remaining_forbidden_occupations: 0,
-                restart_count: 0,
-                steps,
-            }
-        })?;
+        let (c, d) =
+            find_donor_with_capacity(state, i, j, cap, domain, config, rng).ok_or_else(|| {
+                FixedStrengthError::RepairDidNotConverge {
+                    remaining_loops: 0,
+                    remaining_capacity_violations: violations.len() + 1,
+                    remaining_forbidden_occupations: 0,
+                    restart_count: 0,
+                    steps,
+                }
+            })?;
 
         let t_cd = state.get(c, d);
         debug_assert!(t_cd > 0, "donor must be occupied");
@@ -1118,5 +1129,53 @@ mod tests {
         .unwrap();
 
         assert_eq!(state.out_strengths, out_before);
+    }
+
+    #[test]
+    fn capacity_repair_respects_loopless_domain() {
+        // Regression: `repair_capacity` must never place mass on a
+        // self-loop when the (complete) domain forbids loops.  A loopless
+        // B state with block occupations exceeding M must repair to a
+        // fully admissible, capacity-valid, strength-exact state.
+        let n = 4;
+        let family = OccupationFamily::B { layers: 3 };
+        let domain = PairDomain::Complete {
+            node_count: n,
+            self_loops: false,
+        };
+        // T=24 loopless cycle with blocks of 6 > M=3.
+        let pairs: Vec<((u64, u64), OccNum)> =
+            vec![((0, 1), 6), ((1, 2), 6), ((2, 3), 6), ((3, 0), 6)];
+        let mut state = StrengthState::new(n, pairs);
+        let out_before = state.out_strengths.clone();
+        let in_before = state.in_strengths.clone();
+        let mut rng = StdRng::seed_from_u64(42);
+
+        repair_capacity(
+            &mut state,
+            family,
+            &domain,
+            &RepairConfig::default(),
+            &mut rng,
+        )
+        .unwrap();
+
+        for &(src, tgt) in state.occupied_pairs() {
+            assert_ne!(src, tgt, "self-loop survived capacity repair");
+            assert!(
+                state.get(src, tgt) <= 3,
+                "B occupation {} exceeds M=3",
+                state.get(src, tgt)
+            );
+        }
+        assert_eq!(state.out_strengths, out_before);
+        assert_eq!(state.in_strengths, in_before);
+        assert_eq!(
+            state.out_strengths,
+            vec![6, 6, 6, 6]
+                .into_iter()
+                .map(|x| x as OccNum)
+                .collect::<Vec<_>>()
+        );
     }
 }

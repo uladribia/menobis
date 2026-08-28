@@ -77,23 +77,30 @@ impl FixedStrengthProblem {
     /// corresponding out- and in-strength.  Fixed pairs are removed from
     /// the admissible domain so the backend never re-occupies them.
     ///
+    /// Every fixed coordinate enters the domain exclusion set, including
+    /// pairs frozen at occupation 0 (§16).  A `Complete` domain with
+    /// fixed pairs residualizes to a [`PairDomain::CompleteMinus`]
+    /// carrying only the explicit excluded set (`O(F)` memory), never an
+    /// `O(N²)` coordinate set (§15).
+    ///
     /// # Errors
     ///
     /// - [`InvalidResidual`](FixedStrengthError::InvalidResidual) if a
     ///   fixed pair is not admissible in the domain.
+    /// - [`InvalidResidual`](FixedStrengthError::InvalidResidual) if a
+    ///   fixed coordinate appears more than once.
     /// - [`InvalidResidual`](FixedStrengthError::InvalidResidual) if a
     ///   residual strength would become negative.
     /// - [`InvalidResidual`](FixedStrengthError::InvalidResidual) if the
     ///   residual totals are unbalanced.
     /// - [`InvalidResidual`](FixedStrengthError::InvalidResidual) if a
     ///   fixed B occupation exceeds the layer count.
-    /// - [`InvalidResidual`](FixedStrengthError::InvalidResidual) if a
-    ///   fixed pair exceeds flow capacity.
     pub fn into_residual(self) -> Result<ResidualStrengthProblem, FixedStrengthError> {
         let mut res_out = self.strength_out.clone();
         let mut res_in = self.strength_in.clone();
 
-        // Build a set of fixed pairs for domain exclusion.
+        // Set of fixed coordinates: every fixed pair enters the exclusion
+        // set, including pairs frozen at occupation 0.
         let mut fixed_set: std::collections::HashSet<(u64, u64)> =
             std::collections::HashSet::with_capacity(self.fixed_pairs.len());
 
@@ -102,6 +109,14 @@ impl FixedStrengthProblem {
             if !self.domain.is_admissible(src, tgt) {
                 return Err(FixedStrengthError::InvalidResidual(format!(
                     "fixed pair ({src}, {tgt}) is not admissible"
+                )));
+            }
+
+            // Reject duplicate fixed coordinates (avoids subtracting the
+            // occupation twice).
+            if !fixed_set.insert((src, tgt)) {
+                return Err(FixedStrengthError::InvalidResidual(format!(
+                    "duplicate fixed pair ({src}, {tgt})"
                 )));
             }
 
@@ -123,8 +138,6 @@ impl FixedStrengthProblem {
             }
             *s_out -= occ;
             *s_in -= occ;
-
-            fixed_set.insert((src, tgt));
         }
 
         // Check residual totals are balanced.
@@ -144,23 +157,21 @@ impl FixedStrengthProblem {
                 PairDomain::Complete {
                     node_count,
                     self_loops,
+                } => PairDomain::CompleteMinus {
+                    node_count,
+                    self_loops,
+                    excluded: fixed_set,
+                },
+                PairDomain::CompleteMinus {
+                    node_count,
+                    self_loops,
+                    mut excluded,
                 } => {
-                    // Start from the complete set and remove fixed pairs.
-                    let mut allowed: std::collections::HashSet<(u64, u64)> =
-                        std::collections::HashSet::new();
-                    for i in 0..node_count as u64 {
-                        for j in 0..node_count as u64 {
-                            if !self_loops && i == j {
-                                continue;
-                            }
-                            if !fixed_set.contains(&(i, j)) {
-                                allowed.insert((i, j));
-                            }
-                        }
-                    }
-                    PairDomain::Sparse {
+                    excluded.extend(fixed_set);
+                    PairDomain::CompleteMinus {
                         node_count,
-                        allowed,
+                        self_loops,
+                        excluded,
                     }
                 }
                 PairDomain::Sparse {
@@ -342,5 +353,135 @@ mod tests {
         )
         .unwrap();
         assert!(prob.into_residual().is_err());
+    }
+
+    #[test]
+    fn reject_duplicate_fixed_pair() {
+        let prob = FixedStrengthProblem::new(
+            OccupationFamily::ME,
+            vec![10, 10],
+            vec![10, 10],
+            complete_domain(2, true),
+            vec![(0, 1, 2), (0, 1, 3)],
+        )
+        .unwrap();
+        match prob.into_residual() {
+            Err(FixedStrengthError::InvalidResidual(msg)) => {
+                assert!(msg.contains("duplicate fixed pair"), "{msg}")
+            }
+            other => panic!("expected duplicate error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn reject_duplicate_zero_fixed_pair() {
+        // A duplicate zero-occupation fixed pair must also be rejected:
+        // it is still a duplicate coordinate.
+        let prob = FixedStrengthProblem::new(
+            OccupationFamily::ME,
+            vec![5, 5],
+            vec![5, 5],
+            complete_domain(2, true),
+            vec![(0, 1, 0), (0, 1, 0)],
+        )
+        .unwrap();
+        assert!(prob.into_residual().is_err());
+    }
+
+    #[test]
+    fn zero_fixed_pair_remains_excluded() {
+        // A fixed pair frozen at occupation 0 does not change strengths
+        // but its coordinate must be excluded from the residual domain.
+        let prob = FixedStrengthProblem::new(
+            OccupationFamily::ME,
+            vec![10, 20, 30],
+            vec![15, 25, 20],
+            complete_domain(3, true),
+            vec![(0, 1, 0)],
+        )
+        .unwrap();
+        let res = prob.into_residual().unwrap();
+        assert_eq!(res.strength_out, vec![10, 20, 30]);
+        assert_eq!(res.strength_in, vec![15, 25, 20]);
+        assert_eq!(res.total, 60);
+        assert!(!res.domain.is_admissible(0, 1));
+        assert!(matches!(res.domain, PairDomain::CompleteMinus { .. }));
+    }
+
+    #[test]
+    fn complete_with_fixed_pairs_residualizes_to_complete_minus() {
+        // Gold: a Complete domain with any fixed pairs (positive or zero)
+        // must residualize to CompleteMinus — never to an O(N²) Sparse set.
+        let prob = FixedStrengthProblem::new(
+            OccupationFamily::ME,
+            vec![10, 20, 30],
+            vec![15, 25, 20],
+            complete_domain(3, true),
+            vec![(0, 1, 5), (1, 0, 0)], // positive + zero fixed pairs
+        )
+        .unwrap();
+        let res = prob.into_residual().unwrap();
+        assert!(matches!(res.domain, PairDomain::CompleteMinus { .. }));
+        assert!(!res.domain.is_admissible(0, 1));
+        assert!(!res.domain.is_admissible(1, 0));
+        // Residual admissible count: 9 - 2 excluded.
+        assert_eq!(res.domain.admissible_pair_count(), 7);
+    }
+
+    #[test]
+    fn large_complete_domain_fixed_pairs_stay_sparse() {
+        // N=1000 complete domain with 3 fixed pairs must residualize to
+        // CompleteMinus (O(F) memory) and never materialize the N² set.
+        let n = 1000usize;
+        let s_out = vec![1u64; n];
+        let s_in = vec![1u64; n];
+        let prob = FixedStrengthProblem::new(
+            OccupationFamily::ME,
+            s_out,
+            s_in,
+            complete_domain(n, true),
+            vec![(0, 0, 1), (1, 5, 1), (999, 999, 0)],
+        )
+        .unwrap();
+        let res = prob.into_residual().unwrap();
+        assert!(
+            matches!(res.domain, PairDomain::CompleteMinus { .. }),
+            "complete domain with fixed pairs must stay CompleteMinus"
+        );
+        assert_eq!(
+            res.domain.admissible_pair_count(),
+            n * n - 3,
+            "complete-minus count must stay O(1)-computable without materialization"
+        );
+        assert!(!res.domain.is_admissible(0, 0));
+        assert!(!res.domain.is_admissible(1, 5));
+        assert!(!res.domain.is_admissible(999, 999));
+    }
+
+    #[test]
+    fn complete_minus_input_merges_exclusions() {
+        // A CompleteMinus input domain with additional fixed pairs must
+        // union the exclusions, not rebuild the domain.
+        let mut excluded = std::collections::HashSet::new();
+        excluded.insert((0, 0));
+        let domain = PairDomain::CompleteMinus {
+            node_count: 3,
+            self_loops: true,
+            excluded,
+        };
+        let prob = FixedStrengthProblem::new(
+            OccupationFamily::ME,
+            vec![5, 5, 5],
+            vec![5, 5, 5],
+            domain,
+            vec![(1, 1, 2)],
+        )
+        .unwrap();
+        let res = prob.into_residual().unwrap();
+        assert!(matches!(res.domain, PairDomain::CompleteMinus { .. }));
+        assert!(!res.domain.is_admissible(0, 0)); // original exclusion
+        assert!(!res.domain.is_admissible(1, 1)); // merged fixed pair
+        assert_eq!(res.strength_out, vec![5, 3, 5]);
+        assert_eq!(res.strength_in, vec![5, 3, 5]);
     }
 }

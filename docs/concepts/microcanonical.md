@@ -26,6 +26,7 @@ occupation scale and constraint type; see
 | fixed (E,T) | `EDGES_EVENTS` | pair-Gibbs chain (production); DP/rejection (oracle) | exact |
 | fixed (k,T) | `DEGREE_EVENTS` | MCMC binary support + shared pair-Gibbs chain | exact at stationarity |
 | fixed strengths | `STRENGTH` | compressed aggregated constructor → loop/capacity repair → occupied-cell MCMC | exact at stationarity |
+| fixed strengths + exact edge count | `STRENGTH_EDGES` | same constructor/repair → edge-count repair → local 4-cycle + censored-bridge MCMC | exact at stationarity |
 | fixed strengths + expected cost | `STRENGTH_COST` | same + gamma fitting (zero-centered bracket expansion + stochastic bisection) | exact strengths; cost in expectation |
 
 Families: `ME` (Poisson), `B` (Binomial on M), `W` (NegBin on M; M=1 geometric); B/W take a `layers` argument.
@@ -105,6 +106,37 @@ net = sample_model(
 All families use the compressed constructor → repair → occupied-cell MCMC
 path; `burn_in_sweeps` / `sweeps_per_sample` tune the chain.
 
+## Usage: fixed strengths + exact edge count (s, E)
+
+Exact strength sequences **and** an exact number of occupied ordered pairs
+`target_edges` (no fitting step).  The returned network has exactly
+`target_edges` positive pairs and exactly the requested strengths; `E` is
+smaller than the total occupation `T`, so `target_edges` is the number of
+pairs with `occ_num > 0`, not the number of events.
+
+```python
+net = sample_model(
+    ensemble=Ensemble.MICROCANONICAL,
+    family=ModelFamily.W,
+    constraint=Constraint.STRENGTH_EDGES,
+    strength_out=strength_out, strength_in=strength_in,
+    target_edges=1200, layers=3, self_loops=False, seed=42,
+)
+```
+
+- Families: `ME`, `B`, `W` (pass `layers` for B/W).
+- `self_loops=True` admits diagonal pairs; `False` forbids them.
+- Freeze pairs with `known_source`/`known_target`/`known_occnum`;
+  positive fixed pairs count toward `target_edges` and their coordinates
+  are excluded from the residual domain (zero-occupation fixed pairs stay
+  frozen at zero).  Rust performs the residualization exactly once.
+
+The sampler is an **exact stationary MCMC**: the transition kernel has the
+exact family-degeneracy-on-(s,E) distribution as its stationary law; finite
+burn-in remains an ordinary MCMC concern.  See
+[Fixed strengths + exact edge count](fixed-strength-edges.md) for the
+stationary-target argument.
+
 ## Usage: fixed strengths + expected cost
 
 Strengths are exact; total cost is matched in expectation by fitting the
@@ -129,6 +161,12 @@ edges, diagnostics = sample_model_detailed(
   plus targeted repairs (loop, capacity, admissibility) generate a feasible
   state for supported configurations; infeasible inputs are rejected at the
   constraint validation layer.
+- fixed (s,E): necessary bounds are validated up front (`E ≤ T`, `E ≤`
+  admissible pairs, B capacity bounds, positive node lower bounds); a
+  target passing them may still be infeasible for a particular sparse
+  domain, in which case repair exhausts with a structured error (never an
+  approximate edge count).  Loopless perfect-matchings are an inherent
+  4-cycle-kernel limitation.
 - strength-cost: cost must be identifiable; extreme targets can fail the gamma bracket.
 
 ## Scaling

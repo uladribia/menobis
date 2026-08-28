@@ -52,7 +52,6 @@ These are NOT implemented and NOT planned for the current release.
 
 | Deferred feature | Description & rationale |
 |---|---|
-| `fixed (s,E)` | Fixed strength + total edges (zero-inflated); requires extending the fixed-strength kernel with an edge-count Lagrange multiplier. Not implemented. |
 | `fixed (s,k)` | Fixed strength + degree sequence (zero-inflated); requires binary multiplier layer `l_ij = w_i z_j` over the fixed-strength kernel. Not implemented. |
 | `generic annealed repair` | No annealing machinery in production (targeted repairs only). |
 | `general alternating-cycle mask repair` | Only targeted loop/capacity/forbidden-pair repairs exist; a general mask repair framework is deferred. |

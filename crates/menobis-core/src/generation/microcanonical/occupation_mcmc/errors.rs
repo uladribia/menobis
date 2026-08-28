@@ -7,6 +7,23 @@ use std::fmt;
 pub enum FixedStrengthError {
     /// The residual problem is infeasible.
     InvalidResidual(String),
+    /// The residual edge target violates a necessary feasibility bound
+    /// (§14 of the fixed-sE plan).
+    InvalidEdgeTarget(String),
+    /// Edge-count repair exhausted its restart budget without reaching the
+    /// exact edge target (§13.3).
+    EdgeRepairExhausted {
+        /// The best occupied-pair count reached.
+        best_edges: usize,
+        /// The requested residual edge target.
+        target_edges: usize,
+        /// Absolute distance `|best − target|` of the best state.
+        best_distance: usize,
+        /// Number of reconstruction restarts performed.
+        restarts: u32,
+        /// Total attempted repair steps across all restarts.
+        total_steps: u64,
+    },
     /// Initialization via max flow or greedy construction failed.
     InitializationFailed(String),
     /// The repair step did not converge within the configured bounds (spec 21).
@@ -23,6 +40,20 @@ impl fmt::Display for FixedStrengthError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidResidual(msg) => write!(f, "invalid residual problem: {msg}"),
+            Self::InvalidEdgeTarget(msg) => write!(f, "invalid edge target: {msg}"),
+            Self::EdgeRepairExhausted {
+                best_edges,
+                target_edges,
+                best_distance,
+                restarts,
+                total_steps,
+            } => {
+                write!(
+                    f,
+                    "edge repair exhausted after {total_steps} steps and {restarts} restarts: \
+                     best E {best_edges}, target E {target_edges}, best distance {best_distance}"
+                )
+            }
             Self::InitializationFailed(msg) => write!(f, "initialization failed: {msg}"),
             Self::RepairDidNotConverge {
                 remaining_loops,

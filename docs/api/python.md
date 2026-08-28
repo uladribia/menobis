@@ -90,6 +90,35 @@ their contribution is subtracted from `E`/`T`, the residual is sampled, and
 they are merged back. See
 [Microcanonical sampling](../concepts/microcanonical.md).
 
+### Fixed strengths + exact edge count — STRENGTH_EDGES
+
+Exact out/in strengths **and** an exact number of occupied pairs
+`target_edges` (`E`), via exact stationary MCMC (local 4-cycles +
+censored excursion bridge):
+
+```python
+net = sample_model(
+    ensemble=Ensemble.MICROCANONICAL,
+    family=ModelFamily.W,
+    constraint=Constraint.STRENGTH_EDGES,
+    strength_out=strength_out,  # exact out-strength sequence
+    strength_in=strength_in,    # exact in-strength sequence
+    target_edges=1200,          # exact occupied-pair count E
+    layers=3,                   # B/W only
+    self_loops=False,           # False forbids diagonal pairs
+    seed=42,
+)
+```
+
+`target_edges` is the number of pairs with `occ_num > 0`, not the number
+of events; it must satisfy the feasibility bounds (`E ≤ T`, `E ≤`
+admissible pairs, family capacity).  Fixed pairs work as above (positive
+fixed pairs count toward `target_edges`; zero-occupation fixed pairs stay
+frozen).  Exactness is `EXACT_STATIONARY_MCMC` — the kernel law is exact;
+burn-in remains an MCMC concern.  See
+[Fixed strengths + exact edge count](../concepts/fixed-strength-edges.md)
+for the stationary-target argument.
+
 ### Fixed (k,T) — DEGREE_EVENTS
 
 Exact out-degree, in-degree, and total events via MCMC:

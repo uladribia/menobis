@@ -155,11 +155,14 @@ mod tests {
     }
 
     fn make_state(n: usize, so: &[u64], si: &[u64]) -> StrengthState {
+        use rand::rngs::StdRng;
+        use rand::SeedableRng;
         let domain = PairDomain::Complete {
             node_count: n,
             self_loops: true,
         };
-        let table = initialize_table(so, si, OccupationFamily::ME, &domain).unwrap();
+        let mut rng = StdRng::seed_from_u64(0);
+        let table = initialize_table(so, si, OccupationFamily::ME, &domain, &mut rng).unwrap();
         StrengthState::new(n, table)
     }
 
