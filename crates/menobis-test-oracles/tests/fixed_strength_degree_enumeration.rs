@@ -762,6 +762,14 @@ fn mandatory_cases() -> Vec<(
         true,
         empty.clone(),
     ));
+    out.push((
+        "me-n3-432".into(),
+        OccupationFamily::ME,
+        vec![4, 3, 2],
+        vec![2, 3, 4],
+        true,
+        empty.clone(),
+    ));
     // B(M=1): binary occupations.
     out.push((
         "b1-n2".into(),

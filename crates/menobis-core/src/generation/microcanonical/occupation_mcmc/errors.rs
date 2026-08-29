@@ -13,6 +13,18 @@ pub enum FixedStrengthError {
     /// The residual degree target violates a necessary feasibility bound
     /// (§10 of the fixed-(s,k) plan).
     InvalidDegreeTarget(String),
+    /// Degree repair exhausted its restart budget without reaching the
+    /// exact degree target (§15.5 of the fixed-(s,k) plan).
+    DegreeRepairExhausted {
+        /// Best half-normalized degree distance reached.
+        best_degree_distance: u64,
+        /// Number of reconstruction restarts performed.
+        restarts: u32,
+        /// Total attempted degree-auxiliary steps across all restarts.
+        total_steps: u64,
+        /// The requested residual edge count (defined by the degree sums).
+        target_edges: usize,
+    },
     /// Edge-count repair exhausted its restart budget without reaching the
     /// exact edge target (§13.3).
     EdgeRepairExhausted {
@@ -45,6 +57,18 @@ impl fmt::Display for FixedStrengthError {
             Self::InvalidResidual(msg) => write!(f, "invalid residual problem: {msg}"),
             Self::InvalidEdgeTarget(msg) => write!(f, "invalid edge target: {msg}"),
             Self::InvalidDegreeTarget(msg) => write!(f, "invalid degree target: {msg}"),
+            Self::DegreeRepairExhausted {
+                best_degree_distance,
+                restarts,
+                total_steps,
+                target_edges,
+            } => {
+                write!(
+                    f,
+                    "degree repair exhausted after {total_steps} degree steps and {restarts} restarts: \
+                     best degree distance {best_degree_distance}, target edges {target_edges}"
+                )
+            }
             Self::EdgeRepairExhausted {
                 best_edges,
                 target_edges,
