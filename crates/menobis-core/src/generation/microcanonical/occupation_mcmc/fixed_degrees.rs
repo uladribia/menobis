@@ -1729,3 +1729,568 @@ mod phase7_tests {
         let _ = run(10);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Phase 8: capped first-return trace to the exact degree fiber (§17, §19)
+// ---------------------------------------------------------------------------
+
+/// Tuning constants of the production first-return trace (§17.3).  Any
+/// `lambda > 0` and any finite cap preserve the exact stationary law
+/// (the cap changes mobility/mixing only, never the target — the exact
+/// trace oracle proves detailed balance/stationarity).  Internal only.
+#[derive(Clone, Copy, Debug)]
+pub struct DegreeTraceConfig {
+    /// Degree-potential strength of the auxiliary chain (`lambda`).
+    pub lambda: f64,
+    /// Maximum auxiliary steps per trace before timeout-restoration.
+    /// Initial default 16; escalation 16 -> 32 -> 64 only with exact-oracle
+    /// and connectivity-gate evidence (§17.3).
+    pub max_steps: usize,
+}
+
+impl Default for DegreeTraceConfig {
+    fn default() -> Self {
+        Self {
+            lambda: 1.0,
+            max_steps: 16,
+        }
+    }
+}
+
+/// Per-trace mobility diagnostics (§27): used to evaluate the nested
+/// trace at scale.  A timeout is an exact self-loop in the chain, never
+/// an error.  Movement thresholds belong only to generated benchmark
+/// fibers known to contain multiple states — singleton fibers legitimately
+/// produce only self-loops.
+#[derive(Clone, Debug, Default)]
+pub struct DegreeTraceCounters {
+    /// Top-level trace attempts (one per sweep unit).
+    pub trace_attempts: u64,
+    /// Timeouts (cap exhaustion restoring the origin): exact self-loops.
+    pub timeouts: u64,
+    /// Traces that returned at step 1 (in-fiber endpoint / self-loop).
+    pub step1_returns: u64,
+    /// Traces that accepted at least one departing step (left D=0).
+    pub departures: u64,
+    /// Departures that later returned to the fiber within the cap.
+    pub successful_returns: u64,
+    /// Returns ending at a different exact-degree state than the origin.
+    pub different_state_returns: u64,
+    /// Total degree-auxiliary steps executed inside traces.
+    pub auxiliary_steps: u64,
+    /// Accepted auxiliary endpoints.
+    pub outer_accepts: u64,
+    /// Rejected auxiliary endpoints (outer degree potential).
+    pub outer_rejects: u64,
+    /// Maximum half-normalized degree distance reached in any excursion.
+    pub max_excursion_distance: u64,
+}
+
+/// Outcome of one top-level degree trace.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DegreeTraceStepOutcome {
+    /// `true` if the trace returned to the exact degree fiber within the
+    /// cap; `false` = timeout restored the origin (exact self-loop).
+    pub returned: bool,
+    /// Endpoint differs from the origin state.
+    pub different_state: bool,
+    /// The trace left `D = 0` at some (accepted) step.
+    pub departed: bool,
+    /// Return occurred on the very first auxiliary step.
+    pub step1_return: bool,
+    /// Auxiliary steps executed.
+    pub steps: usize,
+    /// Maximum half-normalized degree distance during the excursion.
+    pub max_distance: u64,
+}
+
+/// One top-level first-return trace (§17): starting at an exact-degree
+/// origin (`D = 0`), repeatedly run `degree_auxiliary_step`; **stop on
+/// the first return to `D = 0`** (step 1 included — in-fiber moves and
+/// self-loops are valid returns); if no return occurs within
+/// `config.max_steps`, deterministically undo the whole excursion from
+/// the flat log and restore the origin — an exact top-level self-loop.
+///
+/// The trace is the *primary production kernel*: `pi_(s,k)` is exactly
+/// stationary (the capped first-return trace of a reversible auxiliary
+/// chain onto the degree fiber is reversible for the conditioned target
+/// — proved by the exact trace-matrix oracle).
+///
+/// The flat `record` log spans the whole excursion (§19): each auxiliary
+/// step marks its own start and truncates on inner rejection, so
+/// `record[excursion_start..]` is exactly the deterministic undo log of
+/// the current excursion.  `running_raw` must be `0` on entry and is
+/// restored to `0` on timeout.
+#[allow(clippy::too_many_arguments)]
+#[allow(dead_code)] // consumed by the Phase 9 fixed-(s,k) orchestrator
+pub(crate) fn degree_trace_step(
+    state: &mut StrengthState,
+    target: &StrengthTarget,
+    domain: &PairDomain,
+    rng: &mut impl Rng,
+    edge_target: usize,
+    bridge_config: &BridgeConfig,
+    counters: &mut FixedEdgeCounters,
+    degree: &ResidualDegreeTarget,
+    config: &DegreeTraceConfig,
+    record: &mut Vec<Cycle4Proposal>,
+    running_raw: &mut u64,
+    trace_counters: &mut DegreeTraceCounters,
+) -> DegreeTraceStepOutcome {
+    debug_assert_eq!(*running_raw, 0, "trace must start on the degree fiber");
+    // Full-state origin snapshot (occupied pairs + occupations): the
+    // "different-state" metric must detect occupation changes, not just
+    // support-set changes (two states may share a support with different
+    // occupations).  O(E) once per trace, never per proposal (§27).
+    let mut origin_snapshot: Vec<((u64, u64), OccNum)> = state.iter_occupied().collect();
+    origin_snapshot.sort_unstable();
+    let excursion_start = record.len();
+    trace_counters.trace_attempts += 1;
+
+    let mut steps = 0usize;
+    let mut max_distance = 0u64;
+    let mut departed = false;
+    loop {
+        if steps >= config.max_steps {
+            // Timeout: undo the complete excursion in reverse and restore
+            // the exact origin (§17.2, §19).  No path-level MH correction.
+            for p in record[excursion_start..].iter().rev() {
+                p.undo(state);
+            }
+            record.truncate(excursion_start);
+            *running_raw = 0;
+            trace_counters.timeouts += 1;
+            return DegreeTraceStepOutcome {
+                returned: false,
+                different_state: false,
+                departed,
+                step1_return: false,
+                steps,
+                max_distance,
+            };
+        }
+        let accepted = degree_auxiliary_step(
+            state,
+            target,
+            domain,
+            rng,
+            edge_target,
+            bridge_config,
+            counters,
+            degree,
+            config.lambda,
+            record,
+            running_raw,
+        );
+        steps += 1;
+        trace_counters.auxiliary_steps += 1;
+        if accepted {
+            trace_counters.outer_accepts += 1;
+        } else {
+            trace_counters.outer_rejects += 1;
+        }
+
+        if *running_raw == 0 {
+            // First return to the fiber (step 1 included): keep the state.
+            let mut endpoint_snapshot: Vec<((u64, u64), OccNum)> = state.iter_occupied().collect();
+            endpoint_snapshot.sort_unstable();
+            let different_state = endpoint_snapshot != origin_snapshot;
+            if steps == 1 {
+                trace_counters.step1_returns += 1;
+            }
+            if different_state {
+                trace_counters.different_state_returns += 1;
+            }
+            if departed {
+                trace_counters.successful_returns += 1;
+            }
+            return DegreeTraceStepOutcome {
+                returned: true,
+                different_state,
+                departed,
+                step1_return: steps == 1,
+                steps,
+                max_distance,
+            };
+        }
+        departed = true;
+        let d = *running_raw / 2;
+        if d > max_distance {
+            max_distance = d;
+        }
+    }
+}
+
+/// One fixed-(s,k) sweep: `max(E, 2·N, 1)` top-level degree traces — the
+/// same sparse outer convention as the fixed-strength and fixed-(s,E)
+/// chains (§45).
+#[allow(clippy::too_many_arguments)]
+#[allow(dead_code)] // consumed by the Phase 9 fixed-(s,k) orchestrator
+pub(crate) fn degree_trace_sweep(
+    state: &mut StrengthState,
+    target: &StrengthTarget,
+    domain: &PairDomain,
+    rng: &mut impl Rng,
+    edge_target: usize,
+    bridge_config: &BridgeConfig,
+    counters: &mut FixedEdgeCounters,
+    degree: &ResidualDegreeTarget,
+    config: &DegreeTraceConfig,
+    record: &mut Vec<Cycle4Proposal>,
+    running_raw: &mut u64,
+    trace_counters: &mut DegreeTraceCounters,
+    proposals_per_sweep: Option<usize>,
+) {
+    let per_sweep =
+        proposals_per_sweep.unwrap_or_else(|| edge_target.max(2 * state.node_count).max(1));
+    for _ in 0..per_sweep {
+        degree_trace_step(
+            state,
+            target,
+            domain,
+            rng,
+            edge_target,
+            bridge_config,
+            counters,
+            degree,
+            config,
+            record,
+            running_raw,
+            trace_counters,
+        );
+        // Each top-level trace owns its own excursion log segment (§19);
+        // drop the previous trace's log so memory stays bounded.
+        record.clear();
+    }
+}
+
+#[cfg(test)]
+mod phase8_tests {
+    use super::*;
+    use crate::generation::microcanonical::occupation_mcmc::domain::PairDomain;
+    use crate::generation::microcanonical::occupation_mcmc::fixed_edges::BridgeConfig;
+    use crate::generation::microcanonical::occupation_mcmc::problem::FixedStrengthProblem;
+    use crate::model::family::OccupationFamily;
+    use rand::rngs::StdRng;
+    use rand::SeedableRng;
+
+    fn setup(
+        family: OccupationFamily,
+        so: Vec<OccNum>,
+        si: Vec<OccNum>,
+        sl: bool,
+    ) -> (StrengthTarget<'static>, PairDomain) {
+        let target = StrengthTarget::new(family);
+        let domain = PairDomain::Complete {
+            node_count: so.len(),
+            self_loops: sl,
+        };
+        let _ = FixedStrengthProblem::new(family, so, si, domain.clone(), vec![]).unwrap();
+        (target, domain)
+    }
+
+    fn me_2x2() -> (StrengthTarget<'static>, PairDomain) {
+        setup(OccupationFamily::ME, vec![3, 3], vec![3, 3], true)
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn snapshot(state: &StrengthState) -> (Vec<((u64, u64), OccNum)>, Vec<usize>, Vec<usize>) {
+        let mut pairs: Vec<_> = state.iter_occupied().collect();
+        pairs.sort_unstable();
+        (
+            pairs,
+            state.row_occ_count.clone(),
+            state.col_occ_count.clone(),
+        )
+    }
+
+    #[test]
+    fn trace_step1_return_keeps_endpoint() {
+        // ME N=2 s=[3,3] E=4, degree target (2,2)/(2,2): both E=4 states
+        // are in the fiber, K_E connects them (local move, ΔD=0).  From
+        // origin s1 every trace returns at step 1 — sometimes to the
+        // different state s2, sometimes a K_E self-loop — never departing.
+        let (target, domain) = me_2x2();
+        let deg = ResidualDegreeTarget {
+            out: vec![2, 2],
+            in_: vec![2, 2],
+            edge_count: 4,
+        };
+        let mut rng = StdRng::seed_from_u64(21);
+        let mut counters = FixedEdgeCounters::default();
+        let mut trace_counters = DegreeTraceCounters::default();
+        let mut record = Vec::new();
+        let mut different = 0usize;
+        for _ in 0..2000 {
+            let mut state =
+                StrengthState::new(2, vec![((0, 0), 1), ((0, 1), 2), ((1, 0), 2), ((1, 1), 1)]);
+            let mut running = 0u64;
+            let outcome = degree_trace_step(
+                &mut state,
+                &target,
+                &domain,
+                &mut rng,
+                4,
+                &BridgeConfig::default(),
+                &mut counters,
+                &deg,
+                &DegreeTraceConfig::default(),
+                &mut record,
+                &mut running,
+                &mut trace_counters,
+            );
+            assert!(outcome.returned, "in-fiber origin must return immediately");
+            assert!(
+                outcome.step1_return,
+                "E=4/degree fiber is closed: step-1 return"
+            );
+            assert!(!outcome.departed);
+            assert_eq!(outcome.max_distance, 0);
+            assert_eq!(running, 0);
+            assert_eq!(state.occupied_count(), 4);
+            assert_eq!(state.out_strengths, vec![3, 3]);
+            assert_eq!(state.in_strengths, vec![3, 3]);
+            if outcome.different_state {
+                different += 1;
+                // The other E=4 state shares the support but swaps the
+                // occupations: (0,0)=2,(0,1)=1,(1,0)=1,(1,1)=2 is the
+                // a=2 state; s1 has (0,0)=1,(0,1)=2,(1,0)=2,(1,1)=1.
+                assert_eq!(state.get(0, 0), 2, "different return must be the a=2 state");
+                assert_eq!(state.get(0, 1), 1);
+            } else {
+                // Self-loop: the exact origin.
+                assert_eq!(state.get(0, 0), 1);
+                assert_eq!(state.get(0, 1), 2);
+            }
+            state.debug_validate();
+        }
+        assert!(
+            different > 0,
+            "expected some different-state step-1 returns"
+        );
+        assert_eq!(
+            trace_counters.different_state_returns, different as u64,
+            "diagnostics must agree"
+        );
+    }
+
+    #[test]
+    fn trace_immediate_self_loop_is_valid() {
+        // Loopless N=3 s=[2,2,2] E=3 degree (1,1,1)/(1,1,1): the only two
+        // states (directed 3-cycles) have no valid 4-cycle, so K_E is the
+        // identity and every trace is a valid one-step self-loop return.
+        // Do NOT force departure (§17.3, §40).
+        let so = vec![2u64; 3];
+        let si = vec![2u64; 3];
+        let (target, domain) = setup(OccupationFamily::ME, so, si, false);
+        let deg = ResidualDegreeTarget {
+            out: vec![1, 1, 1],
+            in_: vec![1, 1, 1],
+            edge_count: 3,
+        };
+        let mut rng = StdRng::seed_from_u64(7);
+        let mut counters = FixedEdgeCounters::default();
+        let mut trace_counters = DegreeTraceCounters::default();
+        let mut record = Vec::new();
+        for _ in 0..300 {
+            let mut state = StrengthState::new(3, vec![((0, 1), 2), ((1, 2), 2), ((2, 0), 2)]);
+            let origin = snapshot(&state);
+            let mut running = 0u64;
+            let outcome = degree_trace_step(
+                &mut state,
+                &target,
+                &domain,
+                &mut rng,
+                3,
+                &BridgeConfig::default(),
+                &mut counters,
+                &deg,
+                &DegreeTraceConfig::default(),
+                &mut record,
+                &mut running,
+                &mut trace_counters,
+            );
+            assert!(outcome.returned);
+            assert!(outcome.step1_return);
+            assert!(!outcome.departed);
+            assert!(!outcome.different_state);
+            assert_eq!(
+                snapshot(&state),
+                origin,
+                "identity K_E must keep the origin"
+            );
+        }
+        assert_eq!(trace_counters.timeouts, 0);
+    }
+
+    #[test]
+    fn trace_timeout_restores_exact_origin() {
+        // ME N=3 s=[4,3,2]/[2,3,4] E=5, degree target k=(1,2,2)/(2,2,1)
+        // (state B's own degrees — a singleton fiber).  Runs where the
+        // first K_E step departs the fiber (bridge returns to another E=5
+        // state, e.g. C with k=(2,1,2)/(1,2,2), D>0) must time out at
+        // cap=1 and restore the **exact** origin — occupied pairs,
+        // occupations, strengths, degree caches, E (§17.2, §40).  Every
+        // trace outcome is checked for exact restoration.
+        let so = vec![4u64, 3, 2];
+        let si = vec![2u64, 3, 4];
+        let state_b = vec![
+            ((0, 2), 4),
+            ((1, 0), 1),
+            ((1, 1), 2),
+            ((2, 0), 1),
+            ((2, 1), 1),
+        ];
+        let deg = ResidualDegreeTarget {
+            out: vec![1, 2, 2],
+            in_: vec![2, 2, 1],
+            edge_count: 5,
+        };
+        let (target, domain) = setup(OccupationFamily::ME, so, si, true);
+        let mut rng = StdRng::seed_from_u64(3);
+        let mut counters = FixedEdgeCounters::default();
+        let mut trace_counters = DegreeTraceCounters::default();
+        let mut record = Vec::new();
+        let config = DegreeTraceConfig {
+            lambda: 1.0,
+            max_steps: 1,
+        };
+        let fresh = || StrengthState::new(3, state_b.clone());
+        let mut seen_timeout = false;
+        for _ in 0..3000 {
+            let mut state = fresh();
+            let origin = snapshot(&state);
+            let mut running = 0u64;
+            let outcome = degree_trace_step(
+                &mut state,
+                &target,
+                &domain,
+                &mut rng,
+                5,
+                &BridgeConfig::default(),
+                &mut counters,
+                &deg,
+                &config,
+                &mut record,
+                &mut running,
+                &mut trace_counters,
+            );
+            assert_eq!(running, 0, "trace must leave the chain on the fiber");
+            if outcome.returned {
+                assert!(
+                    outcome.step1_return,
+                    "cap=1: only step-1 returns or timeout"
+                );
+                assert!(!outcome.departed);
+            } else {
+                seen_timeout = true;
+                assert_eq!(
+                    snapshot(&state),
+                    origin,
+                    "timeout must restore the exact origin (state, occupations, caches)"
+                );
+            }
+            assert_eq!(state.occupied_count(), 5);
+            assert_eq!(state.out_strengths, vec![4, 3, 2]);
+            assert_eq!(state.in_strengths, vec![2, 3, 4]);
+            state.debug_validate();
+            record.clear();
+        }
+        assert!(
+            seen_timeout,
+            "expected at least one departure -> timeout on this fiber"
+        );
+        assert!(trace_counters.timeouts > 0);
+    }
+
+    #[test]
+    fn trace_zero_cap_is_deterministic_self_loop() {
+        // max_steps = 0: the trace must immediately time out without any
+        // step, restoring the origin (§40).  Deterministic by construction.
+        let (target, domain) = me_2x2();
+        let deg = ResidualDegreeTarget {
+            out: vec![2, 2],
+            in_: vec![2, 2],
+            edge_count: 4,
+        };
+        let mut rng = StdRng::seed_from_u64(1);
+        let mut counters = FixedEdgeCounters::default();
+        let mut trace_counters = DegreeTraceCounters::default();
+        let mut record = Vec::new();
+        let config = DegreeTraceConfig {
+            lambda: 1.0,
+            max_steps: 0,
+        };
+        for _ in 0..10 {
+            let mut state =
+                StrengthState::new(2, vec![((0, 0), 1), ((0, 1), 2), ((1, 0), 2), ((1, 1), 1)]);
+            let origin = snapshot(&state);
+            let mut running = 0u64;
+            let outcome = degree_trace_step(
+                &mut state,
+                &target,
+                &domain,
+                &mut rng,
+                4,
+                &BridgeConfig::default(),
+                &mut counters,
+                &deg,
+                &config,
+                &mut record,
+                &mut running,
+                &mut trace_counters,
+            );
+            assert!(!outcome.returned);
+            assert_eq!(outcome.steps, 0);
+            assert_eq!(snapshot(&state), origin);
+        }
+        assert_eq!(trace_counters.timeouts, 10);
+    }
+
+    #[test]
+    fn trace_sweep_preserves_fiber_and_invariants() {
+        // Sweeps from a feasible exact-degree start must keep the chain on
+        // the fiber: every trace returns (cap 16 default), the state is
+        // always E-exact with exact strengths, and both different-state
+        // and same-state returns are observed on this 2-state fiber.
+        let (target, domain) = me_2x2();
+        let deg = ResidualDegreeTarget {
+            out: vec![2, 2],
+            in_: vec![2, 2],
+            edge_count: 4,
+        };
+        let mut rng = StdRng::seed_from_u64(11);
+        let mut counters = FixedEdgeCounters::default();
+        let mut trace_counters = DegreeTraceCounters::default();
+        let mut record = Vec::new();
+        let mut state =
+            StrengthState::new(2, vec![((0, 0), 1), ((0, 1), 2), ((1, 0), 2), ((1, 1), 1)]);
+        let mut running = 0u64;
+        for _ in 0..30 {
+            degree_trace_sweep(
+                &mut state,
+                &target,
+                &domain,
+                &mut rng,
+                4,
+                &BridgeConfig::default(),
+                &mut counters,
+                &deg,
+                &DegreeTraceConfig::default(),
+                &mut record,
+                &mut running,
+                &mut trace_counters,
+                None,
+            );
+            assert_eq!(running, 0, "sweep must leave the chain on the fiber");
+            assert_eq!(state.occupied_count(), 4);
+            assert_eq!(state.out_strengths, vec![3, 3]);
+            assert_eq!(state.in_strengths, vec![3, 3]);
+            state.debug_validate();
+        }
+        assert_eq!(trace_counters.trace_attempts, 30 * 4);
+        assert!(trace_counters.different_state_returns > 0);
+        assert_eq!(trace_counters.timeouts, 0);
+        assert!(record.is_empty(), "sweep must drain the flat log");
+    }
+}
