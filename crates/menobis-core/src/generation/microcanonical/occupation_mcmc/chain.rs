@@ -1092,3 +1092,563 @@ mod tests {
         }
     }
 }
+
+// --------------------------------------------------------------------------
+// Phase 9: one-shot fixed-(s,k) core sampler (§25–§27)
+// --------------------------------------------------------------------------
+
+use super::fixed_degrees::{
+    degree_trace_sweep, repair_to_degree_target, residualize_degree_target, validate_degree_target,
+    DegreeRepairConfig, DegreeTraceConfig, DegreeTraceCounters,
+};
+
+/// Per-stage diagnostics for the fixed-(s,k) pipeline (§27, §35-style).
+#[derive(Clone, Debug)]
+pub struct FixedStrengthDegreeBench {
+    /// Wall time for compressed construction.
+    pub construction_time_s: f64,
+    /// Wall time for structural repair (loops, capacity, inadmissible).
+    pub structural_repair_time_s: f64,
+    /// Wall time for edge-count repair to exact residual E.
+    pub edge_repair_time_s: f64,
+    /// Edge-repair steps used.
+    pub edge_repair_steps: u64,
+    /// Edge-repair reconstruction restarts.
+    pub edge_repair_restarts: u32,
+    /// Wall time for degree repair to the exact residual degrees.
+    pub degree_repair_time_s: f64,
+    /// Degree-repair steps used.
+    pub degree_repair_steps: u64,
+    /// Degree-repair reconstruction restarts.
+    pub degree_repair_restarts: u32,
+    /// Half-normalized degree distance of the initial exact-E state.
+    pub initial_degree_distance: u64,
+    /// Residual degree target edge count.
+    pub target_edges: usize,
+    /// Wall time for burn-in + thinning sweeps.
+    pub mcmc_time_s: f64,
+    /// Nested degree-trace mobility counters (§27).
+    pub degree_trace: DegreeTraceCounters,
+    /// Underlying fixed-(s,E) kernel counters (§27: to attribute slow
+    /// performance to K_E itself vs the outer degree trace).
+    pub fixed_edge: FixedEdgeCounters,
+}
+
+/// Benchmark-instrumented one-shot fixed-(s,k) sampling (§25).
+///
+/// Pipeline: Rust residualizes strengths/fixed pairs exactly once,
+/// subtracts the fixed-pair degree contribution, validates the combined
+/// residual (s,k) target, constructs an exact residual `E` state (edge
+/// repair), repairs it to the exact residual degree vectors with the
+/// shared degree-biased auxiliary step, then burn-in + thinning with the
+/// capped first-return degree trace.  The returned network carries exact
+/// full strengths, exact full degrees, and exact `E`.
+///
+/// # Errors
+///
+/// - invalid fixed pairs / residual (propagated from
+///   `FixedStrengthProblem::into_residual`);
+/// - [`InvalidDegreeTarget`](FixedStrengthError::InvalidDegreeTarget)
+///   from residualization or combined-target validation;
+/// - degree-repair exhaustion never returns an inexact sample.
+#[allow(clippy::too_many_arguments)]
+pub fn sample_fixed_strength_degree_bench(
+    problem: FixedStrengthProblem,
+    full_degree_out: Vec<u32>,
+    full_degree_in: Vec<u32>,
+    config: McmcConfig,
+    degree_config: DegreeTraceConfig,
+) -> Result<(SampledNetwork, FixedStrengthDegreeBench), FixedStrengthError> {
+    let fixed_pairs = problem.fixed_pairs.clone();
+    let family = problem.family;
+    let full_strength_out = problem.strength_out.clone();
+    let full_strength_in = problem.strength_in.clone();
+
+    let seed = config.seed;
+    let mut rng = StdRng::seed_from_u64(seed);
+
+    // ---- Residualize once (§7.2 ordering: strengths first, then degrees) ----
+    let residual = problem.into_residual()?;
+    let degree = residualize_degree_target(&full_degree_out, &full_degree_in, &fixed_pairs)?;
+    validate_degree_target(&residual, &degree)?;
+    let e_res = degree.edge_count;
+
+    // ---- Construction + structural repair ----
+    let n = residual.domain.node_count();
+    let t0 = Instant::now();
+    let table = initialize_table(
+        &residual.strength_out,
+        &residual.strength_in,
+        residual.family,
+        &residual.domain,
+        &mut rng,
+    )?;
+    let mut state = StrengthState::new(n, table);
+    let construction_time_s = t0.elapsed().as_secs_f64();
+
+    let t0 = Instant::now();
+    let (_, _, _) = repair_state(&mut state, &residual, &mut rng)?;
+    let structural_repair_time_s = t0.elapsed().as_secs_f64();
+
+    // ---- Edge-count repair to exact residual E (§14) ----
+    let t0 = Instant::now();
+    let edge_outcome = repair_to_edge_target(
+        &mut state,
+        &residual,
+        &mut rng,
+        e_res,
+        &EdgeRepairConfig::default(),
+    )?;
+    let edge_repair_time_s = t0.elapsed().as_secs_f64();
+
+    // ---- Degree repair with the shared degree-biased auxiliary step (§15) ----
+    let t0 = Instant::now();
+    let degree_outcome = repair_to_degree_target(
+        &mut state,
+        &residual,
+        &mut rng,
+        e_res,
+        &BridgeConfig::default(),
+        &degree,
+        &DegreeRepairConfig::default(),
+    )?;
+    let degree_repair_time_s = t0.elapsed().as_secs_f64();
+    if degree_outcome.best_distance != 0 {
+        return Err(FixedStrengthError::DegreeRepairExhausted {
+            best_degree_distance: degree_outcome.best_distance,
+            restarts: degree_outcome.restarts,
+            total_steps: degree_outcome.steps,
+            target_edges: e_res,
+        });
+    }
+
+    // ---- Runtime invariant (§26): no inexact-degree state enters sampling ----
+    debug_assert_eq!(
+        state.row_occ_count,
+        degree.out.iter().map(|&k| k as usize).collect::<Vec<_>>(),
+        "out-degree caches must equal the residual target before sampling"
+    );
+    debug_assert_eq!(
+        state.col_occ_count,
+        degree.in_.iter().map(|&k| k as usize).collect::<Vec<_>>()
+    );
+
+    // ---- Burn-in + thinning with the capped first-return degree trace ----
+    let target = StrengthTarget::new(family);
+    let mut f_e_counters = FixedEdgeCounters::default();
+    let mut trace_counters = DegreeTraceCounters::default();
+    let mut record: Vec<
+        crate::generation::microcanonical::occupation_mcmc::move_cycle::Cycle4Proposal,
+    > = Vec::new();
+    let mut running_raw = 0u64; // start exactly on the degree fiber
+    let t0 = Instant::now();
+    for _ in 0..config.burn_in_sweeps.max(1) {
+        degree_trace_sweep(
+            &mut state,
+            &target,
+            &residual.domain,
+            &mut rng,
+            e_res,
+            &BridgeConfig::default(),
+            &mut f_e_counters,
+            &degree,
+            &degree_config,
+            &mut record,
+            &mut running_raw,
+            &mut trace_counters,
+            config.proposals_per_sweep,
+        );
+    }
+    for _ in 0..config.sweeps_per_sample.max(1) {
+        degree_trace_sweep(
+            &mut state,
+            &target,
+            &residual.domain,
+            &mut rng,
+            e_res,
+            &BridgeConfig::default(),
+            &mut f_e_counters,
+            &degree,
+            &degree_config,
+            &mut record,
+            &mut running_raw,
+            &mut trace_counters,
+            config.proposals_per_sweep,
+        );
+    }
+    let mcmc_time_s = t0.elapsed().as_secs_f64();
+    debug_assert_eq!(running_raw, 0, "sampling must end on the degree fiber");
+
+    // ---- Final residual network + merge fixed pairs + full validation (§26) ----
+    let residual_network = state.to_sampled_network();
+    let network = merge_fixed_pairs(residual_network, &fixed_pairs);
+    validate_fixed_sk_output(
+        &network,
+        n,
+        &full_strength_out,
+        &full_strength_in,
+        &full_degree_out,
+        &full_degree_in,
+        family,
+        residual.domain.self_loops_allowed(),
+    )?;
+
+    Ok((
+        network,
+        FixedStrengthDegreeBench {
+            construction_time_s,
+            structural_repair_time_s,
+            edge_repair_time_s,
+            edge_repair_steps: edge_outcome.steps,
+            edge_repair_restarts: edge_outcome.restarts,
+            degree_repair_time_s,
+            degree_repair_steps: degree_outcome.steps,
+            degree_repair_restarts: degree_outcome.restarts,
+            initial_degree_distance: degree_outcome.initial_distance,
+            target_edges: e_res,
+            mcmc_time_s,
+            degree_trace: trace_counters,
+            fixed_edge: f_e_counters,
+        },
+    ))
+}
+
+/// One-shot fixed-(s,k) sampling without diagnostics (§25).
+pub fn sample_fixed_strength_degree(
+    problem: FixedStrengthProblem,
+    full_degree_out: Vec<u32>,
+    full_degree_in: Vec<u32>,
+    config: McmcConfig,
+    degree_config: DegreeTraceConfig,
+) -> Result<SampledNetwork, FixedStrengthError> {
+    sample_fixed_strength_degree_bench(
+        problem,
+        full_degree_out,
+        full_degree_in,
+        config,
+        degree_config,
+    )
+    .map(|(network, _)| network)
+}
+
+/// O(E) boundary validation of the merged full network (§26): exact full
+/// strengths, exact full degrees, unique coordinates, positive
+/// occupations, family capacity, and the self-loop policy.
+#[allow(clippy::too_many_arguments)]
+fn validate_fixed_sk_output(
+    net: &SampledNetwork,
+    n: usize,
+    full_s_out: &[OccNum],
+    full_s_in: &[OccNum],
+    full_k_out: &[u32],
+    full_k_in: &[u32],
+    family: OccupationFamily,
+    self_loops: bool,
+) -> Result<(), FixedStrengthError> {
+    use std::collections::HashSet;
+    let mut co = vec![0u64; n];
+    let mut ci = vec![0u64; n];
+    let mut ko = vec![0u32; n];
+    let mut ki = vec![0u32; n];
+    let mut seen = HashSet::with_capacity(net.sources.len());
+    let cap = match family {
+        OccupationFamily::B { layers } => layers as OccNum,
+        _ => OccNum::MAX,
+    };
+    for ((&s, &t), &o) in net
+        .sources
+        .iter()
+        .zip(net.targets.iter())
+        .zip(net.occ_nums.iter())
+    {
+        let coord = (s, t);
+        if !seen.insert(coord) {
+            return Err(FixedStrengthError::InvalidResidual(format!(
+                "duplicate output coordinate {coord:?}"
+            )));
+        }
+        if o == 0 {
+            return Err(FixedStrengthError::InvalidResidual(format!(
+                "zero occupation in output at {coord:?}"
+            )));
+        }
+        if !self_loops && s == t {
+            return Err(FixedStrengthError::InvalidResidual(format!(
+                "self-loop {coord:?} violates the loopless policy"
+            )));
+        }
+        if o > cap {
+            return Err(FixedStrengthError::InvalidResidual(format!(
+                "occupation {o} at {coord:?} exceeds B capacity {cap}"
+            )));
+        }
+        co[s as usize] += o;
+        ci[t as usize] += o;
+        ko[s as usize] += 1;
+        ki[t as usize] += 1;
+    }
+    if co != full_s_out || ci != full_s_in {
+        return Err(FixedStrengthError::InvalidResidual(format!(
+            "full strengths not reproduced: out {co:?} != {full_s_out:?}, in {ci:?} != {full_s_in:?}"
+        )));
+    }
+    if ko != full_k_out || ki != full_k_in {
+        return Err(FixedStrengthError::InvalidResidual(format!(
+            "full degrees not reproduced: out {ko:?} != {full_k_out:?}, in {ki:?} != {full_k_in:?}"
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod phase9_tests {
+    use super::*;
+
+    fn full_problem(
+        family: OccupationFamily,
+        so: Vec<OccNum>,
+        si: Vec<OccNum>,
+        sl: bool,
+        fixed: Vec<(u64, u64, OccNum)>,
+    ) -> FixedStrengthProblem {
+        let domain = PairDomain::Complete {
+            node_count: so.len(),
+            self_loops: sl,
+        };
+        FixedStrengthProblem::new(family, so, si, domain, fixed).unwrap()
+    }
+
+    fn trace_config() -> DegreeTraceConfig {
+        DegreeTraceConfig::default()
+    }
+
+    fn degrees_from(net: &SampledNetwork, n: usize) -> (Vec<u32>, Vec<u32>) {
+        let mut ko = vec![0u32; n];
+        let mut ki = vec![0u32; n];
+        for ((&s, &t), _) in net
+            .sources
+            .iter()
+            .zip(net.targets.iter())
+            .zip(net.occ_nums.iter())
+        {
+            ko[s as usize] += 1;
+            ki[t as usize] += 1;
+        }
+        (ko, ki)
+    }
+
+    #[test]
+    fn fixed_sk_all_families_exact() {
+        // Feasible (s,k) derived from explicit constructed networks
+        // (§49: generated/constructed networks guarantee feasibility).
+        // ME N=2 s=[3,3] E=4 k=(2,2): the all-ones state.
+        // B M=2 N=2 s=[2,2] E=4 k=(2,2): all-ones with occ=1 each.
+        // W M=1 N=2 s=[3,3] E=4 k=(2,2): all-ones.
+        // ME N=3 s=[4,3,2] E=5 k=(1,2,2): state B (nontrivial degree repair
+        // if the constructor lands elsewhere).
+        type Case = (
+            OccupationFamily,
+            Vec<OccNum>,
+            Vec<OccNum>,
+            Vec<u32>,
+            Vec<u32>,
+            bool,
+        );
+        let cases: Vec<Case> = vec![
+            (
+                OccupationFamily::ME,
+                vec![3, 3],
+                vec![3, 3],
+                vec![2, 2],
+                vec![2, 2],
+                true,
+            ),
+            (
+                OccupationFamily::B { layers: 2 },
+                vec![2, 2],
+                vec![2, 2],
+                vec![2, 2],
+                vec![2, 2],
+                true,
+            ),
+            (
+                OccupationFamily::W { layers: 1 },
+                vec![3, 3],
+                vec![3, 3],
+                vec![2, 2],
+                vec![2, 2],
+                true,
+            ),
+            (
+                OccupationFamily::ME,
+                vec![4, 3, 2],
+                vec![2, 3, 4],
+                vec![1, 2, 2],
+                vec![2, 2, 1],
+                true,
+            ),
+        ];
+        let mut repaired_nontrivially = 0usize;
+        for (family, so, si, ko, ki, sl) in cases {
+            let problem = full_problem(family, so.clone(), si.clone(), sl, vec![]);
+            let deg_cfg = trace_config();
+            let bench = sample_fixed_strength_degree_bench(
+                problem,
+                ko.clone(),
+                ki.clone(),
+                McmcConfig::new(3, 2, 42),
+                deg_cfg,
+            )
+            .unwrap_or_else(|e| panic!("{family:?}: {e}"))
+            .1;
+            assert_eq!(bench.target_edges, ko.iter().sum::<u32>() as usize);
+            if bench.initial_degree_distance > 0 {
+                repaired_nontrivially += 1;
+            }
+        }
+        assert!(
+            repaired_nontrivially >= 1,
+            "expected at least one nontrivial degree repair among the cases"
+        );
+    }
+
+    #[test]
+    fn fixed_sk_reproducible_by_seed() {
+        let so = vec![4u64, 3, 2];
+        let si = vec![2u64, 3, 4];
+        let ko = vec![1u32, 2, 2];
+        let ki = vec![2u32, 2, 1];
+        let run = |seed: u64| -> Vec<OccNum> {
+            let problem = full_problem(OccupationFamily::ME, so.clone(), si.clone(), true, vec![]);
+            let net = sample_fixed_strength_degree(
+                problem,
+                ko.clone(),
+                ki.clone(),
+                McmcConfig::new(5, 3, seed),
+                trace_config(),
+            )
+            .unwrap();
+            let mut triples: Vec<_> = net
+                .sources
+                .iter()
+                .zip(net.targets.iter())
+                .zip(net.occ_nums.iter())
+                .map(|((&s, &t), &o)| (s, t, o))
+                .collect();
+            triples.sort_unstable();
+            triples
+                .into_iter()
+                .flat_map(|(s, t, o)| vec![s, t, o])
+                .collect()
+        };
+        assert_eq!(run(1), run(1), "same seed must reproduce the sample");
+        let _ = run(7);
+    }
+
+    #[test]
+    fn fixed_sk_positive_fixed_pair_merged_exactly() {
+        // ME N=3 s=[3,3,3] k=(2,2,2)/(2,2,2) with fixed (0,1,1): residual
+        // strengths [2,3,3]/[3,2,3], residual k=(1,2,2)/(2,1,2), residual
+        // E=5 (explicit feasible construction above).
+        let problem = full_problem(
+            OccupationFamily::ME,
+            vec![3, 3, 3],
+            vec![3, 3, 3],
+            true,
+            vec![(0, 1, 1)],
+        );
+        let net = sample_fixed_strength_degree(
+            problem,
+            vec![2, 2, 2],
+            vec![2, 2, 2],
+            McmcConfig::new(3, 2, 7),
+            trace_config(),
+        )
+        .unwrap();
+        // Full degrees sum to 6; residual E=5 plus the fixed pair => 6.
+        assert_eq!(net.sources.len(), 6, "full E = residual 5 + fixed pair");
+        // Fixed pair present with the right occupation; no duplicates.
+        let mut co = vec![0u64; 3];
+        let mut ci = vec![0u64; 3];
+        let mut keys = Vec::new();
+        for ((&s, &t), &o) in net
+            .sources
+            .iter()
+            .zip(net.targets.iter())
+            .zip(net.occ_nums.iter())
+        {
+            co[s as usize] += o;
+            ci[t as usize] += o;
+            keys.push((s, t));
+        }
+        assert_eq!(co, vec![3, 3, 3]);
+        assert_eq!(ci, vec![3, 3, 3]);
+        let (ko, ki) = degrees_from(&net, 3);
+        assert_eq!(ko, vec![2, 2, 2]);
+        assert_eq!(ki, vec![2, 2, 2]);
+        assert!(keys.contains(&(0, 1)));
+        let occ01 = net
+            .sources
+            .iter()
+            .zip(net.targets.iter())
+            .zip(net.occ_nums.iter())
+            .find(|((&s, &t), _)| s == 0 && t == 1)
+            .map(|(_, &o)| o);
+        assert_eq!(occ01, Some(1));
+        let mut sorted = keys.clone();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), keys.len(), "duplicate output coordinates");
+    }
+
+    #[test]
+    fn fixed_sk_zero_fixed_pair_never_reoccupied() {
+        // ME N=3 s=[2,2,2] k=(1,1,1)/(1,1,1) with fixed (0,1,0):
+        // coordinate (0,1) excluded; output never occupies it and the
+        // full degrees/strengths stay exact.
+        let problem = full_problem(
+            OccupationFamily::ME,
+            vec![2, 2, 2],
+            vec![2, 2, 2],
+            true,
+            vec![(0, 1, 0)],
+        );
+        let net = sample_fixed_strength_degree(
+            problem,
+            vec![1, 1, 1],
+            vec![1, 1, 1],
+            McmcConfig::new(3, 2, 11),
+            trace_config(),
+        )
+        .unwrap();
+        assert_eq!(net.sources.len(), 3);
+        assert!(
+            !net.sources
+                .iter()
+                .zip(net.targets.iter())
+                .any(|(&s, &t)| s == 0 && t == 1),
+            "zero fixed pair was reoccupied"
+        );
+        let (ko, ki) = degrees_from(&net, 3);
+        assert_eq!(ko, vec![1, 1, 1]);
+        assert_eq!(ki, vec![1, 1, 1]);
+    }
+
+    #[test]
+    fn fixed_sk_invalid_degree_target_rejected() {
+        // k_out[0] = 3 > s_out[0] = 2 must fail validation before sampling.
+        let problem = full_problem(OccupationFamily::ME, vec![2, 2], vec![2, 2], true, vec![]);
+        match sample_fixed_strength_degree(
+            problem,
+            vec![3, 1],
+            vec![2, 2],
+            McmcConfig::new(2, 1, 1),
+            trace_config(),
+        ) {
+            Err(FixedStrengthError::InvalidDegreeTarget(msg)) => {
+                assert!(msg.contains("exceeds strength_out"), "{msg}")
+            }
+            other => panic!("expected InvalidDegreeTarget, got {other:?}"),
+        }
+    }
+}
