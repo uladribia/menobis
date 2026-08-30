@@ -1884,6 +1884,8 @@ pub(crate) fn degree_trace_step(
             record.truncate(excursion_start);
             *running_raw = 0;
             trace_counters.timeouts += 1;
+            trace_counters.max_excursion_distance =
+                trace_counters.max_excursion_distance.max(max_distance);
             return DegreeTraceStepOutcome {
                 returned: false,
                 different_state: false,
@@ -1931,6 +1933,8 @@ pub(crate) fn degree_trace_step(
             if departed {
                 trace_counters.successful_returns += 1;
             }
+            trace_counters.max_excursion_distance =
+                trace_counters.max_excursion_distance.max(max_distance);
             return DegreeTraceStepOutcome {
                 returned: true,
                 different_state,
