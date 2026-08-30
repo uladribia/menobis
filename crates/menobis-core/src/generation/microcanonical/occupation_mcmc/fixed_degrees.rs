@@ -1776,6 +1776,12 @@ pub struct DegreeTraceCounters {
     pub successful_returns: u64,
     /// Returns ending at a different exact-degree state than the origin.
     pub different_state_returns: u64,
+    /// Returns whose endpoint support set differs from the origin support
+    /// set (support-topology movement).  Occupation-only changes on the
+    /// same support do **not** count (§7).  Incremented only when the
+    /// top-level trace returns to `D = 0`, never for intermediate
+    /// departure steps or timeouts.
+    pub support_changed_returns: u64,
     /// Total degree-auxiliary steps executed inside traces.
     pub auxiliary_steps: u64,
     /// Accepted auxiliary endpoints.
@@ -1802,6 +1808,24 @@ pub struct DegreeTraceStepOutcome {
     pub steps: usize,
     /// Maximum half-normalized degree distance during the excursion.
     pub max_distance: u64,
+}
+
+/// Support-only comparison of two sorted full-state snapshots (§7):
+/// returns `true` iff the occupied-pair sets differ, ignoring occupation
+/// values.  Called only on top-level degree-fiber returns (which already
+/// build the sorted snapshots), never in the auxiliary hot path.
+fn support_sets_differ(origin: &[((u64, u64), OccNum)], endpoint: &[((u64, u64), OccNum)]) -> bool {
+    let (mut o, mut e) = (0usize, 0usize);
+    while o < origin.len() && e < endpoint.len() {
+        match origin[o].0.cmp(&endpoint[e].0) {
+            std::cmp::Ordering::Equal => {
+                o += 1;
+                e += 1;
+            }
+            std::cmp::Ordering::Less | std::cmp::Ordering::Greater => return true,
+        }
+    }
+    o < origin.len() || e < endpoint.len()
 }
 
 /// One top-level first-return trace (§17): starting at an exact-degree
@@ -1900,6 +1924,9 @@ pub(crate) fn degree_trace_step(
             }
             if different_state {
                 trace_counters.different_state_returns += 1;
+            }
+            if support_sets_differ(&origin_snapshot, &endpoint_snapshot) {
+                trace_counters.support_changed_returns += 1;
             }
             if departed {
                 trace_counters.successful_returns += 1;
@@ -2292,5 +2319,80 @@ mod phase8_tests {
         assert!(trace_counters.different_state_returns > 0);
         assert_eq!(trace_counters.timeouts, 0);
         assert!(record.is_empty(), "sweep must drain the flat log");
+    }
+
+    // ---- Gate A support-movement metric (§7) ----
+
+    /// White-box checks of the support-only snapshot comparison.
+    #[test]
+    fn support_sets_differ_metric() {
+        type Snap = Vec<((u64, u64), OccNum)>;
+        let a: Snap = vec![((0, 1), 1), ((1, 0), 2), ((2, 2), 3)];
+        let same: Snap = vec![((0, 1), 7), ((1, 0), 1), ((2, 2), 1)];
+        let one_pair_replaced: Snap = vec![((0, 1), 1), ((1, 0), 2), ((2, 1), 3)];
+        let extra_pair: Snap = vec![((0, 1), 1), ((1, 0), 2), ((2, 2), 3), ((1, 1), 1)];
+        let missing_pair: Snap = vec![((0, 1), 1), ((2, 2), 3)];
+        assert!(
+            !support_sets_differ(&a, &same),
+            "occupation-only change is not support movement"
+        );
+        assert!(
+            !support_sets_differ(&a, &a),
+            "identical snapshots do not differ"
+        );
+        assert!(support_sets_differ(&a, &one_pair_replaced), "replaced pair");
+        assert!(support_sets_differ(&a, &extra_pair), "added pair");
+        assert!(support_sets_differ(&a, &missing_pair), "removed pair");
+        assert!(support_sets_differ(&one_pair_replaced, &a), "symmetric");
+    }
+
+    /// N=2 ME s=[3,3] E=4 degree (2,2)/(2,2): every exact state occupies
+    /// all four admissible pairs, so support movement is **impossible**
+    /// while occupation changes are common.  The gate-a metric must
+    /// report `support_changed_returns == 0` while
+    /// `different_state_returns > 0` (occupation-only movement) — i.e.
+    /// the two metrics separate topology movement from occupation
+    /// movement (§7, §38.2).
+    #[test]
+    fn trace_support_counter_separates_support_from_occupation() {
+        let (target, domain) = me_2x2();
+        let deg = ResidualDegreeTarget {
+            out: vec![2, 2],
+            in_: vec![2, 2],
+            edge_count: 4,
+        };
+        let mut rng = StdRng::seed_from_u64(21);
+        let mut counters = FixedEdgeCounters::default();
+        let mut trace_counters = DegreeTraceCounters::default();
+        let mut record = Vec::new();
+        for _ in 0..2000 {
+            let mut state =
+                StrengthState::new(2, vec![((0, 0), 1), ((0, 1), 2), ((1, 0), 2), ((1, 1), 1)]);
+            let mut running = 0u64;
+            let outcome = degree_trace_step(
+                &mut state,
+                &target,
+                &domain,
+                &mut rng,
+                4,
+                &BridgeConfig::default(),
+                &mut counters,
+                &deg,
+                &DegreeTraceConfig::default(),
+                &mut record,
+                &mut running,
+                &mut trace_counters,
+            );
+            assert!(outcome.returned && outcome.step1_return);
+            state.debug_validate();
+        }
+        assert!(
+            trace_counters.different_state_returns > 0,
+            "occupation-only returns must occur"
+        );
+        assert_eq!(
+            trace_counters.support_changed_returns, 0,
+            "support cannot change on the all-4-pairs N=2 fiber"
+        );
     }
 }
