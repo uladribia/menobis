@@ -19,7 +19,7 @@ use super::fixed_edges::{
 };
 use super::fixed_edges::{repair_to_edge_target, residual_edge_target};
 use super::initializer::initialize_table;
-use super::move_cycle::occupied_cycle4_step;
+use super::move_cycle::{occupied_cycle4_step, Cycle4Proposal};
 use super::problem::{FixedStrengthProblem, ResidualStrengthProblem};
 use super::repair;
 use super::state::StrengthState;
@@ -1098,8 +1098,9 @@ mod tests {
 // --------------------------------------------------------------------------
 
 use super::fixed_degrees::{
-    degree_trace_sweep, repair_to_degree_target, residualize_degree_target, validate_degree_target,
-    DegreeRepairConfig, DegreeTraceConfig, DegreeTraceCounters,
+    degree_distance, degree_trace_step, degree_trace_sweep, repair_to_degree_target,
+    residualize_degree_target, validate_degree_target, DegreeRepairConfig, DegreeTraceConfig,
+    DegreeTraceCounters,
 };
 
 /// Per-stage diagnostics for the fixed-(s,k) pipeline (§27, §35-style).
@@ -1329,6 +1330,202 @@ pub fn sample_fixed_strength_degree(
         degree_config,
     )
     .map(|(network, _)| network)
+}
+
+// --------------------------------------------------------------------------
+// Gate A: trace mobility from an exact (s,k) witness (§5–§7)
+// --------------------------------------------------------------------------
+
+/// Diagnostics-only output of one fixed-(s,k) trace run started directly
+/// on the exact degree fiber (`D = 0`) with no construction/repair.
+#[derive(Clone, Debug)]
+pub struct FixedSkTraceBenchmark {
+    /// Node count.
+    pub n: usize,
+    /// Occupied-pair count (residual `E`).
+    pub e: usize,
+    /// Total residual strength (sum of all witness occupations).
+    pub total_strength: OccNum,
+    /// Nested degree-trace mobility counters (§27).
+    pub trace: DegreeTraceCounters,
+    /// Underlying fixed-(s,E) kernel counters (to attribute slow
+    /// performance to `K_E` itself vs the outer degree trace).
+    pub fixed_edge: FixedEdgeCounters,
+    /// Wall time for the whole trace run.
+    pub wall_time_s: f64,
+    /// Maximum half-normalized degree distance seen by the periodic
+    /// independent full scan.  Must stay `0` for a valid run.
+    pub max_checkpoint_distance: u64,
+}
+
+/// Gate A diagnostic: run the existing capped first-return degree trace
+/// starting from an already exact `(s,k)` state (`D = 0`), bypassing all
+/// fixed-s construction, structural/edge repair, and degree repair.
+///
+/// The caller supplies a **witness table** — an already feasible exact
+/// occupation table for `problem` whose row/column degrees equal the
+/// full degree targets.  The helper validates the witness against the
+/// residual problem (strengths, degrees, `E`, family capacity, domain
+/// admissibility, duplicates, loop policy), recomputes `D` by an
+/// independent full scan and requires `D = 0`, then executes exactly
+/// `trace_attempts` top-level [`degree_trace_step`] calls of the
+/// existing production trace kernel and returns counters plus wall time.
+///
+/// `seed` drives the trace randomness only (the witness is provided).
+///
+/// # Errors
+///
+/// - [`InvalidResidual`](FixedStrengthError::InvalidResidual) if fixed
+///   pairs are present (Gate A requires none), or the witness does not
+///   realize the residual strengths, violates the domain, duplicates
+///   coordinates, or uses zero occupations.
+/// - [`InvalidDegreeTarget`](FixedStrengthError::InvalidDegreeTarget)
+///   if the residualized degree target is unbalanced or the witness
+///   degrees differ from it (including `D != 0` at start or at any
+///   periodic checkpoint).
+#[allow(clippy::too_many_arguments)]
+#[doc(hidden)]
+pub fn benchmark_fixed_sk_trace_from_exact_table(
+    problem: FixedStrengthProblem,
+    full_degree_out: Vec<u32>,
+    full_degree_in: Vec<u32>,
+    exact_table: Vec<((u64, u64), OccNum)>,
+    trace_attempts: usize,
+    seed: u64,
+    degree_config: DegreeTraceConfig,
+) -> Result<FixedSkTraceBenchmark, FixedStrengthError> {
+    let fixed_pairs = problem.fixed_pairs.clone();
+    let family = problem.family;
+    let full_strength_out = problem.strength_out.clone();
+    let full_strength_in = problem.strength_in.clone();
+
+    // Gate A: the diagnostic takes an already exact table; fixed-pair
+    // residualization is a Part B concern (§6.2).
+    if !fixed_pairs.is_empty() {
+        return Err(FixedStrengthError::InvalidResidual(
+            "Gate A trace diagnostic requires no fixed pairs".into(),
+        ));
+    }
+
+    // Same residualization/validation as the production one-shot (§7
+    // ordering: strengths first, then degrees).
+    let residual = problem.into_residual()?;
+    let degree = residualize_degree_target(&full_degree_out, &full_degree_in, &fixed_pairs)?;
+    validate_degree_target(&residual, &degree)?;
+    let e_res = degree.edge_count;
+
+    // ---- Construct the state directly from the witness (no repair) ----
+    let n = residual.domain.node_count();
+    let occ_sum: OccNum = exact_table.iter().map(|&(_, o)| o).sum();
+    if occ_sum != residual.total {
+        return Err(FixedStrengthError::InvalidResidual(format!(
+            "witness total occupation {occ_sum} != residual total {}",
+            residual.total
+        )));
+    }
+    let mut state = StrengthState::new(n, exact_table);
+
+    // Witness validation, O(E) once, before the trace (§6.5).
+    for ((s, t), _) in state.iter_occupied() {
+        if !residual.domain.is_admissible(s, t) {
+            return Err(FixedStrengthError::InvalidResidual(format!(
+                "witness pair ({s}, {t}) is not admissible in the residual domain"
+            )));
+        }
+    }
+    validate_fixed_sk_output(
+        &state.to_sampled_network(),
+        n,
+        &residual.strength_out,
+        &residual.strength_in,
+        &degree.out,
+        &degree.in_,
+        family,
+        residual.domain.self_loops_allowed(),
+    )?;
+    if state.occupied_count() != e_res {
+        return Err(FixedStrengthError::InvalidDegreeTarget(format!(
+            "witness occupied count {} != residual edge count {e_res}",
+            state.occupied_count()
+        )));
+    }
+    let d0 = degree_distance(&state.row_occ_count, &state.col_occ_count, &degree);
+    if d0 != 0 {
+        return Err(FixedStrengthError::InvalidDegreeTarget(format!(
+            "witness is not on the exact degree fiber: D = {d0}"
+        )));
+    }
+
+    // ---- Run the existing trace kernel (§6.8–§6.10) ----
+    let target = StrengthTarget::new(family);
+    let mut f_e_counters = FixedEdgeCounters::default();
+    let mut trace_counters = DegreeTraceCounters::default();
+    let mut record: Vec<Cycle4Proposal> = Vec::new();
+    let mut running_raw = 0u64; // start exactly on the degree fiber
+    let mut rng = StdRng::seed_from_u64(seed);
+    let mut max_checkpoint_distance = 0u64;
+
+    let t0 = Instant::now();
+    for attempt in 0..trace_attempts {
+        degree_trace_step(
+            &mut state,
+            &target,
+            &residual.domain,
+            &mut rng,
+            e_res,
+            &BridgeConfig::default(),
+            &mut f_e_counters,
+            &degree,
+            &degree_config,
+            &mut record,
+            &mut running_raw,
+            &mut trace_counters,
+        );
+        // Every top-level trace must end on the fiber (§6.10).  The
+        // kernel restores the origin on timeout, so `running_raw == 0`
+        // is the O(1) invariant; verify it explicitly.
+        debug_assert_eq!(running_raw, 0, "trace must end on the degree fiber");
+        record.clear();
+        // Periodic independent full-scan D check (O(N), once per 1000
+        // traces — never per K_E step).
+        if attempt % 1000 == 0 {
+            let d = degree_distance(&state.row_occ_count, &state.col_occ_count, &degree);
+            if d > max_checkpoint_distance {
+                max_checkpoint_distance = d;
+            }
+        }
+    }
+    let wall_time_s = t0.elapsed().as_secs_f64();
+    if max_checkpoint_distance != 0 {
+        return Err(FixedStrengthError::InvalidDegreeTarget(format!(
+            "trace left the degree fiber: max checkpoint D = {max_checkpoint_distance}"
+        )));
+    }
+
+    // Final full-target validation against the stored full vectors
+    // (§6.1: full targets are kept before residualization): with no
+    // fixed pairs, residual == full, so this re-verifies the endpoint
+    // is still an exact full (s,k) state after all traces.
+    validate_fixed_sk_output(
+        &state.to_sampled_network(),
+        n,
+        &full_strength_out,
+        &full_strength_in,
+        &degree.out,
+        &degree.in_,
+        family,
+        residual.domain.self_loops_allowed(),
+    )?;
+
+    Ok(FixedSkTraceBenchmark {
+        n,
+        e: e_res,
+        total_strength: residual.total,
+        trace: trace_counters,
+        fixed_edge: f_e_counters,
+        wall_time_s,
+        max_checkpoint_distance,
+    })
 }
 
 /// O(E) boundary validation of the merged full network (§26): exact full
@@ -1649,6 +1846,125 @@ mod phase9_tests {
                 assert!(msg.contains("exceeds strength_out"), "{msg}")
             }
             other => panic!("expected InvalidDegreeTarget, got {other:?}"),
+        }
+    }
+}
+
+// --------------------------------------------------------------------------
+// Gate A unit tests: trace-from-exact-witness diagnostic (§6)
+// --------------------------------------------------------------------------
+
+#[cfg(test)]
+mod gate_a_tests {
+    use super::*;
+
+    /// N=3 ME witness: `s_out=(3,1,1)`, `s_in=(1,3,1)`, `k_out=(2,1,1)`,
+    /// `k_in=(1,2,1)`, `E=4`, `D=0` by construction.
+    #[allow(clippy::type_complexity)]
+    fn me_3_witness() -> (
+        FixedStrengthProblem,
+        Vec<u32>,
+        Vec<u32>,
+        Vec<((u64, u64), OccNum)>,
+    ) {
+        let table = vec![((0, 1), 2), ((0, 2), 1), ((1, 0), 1), ((2, 1), 1)];
+        let problem = FixedStrengthProblem::new(
+            OccupationFamily::ME,
+            vec![3, 1, 1],
+            vec![1, 3, 1],
+            PairDomain::Complete {
+                node_count: 3,
+                self_loops: true,
+            },
+            vec![],
+        )
+        .unwrap();
+        (problem, vec![2, 1, 1], vec![1, 2, 1], table)
+    }
+
+    #[test]
+    fn trace_from_exact_witness_runs_and_stays_on_fiber() {
+        let (problem, k_out, k_in, table) = me_3_witness();
+        let bench = benchmark_fixed_sk_trace_from_exact_table(
+            problem,
+            k_out,
+            k_in,
+            table,
+            2000,
+            7,
+            DegreeTraceConfig {
+                lambda: 1.0,
+                max_steps: 16,
+            },
+        )
+        .unwrap();
+        assert_eq!(bench.n, 3);
+        assert_eq!(bench.e, 4);
+        assert_eq!(bench.total_strength, 5);
+        assert_eq!(bench.trace.trace_attempts, 2000);
+        assert_eq!(
+            bench.max_checkpoint_distance, 0,
+            "trace must never leave D=0"
+        );
+        // Every top-level attempt is exactly one of: timeout (self-loop),
+        // step-1 return (in-fiber move), or departed successful return
+        // (returned to D=0 after leaving).  Disjoint by construction.
+        assert_eq!(
+            bench.trace.trace_attempts,
+            bench.trace.timeouts + bench.trace.step1_returns + bench.trace.successful_returns,
+        );
+        assert!(bench.wall_time_s >= 0.0);
+    }
+
+    #[test]
+    fn trace_from_exact_witness_strength_check() {
+        // Witness with wrong total occupation must be rejected before the
+        // trace runs.
+        let (problem, k_out, k_in, _) = me_3_witness();
+        let bad_table = vec![((0, 1), 2), ((1, 0), 1), ((2, 1), 1)];
+        match benchmark_fixed_sk_trace_from_exact_table(
+            problem,
+            k_out,
+            k_in,
+            bad_table,
+            16,
+            7,
+            DegreeTraceConfig::default(),
+        ) {
+            Err(FixedStrengthError::InvalidResidual(msg)) => {
+                assert!(msg.contains("total occupation"), "{msg}")
+            }
+            other => panic!("expected InvalidResidual, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn trace_from_exact_witness_degree_check() {
+        // A table with the same strengths but a different degree vector
+        // (5 all-ones edges vs the 4-edge witness) must be rejected: it
+        // has the correct total mass and strengths, but E/k differ.
+        let (problem, k_out, k_in, _) = me_3_witness();
+        let bad_table = vec![
+            ((0, 0), 1),
+            ((0, 1), 1),
+            ((0, 2), 1),
+            ((1, 1), 1),
+            ((2, 1), 1),
+        ];
+        match benchmark_fixed_sk_trace_from_exact_table(
+            problem,
+            k_out,
+            k_in,
+            bad_table,
+            16,
+            7,
+            DegreeTraceConfig::default(),
+        ) {
+            Err(e) => {
+                let msg = e.to_string();
+                assert!(msg.contains("degree"), "unexpected error: {msg}")
+            }
+            other => panic!("expected a degree error, got {other:?}"),
         }
     }
 }
