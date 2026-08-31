@@ -2,7 +2,7 @@
 
 **Status:** stopped (algorithmic limitation, plan §43.1 policy)
 **Branch:** `feature/microcanonical-fixed-strength-degree`
-**Spec:** `MENoBiS_fixed_sk_implementation_plan_v2.md`
+**Spec:** `../development/agent-specifications/MENoBiS_fixed_sk_implementation_plan_v2.md`
 
 ## 1. Background
 

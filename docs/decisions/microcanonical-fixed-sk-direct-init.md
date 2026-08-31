@@ -2,7 +2,7 @@
 
 **Status:** STOPPED at the N=1000 constructor gate (algorithmic limitation, not a bug)
 **Branch:** `fix/fixed-sk-direct-init-trace-gate`
-**Recovery plan:** `MENoBiS_fixed_sk_recovery_direct_init_trace_gate.md` (Part B, §13–§28)
+**Recovery plan:** `../development/agent-specifications/MENoBiS_fixed_sk_recovery_direct_init_trace_gate.md` (Part B, §13–§28)
 **Gate A (trace mobility):** PASSED — `TRACE_FROM_EXACT_STATE_VIABLE = true`
 **Gate B (direct constructor):** `DIRECT_EXACT_SK_INITIALIZATION = fail at N=1000`
 **Prior decision:** `docs/decisions/microcanonical-fixed-sk-trace-mobility.md`
@@ -123,5 +123,5 @@ cargo test -p menobis-test-oracles --test fixed_strength_degree_direct_init \
 cargo test --workspace                                       # green (ignored tests skipped)
 ```
 
-Leave the recovery plan (`MENoBiS_fixed_sk_recovery_direct_init_trace_gate.md`)
+Leave the recovery plan (`../development/agent-specifications/MENoBiS_fixed_sk_recovery_direct_init_trace_gate.md`)
 untouched; all findings live in this record and the gate tests.

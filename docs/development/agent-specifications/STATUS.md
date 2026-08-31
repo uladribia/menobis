@@ -9,11 +9,48 @@
 | | |
 |---|---|
 | Branch | `feature/microcanonical-fixed-strength-degree` |
-| Spec | `MENoBiS_fixed_sk_implementation_plan_v2.md` (repo root) |
+| Spec | `agent-specifications/MENoBiS_fixed_sk_implementation_plan_v2.md` |
 | Decision record | `docs/decisions/microcanonical-fixed-sk-stop.md` |
 | Exact-math oracle | `crates/menobis-test-oracles/tests/fixed_strength_degree_enumeration.rs` |
 | N=1000 gate | `crates/menobis-test-oracles/tests/fixed_strength_degree_scalability.rs` |
 | Feature status | **STOPPED (algorithmic limitation), never shipped** |
+
+## ⬆ Recovery update (current work — read this first if exploring the repo today)
+
+A recovery effort replaced the initialization approach on a dedicated
+branch:
+
+```text
+branch: fix/fixed-sk-direct-init-trace-gate   (based on feature/microcanonical-fixed-strength-degree)
+plan:   agent-specifications/MENoBiS_fixed_sk_recovery_direct_init_trace_gate.md
+```
+
+**Gate A — stationary trace from an exact `(s,k)` state: ✅ VIABLE**
+(`docs/decisions/microcanonical-fixed-sk-trace-mobility.md`).  Started on an
+already-exact witness, the first-return degree trace is practically mobile at
+N=1000 for realistic PA-geographic instances (~3% different/support returns
+per trace, ~34 `K_E` per effective return, ~0.2% timeouts).  Uniform-corner
+witnesses (zero occupation-1 edges) are immobile — a start-state constraint,
+not a kernel defect.
+
+**Gate B — direct exact `(s,k)` constructor: ⛔ blocked at N=1000 for
+heterogeneous residuals** (`docs/decisions/microcanonical-fixed-sk-direct-init.md`).
+The §13–§22 pipeline (exact-k support → occupation 1 → residual allocation)
+works at tiny scale and for uniform-occupation instances (the §28 stress grid
+passes), but for realistic heterogeneous residuals **no** generic exact-k
+support admits the residual-strengths transport (0/400 k-greedy, 0/64
+c-aware, 0/64 proportional-random; verified against the legacy max-flow
+oracle).  The extras transport is co-joint: only the witness-like support
+carries the required strength-column correlation.  The full-domain extras
+transport is feasible and spare (1752 edges, 0 rows over k) — the missing
+piece is expressing it on a k-exact support (see the decision record's
+§5 options 1–4).
+
+**What works today:** everything up to Gate B's constructor integration — the
+trace kernel, the tiny/uniform constructor, fixed pairs, B capacity, and all
+prior exact-math gates (see §Regression below).  Phase 8 integration (direct
+init into the one-shot sampler) and everything after are intentionally NOT
+done: Phase 7 is red.
 
 ## TL;DR
 
