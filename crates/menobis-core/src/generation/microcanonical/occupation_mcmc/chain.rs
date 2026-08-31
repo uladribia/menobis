@@ -1097,33 +1097,38 @@ mod tests {
 // Phase 9: one-shot fixed-(s,k) core sampler (§25–§27)
 // --------------------------------------------------------------------------
 
+use super::fixed_degree_init::{initialize_exact_sk_extras_first, ExactSkInitConfig};
 use super::fixed_degrees::{
-    degree_distance, degree_trace_step, degree_trace_sweep, repair_to_degree_target,
-    residualize_degree_target, validate_degree_target, DegreeRepairConfig, DegreeTraceConfig,
-    DegreeTraceCounters,
+    degree_distance, degree_trace_step, degree_trace_sweep, residualize_degree_target,
+    validate_degree_target, DegreeTraceConfig, DegreeTraceCounters,
 };
 
-/// Per-stage diagnostics for the fixed-(s,k) pipeline (§27, §35-style).
+/// Per-stage diagnostics for the fixed-(s,k) pipeline (§48).
+///
+/// Obsolete fixed-(s,k) degree-repair timing fields were removed when
+/// the extras-first constructor became the sole active initializer
+/// (plan Part I): the production path no longer runs compressed
+/// construction, structural repair, edge repair, or degree repair
+/// (§46–§47).
 #[derive(Clone, Debug)]
 pub struct FixedStrengthDegreeBench {
-    /// Wall time for compressed construction.
-    pub construction_time_s: f64,
-    /// Wall time for structural repair (loops, capacity, inadmissible).
-    pub structural_repair_time_s: f64,
-    /// Wall time for edge-count repair to exact residual E.
-    pub edge_repair_time_s: f64,
-    /// Edge-repair steps used.
-    pub edge_repair_steps: u64,
-    /// Edge-repair reconstruction restarts.
-    pub edge_repair_restarts: u32,
-    /// Wall time for degree repair to the exact residual degrees.
-    pub degree_repair_time_s: f64,
-    /// Degree-repair steps used.
-    pub degree_repair_steps: u64,
-    /// Degree-repair reconstruction restarts.
-    pub degree_repair_restarts: u32,
-    /// Half-normalized degree distance of the initial exact-E state.
-    pub initial_degree_distance: u64,
+    /// Wall time for the extras-first direct constructor.
+    pub direct_init_time_s: f64,
+    /// Slot-aware extras transport attempts consumed (§34).
+    pub extras_attempts: usize,
+    /// Extras attempts that failed (stranded mass / discarded tables).
+    pub extras_failed_attempts: usize,
+    /// Positive-`y` extras edges in the constructed state.
+    pub extras_edges: usize,
+    /// Occupation-1 filler edges completing the missing degree slots.
+    pub filler_edges: usize,
+    /// Binary completion attempts across kept extras tables.
+    pub completion_attempts: usize,
+    /// Binary completion failures across kept extras tables.
+    pub completion_failed_attempts: usize,
+    /// Occupation-1 fraction of the constructed start (trace-mobility
+    /// predictor, Gate A / §33).
+    pub occupation_one_fraction: f64,
     /// Residual degree target edge count.
     pub target_edges: usize,
     /// Wall time for burn-in + thinning sweeps.
@@ -1131,19 +1136,23 @@ pub struct FixedStrengthDegreeBench {
     /// Nested degree-trace mobility counters (§27).
     pub degree_trace: DegreeTraceCounters,
     /// Underlying fixed-(s,E) kernel counters (§27: to attribute slow
-    /// performance to K_E itself vs the outer degree trace).
+    /// performance to `K_E` itself vs the outer degree trace).
     pub fixed_edge: FixedEdgeCounters,
 }
 
-/// Benchmark-instrumented one-shot fixed-(s,k) sampling (§25).
+/// Benchmark-instrumented one-shot fixed-(s,k) sampling (§25, §45).
 ///
 /// Pipeline: Rust residualizes strengths/fixed pairs exactly once,
 /// subtracts the fixed-pair degree contribution, validates the combined
-/// residual (s,k) target, constructs an exact residual `E` state (edge
-/// repair), repairs it to the exact residual degree vectors with the
-/// shared degree-biased auxiliary step, then burn-in + thinning with the
+/// residual (s,k) target, constructs an exact `D = 0` state with the
+/// extras-first constructor (§6–§35), then burn-in + thinning with the
 /// capped first-return degree trace.  The returned network carries exact
 /// full strengths, exact full degrees, and exact `E`.
+///
+/// The active fixed-(s,k) path no longer runs the compressed fixed-s
+/// initializer, structural repair, edge repair, or degree repair (§46):
+/// initialization is now combinatorial and exact by construction; the
+/// stationary trace is unchanged.
 ///
 /// # Errors
 ///
@@ -1151,7 +1160,8 @@ pub struct FixedStrengthDegreeBench {
 ///   `FixedStrengthProblem::into_residual`);
 /// - [`InvalidDegreeTarget`](FixedStrengthError::InvalidDegreeTarget)
 ///   from residualization or combined-target validation;
-/// - degree-repair exhaustion never returns an inexact sample.
+/// - [`ExactSkExtrasFirstExhausted`](FixedStrengthError::ExactSkExtrasFirstExhausted)
+///   from the constructor retry budget (never an inexact sample).
 #[allow(clippy::too_many_arguments)]
 pub fn sample_fixed_strength_degree_bench(
     problem: FixedStrengthProblem,
@@ -1174,56 +1184,29 @@ pub fn sample_fixed_strength_degree_bench(
     validate_degree_target(&residual, &degree)?;
     let e_res = degree.edge_count;
 
-    // ---- Construction + structural repair ----
+    // ---- Extras-first direct exact-(s,k) construction (§45) ----
+    // The production fixed-(s,k) path no longer runs the compressed
+    // fixed-s initializer, structural repair, edge repair, or degree
+    // repair (§46–§47): the extras-first constructor builds an exact
+    // D=0 state directly, then the stationary trace burn-in/thinning
+    // runs unchanged (§45).
     let n = residual.domain.node_count();
     let t0 = Instant::now();
-    let table = initialize_table(
-        &residual.strength_out,
-        &residual.strength_in,
-        residual.family,
-        &residual.domain,
-        &mut rng,
-    )?;
-    let mut state = StrengthState::new(n, table);
-    let construction_time_s = t0.elapsed().as_secs_f64();
-
-    let t0 = Instant::now();
-    let (_, _, _) = repair_state(&mut state, &residual, &mut rng)?;
-    let structural_repair_time_s = t0.elapsed().as_secs_f64();
-
-    // ---- Edge-count repair to exact residual E (§14) ----
-    let t0 = Instant::now();
-    let edge_outcome = repair_to_edge_target(
-        &mut state,
+    let (mut state, init_diag) = initialize_exact_sk_extras_first(
         &residual,
+        &degree.out,
+        &degree.in_,
         &mut rng,
-        e_res,
-        &EdgeRepairConfig::default(),
+        &ExactSkInitConfig::default(),
     )?;
-    let edge_repair_time_s = t0.elapsed().as_secs_f64();
+    let direct_init_time_s = t0.elapsed().as_secs_f64();
 
-    // ---- Degree repair with the shared degree-biased auxiliary step (§15) ----
-    let t0 = Instant::now();
-    let degree_outcome = repair_to_degree_target(
-        &mut state,
-        &residual,
-        &mut rng,
-        e_res,
-        &BridgeConfig::default(),
-        &degree,
-        &DegreeRepairConfig::default(),
-    )?;
-    let degree_repair_time_s = t0.elapsed().as_secs_f64();
-    if degree_outcome.best_distance != 0 {
-        return Err(FixedStrengthError::DegreeRepairExhausted {
-            best_degree_distance: degree_outcome.best_distance,
-            restarts: degree_outcome.restarts,
-            total_steps: degree_outcome.steps,
-            target_edges: e_res,
-        });
-    }
-
-    // ---- Runtime invariant (§26): no inexact-degree state enters sampling ----
+    // ---- Runtime invariant (§45): no inexact-degree state enters sampling ----
+    assert_eq!(
+        degree_distance(&state.row_occ_count, &state.col_occ_count, &degree),
+        0,
+        "extras-first constructor must start exactly on the degree fiber"
+    );
     debug_assert_eq!(
         state.row_occ_count,
         degree.out.iter().map(|&k| k as usize).collect::<Vec<_>>(),
@@ -1297,15 +1280,14 @@ pub fn sample_fixed_strength_degree_bench(
     Ok((
         network,
         FixedStrengthDegreeBench {
-            construction_time_s,
-            structural_repair_time_s,
-            edge_repair_time_s,
-            edge_repair_steps: edge_outcome.steps,
-            edge_repair_restarts: edge_outcome.restarts,
-            degree_repair_time_s,
-            degree_repair_steps: degree_outcome.steps,
-            degree_repair_restarts: degree_outcome.restarts,
-            initial_degree_distance: degree_outcome.initial_distance,
+            direct_init_time_s,
+            extras_attempts: init_diag.extras_attempts,
+            extras_failed_attempts: init_diag.extras_failed_attempts,
+            extras_edges: init_diag.extras_edges,
+            filler_edges: init_diag.filler_edges,
+            completion_attempts: init_diag.completion_attempts,
+            completion_failed_attempts: init_diag.completion_failed_attempts,
+            occupation_one_fraction: init_diag.occupation_one_fraction,
             target_edges: e_res,
             mcmc_time_s,
             degree_trace: trace_counters,
@@ -1685,7 +1667,15 @@ mod phase9_tests {
                 true,
             ),
         ];
-        let mut repaired_nontrivially = 0usize;
+        // With the extras-first constructor (§45) every constructed
+        // start is exactly on the degree fiber: initialization is
+        // combinatorial and exact, so the old "at least one nontrivial
+        // degree repair" expectation is obsolete (§62).  Instead check
+        // the extras-first signal: at least one case has zero residual
+        // (all-ones construction, extras = 0) and at least one has a
+        // nontrivial extras transport (extras > 0).
+        let mut zero_residual = 0usize;
+        let mut nontrivial_extras = 0usize;
         for (family, so, si, ko, ki, sl) in cases {
             let problem = full_problem(family, so.clone(), si.clone(), sl, vec![]);
             let deg_cfg = trace_config();
@@ -1699,13 +1689,24 @@ mod phase9_tests {
             .unwrap_or_else(|e| panic!("{family:?}: {e}"))
             .1;
             assert_eq!(bench.target_edges, ko.iter().sum::<u32>() as usize);
-            if bench.initial_degree_distance > 0 {
-                repaired_nontrivially += 1;
+            assert_eq!(
+                bench.occupation_one_fraction,
+                bench.filler_edges as f64 / bench.target_edges as f64,
+                "occ-1 fraction is exactly the filler fraction (extras carry occ >= 2)"
+            );
+            if bench.extras_edges == 0 {
+                zero_residual += 1;
+            } else {
+                nontrivial_extras += 1;
             }
         }
         assert!(
-            repaired_nontrivially >= 1,
-            "expected at least one nontrivial degree repair among the cases"
+            zero_residual >= 1,
+            "expected at least one all-ones (s==k) case"
+        );
+        assert!(
+            nontrivial_extras >= 1,
+            "expected at least one case with a nontrivial extras transport"
         );
     }
 

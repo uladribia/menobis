@@ -1,29 +1,19 @@
-//! Heavy: N=1000 scalability gate for the fixed-(s,k) sampler (§42–§43).
+//! Heavy: N=1000 scalability gate for the fixed-(s,k) sampler (§49).
 //!
-//! # Status: STOPPED (algorithmic limitation, §43.1 policy)
+//! # Status: extras-first constructor active (Gate C/D passed)
 //!
-//! The N=1000 degree-repair gate **fails as designed**: the shared
-//! degree-biased auxiliary step (one recorded `K_E` transition + outer
-//! degree-distance MH, `λ = 1.0`) cannot bring a randomized exact-E
-//! start to the exact degree target at scale.  The distance trajectory
-//! shows a geometric tail that **floors at a strictly positive D** that
-//! grows roughly linearly with N (probed: N=30 floor D≈21, N=100
-//! D≈79, N=200 D≈154 under default budgets; `λ ∈ {0.5, 1.0, 2.0}` all
-//! floor).  Degree repair converges only on tiny enumerable fibers
-//! (N ≤ 3) where the exact-E state space is small enough for the walk to
-//! find the target.
+//! These tests used to pin the degree-repair STOP artifact
+//! (`DegreeRepairExhausted` at N=1000) and the repair floor scaling
+//! with N.  That evidence is preserved in the decision record
+//! `docs/decisions/microcanonical-fixed-sk-stop.md`; per plan Part I
+//! §62 the live tests now require **extras-first success**: the
+//! production one-shot must construct an exact `D = 0` state directly
+//! and sample without any degree repair (§45–§47).
 //!
-//! Per §43.1 the plan mandates STOP: do not blindly raise the repair
-//! budget, and per §52 do not add a new move family or a second repair
-//! policy in this task.  The exact trace-matrix oracle (§22), the
-//! production-vs-oracle correspondence (§39), the degree repair on tiny
-//! fibers (§41), and the tiny-N end-to-end gates all pass — the failure
-//! is specifically the **initialization repair at scale**, not the
-//! stationary trace kernel.
-//!
-//! These tests pin the documented behavior so the STOP artifact is
-//! reproducible and the diagnostics are captured as permanent evidence:
-//! `[ignore]`d because each case runs a large repair budget.
+//! The N=1000 sampler gate runs burn-in + thinning on the trace with a
+//! small budget (exactness is the gate; mixing is measured separately
+//! by `fixed_strength_degree_trace_constructed`).  `[ignore]`d because
+//! each case runs an N=1000 MCMC sweep.
 
 use std::collections::HashSet;
 
@@ -77,16 +67,18 @@ fn derive_constraints(
     (s_out, s_in, k_out, k_in, table.len())
 }
 
-/// §43.1 STOP artifact: N=1000 repair must exhaust with the structured
-/// `DegreeRepairExhausted` error (never an inexact sample), and the
-/// diagnostics must be sane.  This pins the documented algorithmic
-/// limitation and its reproducible diagnostics.
+/// §49: N=1000 one-shot fixed-(s,k) sampling on a heterogeneous
+/// random-support synthetic instance.  The extras-first constructor must
+/// build an exact D=0 state directly (no degree repair), the trace
+/// sweeps must end on the fiber, and the final output must reproduce the
+/// exact constraints.  (This test previously pinned `DegreeRepairExhausted`;
+/// the STOP artifact lives in the decision record now.)
 #[test]
 #[ignore]
-fn n1000_degree_repair_stop_artifact() {
+fn n1000_extras_first_one_shot() {
     let n = 1000usize;
     let table = synthetic_feasible_table(n, 8, 1, 3, 42);
-    let (out, inp, k_out, k_in, _) = derive_constraints(&table, n);
+    let (out, inp, k_out, k_in, e) = derive_constraints(&table, n);
     let domain = PairDomain::Complete {
         node_count: n,
         self_loops: false,
@@ -99,42 +91,40 @@ fn n1000_degree_repair_stop_artifact() {
         proposals_per_sweep: Some(2000),
         seed: 1,
     };
-    match sample_fixed_strength_degree_bench(
+    let (_net, bench) = sample_fixed_strength_degree_bench(
         problem,
         k_out,
         k_in,
         config,
         DegreeTraceConfig::default(),
-    ) {
-        Err(menobis_core::generation::microcanonical::occupation_mcmc::errors::FixedStrengthError::DegreeRepairExhausted {
-            best_degree_distance,
-            restarts,
-            total_steps,
-            target_edges,
-        }) => {
-            eprintln!(
-                "[STOP artifact] N={n} degree repair exhausted: best D={best_degree_distance}, \
-                 restarts={restarts}, steps={total_steps}, target edges={target_edges}"
-            );
-            assert!(best_degree_distance > 0, "best distance must be positive");
-            assert_eq!(target_edges, 8 * n);
-            assert!(restarts >= 1);
-            assert!(total_steps > 0);
-        }
-        Ok(_) => panic!(
-            "N=1000 degree repair unexpectedly succeeded — the STOP artifact is stale; \
-             re-evaluate §43.1 before enabling production use"
-        ),
-        Err(other) => panic!("expected DegreeRepairExhausted (documented STOP), got {other:?}"),
-    }
+    )
+    .unwrap_or_else(|e| panic!("N=1000 extras-first one-shot failed: {e}"));
+    eprintln!(
+        "[one-shot] N={n} E={e} direct_init={:.3}s extras_attempts={} extras_edges={} \
+         filler_edges={} completion={} occ1={:.3} mcmc={:.3}s",
+        bench.direct_init_time_s,
+        bench.extras_attempts,
+        bench.extras_edges,
+        bench.filler_edges,
+        bench.completion_attempts,
+        bench.occupation_one_fraction,
+        bench.mcmc_time_s,
+    );
+    assert_eq!(bench.target_edges, e);
+    assert!(
+        bench.extras_edges >= 1,
+        "heterogeneous residual needs extras"
+    );
+    // The sampled network itself was validated inside the sampler
+    // (exact full strengths/degrees/E, §26).
 }
 
-/// Mixed-size floor characterization (fast, the inspect-step evidence of
-/// §43.1): the repair's floor grows with N while the budget is held
-/// fixed — pins the geometric-tail / floor observation in the report.
+/// Mixed-size N∈{60,120} one-shot gate: the extras-first constructor
+/// succeeds regardless of scale (this previously pinned the repair
+/// floor growing with N).
 #[test]
 #[ignore]
-fn degree_repair_floor_scales_with_n() {
+fn n60_n120_extras_first_success() {
     for n in [60usize, 120] {
         let table = synthetic_feasible_table(n, 8, 1, 3, 42);
         let (out, inp, k_out, k_in, _) = derive_constraints(&table, n);
@@ -145,9 +135,9 @@ fn degree_repair_floor_scales_with_n() {
         let problem =
             FixedStrengthProblem::new(OccupationFamily::ME, out, inp, domain, vec![]).unwrap();
         let config = McmcConfig {
-            burn_in_sweeps: 0,
-            sweeps_per_sample: 0,
-            proposals_per_sweep: Some(1000),
+            burn_in_sweeps: 1,
+            sweeps_per_sample: 1,
+            proposals_per_sweep: Some(500),
             seed: 3,
         };
         match sample_fixed_strength_degree_bench(
@@ -157,11 +147,11 @@ fn degree_repair_floor_scales_with_n() {
             config,
             DegreeTraceConfig::default(),
         ) {
-            Err(menobis_core::generation::microcanonical::occupation_mcmc::errors::FixedStrengthError::DegreeRepairExhausted {
-                best_degree_distance,
-                ..
-            }) => eprintln!("[floor] N={n}: best D={best_degree_distance} (default repair budget)"),
-            other => panic!("N={n}: expected repair exhaustion, got {other:?}"),
+            Ok((_, bench)) => eprintln!(
+                "[scale] N={n}: direct_init={:.3}s extras={} occ1={:.3}",
+                bench.direct_init_time_s, bench.extras_edges, bench.occupation_one_fraction
+            ),
+            other => panic!("N={n}: expected extras-first success, got {other:?}"),
         }
     }
 }

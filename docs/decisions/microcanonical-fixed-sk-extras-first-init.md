@@ -148,3 +148,81 @@ cargo test --release -p menobis-test-oracles \
   #   n1000_extras_first_heterogeneous_b_w   -> §40 green
 cargo test --workspace                                 # green (ignored skipped)
 ```
+
+---
+
+# Update — Gate D (trace from constructed states) and Part F/G (production
+# integration) PASS
+
+**Extended on completion of plan Parts D–G.**  This record is the final
+current fixed-(s,k) decision (§68).
+
+## 8. Gate D — constructed-state trace mobility (§42–§44)
+
+Verdict:
+
+```text
+CONSTRUCTED_TRACE_MOBILITY = green (well above the engineering gate)
+```
+
+Evidence (`fixed_strength_degree_trace_constructed.rs`, N=1000, λ=1,
+cap=16, 100,000 top-level trace attempts, `--release`):
+
+| family | constructed occ-1 | diff-state rate | support rate | timeouts | aux/diff | wall | class |
+|---|---:|---:|---:|---:|---:|---:|---|
+| ME realistic PA-geo (T/E=8) | 0.829 | 6.21e-1 | 6.21e-1 | 4.2e-3 | 1.71 | 74.7 s | GREEN |
+| W M=1 realistic (T/E=8) | 0.829 | 6.20e-1 | 6.20e-1 | 4.1e-3 | 1.71 | 69.8 s | GREEN |
+| B M=5 Balanced12 (T/E=1.5) | 0.824 | 6.10e-1 | 6.10e-1 | 3.8e-3 | 1.73 | 68.1 s | GREEN |
+
+Gate A's constructor risk (§5 of the trace-mobility record: “the direct
+constructor must not hand the trace a zero-occupation-1 corner”) is
+**resolved**: the extras-first constructed states have occ-1 ≈ 0.83
+(vs the witness 0.18), putting the trace in its most mobile regime —
+~61% different/support-changing returns at ~1.7 `K_E` per effective
+return (witness-from start: 3% at 34).  No STOP C trigger (§81).
+
+## 9. Part F — production integration (§45–§48)
+
+- `chain.rs` fixed-(s,k) pipeline now runs: residualize s,k,fixed pairs
+  → `initialize_exact_sk_extras_first` → assert `D = 0` → degree-trace
+  burn-in/thinning → merge fixed pairs → full exact output validation.
+- The active fixed-(s,k) path no longer runs the compressed fixed-s
+  initializer, structural repair, edge repair, or degree repair
+  (§46–§47): `repair_to_degree_target`/`DegreeRepairConfig` are no
+  longer called in production; `degree_distance`, `degree_auxiliary_step`,
+  `degree_trace_step`, `degree_trace_sweep` remain (stationary sampler).
+- `FixedStrengthDegreeBench` now reports `direct_init_time_s`, extras
+  attempts/edges, filler edges, completion attempts, occupation-1
+  fraction, `mcmc_time_s`, and the trace/fixed-edge counters; the
+  obsolete degree-repair timing fields were removed (§48).
+- The failure-pinning scalability tests were rewritten as extras-first
+  success gates (§62, user decision).
+
+## 10. Part G — N=1000 end-to-end gates (§49–§53)
+
+`fixed_strength_degree_e2e.rs` — the actual one-shot sampler, exactness
+verified by the sampler's full output validation plus independent
+assertions:
+
+| case | direct init | extras | fillers | occ-1 | mcmc | trace diff/support |
+|---|---:|---:|---:|---:|---:|---:|
+| ME realistic T/E=8 | 0.14 s | 1366 | 6634 | 0.829 | 16.8 s | 9783 / 9783 |
+| ME Balanced12 | 0.07 s | 904 | 7096 | 0.887 | 12.2 s | 11164 / 11164 |
+| W M=1 realistic | 0.10 s | 1366 | 6634 | 0.829 | 12.1 s | 9758 / 9758 |
+| B M=5 Balanced12 | 0.36 s | 1406 | 6594 | 0.824 | 15.0 s | 9661 / 9661 |
+| B M=5 at-capacity corner | 1.62 s | 8000 | 0 | 0.0 | 10.6 s | 0 / 0 (immobile by design) |
+| ME + 800 positive fixed pairs | 0.12 s | 1402 | 5798 | 0.805 | 10.0 s | 9274 / 9274 |
+| ME + 1000 zero fixed pairs (CompleteMinus) | 0.19 s | 1320 | 6680 | 0.835 | 11.0 s | 9904 / 9904 |
+
+Exact oracles (`fixed_strength_degree_enumeration`, `fixed_strength_edges_enumeration`)
+remain green — no tolerance weakened (§53).  The B at-capacity corner is
+intentionally immobile (Gate A start-state pathology): exactness is
+preserved; no rapid mixing is claimed on it.
+
+## 11. Public integration status
+
+Per user decision (session scope), **Parts H–K are deferred**: Rust
+routing, pyo3, Python `Constraint.STRENGTH_DEGREE` routing, capability
+exposure, and the documentation cleanup (STATUS rewrite, archive,
+supersession banners).  The capability must not be enabled until those
+land.
