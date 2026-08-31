@@ -64,3 +64,28 @@ new metric:
 Use a dedicated branch and keep the red/green step small. If changing CLI output
 or flags, apply the CLI guidelines. If changing docs, keep pages brief and run
 `uv run mkdocs build --strict`.
+
+## Contributor documentation policy
+
+Keep the public documentation and the capability registry in sync:
+
+- **Changing the capability registry** — regenerate the support tables and
+  run the drift check:
+
+  ```bash
+  uv run python scripts/docs/generate_capabilities.py
+  uv run python scripts/docs/generate_capabilities.py --check
+  ```
+
+- **Changing a public signature** — update the documentation examples and
+  their smoke tests (`tests/test_docs_examples.py`) in the same commit.
+- **Adding a family/constraint** — update the scientific model page
+  (`science/event-families.md`, `science/constraints.md`), the generated
+  capabilities update automatically, add one tested user example, add
+  validation evidence, and update performance context.
+- **Adding a sampler** — document the exactness classification
+  (exact direct / exact stationary MCMC / hybrid), feasibility,
+  diagnostics, and tested scales.
+
+`tests/test_public_docs_contract.py` enforces that public pages never claim
+stale capabilities; include it in your red/green loop when touching docs.

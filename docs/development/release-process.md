@@ -6,19 +6,18 @@ description: Release process for MENoBiS.
 
 ## TL;DR
 
-MENoBiS is not yet published to PyPI or crates.io. The current release process is
-local development builds with maturin.
+MENoBiS is not yet published to PyPI or crates.io. The current release
+process is local development builds with maturin, plus the existing
+documentation GitHub Actions workflow.
 
 ## Development build
 
 ```bash
-uv run maturin develop          # debug build
-uv run maturin develop --release  # optimized build
+uv run maturin develop                # debug build
+uv run maturin develop --release      # optimized build
 ```
 
 ## Pre-release checklist
-
-Before any future release:
 
 | Check | Command |
 |-------|---------|
@@ -30,14 +29,26 @@ Before any future release:
 | Type check | `uv run ty check` |
 | Python tests | `uv run pytest` |
 | Docs build | `uv run mkdocs build --strict` |
+| Capability tables | `uv run python scripts/docs/generate_capabilities.py --check` |
+
+## CI/CD
+
+A GitHub Actions workflow (`docs.yml`) builds and deploys the documentation
+site to GitHub Pages on pushes to `master`. It installs dependencies, builds
+the Python extension, checks `mkdocs build --strict`, and deploys.
+
+Broader automation (tests, lint, type checks, releases) is not yet wired
+into CI beyond that documentation workflow. If you add it, reuse the
+existing workflow's setup steps (uv sync, maturin develop) rather than
+duplicating environment configuration.
 
 ## Versioning
 
-MENoBiS follows semantic versioning. The current public documentation release is `1.0.1`.
+MENoBiS follows semantic versioning. The current public documentation
+release is `1.0.1`.
 
 ## Future plans
 
 - Publish to PyPI as `menobis` with maturin-built wheels.
 - Publish `menobis-core` to crates.io for Rust-only users.
-- Add CI/CD pipeline with GitHub Actions.
-- Add benchmarking regression thresholds to CI.
+- Add benchmark regression thresholds to CI.
