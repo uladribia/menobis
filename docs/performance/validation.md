@@ -68,8 +68,8 @@ flowchart TD
 
     M --> BI[Finite burn-in still matters]
     M --> MI[Mixing still matters]
-    H --> EX[State which constraints are exact]
-    H --> EP[State which are expected]
+    H --> EX[Exact constraints named explicitly]
+    H --> EP[Expected constraints named explicitly]
 ```
 
 The supported-model matrix

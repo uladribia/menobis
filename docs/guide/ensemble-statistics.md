@@ -125,8 +125,8 @@ MENoBiS exposes two per-node clustering helpers:
 - `occupation_clustering_coefficient(edges)` — **occupation-based**
   clustering.
 
-State which one you report; the occupation-based function is *not* exported
-under a "weighted" name.
+Report which convention you use; the occupation-based function is *not*
+exported under a "weighted" name.
 
 ### Occupation distribution
 

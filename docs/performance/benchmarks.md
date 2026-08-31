@@ -90,11 +90,12 @@ peak_rss
 
 GC-specific: `fit_iterations`, `fit_converged`, `fit_residual`.
 MCMC-specific when meaningful: `acceptance_rate`, `effective_move_rate`,
-`ESS`. Do not expose an ESS field when the route does not calculate it.
+`ESS` (only on routes that actually calculate it).
 
 ## Reading results
 
-Every conclusion from benchmark data must specify:
+A conclusion drawn from benchmark data is only meaningful with the
+following scope:
 
 - family;
 - constraint;
@@ -102,13 +103,13 @@ Every conclusion from benchmark data must specify:
 - sparsity regime;
 - observable.
 
-Example wording (form only — replace with actual evidence):
+Example of a scoped conclusion (illustrative):
 
 > For ME with strength constraints in the tested \(\bar k=8\), \(T/E=8\)
 > regime, the finite-sample mean \(Y_2\) values approach each other as \(N\)
 > increases, while support metrics can remain visibly different.
 
-Never turn an empirical trend into a theorem.
+An empirical trend is evidence, not a theorem.
 
 ## Committed evidence
 

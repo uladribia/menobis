@@ -29,9 +29,7 @@ flowchart LR
     SAMPLE --> DIAG[Burn-in, mixing and diagnostics where MCMC is used]
 ```
 
-For the strength+cost microcanonical route, add explicitly: the route is
-**hybrid** — strengths are exact while cost is controlled in expectation
-through the cost multiplier.
+The strength+cost microcanonical route is **hybrid**: strengths are exact while cost is controlled in expectation through the cost multiplier.
 
 ## Grand canonical
 

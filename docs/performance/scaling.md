@@ -66,7 +66,7 @@ are what it means.
 
 ## Empirical wall times
 
-Every timing table must include provenance:
+Every timing table states its provenance:
 
 - date and git SHA;
 - CPU model, physical/logical cores, RAM, OS;
@@ -75,7 +75,7 @@ Every timing table must include provenance:
 - sampling settings (burn-in sweeps, sweeps per sample, sample count);
 - seed, wall time, peak RSS.
 
-Use "**tested at**" wording — measured on stated hardware for a stated
-commit; not universal limits. See
+Values are **tested at** the stated hardware and commit — they are
+measurements for that configuration, not universal limits. See
 [Benchmarks](benchmarks.md) for the metadata schema and how results are
 collected.

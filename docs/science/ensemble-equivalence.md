@@ -52,11 +52,10 @@ between conditional and unconditional ensembles are a separate question.
 
 ## Asymptotic / large-occupation discussion
 
-Never write "conditioning vanishes". Prefer:
-
-> For observables insensitive to residual fluctuations of the conditioned
-> statistics, differences between conditional and unconditioned ensembles
-> may become negligible in an appropriate asymptotic regime.
+Differences between conditional and unconditioned ensembles can become
+**negligible for observables insensitive to residual fluctuations of the
+conditioned statistics**, in an appropriate asymptotic regime. They do not
+"vanish" in any unconditional sense.
 
 The right way to study the question is empirical, at finite \(N\), with the
 planned GC-vs-MC comparison notebook as the evidence source
@@ -73,15 +72,15 @@ a_{ij}=\mathbf 1[t_{ij}>0].
 
 Quantities built from it — \(E\), degree sequences \(k\), binary
 clustering, support motifs — can remain sensitive to the ensemble choice
-even where smooth occupation observables converge. Do not broadly classify
-all "topology observables" as convergent.
+even where smooth occupation observables converge. Support observables
+cannot therefore be broadly classified as convergent.
 
 ## Event-family dependence
 
-Do not generalize ME asymptotics to B or W without proof. The three
+ME asymptotics do not generalize to B or W without proof. The three
 families have different pair laws and domains (in particular W has
 \(q_{ij}\in(0,1)\)), so asymptotic statements must be family-specific.
-Distinguish clearly:
+Three kinds of statements need to be told apart in the discussion:
 
 - exact conditional identities;
 - theoretical asymptotic statements;

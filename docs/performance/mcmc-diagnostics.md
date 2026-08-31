@@ -75,9 +75,11 @@ Estimate tails of \(g\) only with enough effective samples
 - repeated-chain agreement (independent chains, same seed offset);
 - autocorrelation of the high-level metrics you will report.
 
-## Wording
+## A note on convergence language
 
-Avoid "MCMC may not converge". Prefer:
+These kernels have exactly the target distribution as their stationary law,
+so "MCMC does not converge" is inaccurate. The accurate concern is finite-
+run mixing in tight or heterogeneous fibers:
 
 > The kernel has the correct stationary target, but finite-run mixing can be
 > slow in tight or heterogeneous fibers.

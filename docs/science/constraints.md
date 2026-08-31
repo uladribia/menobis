@@ -94,8 +94,8 @@ T=\sum_{ij} t_{ij}.
   case of the generic pair parameterization).
 - **Microcanonical:** \(E\) and \(T\) are exact.
 
-`EDGES_EVENTS` is part of the official constraint list and is never omitted
-from capability summaries.
+`EDGES_EVENTS` is one of the six official constraint types exposed by the
+capability registry.
 
 ## The zero-inflated support layer
 
