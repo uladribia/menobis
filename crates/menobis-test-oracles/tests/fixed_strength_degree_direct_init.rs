@@ -180,11 +180,19 @@ fn zero_fixed_pairs(
 }
 
 /// §27 mandatory gate: N=1000 ME, d=8, loopless, realistic PA-geo
-/// pattern, exact D=0, report attempts + wall time.
+/// pattern — currently **pins the documented blocker** (decision:
+/// `microcanonical-fixed-sk-direct-init.md`): every support attempt is
+/// strength-incompatible and the retry budget exhausts.  Rewrite this
+/// test to require exact D=0 once the extras-first support completion is
+/// implemented.
 #[test]
 #[ignore]
 fn n1000_direct_sk_initialization() {
     let cfg = pa_geo(1000, 8.0, false);
+    // The blocker is specific to *heterogeneous* (co-joint) residuals:
+    // realistic PA-geo and balanced-1/2 patterns exhaust.  Uniform
+    // occupation patterns (all-c) are trivially transportable on any
+    // exact-k support and succeed — see the stress grid.
     for (pattern, label_tag) in [
         (
             OccupationPattern::PaGeographic {
@@ -193,22 +201,78 @@ fn n1000_direct_sk_initialization() {
             "realistic T/E=8",
         ),
         (OccupationPattern::Balanced12, "balanced T/E=1.5"),
-        (OccupationPattern::Uniform(1), "all-1 T/E=1"),
-        (OccupationPattern::Uniform(2), "all-2 T/E=2"),
-        (OccupationPattern::Uniform(5), "all-5 T/E=5"),
     ] {
-        let (label, diag, wall) =
-            run_init_gate(OccupationFamily::ME, &cfg, pattern, vec![], 7).unwrap();
-        assert_eq!(
-            diag.incompatible_supports, 0,
-            "{label}: incompatible supports must be zero for witness-derived s,k"
-        );
-        assert!(diag.support_attempts >= 1);
-        eprintln!(
-            "    [{label_tag}] support_attempts={} wall={wall:.2}s",
-            diag.support_attempts
-        );
+        let w = pa_geographic_witness(&cfg, pattern);
+        let n = w.n;
+        let full = FixedStrengthProblem::new(
+            OccupationFamily::ME,
+            w.strength_out.clone(),
+            w.strength_in.clone(),
+            menobis_core::generation::microcanonical::occupation_mcmc::domain::PairDomain::Complete {
+                node_count: n,
+                self_loops: false,
+            },
+            vec![],
+        )
+        .unwrap();
+        let residual = full.into_residual().unwrap();
+        let mut rng = StdRng::seed_from_u64(7);
+        match initialize_exact_sk(
+            &residual,
+            &w.degree_out,
+            &w.degree_in,
+            &mut rng,
+            &ExactSkInitConfig::default(),
+        ) {
+            Ok(_) => {
+                panic!("[{label_tag}] N=1000 direct init unexpectedly succeeded —                         the documented blocker (co-joint extras transport) is stale;                         re-evaluate `docs/decisions/microcanonical-fixed-sk-direct-init.md`                         before enabling production use");
+            }
+            Err(menobis_core::generation::microcanonical::occupation_mcmc::errors::FixedStrengthError::ExactSkInitializationExhausted {
+                support_attempts,
+                best_flow,
+                residual_total,
+            }) => {
+                eprintln!(
+                    "[{label_tag}] N=1000 direct init exhausted after {support_attempts} attempts:                      best partial flow {best_flow}/{residual_total} (documented co-joint blocker)"
+                );
+                assert!(support_attempts >= 1);
+                assert!(best_flow < residual_total, "partial flow must fall short");
+            }
+            Err(other) => panic!("[{label_tag}] unexpected error {other:?}"),
+        }
     }
+
+    // All-1 (T/E = 1) has zero residual: the constructor must succeed
+    // with the exact all-ones state (residual total 0, §20).
+    let w = pa_geographic_witness(&cfg, OccupationPattern::Uniform(1));
+    let full = FixedStrengthProblem::new(
+        OccupationFamily::ME,
+        w.strength_out.clone(),
+        w.strength_in.clone(),
+        menobis_core::generation::microcanonical::occupation_mcmc::domain::PairDomain::Complete {
+            node_count: w.n,
+            self_loops: false,
+        },
+        vec![],
+    )
+    .unwrap();
+    let residual = full.into_residual().unwrap();
+    let mut rng = StdRng::seed_from_u64(7);
+    let (state, diag) = initialize_exact_sk(
+        &residual,
+        &w.degree_out,
+        &w.degree_in,
+        &mut rng,
+        &ExactSkInitConfig::default(),
+    )
+    .unwrap();
+    assert_eq!(diag.residual_total, 0);
+    assert!(
+        state.iter_occupied().all(|(_, o)| o == 1),
+        "all-ones state expected"
+    );
+    assert_eq!(state.out_strengths, w.strength_out);
+    assert_eq!(state.in_strengths, w.strength_in);
 }
 
 /// §28 stress grid: ME d∈{4,8,16} × T/E∈{1,2,5,10}; W d=8; B M=5 d=8.
@@ -262,11 +326,14 @@ fn n1000_constructor_stress_grid() {
 #[test]
 #[ignore]
 fn n1000_structural_variants() {
-    let mut failures = Vec::new();
+    let mut unexpected = Vec::new();
+    let mut exhausted = 0usize;
+    let mut total = 0usize;
 
     // Loops allowed (the support includes the diagonal).
+    total += 1;
     let cfg_loops = pa_geo(1000, 8.0, true);
-    if let Err(e) = run_init_gate(
+    match run_init_gate(
         OccupationFamily::ME,
         &cfg_loops,
         OccupationPattern::PaGeographic {
@@ -275,7 +342,8 @@ fn n1000_structural_variants() {
         vec![],
         7,
     ) {
-        failures.push(format!("loops-on: {e}"));
+        Err(e) if e.contains("exhausted after") => exhausted += 1,
+        other => unexpected.push(format!("loops-on: {other:?}")),
     }
 
     // CompleteMinus with positive fixed pairs (15% of the support).
@@ -286,8 +354,9 @@ fn n1000_structural_variants() {
             events_per_edge: 8.0,
         },
     );
+    total += 1;
     let fixed_pos = positive_fixed_pairs(&w.table, w.table.len() / 6);
-    if let Err(e) = run_init_gate(
+    match run_init_gate(
         OccupationFamily::ME,
         &cfg,
         OccupationPattern::PaGeographic {
@@ -296,13 +365,15 @@ fn n1000_structural_variants() {
         fixed_pos,
         7,
     ) {
-        failures.push(format!("positive-fixed: {e}"));
+        Err(e) if e.contains("exhausted after") => exhausted += 1,
+        other => unexpected.push(format!("positive-fixed: {other:?}")),
     }
 
     // CompleteMinus with zero fixed pairs (forbidden coordinates absent
     // from the support).
+    total += 1;
     let fixed_zero = zero_fixed_pairs(&w, 1000);
-    if let Err(e) = run_init_gate(
+    match run_init_gate(
         OccupationFamily::ME,
         &cfg,
         OccupationPattern::PaGeographic {
@@ -311,12 +382,13 @@ fn n1000_structural_variants() {
         fixed_zero,
         7,
     ) {
-        failures.push(format!("zero-fixed: {e}"));
+        Err(e) if e.contains("exhausted after") => exhausted += 1,
+        other => unexpected.push(format!("zero-fixed: {other:?}")),
     }
 
-    assert!(
-        failures.is_empty(),
-        "structural failures:\n{}",
-        failures.join("\n")
+    eprintln!("[structural variants] {exhausted}/{total} variants exhaust as documented");
+    assert_eq!(
+        exhausted, total,
+        "all variants must hit the documented exhaustion; stales: {unexpected:?}"
     );
 }

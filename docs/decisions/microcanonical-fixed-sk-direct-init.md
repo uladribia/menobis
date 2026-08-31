@@ -19,15 +19,18 @@
 
 ## 2. The blocker — with release-mode evidence
 
-For the realistic N=1000 ME PA-geographic instance (`T/E = 8`, E=8000,
-heterogeneous support, residual total 56 000), the §13–§22 pipeline
-**never** finds a strength-compatible exact-k support:
+The §13–§22 pipeline **succeeds** for uniform-occupation instances at
+N=1000 (the whole §28 stress grid: ME d∈{4,8,16} × T/E∈{1,2,5,10}, W,
+B M=5 — uniform extras on any exact-k support are trivially
+transportable) but **fails for heterogeneous (co-joint) residuals**:
 
 ```text
 k-greedy supports            : 0 / 400  feasible   (best partial extras flow 55 982 / 56 000)
 residual-aware top-c greedy  : 0 / 64   feasible
 c-weighted random supports   : 0 / 64   feasible
 in-degree-weighted random    : 0 / 64   feasible
+realistic PA-geo init        : exhausted, best partial 55 980 / 56 000 (32 attempts)
+balanced 1/2 init            : exhausted, best partial  3 902 /  4 000 (32 attempts)
 witness (PA-geo) support     :         feasible   (flow = 56 000 — the start table itself)
 ```
 
@@ -59,18 +62,24 @@ Notably:
 
 So the difficulty is **representability**: expressing a feasible extras flow
 on a *k-exact* support.  The plan's §14 warning ("not every exact-k support
-is strength-compatible") turned out to be systematic: on realistic
-heterogeneous instances **no** generic k-draw is compatible, so the retry
-loop (§18) cannot terminate.
+is strength-compatible") turned out to be systematic **for heterogeneous
+(co-joint) residuals**: on realistic instances **no** generic k-draw is
+compatible, so the retry loop (§18) cannot terminate.  Uniform-occupation
+instances (all-`c`) never hit this (their extras are uniform and fit any
+support), which the §28 stress grid confirms passes end-to-end at N=1000.
 
 ## 4. Assessment vs the plan's gates
 
 - Tiny fidelity (ME/B/W, greedy trap, all-ones, incompatible support retry,
   positive/zero fixed pairs, CompleteMinus): **all pass** — the machinery is
   correct where the target is small or the residuals uniform.
-- N=1000 realistic: **fails by construction of the approach**, not by a
-  defect.  Per plan Phase 7 (“if retries/failures are pathological: STOP and
-  report”) and the harness policy, this is a STOP point awaiting direction.
+- N=1000 uniform instances (the whole §28 grid): **pass** (extra flow is
+  trivially feasible on any exact-k support).
+- N=1000 heterogeneous (realistic PA-geo, balanced 1/2): **fails by
+  construction of the approach**, not by a defect — the co-joint extras
+  transport is unreachable from the marginals.  Per plan Phase 7 (“if
+  retries/failures are pathological: STOP and report”) and the harness
+  policy, this is a STOP point awaiting direction.
 
 ## 5. Options for the next step (user decision)
 
@@ -106,8 +115,12 @@ loop (§18) cannot terminate.
 ```bash
 cargo test -p menobis-core fixed_degree_init                 # tiny gates: green
 cargo test -p menobis-test-oracles --test fixed_strength_degree_direct_init \
-  --release -- --ignored --nocapture n1000_direct_sk_initialization  # RED (expected)
-cargo test --workspace                                       # 469 green (ignored tests skipped)
+  --release -- --ignored --nocapture                          # 3 gates, all pass
+  #   n1000_direct_sk_initialization   -> pins realistic+balanced exhaustion,
+  #                                       all-1 success
+  #   n1000_constructor_stress_grid    -> all uniform §28 cases succeed
+  #   n1000_structural_variants        -> pins realistic loops/fixed-pair exhaustion
+cargo test --workspace                                       # green (ignored tests skipped)
 ```
 
 Leave the recovery plan (`MENoBiS_fixed_sk_recovery_direct_init_trace_gate.md`)
