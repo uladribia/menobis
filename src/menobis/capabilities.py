@@ -311,6 +311,31 @@ def _build_registry() -> dict[
             result_kind="sampled_network",
         )
 
+    # Microcanonical fixed strengths + exact degrees (s,k): extras-first
+    # exact constructor + capped first-return degree trace, no fit (§57-§58).
+    # Exposed only after the N=1000 Rust gates (Gate C/D/E2E) pass.
+    for fam, needs_layers in [
+        (ModelFamily.ME, False),
+        (ModelFamily.B, True),
+        (ModelFamily.W, True),
+    ]:
+        req_args = {"strength_out", "strength_in", "degree_out", "degree_in"}
+        opt_args = {"seed", "self_loops", "burn_in_sweeps", "sweeps_per_sample"}
+        if needs_layers:
+            opt_args.add("layers")
+        registry[
+            (Verb.SAMPLE, Ensemble.MICROCANONICAL, fam, Constraint.STRENGTH_DEGREE)
+        ] = ModelCapability(
+            supported=True,
+            requires_fit=False,
+            backend="microcanonical_fixed_strength_degree",
+            required_arguments=frozenset(req_args),
+            optional_arguments=frozenset(opt_args),
+            supports_self_loops=True,
+            supports_no_self_loops=True,
+            result_kind="sampled_network",
+        )
+
     # --- FILTER ---
     for family in _FAMILIES:
         for constraint in _CONSTRAINTS:
@@ -356,6 +381,9 @@ def unsupported_cases() -> list[tuple[Verb, Ensemble, ModelFamily, Constraint]]:
         (ModelFamily.ME, Constraint.STRENGTH_EDGES),
         (ModelFamily.B, Constraint.STRENGTH_EDGES),
         (ModelFamily.W, Constraint.STRENGTH_EDGES),
+        (ModelFamily.ME, Constraint.STRENGTH_DEGREE),
+        (ModelFamily.B, Constraint.STRENGTH_DEGREE),
+        (ModelFamily.W, Constraint.STRENGTH_DEGREE),
         (ModelFamily.ME, Constraint.EDGES_EVENTS),
         (ModelFamily.B, Constraint.EDGES_EVENTS),
         (ModelFamily.W, Constraint.EDGES_EVENTS),

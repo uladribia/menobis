@@ -329,6 +329,11 @@ def sample_model_detailed(
             # exact stationary MCMC (local 4-cycles + censored bridge).
             method = "microcanonical_fixed_strength_edges"
             exactness = SamplingExactness.EXACT_STATIONARY_MCMC
+        elif constraint is Constraint.STRENGTH_DEGREE:
+            # Microcanonical fixed strengths + exact degrees: extras-first
+            # exact constructor + capped first-return degree trace.
+            method = "microcanonical_fixed_strength_degree"
+            exactness = SamplingExactness.EXACT_STATIONARY_MCMC
         else:
             # Microcanonical STRENGTH: fixed-strength occupation MCMC
             # (4-cycle Metropolis chain on the compressed residual state).
@@ -683,6 +688,7 @@ def _sample_model(
     from menobis.data.frames import EdgeTable
     from menobis.models.generation import (
         _sample_degree_events_fixed_kt,
+        _sample_fixed_strength_degree_mcmc,
         _sample_fixed_strength_edges_mcmc,
         _sample_model_router,
         _sample_strength_fixed_strength_cost_mcmc,
@@ -865,6 +871,45 @@ def _sample_model(
                     burn_in_sweeps=burn_in_sweeps,
                     sweeps_per_sample=sweeps_per_sample,
                 )
+            if constraint is Constraint.STRENGTH_DEGREE:
+                # §57: microcanonical fixed-(s,k) — no fit step (§57).
+                # Strengths win routing priority (§54/§80): this must
+                # dispatch to the occupation-MCMC fixed-(s,k) backend,
+                # never silently degrade to fixed-(k,T).
+                if strength_out is None or strength_in is None:
+                    msg = (
+                        "microcanonical strength_degree requires "
+                        "strength_out and strength_in"
+                    )
+                    raise ValueError(msg)
+                if degree_out is None or degree_in is None:
+                    msg = (
+                        "microcanonical strength_degree requires "
+                        "degree_out and degree_in"
+                    )
+                    raise ValueError(msg)
+                fam = (
+                    "ME"
+                    if family == ModelFamily.ME
+                    else ("B" if family == ModelFamily.B else "W")
+                )
+                # Rust residualizes fixed pairs once and merges positive
+                # fixed pairs back (§45).
+                return _sample_fixed_strength_degree_mcmc(
+                    family=fam,
+                    strength_out=np.asarray(strength_out, dtype=np.uint64),
+                    strength_in=np.asarray(strength_in, dtype=np.uint64),
+                    degree_out=np.asarray(degree_out, dtype=np.uint32),
+                    degree_in=np.asarray(degree_in, dtype=np.uint32),
+                    self_loops=bool(self_loops),
+                    known_source=known_source,
+                    known_target=known_target,
+                    known_occnum=known_occnum,
+                    layers=int(layers),
+                    seed=seed,
+                    burn_in_sweeps=burn_in_sweeps,
+                    sweeps_per_sample=sweeps_per_sample,
+                )
             if constraint is Constraint.DEGREE_EVENTS:
                 if degree_out is None or degree_in is None:
                     msg = (
@@ -966,7 +1011,8 @@ def _sample_model(
                 )
             msg = (
                 f"microcanonical does not support constraint={constraint!r}; "
-                "supported: STRENGTH, STRENGTH_COST, EDGES_EVENTS, DEGREE_EVENTS"
+                "supported: STRENGTH, STRENGTH_COST, STRENGTH_EDGES, "
+                "STRENGTH_DEGREE, EDGES_EVENTS, DEGREE_EVENTS"
             )
             raise UnsupportedModelCaseError(msg)
         case Ensemble.CANONICAL:

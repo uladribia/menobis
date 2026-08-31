@@ -26,4 +26,6 @@ pub mod state;
 pub mod target;
 
 pub use chain::sample_fixed_strength;
+pub use chain::sample_fixed_strength_degree;
+pub use chain::sample_fixed_strength_edges;
 pub use compressed::FlowTable;

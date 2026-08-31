@@ -21,8 +21,11 @@ use super::binary::sampler::FixedDegreeMcmcConfig;
 use super::conditional::fixed_et::{sample_b_fixed_et, sample_me_fixed_et, sample_w_fixed_et};
 use super::mcmc::McmcConfig;
 use super::occupation_mcmc::domain::PairDomain;
+use super::occupation_mcmc::fixed_degrees::DegreeTraceConfig;
 use super::occupation_mcmc::problem::FixedStrengthProblem;
-use super::occupation_mcmc::sample_fixed_strength;
+use super::occupation_mcmc::{
+    sample_fixed_strength, sample_fixed_strength_degree, sample_fixed_strength_edges,
+};
 use crate::model::family::OccupationFamily;
 use crate::model::problem::PreparedProblem;
 use crate::model::sampling_plan::SamplingPlan;
@@ -147,7 +150,9 @@ fn route_factorized(
     .map_err(|e| MicrocanonicalError::Backend(e.to_string()))
 }
 
-/// Coupled branch: fixed-strength occupation MCMC, with ME stub-matching fast path.
+/// Coupled branch: fixed-strength occupation MCMC.  Priority inside the
+/// branch (§54): `s+k` (strengths + degrees, §55), then `s+E`
+/// (strengths + edges), then `s` (strengths only).
 fn route_occupation_mcmc(
     problem: &PreparedProblem,
     config: &MicrocanonicalConfig,
@@ -175,15 +180,46 @@ fn route_occupation_mcmc(
     };
     let full = FixedStrengthProblem::new(family, out, in_, domain, vec![])
         .map_err(|e| MicrocanonicalError::Backend(e.to_string()))?;
-    let residual = full
-        .into_residual()
-        .map_err(|e| MicrocanonicalError::Backend(e.to_string()))?;
     let mcmc = McmcConfig {
         burn_in_sweeps: config.burn_in_sweeps,
         sweeps_per_sample: config.sweeps_per_sample,
         proposals_per_sweep: None,
         seed: config.seed,
     };
+
+    // s + k: fixed-(s,k) — extras-first exact constructor + the exact
+    // first-return degree trace (§45–§55).  The trace kernel is the
+    // already-oracle-validated capped first-return sampler.
+    if let (Some(k_out), Some(k_in)) = (&problem.residual_out_degrees, &problem.residual_in_degrees)
+    {
+        let net = sample_fixed_strength_degree(
+            full,
+            k_out.clone(),
+            k_in.clone(),
+            mcmc,
+            DegreeTraceConfig::default(),
+        )
+        .map_err(|e| MicrocanonicalError::Backend(e.to_string()))?;
+        return Ok(net);
+    }
+
+    // s + E: fixed-(s,E) stationary 4-cycle/bridge MCMC.
+    if let Some(e) = problem.residual_edges {
+        let net = sample_fixed_strength_edges(
+            full,
+            e,
+            mcmc,
+            super::occupation_mcmc::fixed_edges::BridgeConfig::default(),
+        )
+        .map_err(|e| MicrocanonicalError::Backend(e.to_string()))?;
+        return Ok(net);
+    }
+
+    // s: plain fixed-strength occupation MCMC (ME stub-matching fast
+    // path inside the kernel).
+    let residual = full
+        .into_residual()
+        .map_err(|e| MicrocanonicalError::Backend(e.to_string()))?;
     let net = sample_fixed_strength(residual, mcmc)
         .map_err(|e| MicrocanonicalError::Backend(e.to_string()))?;
     Ok(net)
@@ -270,6 +306,50 @@ mod tests {
         }
         assert_eq!(out, vec![2, 2, 2]);
         assert_eq!(inp, vec![2, 2, 2]);
+    }
+
+    #[test]
+    fn routes_fixed_sk_strength_degree() {
+        // §55/§80: strengths + degrees must route to the occupation-MCMC
+        // fixed-(s,k) backend (extras-first init + exact degree trace),
+        // reproducing BOTH exact strengths and exact degrees — never
+        // fixed-(k,T) (which would ignore the strengths).
+        let s_out = vec![3u64, 2, 2];
+        let s_in = vec![2u64, 3, 2];
+        let k_out = vec![2u32, 1, 1];
+        let k_in = vec![1u32, 2, 1];
+        let p = PreparedProblem::new(
+            OccupationFamily::ME,
+            3,
+            false,
+            6,
+            None,
+            None,
+            Some(k_out.clone()),
+            Some(k_in.clone()),
+            Some(s_out.clone()),
+            Some(s_in.clone()),
+        );
+        let net = sample_microcanonical(&p, &cfg(1)).unwrap();
+        let mut o = vec![0u64; 3];
+        let mut i = vec![0u64; 3];
+        let mut ko = vec![0u32; 3];
+        let mut ki = vec![0u32; 3];
+        for ((&s, &t), &v) in net
+            .sources
+            .iter()
+            .zip(net.targets.iter())
+            .zip(net.occ_nums.iter())
+        {
+            o[s as usize] += v;
+            i[t as usize] += v;
+            ko[s as usize] += 1;
+            ki[t as usize] += 1;
+        }
+        assert_eq!(o, s_out, "exact out-strengths");
+        assert_eq!(i, s_in, "exact in-strengths");
+        assert_eq!(ko, k_out, "exact out-degrees");
+        assert_eq!(ki, k_in, "exact in-degrees");
     }
 
     #[test]

@@ -208,6 +208,74 @@ def _sample_fixed_strength_edges_mcmc(
     )
 
 
+def _sample_fixed_strength_degree_mcmc(
+    *,
+    family: str,
+    strength_out: NDArray[np.integer],
+    strength_in: NDArray[np.integer],
+    degree_out: NDArray[np.integer],
+    degree_in: NDArray[np.integer],
+    self_loops: bool = True,
+    known_source: NDArray[np.integer] | None = None,
+    known_target: NDArray[np.integer] | None = None,
+    known_occnum: NDArray[np.integer] | None = None,
+    layers: int = 1,
+    seed: int = 0,
+    burn_in_sweeps: int = 50,
+    sweeps_per_sample: int = 10,
+) -> EdgeTable:
+    """Microcanonical fixed-strength + fixed-degree sampler (s,k).
+
+    Rust residualizes fixed pairs exactly once (strengths, domain
+    exclusion, degree subtraction), constructs an exact ``D = 0`` state
+    with the extras-first constructor, burn-in/thins with the exact
+    capped first-return degree trace, and merges positive fixed pairs
+    back.  The output carries exact full strengths and exact full
+    degrees.
+    """
+    import menobis._menobis as _menobis
+
+    s_out = np.asarray(strength_out, dtype=np.uint64).tolist()
+    s_in = np.asarray(strength_in, dtype=np.uint64).tolist()
+    d_out = np.asarray(degree_out, dtype=np.uint32).tolist()
+    d_in = np.asarray(degree_in, dtype=np.uint32).tolist()
+    f_src = (
+        np.asarray(known_source, dtype=np.uint64).tolist()
+        if known_source is not None
+        else []
+    )
+    f_tgt = (
+        np.asarray(known_target, dtype=np.uint64).tolist()
+        if known_target is not None
+        else []
+    )
+    f_occ = (
+        np.asarray(known_occnum, dtype=np.uint64).tolist()
+        if known_occnum is not None
+        else []
+    )
+    sources, targets, occ_nums = _menobis.sample_fixed_strength_degree(
+        family,
+        s_out,
+        s_in,
+        d_out,
+        d_in,
+        bool(self_loops),
+        f_src,
+        f_tgt,
+        f_occ,
+        int(layers),
+        int(burn_in_sweeps),
+        int(sweeps_per_sample),
+        int(seed),
+    )
+    return EdgeTable(
+        source=np.asarray(sources, dtype=np.uint64),
+        target=np.asarray(targets, dtype=np.uint64),
+        occ_num=np.asarray(occ_nums, dtype=np.uint64),
+    )
+
+
 def _sample_strength_fixed_strength_cost_mcmc(
     *,
     family: str,
