@@ -4,7 +4,7 @@
 constructed state, plan §42–§44) and production integration (§45–§48)
 remain before public exposure.
 **Branch:** `fix/fixed-sk-direct-init-trace-gate`
-**Plan:** `../development/agent-specifications/MENoBiS_fixed_sk_extras_first_completion_plan.md`
+**Plan:** `../development/agent-specifications/archive/fixed_sk/MENoBiS_fixed_sk_extras_first_completion_plan.md`
 (Part D, §36–§41)
 **Prior decisions:** `microcanonical-fixed-sk-stop.md` (degree-repair
 STOP), `microcanonical-fixed-sk-trace-mobility.md` (Gate A),
@@ -221,8 +221,12 @@ preserved; no rapid mixing is claimed on it.
 
 ## 11. Public integration status
 
-Per user decision (session scope), **Parts H–K are deferred**: Rust
-routing, pyo3, Python `Constraint.STRENGTH_DEGREE` routing, capability
-exposure, and the documentation cleanup (STATUS rewrite, archive,
-supersession banners).  The capability must not be enabled until those
-land.
+**COMPLETE (Parts H–K of the plan).**  `Constraint.STRENGTH_DEGREE`
+routes to the occupation-MCMC fixed-(s,k) backend through the Rust
+router (strengths get routing priority, §54/§80), the pyo3 thin binding,
+and the Python route (no fit step) + capability registry.  The §80
+routing release blocker test is in place.  Python fast suite green;
+full checks recorded in `STATUS.md` "How to verify".  The legacy
+support-first / degree-repair initializers were removed (Part I), and
+this task's generated plans are archived under
+`agent-specifications/archive/fixed_sk/` (Part J).

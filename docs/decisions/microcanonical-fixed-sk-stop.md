@@ -1,8 +1,12 @@
 # Decision — Fixed-(s,k) Feature Stopped at the N=1000 Degree-Repair Gate
 
+> **Superseded for current implementation status.**  This record
+documents the abandoned degree-repair initializer.  See `STATUS.md` and
+`microcanonical-fixed-sk-extras-first-init.md`.
+
 **Status:** stopped (algorithmic limitation, plan §43.1 policy)
 **Branch:** `feature/microcanonical-fixed-strength-degree`
-**Spec:** `../development/agent-specifications/MENoBiS_fixed_sk_implementation_plan_v2.md`
+**Spec:** `../development/agent-specifications/archive/fixed_sk/MENoBiS_fixed_sk_implementation_plan_v2.md`
 
 ## 1. Background
 

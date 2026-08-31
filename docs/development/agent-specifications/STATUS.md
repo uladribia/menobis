@@ -1,158 +1,185 @@
-# STATUS — Microcanonical Fixed-(s,k): STOPPED at the N=1000 Degree-Repair Gate
+# STATUS — Microcanonical fixed-(s,k): core complete, public integration pending
 
-> **For the next agent.** This is the review entry point for the
-> `feature/microcanonical-fixed-strength-degree` branch. Read this,
-> then the spec and the decision record, then the code. Do not assume
-> the feature is usable at scale — the initialization repair cannot
-> reach the exact degree vector at N ≥ ~30 under the plan's mandated policy.
+> **Review entry point for fixed-(s,k) work.** This is the single current
+> summary.  Read this, then the current decision record and the code.
+> Historical plans are archived under `archive/fixed_sk/` and are not
+> live requirements.
 
 | | |
 |---|---|
-| Branch | `feature/microcanonical-fixed-strength-degree` |
-| Spec | `agent-specifications/MENoBiS_fixed_sk_implementation_plan_v2.md` |
-| Decision record | `docs/decisions/microcanonical-fixed-sk-stop.md` |
-| Exact-math oracle | `crates/menobis-test-oracles/tests/fixed_strength_degree_enumeration.rs` |
-| N=1000 gate | `crates/menobis-test-oracles/tests/fixed_strength_degree_scalability.rs` |
-| Feature status | **STOPPED (algorithmic limitation), never shipped** |
+| Branch | `fix/fixed-sk-direct-init-trace-gate` |
+| Current decision | `docs/decisions/microcanonical-fixed-sk-extras-first-init.md` |
+| Constructor | extras-first (`occupation_mcmc/fixed_degree_init.rs`) |
+| Stationary kernel | capped first-return degree trace (`occupation_mcmc/fixed_degrees.rs`) |
+| Exact-math oracle | `test-oracles/tests/fixed_strength_degree_enumeration.rs` |
+| N=1000 gates | `test-oracles/tests/fixed_strength_degree_direct_init.rs`, `fixed_strength_degree_trace_constructed.rs`, `fixed_strength_degree_scalability.rs`, `fixed_strength_degree_e2e.rs` |
+| Routing | `Constraint.STRENGTH_DEGREE` → occupation MCMC (Rust route + pyo3 + Python) |
+| Feature status | **core complete and N=1000 validated; public integration implemented and tested** |
 
-## ⬆ Recovery update (current work — read this first if exploring the repo today)
+## Current verdict
 
-A recovery effort replaced the initialization approach on a dedicated
-branch:
+The fixed-strength + fixed-directed-degree microcanonical law
 
-```text
-branch: fix/fixed-sk-direct-init-trace-gate   (based on feature/microcanonical-fixed-strength-degree)
-plan:   agent-specifications/MENoBiS_fixed_sk_recovery_direct_init_trace_gate.md
-```
+\[
+\pi_{s,k}(t)\propto\prod_{ij}d_F(t_{ij})
+\]
 
-**Gate A — stationary trace from an exact `(s,k)` state: ✅ VIABLE**
-(`docs/decisions/microcanonical-fixed-sk-trace-mobility.md`).  Started on an
-already-exact witness, the first-return degree trace is practically mobile at
-N=1000 for realistic PA-geographic instances (~3% different/support returns
-per trace, ~34 `K_E` per effective return, ~0.2% timeouts).  Uniform-corner
-witnesses (zero occupation-1 edges) are immobile — a start-state constraint,
-not a kernel defect.
+(ME/B/W) is implemented end-to-end:
 
-**Gate B — direct exact `(s,k)` constructor: ⛔ blocked at N=1000 for
-heterogeneous residuals** (`docs/decisions/microcanonical-fixed-sk-direct-init.md`).
-The §13–§22 pipeline (exact-k support → occupation 1 → residual allocation)
-works at tiny scale and for uniform-occupation instances (the §28 stress grid
-passes), but for realistic heterogeneous residuals **no** generic exact-k
-support admits the residual-strengths transport (0/400 k-greedy, 0/64
-c-aware, 0/64 proportional-random; verified against the legacy max-flow
-oracle).  The extras transport is co-joint: only the witness-like support
-carries the required strength-column correlation.  The full-domain extras
-transport is feasible and spare (1752 edges, 0 rows over k) — the missing
-piece is expressing it on a k-exact support (see the decision record's
-§5 options 1–4).
+1. **Initialization** is combinatorial and exact: *extras-first*
+   slot-aware compressed extras transport (§10–§21 of the plan), then
+   occupation-1 binary completion of the missing degree slots.  This
+   resolves the Gate B co-joint blocker — realistic N=1000 targets
+   construct exactly, usually on the first extras attempt (0.1–1.7 s).
+2. **Sampling** is the exact capped first-return trace of the
+   degree-distance-biased auxiliary chain onto the degree fiber
+   (unchanged since Gate A; Q/R oracle green).
+3. **Public integration** is wired: Rust router (s+k/s+E/s priority),
+   pyo3 binding, Python `Constraint.STRENGTH_DEGREE` route (no fit), and
+   the capability registry.  The §80 routing release blocker test is in
+   place (strengths can never silently route as fixed-(k,T)).
 
-**What works today:** everything up to Gate B's constructor integration — the
-trace kernel, the tiny/uniform constructor, fixed pairs, B capacity, and all
-prior exact-math gates (see §Regression below).  Phase 8 integration (direct
-init into the one-shot sampler) and everything after are intentionally NOT
-done: Phase 7 is red.
+The two failed initializer families (degree-repair MCMC; support-first
+exact-k + residual allocation) are **removed from live code**; their
+evidence lives in the historical decision records.
 
-## TL;DR
-
-Fixed strengths + fixed degrees (`Constraint.STRENGTH_DEGREE`,
-microcanonical, ME/B/W) were implemented as a **capped first-return trace
-of a degree-distance-biased auxiliary chain whose proposal is the whole
-finished fixed-(s,E) kernel `K_E`** — `pi_(s,k) = pi_(s,E)(· | k = k_target)`.
-All **mathematical gates pass** (exact `Q`/`R` trace-matrix oracle,
-production-vs-exact correspondence, tiny-fiber repair, tiny-N end-to-end).
-The **N=1000 gate fails**: the initialization degree repair (the same
-degree-biased auxiliary step, `λ = 1.0`, per plan §15/§24) floors at a
-strictly positive degree distance that scales ~O(N), so a randomized
-exact-E start cannot be brought to the exact degree vector at scale.
-Per plan §43.1/§52 and the review decision, the policy is **STOP and
-report** — no blind budget raises, no new move family, no second repair
-policy, no capability exposure.
-
-## What is on the branch (all green)
-
-| Piece | File (menobis-core `.../occupation_mcmc/`) | Phase |
-|---|---|---|
-| `ResidualDegreeTarget` + fixed-pair degree subtraction + combined (s,k) validation | `fixed_degrees.rs` | 3 |
-| O(1) degree before/after metadata on every 4-cycle proposal | `move_cycle.rs` | 4 |
-| Recordable `K_E` (undo-exact flat log, unrecorded path unchanged) | `fixed_edges.rs` | 5 |
-| Exact degree oracle: auxiliary matrix `Q`, capped first-return trace matrix `R`, DB/stationarity/connectivity | test-oracles `fixed_strength_degree_enumeration.rs` | 2 |
-| `degree_auxiliary_step` (one recorded `K_E` + `min(1, e^{−λΔD})`) | `fixed_degrees.rs` | 6 |
-| Degree repair to exact degrees | `fixed_degrees.rs` | 7 |
-| Capped first-return trace + sweep (primary kernel) | `fixed_degrees.rs` | 8 |
-| One-shot `sample_fixed_strength_degree(_bench)` + O(E) full-invariant validation | `chain.rs` | 9 |
-| STOP artifact tests + N-floor characterization | test-oracles `fixed_strength_degree_scalability.rs` | — |
-
-Checks: `cargo test --workspace` **447 passed**; clippy `-D warnings` clean;
-`cargo fmt --check` clean; all oracles + heavy fixed-sE N=1000/N=5000 pass.
-
-## The exact math (why the stationary kernel is correct)
-
-- `E_target = Σ k_out`; the degree fiber `A_k ⊂ Ω_E`.
-- `pi_(s,k) = pi_(s,E)(· | A_k)`.
-- `K_E` reversible for `pi_(s,E)` ⇒ outer degree MH ratio collapses to
-  `min(1, exp(−λ·(D(y)−D(x))))` with `D = ½·(Σ|k_out−k*| + Σ|k_in−k*|)` — no
-  internal Hastings/bridge recomputation.
-- The production kernel is the capped first-return trace of the
-  degree-biased auxiliary chain onto `A_k`; timeout restores the origin
-  (exact self-loop). Proven numerically: `Q` and `R` satisfy row sums,
-  detailed balance, and stationarity on every enumerated tiny fiber; the
-  trace connects every underlying-connected fiber at cap 16.
-- `K_E` is invoked through an exact recorder so a rejected outer step
-  (or a timed-out trace) deterministically undoes the whole excursion
-  from a flat `Vec<Cycle4Proposal>` — no state clones.
-
-## The blocker (read `docs/decisions/microcanonical-fixed-sk-stop.md`)
-
-The degree **repair** reuses `degree_auxiliary_step` (plan §15.2, §24).
-Probed trajectory (d=8, occ 1..3, λ=1.0, 600k steps):
+## Final architecture
 
 ```text
-N=30   initial D=74   floor D=21
-N=100  initial D=246  floor D=79
-N=200  initial D=514  floor D=154
-N=1000 (5M steps × 5 restarts) best D=1791 -> DegreeRepairExhausted
+full (s,k) target + fixed pairs
+        |
+        v
+existing residualization (strengths/degrees/domain; B M=1 invariant)
+        |
+        v
+r = s_out - k_out, c = s_in - k_in
+        |
+        v
+slot-aware compressed extras transport
+  (pressure(mass,slots) rows/cols, block allocation, per-node k caps,
+   deterministic attempt 0 + bounded randomized retries)
+        |
+        v
+extras support B  (support degrees <= k)
+        |
+        v
+delta_k = k - degree(B)
+        |
+        v
+occupation-1 filler support C on domain minus B
+  (reuses the domain-aware binary exact-degree initializer)
+        |
+        v
+t = 1 + y on B, t = 1 on C   -> exact (s,k) state, D = 0
+        |
+        v
+exact capped first-return degree trace (burn-in / thinning)
+        |
+        v
+merge fixed pairs
+        |
+        v
+full exact validation
+        |
+        v
+Rust route / pyo3 / Python (Constraint.STRENGTH_DEGREE)
 ```
 
-λ ∈ {0.5, 1.0, 2.0} all floor; the underlying K_E mobility is healthy
-(fixed-sE N=1000 gate passes), so the limitation is the soft
-degree-potential descent over the astronomically large exact-E fiber —
-a genuine mixing barrier, not a bug. The oracle, correspondence
-`P(s1→s2) = 0.475`, tiny-fiber repair, and tiny-N E2E all pass, so the
-stationary kernel machinery is sound; **initialization cannot scale**.
+Initialization is combinatorial and needs no detailed balance; trace
+exactness is independently checked by the Q/R oracle.
+
+## Exactness evidence
+
+- Tiny exact `Q`/`R` transition-matrix oracle: row sums, detailed
+  balance, stationarity, tiny-fiber connectivity — green.
+- Production-vs-exact correspondence, fixed-(s,E) regressions — green.
+- The B M=1 (Bernoulli) invariant (strength == degree per node) is
+  rejected early in shared target validation, before any constructor or
+  solver logic activates (independent of the sampling ensemble).
+
+## N=1000 initialization evidence (Gate C)
+
+`EXTRAS_FIRST_INITIALIZATION = pass` — see the decision record for the
+full table.  Highlights:
+
+| case | extras attempts | extras edges | fillers | occ-1 | wall |
+|---|---:|---:|---:|---:|---:|
+| ME realistic T/E=8 | 1 | 1366 | 6634 | 0.829 | 0.10 s |
+| Balanced12 | 1 | 904 | 7096 | 0.887 | 0.06 s |
+| B M=5 Balanced12 | 3 | 1406 | 6594 | 0.824 | 0.41 s |
+| W realistic | 1 | 1366 | 6634 | 0.829 | 0.17 s |
+| uniform stress grid (ME d=4/8/16, W, B) | 1–5 | — | — | — | ≤ 1.7 s |
+| structural variants (loops, pos/zero fixed pairs) | 1–2 | — | — | — | ≤ 0.21 s |
+
+## N=1000 trace/mobility evidence (Gate D)
+
+`CONSTRUCTED_TRACE_MOBILITY = green` — the trace starts from the actual
+constructor output (occ-1 ≈ 0.83), not the witness: ~61% different /
+support-changing returns per top-level trace at ~1.7 `K_E` per effective
+return (witness start: 3% at 34).  ME/W/B all GREEN at 100k attempts.
+
+Degenerate at-capacity corners (B T/E=M, occ-1 = 0) remain immobile —
+a documented start-state pathology (Gate A record), not an error; no
+rapid mixing is claimed anywhere.
+
+## Public integration status
+
+- Rust: `SamplingPlan::classify` gives strengths routing priority;
+  `route_occupation_mcmc` dispatches s+k → s+E → s.  §80 blocker test
+  green.
+- pyo3: `sample_fixed_strength_degree` (fixed pairs residualized and
+  merged in Rust).
+- Python: `Constraint.STRENGTH_DEGREE` microcanonical route (no fit),
+  capability registry entries for ME/B/W, `sample_model_detailed`
+  method/exactness mapping.
+- Fast Python suite green (408 passed / 24 skipped / 0 failed); the
+  new `tests/test_menobis_microcanonical_fixed_strength_degree.py`
+  covers exact s+k recovery, the §80 blocker, determinism, self-loops,
+  fixed pairs, B M=1 rejection, and an N=100 heavy case.
 
 ## How to verify
 
 ```bash
-# fast suite (includes the exact degree oracle + repair + trace tests)
+# fast suite (tiny extras-first gates + exact Q/R oracle + trace tests)
 cargo test --workspace
 
 # exact (s,k) oracle — the mathematical release gate
 cargo test -p menobis-test-oracles --test fixed_strength_degree_enumeration
+# fixed-sE regression
+cargo test -p menobis-test-oracles --test fixed_strength_edges_enumeration
 
-# pinned STOP artifacts (N=1000 repair exhaustion, N-floor scaling)
-cargo test -p menobis-test-oracles --test fixed_strength_degree_scalability -- --ignored --nocapture
+# N=1000 gates (release)
+cargo test --release -p menobis-test-oracles \
+  --test fixed_strength_degree_direct_init -- --ignored --nocapture   # Gate C
+cargo test --release -p menobis-test-oracles \
+  --test fixed_strength_degree_trace_constructed -- --ignored         # Gate D
+cargo test --release -p menobis-test-oracles \
+  --test fixed_strength_degree_scalability -- --ignored               # one-shot
+cargo test --release -p menobis-test-oracles \
+  --test fixed_strength_degree_e2e -- --ignored                       # E2E
 
-# fixed-sE regression (unrecorded K_E path unchanged)
-cargo test -p menobis-test-oracles --test fixed_strength_edges_enumeration --test fixed_strength_edges_scalability -- --include-ignored
+# Python (after maturin develop)
+uv run ruff format --check .
+uv run ruff check .
+uv run ty check
+uv run pytest
 
 # static gates
-cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all -- --check
 ```
 
-## Recommended next steps (outside this task's policy)
+## Historical decisions
 
-1. **Constructive degree-obeying initializer** (most promising): build a
-   start already on `A_k` (e.g. flow-based or sequential Bernoulli+repair
-   honoring `k` before assigning weights), removing the descent entirely.
-2. Non-MH greedy/annealed repair (fixed-sE-edge-repair style) — may still
-   hit the `D>0` floor; needs explicit approval (plan §52 forbids it in
-   the original task).
-3. Degree-preserving move-family augmentation — a new proposal law with a
-   fresh path-Hastings derivation (explicitly out of the original scope).
+- `docs/decisions/microcanonical-fixed-sk-stop.md` — the original
+  degree-repair STOP (superseded; preserved evidence).
+- `docs/decisions/microcanonical-fixed-sk-trace-mobility.md` — Gate A
+  (still valid evidence).
+- `docs/decisions/microcanonical-fixed-sk-direct-init.md` — Gate B
+  support-first blocker (superseded; preserved evidence).
+- `docs/decisions/microcanonical-fixed-sk-extras-first-init.md` — the
+  current extras-first decision (Gate C/D + Part F/G/H evidence).
 
-Phases 10–13 (sampling-plan priority correction + visible-error guard for
-silently-ignored strengths in the factorized router, pyo3 binding, Python
-routing, capability exposure) were **not done** — capability must not be
-exposed until the scalability gate passes. If the initializer approach
-succeeds, pick up at Phase 10 with the router guard landed atomically
-with the `SamplingPlan` priority change.
+Generated fixed-(s,k) plan documents are archived under
+`docs/development/agent-specifications/archive/fixed_sk/` and are
+historical implementation instructions only.

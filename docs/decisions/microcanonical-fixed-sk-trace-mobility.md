@@ -3,7 +3,7 @@
 **Status:** complete — decision recorded, awaiting user review before Gate B
 **Branch:** `fix/fixed-sk-direct-init-trace-gate`
 **Base:** `feature/microcanonical-fixed-strength-degree`
-**Recovery plan:** `../development/agent-specifications/MENoBiS_fixed_sk_recovery_direct_init_trace_gate.md` (Part A, §5–§12)
+**Recovery plan:** `../development/agent-specifications/archive/fixed_sk/MENoBiS_fixed_sk_recovery_direct_init_trace_gate.md` (Part A, §5–§12)
 **Orca/diagnostics:** `menobis-test-oracles/tests/fixed_strength_degree_trace_gate.rs`
 
 ## 1. Verdict

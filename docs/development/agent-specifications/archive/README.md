@@ -44,6 +44,7 @@ kept under version control so that:
 | `09_MENoBiS_microcanonical_refactor_plan.md` | Pre-refactor | Overall refactor plan (superseded by the practical final spec) |
 | `microcanonical-phase-0.md` | Phase 0 | Foundation refactor: terminology migration, shared abstractions, generation split, filtering adaptation, benchmark baseline |
 | `12_microcanonical_fixed_strength_edges_master_implementation_plan.md` | Fixed (s,E) | Master implementation plan for exact microcanonical fixed strengths + exact edge count (ME/B/W; local 4-cycle + censored-bridge MCMC) — completed on `feature/microcanonical-fixed-strength-edges` |
+| `fixed_sk/README.md` | Fixed (s,k) | Chronology of the three fixed-(s,k) implementation plans (degree-repair → support-first recovery → extras-first completion), plus pointers to `STATUS.md` and the decision records |
 
 ## Notes
 

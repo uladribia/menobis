@@ -20,13 +20,12 @@ These documents are intentionally more detailed than end-user documentation. The
 
 ## Documents
 
-### Current fixed-(s,k) work (STOPPED / recovery)
+### Current fixed-(s,k) work (COMPLETE — core + public routing)
 
 | Document | Status | Description |
 |---|---|---|
-| `STATUS.md` | **Entry point** | Fixed-(s,k) review / recovery status: feature branch STOP at degree repair, recovery branch `fix/fixed-sk-direct-init-trace-gate`, current Gate A/B outcomes |
-| `MENoBiS_fixed_sk_implementation_plan_v2.md` | Historical spec | Master implementation plan for fixed strengths + fixed degrees (the old degree-repair initialization that does not scale) |
-| `MENoBiS_fixed_sk_recovery_direct_init_trace_gate.md` | **Recovery plan** | Supersedes the initialization part: Gate A (trace mobility from exact witnesses) + Gate B (direct exact-(s,k) constructor). Outcomes in `docs/decisions/microcanonical-fixed-sk-trace-mobility.md` (viable) and `docs/decisions/microcanonical-fixed-sk-direct-init.md` (N=1000 heterogeneous blocked) |
+| `STATUS.md` | **Entry point** | Fixed-(s,k) current status: extras-first constructor + exact degree trace, N=1000 validated, `Constraint.STRENGTH_DEGREE` routed |
+| `archive/fixed_sk/README.md` | Index | Chronology of the three generated fixed-(s,k) plans (degree-repair, support-first recovery, extras-first completion) — historical implementation instructions only |
 
 ### Microcanonical refactor (COMPLETE)
 
