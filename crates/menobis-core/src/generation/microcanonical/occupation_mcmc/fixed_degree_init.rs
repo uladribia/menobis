@@ -165,11 +165,15 @@ pub fn initialize_exact_sk(
             None => {
                 diag.flow_fallback_attempts += 1;
                 match allocate_residual_flow(&support, &r, &c, edge_cap) {
-                    Some((extras, flow)) => {
+                    (Some(extras), flow) => {
                         best_flow = Some(best_flow.map_or(flow, |b| b.max(flow)));
                         extras
                     }
-                    None => {
+                    (None, partial) => {
+                        // Record the best *partial* flow too (§33): the
+                        // error reports the closest a support got to a
+                        // full allocation.
+                        best_flow = Some(best_flow.map_or(partial, |b| b.max(partial)));
                         diag.incompatible_supports += 1;
                         continue; // another exact-k support
                     }
@@ -376,18 +380,19 @@ fn allocate_residual_greedy(
 ///
 /// Flow graph: `source -> row i` (cap `r_i`), `row i -> col j` for
 /// support edges only (cap `edge_cap`), `col j -> sink` (cap `c_j`).
-/// Returns `(extras, total_flow)` when `total_flow == Σ r_i`, otherwise
-/// `None` (support is strength-incompatible — retry another support).
+/// Returns `(Some(extras), flow)` when `flow == Σ r_i`, else
+/// `(None, flow)` with `flow` = the best partial transport achieved — the
+/// support is strength-incompatible and the caller retries another one.
 fn allocate_residual_flow(
     support: &[(u64, u64)],
     r: &[OccNum],
     c: &[OccNum],
     edge_cap: OccNum,
-) -> Option<(Vec<OccNum>, OccNum)> {
+) -> (Option<Vec<OccNum>>, OccNum) {
     let n = r.len();
     let total: OccNum = r.iter().sum();
     if total == 0 {
-        return Some((vec![0; support.len()], 0));
+        return (Some(vec![0; support.len()]), 0);
     }
     // Node ids: 0 = source, 1..n+1 rows, n+1..2n+1 cols, 2n+1 = sink.
     let src = 0usize;
@@ -422,7 +427,7 @@ fn allocate_residual_flow(
 
     let flow = dinic.max_flow(src, sink);
     if flow < total {
-        return None;
+        return (None, flow);
     }
     let mut extras = vec![0u64; support.len()];
     for (e, &(from, idx)) in row_edges.iter().enumerate() {
@@ -434,7 +439,7 @@ fn allocate_residual_flow(
         // Pushed flow on the forward edge == reverse edge's capacity.
         extras[e] = dinic.graph[to][rev].cap;
     }
-    Some((extras, flow))
+    (Some(extras), flow)
 }
 
 // ---------------------------------------------------------------------------
@@ -571,9 +576,9 @@ mod tests {
     fn flow_trivial_one_edge_matches_residual() {
         // §23.1: one row, one column, residual 5, one support edge.
         let support = vec![(0u64, 1u64)];
-        let (extras, flow) = allocate_residual_flow(&support, &[5, 0], &[0, 5], 1000).unwrap();
+        let (extras, flow) = allocate_residual_flow(&support, &[5, 0], &[0, 5], 1000);
         assert_eq!(flow, 5);
-        assert_eq!(extras, vec![5]);
+        assert_eq!(extras.unwrap(), vec![5]);
     }
 
     #[test]
@@ -581,10 +586,10 @@ mod tests {
         // §23.2: A->X, A->Y, B->X with r=(1,1), c=(1,1): flow must route
         // A->Y=1 and B->X=1 (even if a naive greedy could get stuck).
         let support = vec![(0u64, 0u64), (0, 1), (1, 0)];
-        let (extras, flow) = allocate_residual_flow(&support, &[1, 1], &[1, 1], 1000).unwrap();
+        let (extras, flow) = allocate_residual_flow(&support, &[1, 1], &[1, 1], 1000);
         assert_eq!(flow, 2);
         // edges: (0,0)=A->X, (0,1)=A->Y, (1,0)=B->X
-        assert_eq!(extras, vec![0, 1, 1], "A->Y=1, B->X=1");
+        assert_eq!(extras.unwrap(), vec![0, 1, 1], "A->Y=1, B->X=1");
     }
 
     #[test]
@@ -592,17 +597,19 @@ mod tests {
         // Row B has positive residual but no support edge: max flow < R.
         let support = vec![(0u64, 0u64)]; // only A->X
         let out = allocate_residual_flow(&support, &[1, 1], &[1, 1], 1000);
-        assert!(out.is_none(), "flow must be < total residual");
+        assert!(out.0.is_none(), "flow must be < total residual");
     }
 
     #[test]
     fn flow_respects_b_capacity() {
         // §23.4: a single edge with M-1 = 1 cannot carry residual 2.
         let support = vec![(0u64, 1u64)];
-        assert!(allocate_residual_flow(&support, &[2, 0], &[0, 2], 1).is_none());
-        let (extras, flow) = allocate_residual_flow(&support, &[2, 0], &[0, 2], 2).unwrap();
+        assert!(allocate_residual_flow(&support, &[2, 0], &[0, 2], 1)
+            .0
+            .is_none());
+        let (extras, flow) = allocate_residual_flow(&support, &[2, 0], &[0, 2], 2);
         assert_eq!(flow, 2);
-        assert_eq!(extras, vec![2]);
+        assert_eq!(extras.unwrap(), vec![2]);
     }
 
     #[test]
@@ -611,8 +618,9 @@ mod tests {
         let support = vec![(0u64, 0u64), (0, 1), (1, 0), (1, 1)];
         let r = vec![3, 4];
         let c = vec![2, 5];
-        let (extras, flow) = allocate_residual_flow(&support, &r, &c, 1000).unwrap();
+        let (extras, flow) = allocate_residual_flow(&support, &r, &c, 1000);
         assert_eq!(flow, 7);
+        let extras = extras.unwrap();
         let mut co = vec![0u64; 2];
         let mut ci = vec![0u64; 2];
         for (e, &(s, t)) in support.iter().enumerate() {
@@ -665,8 +673,9 @@ mod tests {
             allocate_residual_greedy(&support, &r, &c, 1000).is_none(),
             "greedy must be stuck on this system"
         );
-        let (extras, flow) = allocate_residual_flow(&support, &r, &c, 1000).unwrap();
+        let (extras, flow) = allocate_residual_flow(&support, &r, &c, 1000);
         assert_eq!(flow, 4);
+        let extras = extras.unwrap();
         // Extraction must reproduce the residuals exactly (§23.5).
         let mut co = vec![0u64; 3];
         let mut ci = vec![0u64; 3];
@@ -835,12 +844,14 @@ mod tests {
         let r = vec![0u64, 3, 0];
         let c = vec![2u64, 1, 0];
         assert!(
-            allocate_residual_flow(&support_bad, &r, &c, 1000).is_none(),
+            allocate_residual_flow(&support_bad, &r, &c, 1000)
+                .0
+                .is_none(),
             "B has no column with enough residual on the bad support"
         );
-        let (extras, flow) = allocate_residual_flow(&support_good, &r, &c, 1000).unwrap();
+        let (extras, flow) = allocate_residual_flow(&support_good, &r, &c, 1000);
         assert_eq!(flow, 3, "B->X=2, B->Y=1");
-        assert_eq!(extras, vec![0, 2, 1]);
+        assert_eq!(extras.unwrap(), vec![0, 2, 1]);
     }
 
     #[test]
