@@ -205,6 +205,24 @@ def test_microcanonical_edges_events(network: object) -> None:
     assert sample.total_events == total_events
 
 
+def test_io_roundtrip_canonical_occnum_schema(tmp_path) -> None:
+    """File-format test: CSV writer emits occ_num; read back preserves rows (§40)."""
+    from menobis.data import read_edges, write_edges
+
+    edges = _dense_network(12).edges
+    path = tmp_path / "edges.csv"
+    write_edges(edges, path)
+    header = path.read_text(encoding="utf-8").splitlines()[0]
+    columns = [c.strip('"').strip() for c in header.split(",")]
+    assert columns == ["source", "target", "occ_num"], header
+    read_back = read_edges(path)
+    assert read_back.num_edges == edges.num_edges
+    assert read_back.total_events == edges.total_events
+    np.testing.assert_array_equal(read_back.source, edges.source)
+    np.testing.assert_array_equal(read_back.target, edges.target)
+    np.testing.assert_array_equal(read_back.occ_num, edges.occ_num)
+
+
 def test_microcanonical_degree_events(network: object, constraints: object) -> None:
     """Microcanonical (k,T): degree sequences and T exact (§51.7)."""
     k_out = constraints.degree_out.astype(np.uint32)

@@ -16,7 +16,7 @@ MC routes.
 
 A grand-canonical null matches constraints in expectation: every sampled
 network fluctuates around them. A microcanonical null makes the constrained
-quantities **identical in every realizations** — a different null
+quantities **identical in every realization** — a different null
 hypothesis, not a "better" one. Choose between them by the scientific
 question (see [Choose a model](choose-model.md) and
 [Ensembles](../science/ensembles.md)).
