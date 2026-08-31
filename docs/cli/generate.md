@@ -21,6 +21,7 @@ seeded synthetic edge table. Data goes to stdout unless `--output` is set.
 | `strength-edges-poisson` | Strength-edges Poisson (zero-inflated) | 3 | optional `--target-edges` |
 | `strength-degree-poisson` | Strength-degree Poisson (zero-inflated) | 4 | — |
 | `degree-events-poisson` | Degree-events Poisson (zero-inflated) | 5 | `--total-events` |
+| `strength-degree-mcmc` | Fixed-strength-degree, microcanonical ME — exact `(s,k)`, extras-first constructor + degree-fiber trace | — | optional `--burn-in-sweeps`, `--sweeps-per-sample` |
 
 ## Examples
 
@@ -32,6 +33,7 @@ menobis generate strength-cost-poisson edges.csv --coordinates xy.csv --seed 7
 menobis generate strength-edges-poisson edges.csv --target-edges 500
 menobis generate strength-degree-poisson edges.csv --seed 99
 menobis generate degree-events-poisson edges.csv --total-events 5000
+menobis generate strength-degree-mcmc edges.csv --seed 99 --no-self-loops
 ```
 
 ## Options

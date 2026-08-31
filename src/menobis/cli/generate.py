@@ -219,6 +219,66 @@ def strength_degree_me(
     _progress("Wrote strength-degree ME sample", output, quiet, output_json)
 
 
+@app.command("strength-degree-mcmc")
+def strength_degree_mcmc(
+    input_path: Path,
+    output: Annotated[
+        Path | None, Option("--output", "-o", help="Output path. Stdout if omitted.")
+    ] = None,
+    seed: Annotated[int, Option("--seed", "-s", help="Random seed.")] = 0,
+    output_json: Annotated[bool, Option("--json", help="Output as JSON.")] = False,
+    quiet: Annotated[
+        bool, Option("--quiet", help="Suppress progress messages.")
+    ] = False,
+    self_loops: Annotated[
+        bool,
+        Option("--self-loops/--no-self-loops", help="Whether model self loops."),
+    ] = True,
+    burn_in_sweeps: Annotated[
+        int,
+        Option("--burn-in-sweeps", help="Degree-trace MCMC burn-in sweeps."),
+    ] = 50,
+    sweeps_per_sample: Annotated[
+        int,
+        Option("--sweeps-per-sample", help="Degree-trace MCMC thinning sweeps."),
+    ] = 10,
+) -> None:
+    """Generate an exact fixed-(s,k) sample (microcanonical ME).
+
+    Derives the integer strength and binary degree sequences from the
+    input edges and samples the microcanonical fixed-strength +
+    fixed-degree law: extras-first exact constructor + capped first-return
+    degree trace.  No fitting step; strengths and degrees are reproduced
+    exactly.
+    """
+    edges = read_edges(input_path)
+    nc = int(max(edges.source.max(), edges.target.max())) + 1  # type: ignore
+    s_out = np.zeros(nc, dtype=np.uint64)
+    s_in = np.zeros(nc, dtype=np.uint64)
+    k_out = np.zeros(nc, dtype=np.uint32)
+    k_in = np.zeros(nc, dtype=np.uint32)
+    for src, tgt, w in zip(edges.source, edges.target, edges.occ_num, strict=True):
+        s_out[int(src)] += int(w)
+        s_in[int(tgt)] += int(w)
+        k_out[int(src)] += 1
+        k_in[int(tgt)] += 1
+    sample = sample_model(
+        ensemble=Ensemble.MICROCANONICAL,
+        family=ModelFamily.ME,
+        constraint=Constraint.STRENGTH_DEGREE,
+        strength_out=s_out,
+        strength_in=s_in,
+        degree_out=k_out,
+        degree_in=k_in,
+        self_loops=self_loops,
+        seed=seed,
+        burn_in_sweeps=burn_in_sweeps,
+        sweeps_per_sample=sweeps_per_sample,
+    )
+    _emit_edges(sample, output, output_json)
+    _progress("Wrote fixed-strength-degree (s,k) ME sample", output, quiet, output_json)
+
+
 @app.command("strength-edges-poisson")
 def strength_edges_me(
     input_path: Path,
