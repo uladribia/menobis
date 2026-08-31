@@ -15,31 +15,6 @@ pub enum FixedStrengthError {
     /// The residual degree target violates a necessary feasibility bound
     /// (§10 of the fixed-(s,k) plan).
     InvalidDegreeTarget(String),
-    /// Degree repair exhausted its restart budget without reaching the
-    /// exact degree target (§15.5 of the fixed-(s,k) plan).
-    DegreeRepairExhausted {
-        /// Best half-normalized degree distance reached.
-        best_degree_distance: u64,
-        /// Number of reconstruction restarts performed.
-        restarts: u32,
-        /// Total attempted degree-auxiliary steps across all restarts.
-        total_steps: u64,
-        /// The requested residual edge count (defined by the degree sums).
-        target_edges: usize,
-    },
-    /// The direct exact-(s,k) constructor exhausted its support retry
-    /// budget without finding a strength-compatible exact-k support
-    /// (§33).  This is **not** a proof that the target is infeasible
-    /// (§14) — a different support or a larger budget may succeed.
-    ExactSkInitializationExhausted {
-        /// Support construction/allocation attempts consumed.
-        support_attempts: usize,
-        /// Best total residual flow reached by the max-flow fallback
-        /// across all attempts (0 if it never ran).
-        best_flow: OccNum,
-        /// `Σ (s_out − k_out) = Σ (s_in − k_in)`.
-        residual_total: OccNum,
-    },
     /// The extras-first exact-(s,k) constructor exhausted its retry
     /// budgets (plan §35).  Retry exhaustion is **not** mathematical
     /// infeasibility (§21, §27) — a larger budget or different
@@ -87,29 +62,6 @@ impl fmt::Display for FixedStrengthError {
             Self::InvalidResidual(msg) => write!(f, "invalid residual problem: {msg}"),
             Self::InvalidEdgeTarget(msg) => write!(f, "invalid edge target: {msg}"),
             Self::InvalidDegreeTarget(msg) => write!(f, "invalid degree target: {msg}"),
-            Self::DegreeRepairExhausted {
-                best_degree_distance,
-                restarts,
-                total_steps,
-                target_edges,
-            } => {
-                write!(
-                    f,
-                    "degree repair exhausted after {total_steps} degree steps and {restarts} restarts: \
-                     best degree distance {best_degree_distance}, target edges {target_edges}"
-                )
-            }
-            Self::ExactSkInitializationExhausted {
-                support_attempts,
-                best_flow,
-                residual_total,
-            } => {
-                write!(
-                    f,
-                    "direct exact-(s,k) initialization exhausted after {support_attempts} support attempts: \
-                     best flow {best_flow} of residual total {residual_total} (target not proven infeasible)"
-                )
-            }
             Self::ExactSkExtrasFirstExhausted {
                 extras_attempts,
                 extras_failures,
