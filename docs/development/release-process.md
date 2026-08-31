@@ -45,7 +45,7 @@ duplicating environment configuration.
 ## Versioning
 
 MENoBiS follows semantic versioning. The current public documentation
-release is `1.0.1`.
+release is `1.1.0`.
 
 ## Future plans
 

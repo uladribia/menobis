@@ -225,7 +225,7 @@ def test_all_fit_results_inherit_fit_result() -> None:
 
 
 def test_package_exports_version() -> None:
-    assert menobis.__version__ == "1.0.1"
+    assert menobis.__version__ == "1.1.0"
     assert menobis.__all__ == ["__version__"]
 
 
