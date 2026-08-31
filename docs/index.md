@@ -40,6 +40,7 @@ See [Notation](science/notation.md) for the full symbol table.
 | Decide which null model to use | [Choose a model](guide/choose-model.md) |
 | What is actually supported today | [Supported models](guide/supported-models.md) |
 | Fit and sample a model | [Fit and sample](guide/fit-and-sample.md) |
+| Walk through a compact applied overview | [Main use cases](examples/main-use-cases.ipynb) |
 | Filter significant node pairs | [Filter node pairs](guide/filter-network.md) |
 | Understand the mathematics | [Scientific foundations](science/notation.md) |
 | Runtime and memory expectations | [Practical scaling](performance/scaling.md) |
