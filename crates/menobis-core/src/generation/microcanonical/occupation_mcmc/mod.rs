@@ -14,6 +14,7 @@ pub mod cost;
 pub mod cost_fit;
 pub mod domain;
 pub mod errors;
+pub mod fixed_degree_init;
 pub mod fixed_degrees;
 pub mod fixed_edges;
 pub mod initializer;

@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+use crate::OccNum;
+
 /// Errors that can occur during fixed-strength sampling.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FixedStrengthError {
@@ -24,6 +26,19 @@ pub enum FixedStrengthError {
         total_steps: u64,
         /// The requested residual edge count (defined by the degree sums).
         target_edges: usize,
+    },
+    /// The direct exact-(s,k) constructor exhausted its support retry
+    /// budget without finding a strength-compatible exact-k support
+    /// (§33).  This is **not** a proof that the target is infeasible
+    /// (§14) — a different support or a larger budget may succeed.
+    ExactSkInitializationExhausted {
+        /// Support construction/allocation attempts consumed.
+        support_attempts: usize,
+        /// Best total residual flow reached by the max-flow fallback
+        /// across all attempts (0 if it never ran).
+        best_flow: OccNum,
+        /// `Σ (s_out − k_out) = Σ (s_in − k_in)`.
+        residual_total: OccNum,
     },
     /// Edge-count repair exhausted its restart budget without reaching the
     /// exact edge target (§13.3).
@@ -67,6 +82,17 @@ impl fmt::Display for FixedStrengthError {
                     f,
                     "degree repair exhausted after {total_steps} degree steps and {restarts} restarts: \
                      best degree distance {best_degree_distance}, target edges {target_edges}"
+                )
+            }
+            Self::ExactSkInitializationExhausted {
+                support_attempts,
+                best_flow,
+                residual_total,
+            } => {
+                write!(
+                    f,
+                    "direct exact-(s,k) initialization exhausted after {support_attempts} support attempts: \
+                     best flow {best_flow} of residual total {residual_total} (target not proven infeasible)"
                 )
             }
             Self::EdgeRepairExhausted {
