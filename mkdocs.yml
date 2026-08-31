@@ -15,50 +15,58 @@ theme:
     - content.code.copy
 
 nav:
-  - Start here:
-      - Home: index.md
+  - Start:
+      - Overview: index.md
       - Getting started: getting-started.md
-      - Main use cases: examples/main-use-cases.ipynb
-      - Thesis and citations: thesis-context.md
-  - Tutorials:
-      - Filter a network: tutorials/filter-network.md
-      - Sample ensemble magnitudes: tutorials/sample-ensemble-magnitudes.md
-      - Use spatial costs: tutorials/use-spatial-costs.md
-      - Microcanonical sampling: tutorials/microcanonical-sampling.md
-  - Model selection and maths:
-      - Choose a null model: concepts/choose-null-model.md
-      - Equations: concepts/equations.md
-      - Ensemble equivalence at large occupation: concepts/ensemble-equivalence.md
-      - Partial constraints: concepts/partial-constraints.md
-      - Microcanonical sampling: concepts/microcanonical.md
-      - Fixed strengths + exact edge count: concepts/fixed-strength-edges.md
-      - Fixed strengths + exact degrees: concepts/fixed-strength-degree.md
-      - Solvers and scaling: concepts/solvers-and-scaling.md
-      - Scaling (GC + MC): development/scalability.md
-      - Benchmarks (GC + MC): development/benchmarking.md
-      - Filtering statistics: concepts/filtering.md
+      - Choose a model: guide/choose-model.md
+      - Supported models: guide/supported-models.md
+
+  - User guide:
+      - Fit and sample: guide/fit-and-sample.md
+      - Ensemble statistics: guide/ensemble-statistics.md
+      - Filter node pairs: guide/filter-network.md
+      - Spatial costs: guide/spatial-costs.md
+      - Fixed / known pairs: guide/fixed-pairs.md
+      - Microcanonical sampling: guide/microcanonical.md
+
+  - Scientific foundations:
+      - Notation: science/notation.md
+      - Event families ME, B, W: science/event-families.md
+      - Constraints: science/constraints.md
+      - Ensembles: science/ensembles.md
+      - Ensemble equivalence: science/ensemble-equivalence.md
+      - Filtering statistics: science/filtering.md
+      - References and thesis: science/references.md
+
+  - Performance and validation:
+      - Practical scaling: performance/scaling.md
+      - Benchmarks: performance/benchmarks.md
+      - MCMC diagnostics: performance/mcmc-diagnostics.md
+      - Validation: performance/validation.md
+
   - Reference:
       - Python API: api/python.md
       - File formats: api/file-formats.md
-      - Filtering API: api/filtering.md
       - Network metrics: api/network-metrics.md
+      - Filtering API: api/filtering.md
       - Rust API: api/rust.md
       - CLI:
           - Fit: cli/fit.md
           - Generate: cli/generate.md
           - Filter: cli/filter.md
           - Benchmarks: cli/benchmarks.md
-  - Development:
-      - Extending thesis cases: development/extending-thesis-cases.md
-      - Testing: development/testing.md
-      - Fetching real-world data: development/fetching-data.md
-      - Release process: development/release-process.md
-      - TODOs: development/todos.md
+
+  - Contributing:
       - Architecture: development/architecture.md
+      - Extending MENoBiS: development/extending-thesis-cases.md
+      - Microcanonical algorithms: development/microcanonical-algorithms.md
       - Responsibilities: development/responsibilities.md
+      - Testing: development/testing.md
+      - Release process: development/release-process.md
 
 exclude_docs: |
   /development/agent-specifications/
+  /_generated/
 
 plugins:
   - search
@@ -75,6 +83,9 @@ markdown_extensions:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.snippets:
+      check_paths: true
+      base_path: docs
   - pymdownx.arithmatex:
       generic: true
   - attr_list

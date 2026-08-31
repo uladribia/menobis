@@ -1,49 +1,49 @@
 ---
-description: Fit MENoBiS model parameters from edge tables.
+description: menobis fit — fit grand-canonical multipliers from an observed network.
 ---
 
 # `menobis fit`
 
 ## TL;DR
 
-Use `menobis fit` to solve Lagrange multipliers from an observed edge table.
+Use `menobis fit` to fit grand-canonical multipliers from an observed
+network and emit the fitted model. Data goes to stdout unless `--output` is
+set.
+
+> The Python API is the authoritative full model interface. CLI commands
+> expose a convenience subset for the most common grand-canonical routes and
+> may retain command names that do not mirror the model ontology exactly.
 
 ## Commands
 
-| Command | Model | Case | Output columns |
-|---------|-------|------|----------------|
-| `strength-poisson` | Strength Poisson | — | `node,x,y` |
-| `strength-geometric` | Strength geometric W | W | `node,x,y,layers,status,...` |
-| `strength-negative-binomial` | Strength negative-binomial W | W | `node,x,y,layers,status,...` |
-| `degree-bernoulli` | Degree Bernoulli | 5 | `node,x,y` |
-| `strength-cost-poisson` | Strength-cost Poisson | 2 | `node,x,y,gamma` |
-| `strength-edges-poisson` | Strength-edges Poisson | 3 | `node,x,y,lambda` |
-| `strength-degree-poisson` | Strength-degree Poisson | 4 | `node,x,y,z,w` |
+| Command | Ensemble | Family | Constraint | Notes |
+|---|---|---|---|---|
+| `strength-poisson` | grand-canonical | ME | strength | default route |
+| `strength-geometric` | grand-canonical | W | strength | geometric \(M=1\) |
+| `strength-negative-binomial` | grand-canonical | W | strength | needs `--layers` |
+| `degree-bernoulli` | grand-canonical | ME | degree-events | binary degree fit |
+| `strength-degree-poisson` | grand-canonical | ME | strength-degree | zero-inflated |
+| `strength-edges-poisson` | grand-canonical | ME | strength-edges | zero-inflated |
+| `strength-cost-poisson` | grand-canonical | ME | strength-cost | needs coordinates |
 
 ## Examples
 
 ```bash
-menobis fit strength-poisson edges.csv --json
-menobis fit strength-poisson edges.csv --output fit.csv
-menobis fit strength-geometric edges.csv --json
-menobis fit strength-negative-binomial edges.csv --layers 3 --output fit.csv
-menobis fit strength-cost-poisson edges.csv --coordinates xy.csv --target-cost 120.0
-menobis fit strength-edges-poisson edges.csv --target-edges 500
-menobis fit strength-degree-poisson edges.csv --output fit.csv
-menobis fit degree-bernoulli edges.csv --json
+menobis fit strength-poisson edges.csv --seed 42
+menobis fit strength-negative-binomial edges.csv --layers 4 --json
+menobis fit strength-cost-poisson edges.csv --coordinates xy.csv
 ```
 
 ## Options
 
 | Option | Meaning |
 |--------|---------|
-| `--output`, `-o` | Write multipliers to CSV |
+| `--output`, `-o` | Write the fitted model |
 | `--json` | Print JSON to stdout |
 | `--quiet` | Suppress progress |
 | `--self-loops/--no-self-loops` | Diagonal handling |
-| `--target-edges` | Target $E$ (strength-edges) |
-| `--layers` | Negative-binomial layer count $M > 1$ |
-| `--tolerance` | Solver tolerance |
-| `--max-iterations` | Solver iteration cap |
-| `--target-cost` | Target $C$ (strength-cost) |
-| `--coordinates` | Projected XY coordinate CSV path (strength-cost) |
+| `--layers` | B/W layer parameter \(M\) (B/W routes) |
+| `--coordinates` | Projected XY coordinate CSV (cost routes) |
+
+The complete supported matrix is the Python API
+[Supported models](../guide/supported-models.md).

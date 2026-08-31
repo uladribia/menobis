@@ -1,45 +1,54 @@
 ---
-description: MENoBiS — Max Entropy NOn Binary Suite for non-binary network null models.
+description: MENoBiS — Max Entropy NOn Binary Suite for null modeling of directed non-binary networks.
 ---
 
 # MENoBiS
 
-## TL;DR
+**MENoBiS fits maximum-entropy null models for directed non-binary
+networks**: it models integer node-pair occupations \(t_{ij}\), fits
+structural constraints in expectation or exactly, samples null ensembles,
+and flags statistically surprising node pairs.
 
-MENoBiS fits maximum-entropy null models for directed non-binary networks,
-filters surprising node-pair occupations, and samples null ensembles for
-network-magnitude checks.
+## What MENoBiS does
 
-!!! note "Terminology"
-    In MENoBiS, **non-binary** means integer-valued node-pair occupations
-    $t_{ij}\in\{0,1,2,\ldots\}$. Weighted, multi-edge, and aggregated binary
-    interpretations are different event families, not synonyms.
+1. **Fit** null models — ME, B, and W occupation families under
+   grand-canonical, canonical, and microcanonical ensembles, with six
+   structural constraint types (strengths, degrees, occupied-pair counts,
+   total events, pair costs, and their combinations).
+2. **Sample** null ensembles — exact direct samplers and validated
+   stationary-MCMC kernels; use the draws to compare observed network
+   statistics with the null.
+3. **Filter** observed node pairs — per-pair p-values against the fitted
+   null, with multiple-testing corrections and absent-edge detection.
 
-!!! info "Agentic coding disclosure"
-    MENoBiS was coded and documented with help from agentic coding workflows
-    using the Pi coding agent and several LLM providers. Human maintainers
-    directed, reviewed, tested, and accepted the changes.
+## Minimal vocabulary
 
-## Why MENoBiS?
+- **non-binary network** — a directed network with integer pair
+  occupations \(t_{ij}\);
+- **occupation number** \(t_{ij}\) — integer event count on pair \((i,j)\);
+- **occupied pair** — a pair with \(t_{ij}>0\);
+- **binary support** — the indicator \(a_{ij}=\mathbf 1[t_{ij}>0]\);
+- **strength / degree** — occupation / support sums per node.
 
-Origin-destination matrices and other non-binary networks often have strong
-low-order structure: large origins, large destinations, spatial costs, and
-binary support constraints. MENoBiS helps separate those expected effects from
-statistically significant higher-order structure.
+See [Notation](science/notation.md) for the full symbol table.
 
-## Start by goal
+## Start here by task
 
 | Goal | Start here |
 |---|---|
-| Filter observed node pairs | [Filter a network](tutorials/filter-network.md) |
-| Sample null networks and compare magnitudes | [Sample ensemble magnitudes](tutorials/sample-ensemble-magnitudes.md) |
-| Pick a null model | [Choose a null model](concepts/choose-null-model.md) |
-| Understand the equations | [Equations](concepts/equations.md) |
-| Use frozen known pairs | [Partial constraints](concepts/partial-constraints.md) |
-| Estimate runtime and memory | [Solvers and scaling](concepts/solvers-and-scaling.md) |
-| Extend MENoBiS | [Extending thesis cases](development/extending-thesis-cases.md) |
+| Install and run the first fit/sample pipeline | [Getting started](getting-started.md) |
+| Decide which null model to use | [Choose a model](guide/choose-model.md) |
+| What is actually supported today | [Supported models](guide/supported-models.md) |
+| Fit and sample a model | [Fit and sample](guide/fit-and-sample.md) |
+| Walk through a compact applied overview | [Main use cases](examples/main-use-cases.ipynb) |
+| Filter significant node pairs | [Filter node pairs](guide/filter-network.md) |
+| Understand the mathematics | [Scientific foundations](science/notation.md) |
+| Runtime and memory expectations | [Practical scaling](performance/scaling.md) |
+| Work on the code | [Development](development/architecture.md) |
 
-## Minimal install
+## Installation status
+
+Source/development installation (Rust toolchain required; not yet on PyPI):
 
 ```bash
 git clone https://github.com/uladribia/menobis.git
@@ -49,39 +58,53 @@ uv run maturin develop --release -m crates/menobis-python/Cargo.toml
 uv run menobis --version
 ```
 
-## Main public Python workflow
+This is a **source/development installation**, not a generic package
+install.
+
+## One tiny example
 
 ```python
-from menobis.models import Constraint, ModelFamily, fit_model, sample_model
-from menobis.filtering import filter_model
+from menobis.analysis import compute_all_stats
+from menobis.models import Constraint, Ensemble, ModelFamily, fit_model
+from menobis.routing import sample_model
+from menobis.utilities.synthetic import (
+    derive_synthetic_constraints,
+    generate_pa_geographic_network,
+)
+
+network = generate_pa_geographic_network(30, average_degree=6.0, seed=7)
+c = derive_synthetic_constraints(network)
 
 fit = fit_model(
     family=ModelFamily.ME,
     constraint=Constraint.STRENGTH,
-    strength_out=strength_out,
-    strength_in=strength_in,
-    self_loops=False,
+    strength_out=c.strength_out,
+    strength_in=c.strength_in,
 )
+assert fit.converged
 
 sample = sample_model(
+    ensemble=Ensemble.GRAND_CANONICAL,
     family=ModelFamily.ME,
     constraint=Constraint.STRENGTH,
     fit=fit,
-    seed=42,
+    seed=0,
 )
-
-filtered = filter_model(
-    edges,
-    family=ModelFamily.ME,
-    constraint=Constraint.STRENGTH,
-    fit=fit,
-)
+print(compute_all_stats(sample).y2_out.mean())
 ```
 
-Use [Getting started](getting-started.md) for a full feasible example.
+This example is executable — the full pipeline is in
+[Getting started](getting-started.md).
 
-## Citation
+## About
 
-MENoBiS is based on the thesis and papers listed in
-[Thesis and citations](thesis-context.md). The repository includes
-`CITATION.cff` for GitHub citation metadata.
+MENoBiS implements the non-binary maximum-entropy framework of Oleguer
+Sagarra's doctoral thesis (see [References and thesis](science/references.md)).
+
+The codebase is Rust for computation with thin typed Python wrappers;
+see [Architecture](development/architecture.md) for contributors.
+
+!!! note "Agentic coding disclosure"
+    MENoBiS was coded and documented with help from agentic coding workflows
+    using the Pi coding agent and several LLM providers. Human maintainers
+    directed, reviewed, tested, and accepted the changes.

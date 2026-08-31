@@ -40,6 +40,15 @@ jobs:
       - name: Build Python extension
         run: uv run --frozen maturin develop --release -m crates/menobis-python/Cargo.toml
 
+      - name: Check generated capability tables
+        run: uv run --frozen python scripts/docs/generate_capabilities.py --check
+
+      - name: Run public-docs contract tests
+        run: uv run --frozen pytest tests/test_public_docs_contract.py
+
+      - name: Run documentation example smoke tests
+        run: uv run --frozen pytest tests/test_docs_examples.py
+
       - name: Build documentation
         run: uv run --frozen mkdocs build --strict
 
