@@ -73,6 +73,23 @@ pub struct Cycle4Proposal {
     #[allow(dead_code)] // consumed by the exact-E veto and repair phases
     pub occupied_after: usize,
 
+    /// Occupied-pair count of source `a` before the cycle (its out-degree).
+    pub out_a_before: usize,
+    /// Occupied-pair count of source `a` after the cycle.
+    pub out_a_after: usize,
+    /// Occupied-pair count of source `c` before the cycle.
+    pub out_c_before: usize,
+    /// Occupied-pair count of source `c` after the cycle.
+    pub out_c_after: usize,
+    /// Occupied-pair count of target `b` before the cycle (its in-degree).
+    pub in_b_before: usize,
+    /// Occupied-pair count of target `b` after the cycle.
+    pub in_b_after: usize,
+    /// Occupied-pair count of target `d` before the cycle.
+    pub in_d_before: usize,
+    /// Occupied-pair count of target `d` after the cycle.
+    pub in_d_after: usize,
+
     /// `log q(x → y)` under the exact `master` selection law.
     pub log_q_forward: f64,
     /// `log q(y → x)` under the exact `master` selection law.
@@ -237,6 +254,14 @@ pub(crate) fn draw_cycle4_proposal(
         new_cb,
         occupied_before: m,
         occupied_after: m_prime as usize,
+        out_a_before: state.row_occ_count[a as usize],
+        out_a_after: row_a_prime as usize,
+        out_c_before: state.row_occ_count[c as usize],
+        out_c_after: row_c_prime as usize,
+        in_b_before: state.col_occ_count[b as usize],
+        in_b_after: col_b_prime as usize,
+        in_d_before: state.col_occ_count[d as usize],
+        in_d_after: col_d_prime as usize,
         log_q_forward,
         log_q_reverse,
     })

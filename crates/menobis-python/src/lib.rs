@@ -316,6 +316,7 @@ fn _menobis(module: &Bound<'_, PyModule>) -> PyResult<()> {
     add_pyfunction!(module, generation::sample_degree_events_fixed_kt)?;
     add_pyfunction!(module, generation::sample_fixed_strength)?;
     add_pyfunction!(module, generation::sample_fixed_strength_edges)?;
+    add_pyfunction!(module, generation::sample_fixed_strength_degree)?;
     add_pyfunction!(module, generation::sample_fixed_strength_with_cost)?;
     add_pyfunction!(module, generation::bench_fixed_strength)?;
     add_pyfunction!(module, generation::bench_fixed_strength_with_cost)?;

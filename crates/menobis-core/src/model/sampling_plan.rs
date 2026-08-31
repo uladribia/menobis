@@ -30,26 +30,26 @@ pub enum SamplingPlan {
 impl SamplingPlan {
     /// Classify a prepared problem into a sampling plan.
     ///
-    /// Rules (checked in order):
+    /// Rules (checked in order — §54 routing priority):
     ///
-    /// 1. Residual degree or edge constraint → factorized MC
+    /// 1. Residual **strength** constraint → occupation MCMC **first**.
+    ///    Coupled strengths (`s`, `s+E`, `s+k`) always require the
+    ///    occupation-MCMC branch; a strength constraint must never fall
+    ///    through to the factorized branch, which would silently ignore
+    ///    the strengths (§80 release blocker).
+    /// 2. Residual degree or edge constraint → factorized MC
     ///    (binary support + fixed-total occupation).
-    /// 2. Residual strength constraint → occupation MCMC
-    ///    (total T is implied by Σs_out = Σs_in; no explicit total needed).
     /// 3. Otherwise (no hard constraints) → grand canonical.
-    ///
-    /// A future fixed-(E,s) case (edges + strengths, no total) will need
-    /// an explicit rule here; today it falls through to the factorized
-    /// branch which reports a missing-constraint error.
     pub fn classify(problem: &PreparedProblem) -> Self {
+        // Strength constraints win routing priority (§54): within the
+        // branch the backend dispatches s+k → s+E → s in that order.
+        if problem.residual_out_strengths.is_some() {
+            return Self::OccupationMcmc;
+        }
+
         // Degree or edge constraint factorizes: support then occupations.
         if problem.residual_out_degrees.is_some() || problem.residual_edges.is_some() {
             return Self::FactorizedMicrocanonical;
-        }
-
-        // Strength constraints → coupled occupation MCMC.
-        if problem.residual_out_strengths.is_some() {
-            return Self::OccupationMcmc;
         }
 
         // No hard constraints → expectation constraints only → GC.
@@ -135,5 +135,40 @@ mod tests {
             Some(vec![5; 5]),
         );
         assert_eq!(SamplingPlan::classify(&p), SamplingPlan::OccupationMcmc);
+    }
+
+    #[test]
+    fn occupation_mcmc_wins_over_degrees() {
+        // §54/§80 release blocker: a problem with BOTH residual
+        // strengths and residual degrees must route to occupation MCMC
+        // (fixed-(s,k)), never to the factorized fixed-(k,T) branch,
+        // which would silently ignore the strengths.
+        let p = PreparedProblem::new(
+            OccupationFamily::ME,
+            5,
+            false,
+            20,
+            None,
+            None,
+            Some(vec![2, 2, 1, 0, 0]),
+            Some(vec![0, 1, 2, 1, 0]),
+            Some(vec![3, 4, 1, 0, 0]),
+            Some(vec![0, 1, 4, 3, 0]),
+        );
+        assert_eq!(SamplingPlan::classify(&p), SamplingPlan::OccupationMcmc);
+        // The companion s+E case also belongs to the occupation branch.
+        let q = PreparedProblem::new(
+            OccupationFamily::ME,
+            5,
+            false,
+            20,
+            Some(6),
+            Some(20),
+            None,
+            None,
+            Some(vec![3, 4, 1, 0, 0]),
+            Some(vec![0, 1, 4, 3, 0]),
+        );
+        assert_eq!(SamplingPlan::classify(&q), SamplingPlan::OccupationMcmc);
     }
 }

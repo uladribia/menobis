@@ -229,20 +229,57 @@ def test_canonical_rejects_non_me_family() -> None:
 
 
 def test_microcanonical_rejects_unsupported_constraint() -> None:
-    """Microcanonical does not support STRENGTH_DEGREE.
+    """Microcanonical rejects an unknown ensemble combination.
 
-    Only the fixed-(s,E) feature adds its own microcanonical route.
+    All six Constraint values now have microcanonical routes; an
+    unsupported case is still rejected with the structured router error
+    (here: an impossible strength target that violates a feasibility
+    bound surfaces as a routed backend error, not a silent success).
     """
-    with pytest.raises(UnsupportedModelCaseError, match=r"unsupported sampling case"):
+    # Strength with a B M=1 family and strength != degree must be
+    # rejected early (Bernoulli invariant) rather than silently sampled.
+    with pytest.raises(ValueError, match="M=1"):
         sample_model(
             ensemble=Ensemble.MICROCANONICAL,
-            family=ModelFamily.ME,
+            family=ModelFamily.B,
             constraint=Constraint.STRENGTH_DEGREE,
             strength_out=np.array([2], dtype=np.uint64),
             strength_in=np.array([2], dtype=np.uint64),
             degree_out=np.array([1], dtype=np.uint64),
             degree_in=np.array([1], dtype=np.uint64),
+            layers=1,
         )
+
+
+def test_microcanonical_strength_degree_now_supported() -> None:
+    """The fixed-(s,k) feature exposes microcanonical STRENGTH_DEGREE.
+
+    Extras-first exact constructor + capped first-return degree trace;
+    exact strengths and degrees, no fit required.
+    """
+    from menobis.capabilities import SamplingExactness
+
+    res = sample_model_detailed(
+        ensemble=Ensemble.MICROCANONICAL,
+        family=ModelFamily.ME,
+        constraint=Constraint.STRENGTH_DEGREE,
+        strength_out=np.array([2, 2], dtype=np.uint64),
+        strength_in=np.array([2, 2], dtype=np.uint64),
+        degree_out=np.array([1, 1], dtype=np.uint32),
+        degree_in=np.array([1, 1], dtype=np.uint32),
+        self_loops=True,
+        seed=7,
+    )
+    assert res.method == "microcanonical_fixed_strength_degree"
+    assert res.exactness == SamplingExactness.EXACT_STATIONARY_MCMC
+    assert len(res.edges) == 2
+    net = res.edges
+    dout = np.zeros(2, dtype=np.uint32)
+    din = np.zeros(2, dtype=np.uint32)
+    np.add.at(dout, net.source.astype(int), 1)
+    np.add.at(din, net.target.astype(int), 1)
+    np.testing.assert_array_equal(dout, np.array([1, 1], dtype=np.uint32))
+    np.testing.assert_array_equal(din, np.array([1, 1], dtype=np.uint32))
 
 
 def test_microcanonical_strength_edges_now_supported() -> None:

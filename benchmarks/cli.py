@@ -1062,7 +1062,7 @@ def micro_command(
         typer.Option(
             "--constraint",
             help="Microcanonical constraint: edges-events, degree-events, strength, "
-            "or strength-cost.",
+            "strength-degree, or strength-cost.",
         ),
     ] = "edges-events",
     known_pairs: Annotated[
@@ -1118,17 +1118,23 @@ def micro_command(
         bool, typer.Option("--json", help="Print JSON to stdout.")
     ] = False,
 ) -> None:
-    """Benchmark the microcanonical fixed-(E,T), fixed-(k,T), or fixed-strength samplers.
+    """Benchmark the microcanonical fixed-(E,T), fixed-(k,T), fixed-(s,k), or fixed-strength samplers.
 
     For each family and regime, derives feasible constraints from a synthetic
     PA-geographic network and samples the microcanonical model directly (no fitting),
-    with and without fixed pairs.  Use --constraint edges-events, degree-events, or
-    strength.
+    with and without fixed pairs.  Use --constraint edges-events, degree-events,
+    strength-degree, strength, or strength-cost.
     """
-    if constraint not in ("edges-events", "degree-events", "strength", "strength-cost"):
+    if constraint not in (
+        "edges-events",
+        "degree-events",
+        "strength",
+        "strength-degree",
+        "strength-cost",
+    ):
         msg = (
             f"unsupported constraint: {constraint!r}, expected edges-events, "
-            "degree-events, strength, or strength-cost"
+            "degree-events, strength, strength-degree, or strength-cost"
         )
         raise typer.BadParameter(msg)
     rows: list[BenchmarkRow] = []
@@ -1279,6 +1285,28 @@ def micro_command(
                                 kwargs["known_source"] = _known[0]
                                 kwargs["known_target"] = _known[1]
                                 kwargs["known_occnum"] = _known[2]
+                        elif _constraint == "strength-degree":
+                            # Fixed-(s,k): extras-first constructor + exact
+                            # degree-fiber trace (no fit).
+                            kwargs = {
+                                "ensemble": Ensemble.MICROCANONICAL,
+                                "family": _FAMILY_MAP[_family],
+                                "constraint": Constraint.STRENGTH_DEGREE,
+                                "strength_out": _out_str,
+                                "strength_in": _in_str,
+                                "degree_out": _out_deg,
+                                "degree_in": _in_deg,
+                                "self_loops": _sl,
+                                "seed": _seed,
+                                "burn_in_sweeps": _burn_in,
+                                "sweeps_per_sample": _sample_sweeps,
+                            }
+                            if _family in ("b", "w"):
+                                kwargs["layers"] = _layers
+                            if _known is not None:
+                                kwargs["known_source"] = _known[0]
+                                kwargs["known_target"] = _known[1]
+                                kwargs["known_occnum"] = _known[2]
                         elif _constraint == "strength-cost":
                             # Observed total cost from the synthetic network.
                             kwargs = {
@@ -1353,6 +1381,26 @@ def micro_command(
                             in_s[int(t)] += 1
                         ok = ok and bool(
                             (out_s == out_deg).all() and (in_s == in_deg).all()
+                        )
+                    if constraint == "strength-degree":
+                        # Fixed-(s,k): exact strengths AND exact degrees.
+                        out_s = np.zeros(node_count, dtype=np.uint64)
+                        in_s = np.zeros(node_count, dtype=np.uint64)
+                        for s, t, w in zip(
+                            sample.source, sample.target, sample.occ_num, strict=True
+                        ):
+                            out_s[int(s)] += int(w)
+                            in_s[int(t)] += int(w)
+                        ok = ok and bool(
+                            (out_s == out_str).all() and (in_s == in_str).all()
+                        )
+                        out_k = np.zeros(node_count, dtype=np.uint64)
+                        in_k = np.zeros(node_count, dtype=np.uint64)
+                        for s, t in zip(sample.source, sample.target, strict=True):
+                            out_k[int(s)] += 1
+                            in_k[int(t)] += 1
+                        ok = ok and bool(
+                            (out_k == out_deg).all() and (in_k == in_deg).all()
                         )
                     if constraint in ("strength", "strength-cost"):
                         # Strength case: edge count is not fixed; only total

@@ -20,6 +20,15 @@ These documents are intentionally more detailed than end-user documentation. The
 
 ## Documents
 
+### Current fixed-(s,k) work (COMPLETE — core + public routing)
+
+| Document | Status | Description |
+|---|---|---|
+| `STATUS.md` | **Entry point** | Fixed-(s,k) current status: extras-first constructor + exact degree trace, N=1000 validated, `Constraint.STRENGTH_DEGREE` routed |
+| `archive/fixed_sk/README.md` | Index | Chronology of the three generated fixed-(s,k) plans (degree-repair, support-first recovery, extras-first completion) — historical implementation instructions only |
+
+### Microcanonical refactor (COMPLETE)
+
 | Document | Status | Description |
 |---|---|---|
 | `microcanonical_implementation/11_microcanonical_refactor_practical_final.md` | **Authoritative** | Practical final specification for the microcanonical refactor (phases A–H, §35 benchmark matrix, §40 completion gate) |

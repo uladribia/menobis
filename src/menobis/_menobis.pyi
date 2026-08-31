@@ -160,6 +160,21 @@ def sample_fixed_strength_edges(
     sweeps_per_sample: int,
     seed: int,
 ) -> tuple[list[int], list[int], list[int]]: ...
+def sample_fixed_strength_degree(
+    family: str,
+    strength_out: list[int],
+    strength_in: list[int],
+    degree_out: list[int],
+    degree_in: list[int],
+    self_loops: bool,
+    fixed_sources: list[int],
+    fixed_targets: list[int],
+    fixed_occnums: list[int],
+    layers: int,
+    burn_in_sweeps: int,
+    sweeps_per_sample: int,
+    seed: int,
+) -> tuple[list[int], list[int], list[int]]: ...
 def sample_fixed_strength_with_cost(
     family: str,
     strength_out: list[int],

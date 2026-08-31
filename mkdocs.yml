@@ -32,6 +32,7 @@ nav:
       - Partial constraints: concepts/partial-constraints.md
       - Microcanonical sampling: concepts/microcanonical.md
       - Fixed strengths + exact edge count: concepts/fixed-strength-edges.md
+      - Fixed strengths + exact degrees: concepts/fixed-strength-degree.md
       - Solvers and scaling: concepts/solvers-and-scaling.md
       - Scaling (GC + MC): development/scalability.md
       - Benchmarks (GC + MC): development/benchmarking.md

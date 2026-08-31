@@ -14,6 +14,8 @@ pub mod cost;
 pub mod cost_fit;
 pub mod domain;
 pub mod errors;
+pub mod fixed_degree_init;
+pub mod fixed_degrees;
 pub mod fixed_edges;
 pub mod initializer;
 pub mod move_cycle;
@@ -24,4 +26,6 @@ pub mod state;
 pub mod target;
 
 pub use chain::sample_fixed_strength;
+pub use chain::sample_fixed_strength_degree;
+pub use chain::sample_fixed_strength_edges;
 pub use compressed::FlowTable;

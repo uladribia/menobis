@@ -42,7 +42,7 @@ uv run python -m benchmarks micro --nodes 500,1000 --families me,b,w --regime sp
 Reports: wall/CPU time, memory, constraint recovery precision. Does not fit —
 derives constraints from the PA-geographic generator and samples directly.
 
-Flags: `--constraint` (edges-events, degree-events, strength, strength-cost),
+Flags: `--constraint` (edges-events, degree-events, strength, strength-degree, strength-cost),
 `--burn-in-sweeps`, `--sweeps-per-sample`, gamma-fit tuning flags for
 strength-cost.
 

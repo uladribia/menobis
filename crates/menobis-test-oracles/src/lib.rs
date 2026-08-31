@@ -31,3 +31,4 @@ pub mod legacy_constructor;
 pub mod legacy_fixed_et;
 pub mod legacy_max_flow;
 pub mod legacy_strength_kernel;
+pub mod pa_geographic;

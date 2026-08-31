@@ -424,6 +424,100 @@ pub(crate) fn sample_fixed_strength_edges(
     }
 }
 
+/// Sample from the microcanonical fixed-strength + fixed-degree
+/// ensemble (ME/B/W) — the fixed-(s,k) backend (§45–§55).
+///
+/// Rust residualizes fixed pairs exactly once (strengths, domain
+/// exclusion, degree subtraction), constructs an exact `D = 0` state
+/// with the extras-first constructor, burn-in/thins with the exact
+/// capped first-return degree trace, and merges positive fixed pairs
+/// back.  The returned arrays carry exact full strengths and exact full
+/// degrees.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn sample_fixed_strength_degree(
+    family: &str,
+    strength_out: Vec<u64>,
+    strength_in: Vec<u64>,
+    degree_out: Vec<u32>,
+    degree_in: Vec<u32>,
+    self_loops: bool,
+    fixed_sources: Vec<u64>,
+    fixed_targets: Vec<u64>,
+    fixed_occnums: Vec<u64>,
+    layers: u32,
+    burn_in_sweeps: usize,
+    sweeps_per_sample: usize,
+    seed: u64,
+) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+    use menobis_core::generation::microcanonical::mcmc::McmcConfig;
+    use menobis_core::generation::microcanonical::occupation_mcmc::chain::sample_fixed_strength_degree as core_sample;
+    use menobis_core::generation::microcanonical::occupation_mcmc::domain::PairDomain;
+    use menobis_core::generation::microcanonical::occupation_mcmc::fixed_degrees::DegreeTraceConfig;
+    use menobis_core::generation::microcanonical::occupation_mcmc::problem::FixedStrengthProblem;
+    use menobis_core::model::family::OccupationFamily;
+
+    let family_enum = match family {
+        "ME" => OccupationFamily::ME,
+        "B" => OccupationFamily::B { layers },
+        "W" => OccupationFamily::W { layers },
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "unknown family: {other}. Use ME, B, or W"
+            )))
+        }
+    };
+
+    if strength_out.len() != strength_in.len() {
+        return Err(PyValueError::new_err(
+            "strength_out and strength_in must have the same length",
+        ));
+    }
+    if degree_out.len() != degree_in.len() {
+        return Err(PyValueError::new_err(
+            "degree_out and degree_in must have the same length",
+        ));
+    }
+    if strength_out.len() != degree_out.len() {
+        return Err(PyValueError::new_err(
+            "strength_out and degree_out must have the same length",
+        ));
+    }
+    if fixed_sources.len() != fixed_targets.len() || fixed_sources.len() != fixed_occnums.len() {
+        return Err(PyValueError::new_err(
+            "fixed_sources, fixed_targets, fixed_occnums must have the same length",
+        ));
+    }
+
+    let n = strength_out.len();
+    let domain = PairDomain::Complete {
+        node_count: n,
+        self_loops,
+    };
+    let fixed_pairs: Vec<_> = fixed_sources
+        .iter()
+        .zip(fixed_targets.iter())
+        .zip(fixed_occnums.iter())
+        .map(|((&s, &t), &o)| (s, t, o))
+        .collect();
+
+    let problem =
+        FixedStrengthProblem::new(family_enum, strength_out, strength_in, domain, fixed_pairs)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+    let config = McmcConfig::new(burn_in_sweeps, sweeps_per_sample, seed);
+    match core_sample(
+        problem,
+        degree_out,
+        degree_in,
+        config,
+        DegreeTraceConfig::default(),
+    ) {
+        Ok(network) => Ok((network.sources, network.targets, network.occ_nums)),
+        Err(e) => Err(PyValueError::new_err(e.to_string())),
+    }
+}
+
 /// Sample from the microcanonical fixed-strength ensemble.
 ///
 /// Always uses the generic 4-cycle Metropolis MCMC backend on the
@@ -1030,7 +1124,8 @@ pub(crate) fn bench_fixed_strength_with_cost(
 /// validates the constraint-required parameters and dispatches:
 ///
 /// - `microcanonical`: EDGES_EVENTS → fixed-(E,T), DEGREE_EVENTS →
-///   fixed-(k,T), STRENGTH → fixed-strength MCMC.
+///   fixed-(k,T), STRENGTH → fixed-strength MCMC, STRENGTH_DEGREE →
+///   fixed-(s,k) (extras-first init + exact degree trace, §54–§55).
 /// - `grand_canonical`: all six constraints via the grand-canonical
 ///   router (fitted multipliers x, y, ...).
 /// - `canonical`: ME STRENGTH multinomial with fixed total events.
@@ -1188,6 +1283,28 @@ fn sample_model_microcanonical(
                 None,
                 None,
                 None,
+                Some(s_out),
+                Some(s_in),
+            )
+        }
+        "strength_degree" => {
+            // §54/§57: microcanonical fixed-(s,k).  Strengths win routing
+            // priority; the router must dispatch this to the occupation
+            // MCMC branch (never factorized fixed-(k,T)).
+            let s_out = strength_out.ok_or_else(|| missing("strength_out"))?;
+            let s_in = strength_in.ok_or_else(|| missing("strength_in"))?;
+            let d_out = degree_out.ok_or_else(|| missing("degree_out"))?;
+            let d_in = degree_in.ok_or_else(|| missing("degree_in"))?;
+            let n = s_out.len();
+            PreparedProblem::new(
+                fam,
+                n,
+                self_loops,
+                admissible_pairs(n, self_loops),
+                None,
+                None,
+                Some(d_out),
+                Some(d_in),
                 Some(s_out),
                 Some(s_in),
             )

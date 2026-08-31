@@ -119,6 +119,37 @@ burn-in remains an MCMC concern.  See
 [Fixed strengths + exact edge count](../concepts/fixed-strength-edges.md)
 for the stationary-target argument.
 
+### Fixed strengths + exact degrees — STRENGTH_DEGREE
+
+Exact out/in strengths **and** exact out/in binary degrees via
+combinatorial extras-first initialization (no MCMC, no fit) followed by
+the exact capped first-return degree trace:
+
+```python
+net = sample_model(
+    ensemble=Ensemble.MICROCANONICAL,
+    family=ModelFamily.ME,
+    constraint=Constraint.STRENGTH_DEGREE,
+    strength_out=strength_out,  # exact out-strength sequence
+    strength_in=strength_in,    # exact in-strength sequence
+    degree_out=degree_out,      # exact out-degree sequence
+    degree_in=degree_in,        # exact in-degree sequence
+    self_loops=False,
+    seed=42,
+)
+```
+
+`degree_out`/`degree_in` are the exact binary (`0/1`-per-pair) degree
+sequences; strengths must dominate degrees per node (`s ≥ k`) and satisfy
+family capacity (`B M=1` forces `s == k`, rejected early).  Fixed pairs
+work as above (positive fixed pairs subtract from strengths, degrees, and
+the domain; merged back after sampling).  Exactness is
+`EXACT_STATIONARY_MCMC` — initialization is exact and combinatorial;
+the trace kernel law is oracle-validated; burn-in remains an MCMC
+concern.  See
+[Fixed strengths + exact degrees](../concepts/fixed-strength-degree.md)
+for the initialization/kernel argument.
+
 ### Fixed (k,T) — DEGREE_EVENTS
 
 Exact out-degree, in-degree, and total events via MCMC:
