@@ -18,6 +18,9 @@ application to the study of urban mobility*, PhD thesis, 2015.
 
 <https://hdl.handle.net/10803/400560>
 
+A copy of the thesis PDF ships with the repository at
+[`docs/concepts/OSP_PhD_THESIS.pdf`](../concepts/OSP_PhD_THESIS.pdf).
+
 This is the primary scientific reference for the model ontology: the
 ME/B/W occupation families, the grand-canonical constraint framework, and
 the urban-mobility applications.
