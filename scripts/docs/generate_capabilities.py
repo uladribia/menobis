@@ -64,44 +64,42 @@ CONSTRAINT_ORDER = [
 # ``result.diagnostics.exactness``.
 SAMPLE_SEMANTICS: dict[tuple[Ensemble, Constraint], str] = {
     (Ensemble.GRAND_CANONICAL, Constraint.STRENGTH): (
-        "exact independent draws; constraints matched in expectation"
+        "exact independent; matched in expectation"
     ),
     (Ensemble.GRAND_CANONICAL, Constraint.STRENGTH_COST): (
-        "exact independent draws; constraints matched in expectation"
+        "exact independent; matched in expectation"
     ),
     (Ensemble.GRAND_CANONICAL, Constraint.STRENGTH_EDGES): (
-        "exact independent draws; constraints matched in expectation"
+        "exact independent; matched in expectation"
     ),
     (Ensemble.GRAND_CANONICAL, Constraint.STRENGTH_DEGREE): (
-        "exact independent draws; constraints matched in expectation"
+        "exact independent; matched in expectation"
     ),
     (Ensemble.GRAND_CANONICAL, Constraint.DEGREE_EVENTS): (
-        "exact independent draws; constraints matched in expectation"
+        "exact independent; matched in expectation"
     ),
     (Ensemble.GRAND_CANONICAL, Constraint.EDGES_EVENTS): (
-        "exact independent draws; constraints matched in expectation"
+        "exact independent; matched in expectation"
     ),
     (Ensemble.CANONICAL, Constraint.STRENGTH): (
-        "exact direct; total occupation T fixed, remaining structure soft"
+        "exact direct; T fixed, remaining structure soft"
     ),
     (Ensemble.MICROCANONICAL, Constraint.STRENGTH): (
         "exact stationary MCMC; strengths exact"
     ),
     (Ensemble.MICROCANONICAL, Constraint.STRENGTH_COST): (
-        "exact stationary MCMC; strengths exact, cost matched in expectation"
+        "exact stationary MCMC; hybrid (cost expected)"
     ),
     (Ensemble.MICROCANONICAL, Constraint.STRENGTH_EDGES): (
-        "exact stationary MCMC; strengths and occupied-pair count E exact"
+        "exact stationary MCMC; strengths, E exact"
     ),
     (Ensemble.MICROCANONICAL, Constraint.STRENGTH_DEGREE): (
-        "exact stationary MCMC; strengths and degree sequences exact"
+        "exact stationary MCMC; strengths, degrees exact"
     ),
     (Ensemble.MICROCANONICAL, Constraint.DEGREE_EVENTS): (
-        "exact stationary MCMC; degree sequences and total events T exact"
+        "exact stationary MCMC; k, T exact"
     ),
-    (Ensemble.MICROCANONICAL, Constraint.EDGES_EVENTS): (
-        "exact direct; occupied-pair count E and total events T exact"
-    ),
+    (Ensemble.MICROCANONICAL, Constraint.EDGES_EVENTS): ("exact direct; E, T exact"),
 }
 
 # Exact/controlled quantities for the microcanonical route table (guide page).
@@ -180,17 +178,12 @@ def generate_capabilities() -> str:
     lines: list[str] = [
         GENERATED_MARKER,
         "",
-        "# Supported model matrix",
-        "",
-        "> This table is generated from MENoBiS' capability registry"
-        " (`menobis.capabilities`). If the code and another documentation page"
-        " disagree, this table is authoritative for public support.",
+        "## Supported model matrix",
         "",
         f"_Registry source SHA: `{git_short_sha()}` · generated:"
         f" {datetime.now(UTC).isoformat(timespec='seconds')}_",
         "",
-        "| Ensemble | Family | Constraint | Fit | Sample | Filter |",
-        "| Exactness / semantics |",
+        "| Ensemble | Family | Constraint | Fit | Sample | Filter | Exactness / semantics |",  # noqa: E501
         "|---|---|---|---|---|---|---|",
     ]
 
@@ -221,16 +214,12 @@ def generate_microcanonical_routes() -> str:
     lines: list[str] = [
         GENERATED_MARKER,
         "",
-        "# Microcanonical sampling routes",
-        "",
-        "> Generated from MENoBiS' capability registry (`menobis.capabilities`)."
-        " The exactness and backend columns reflect the current source tree.",
+        "## Microcanonical sampling routes",
         "",
         f"_Registry source SHA: `{git_short_sha()}` · generated:"
         f" {datetime.now(UTC).isoformat(timespec='seconds')}_",
         "",
-        "| Constraint | Family | Exact / controlled | Backend |",
-        "| Required arguments | Exactness |",
+        "| Constraint | Family | Exact / controlled | Backend | Required arguments | Exactness |",  # noqa: E501
         "|---|---|---|---|---|---|",
     ]
 

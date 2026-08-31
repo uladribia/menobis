@@ -132,3 +132,25 @@ def test_microcanonical_guide_has_protected_philosophy() -> None:
     text = page.read_text(encoding="utf-8")
     for internal in ("Gate C", "Gate D", "STOP record"):
         assert internal not in text, f"internal harness language leaked: {internal}"
+
+
+def test_generated_tables_have_single_line_headers() -> None:
+    """Every generated table header must be a single line (regression guard).
+
+    A header split across two lines renders as raw pipe text instead of a
+    table, so each ``| ... |`` header line must be directly followed by the
+    ``|---|`` separator row.
+    """
+    for name in ("capabilities.md", "microcanonical-routes.md"):
+        generated = DOCS_DIR / "_generated" / name
+        if not generated.exists():
+            pytest.skip(f"{name} not generated yet")
+        lines = generated.read_text(encoding="utf-8").splitlines()
+        header_index = next(
+            (i for i, line in enumerate(lines) if line.startswith("| ")), None
+        )
+        assert header_index is not None, f"{name}: no markdown table found"
+        assert lines[header_index + 1].startswith("|---"), (
+            f"{name}: table header on line {header_index + 1} is not followed "
+            "by the --- separator; the table will not render"
+        )

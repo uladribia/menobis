@@ -23,15 +23,18 @@ documentation page disagree, this table is authoritative for public support.
   column follows the same registry).
 - **Sample** — a sampler exists for the route.
 - **Filter** — statistical filtering exists for the route.
-- **Exactness / semantics** — what a sampled network guarantees:
+- **Exactness / semantics** — how a sampled network is generated and which
+  quantities are exact:
 
 | Label | Meaning |
 |---|---|
-| exact independent draws | each pair drawn directly from its fitted law; an exact *direct* sampler |
+| exact independent | each pair drawn directly from its fitted law (grand canonical); constraints are matched in expectation and fluctuate across samples |
 | exact direct | one draw from the target distribution, up to ordinary pseudorandom error |
-| exact stationary MCMC | kernel with the correct stationary distribution; finite runs still need burn-in/mixing |
-| constraints matched in expectation | soft fitted quantities that fluctuate (grand canonical) |
-| strengths exact, cost expected | the hybrid microcanonical strength+cost route |
+| exact stationary MCMC | validated kernel with the target stationary distribution; finite runs still need burn-in/mixing |
+| hybrid (cost expected) | the microcanonical strength+cost route: strengths exact, cost matched in expectation |
+
+Per-route exactness categories are also reported at runtime on
+`sample_model_detailed(...).diagnostics.exactness`.
 
 ## Canonical support
 
