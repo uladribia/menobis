@@ -63,7 +63,7 @@ strength_in = c.strength_in
 ```
 
 Constraints derived from a real network are feasible by construction — the
-way to build honest examples (see [Constraints](../science/constraints.md)).
+way to build honest examples (see [Constraints](science/constraints.md)).
 
 ## 4. Fit a grand-canonical ME strength model
 
