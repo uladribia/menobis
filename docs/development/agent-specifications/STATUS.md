@@ -179,6 +179,8 @@ cargo fmt --all -- --check
   support-first blocker (superseded; preserved evidence).
 - `docs/decisions/microcanonical-fixed-sk-extras-first-init.md` — the
   current extras-first decision (Gate C/D + Part F/G/H evidence).
+- `docs/decisions/microcanonical-fixed-sk-performance.md` — N=100…5000
+  scale/memory benchmark (`fixed_strength_degree_benchmark.rs`).
 
 Generated fixed-(s,k) plan documents are archived under
 `docs/development/agent-specifications/archive/fixed_sk/` and are

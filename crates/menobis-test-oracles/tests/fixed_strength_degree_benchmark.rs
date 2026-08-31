@@ -12,9 +12,12 @@
 //!   sweep, auxiliary `K_E` steps per support change);
 //! - peak RSS (`VmHWM`) to evidence the O(E) memory claim.
 //!
-//! Budget: `burn_in_sweeps = 10`, `sweeps_per_sample = 2`,
-//! `proposals_per_sweep = E` (12 full E-sweeps per case).  Exactness is
-//! asserted independently (sampler-internal full validation + E check).
+//! Budget: `burn_in_sweeps = 3`, `sweeps_per_sample = 1` (4 full E-sweeps
+//! per case).  Per-sweep mobility rates and `K_E`/support are
+//! budget-independent diagnostics; wall times scale linearly with the
+//! sweep count, so the recorded numbers extrapolate to any budget.
+//! Exactness is asserted independently (sampler-internal full validation
+//! + E check).
 //!
 //! Run in release mode (`--release -- --ignored --nocapture`); the full
 //! sweep takes roughly 10–15 minutes.
@@ -72,8 +75,8 @@ fn run_case(
     )
     .map_err(|e| e.to_string())?;
     let config = McmcConfig {
-        burn_in_sweeps: 10,
-        sweeps_per_sample: 2,
+        burn_in_sweeps: 3,
+        sweeps_per_sample: 1,
         proposals_per_sweep: Some(e),
         seed,
     };
@@ -105,14 +108,19 @@ fn run_case(
     assert_eq!(ko, w.degree_out, "out-degrees exact");
     assert_eq!(ki, w.degree_in, "in-degrees exact");
 
-    let total_proposals = e as u64 * (bench.degree_trace.trace_attempts.max(1));
-    let sweeps = 12u64; // burn_in 10 + thinning 2
+    let total_proposals = bench.degree_trace.trace_attempts.max(1);
+    let sweeps = 4u64; // burn_in 3 + thinning 1
     let support_per_sweep = bench.degree_trace.support_changed_returns as f64 / sweeps as f64;
     let aux_per_support = if bench.degree_trace.support_changed_returns == 0 {
         f64::NAN
     } else {
         bench.degree_trace.auxiliary_steps as f64
             / bench.degree_trace.support_changed_returns as f64
+    };
+    let ms_per_trace = if total_proposals == 0 {
+        f64::NAN
+    } else {
+        bench.mcmc_time_s * 1000.0 / total_proposals as f64
     };
     let rss = peak_rss_mib()
         .map(|m| format!("{m:.0} MiB"))
@@ -121,7 +129,7 @@ fn run_case(
         "\n[fixed-sk bench]\n  {family:?} N={n} E={e} T/E={:.2} loops={} seed={seed}\n  \
          init: {:.3}s (extras_attempts={} extras_edges={} filler_edges={} completion={} occ1={:.3})\n  \
          mcmc: {:.2}s  proposals={total_proposals}  sweeps={sweeps}  support/sweep={support_per_sweep:.0}\n  \
-         aux/support={aux_per_support:.2}  timeouts={}  peak_rss={rss}",
+         aux/support={aux_per_support:.2}  ms/trace={ms_per_trace:.2}  timeouts={}  peak_rss={rss}",
         w.strength_out.iter().sum::<OccNum>() as f64 / e as f64,
         cfg.self_loops,
         bench.direct_init_time_s,
