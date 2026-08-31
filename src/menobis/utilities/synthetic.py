@@ -193,7 +193,7 @@ def derive_synthetic_constraints(network: SyntheticNetwork) -> SyntheticConstrai
     total_cost = float(np.sum(occ_nums * distances))
     pairs_per_node = node_count if network.self_loops else max(node_count - 1, 1)
     max_strength = float(
-        max(strength_out.max(initial=0.0), strength_in.max(initial=0.0))  # type: ignore
+        max(strength_out.max(initial=0.0), strength_in.max(initial=0.0))
     )
     binomial_layers = max(10, 4 * int(np.ceil(max_strength / pairs_per_node)))
     return SyntheticConstraints(

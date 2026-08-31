@@ -25,13 +25,16 @@ The zero-inflated cross-checks are deterministic and use machine tolerance.
 from __future__ import annotations
 
 import math
+from typing import cast
 
 import numpy as np
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from menobis.data.frames import EdgeTable
 from menobis.filtering import filter_model
 from menobis.models import Constraint, Ensemble, ModelFamily, fit_model, sample_model
+from menobis.models.types import StrengthEdgesFit, StrengthFit
 
 N = 200
 L = N * (N - 1)
@@ -54,7 +57,7 @@ def _empirical_pair_mean(fit: object, family: ModelFamily, *, seed: int = 0) -> 
     return float(sample.occ_num.sum()) / L
 
 
-def _pair_q(fit: object) -> float:
+def _pair_q(fit: StrengthFit) -> float:
     """Per-pair fugacity q = x_i y_j (constant across pairs by symmetry)."""
     x0 = float(fit.x[0])
     y0 = float(fit.y[0])
@@ -64,12 +67,15 @@ def _pair_q(fit: object) -> float:
 def test_me_pair_mean_matches_q() -> None:
     """ME: documented E[t] = q matches the implemented Poisson mean."""
     strengths = _constant_strength(398.0)  # q = 398/(N-1) = 2
-    fit = fit_model(
-        family=ModelFamily.ME,
-        constraint=Constraint.STRENGTH,
-        strength_out=strengths,
-        strength_in=strengths,
-        self_loops=False,
+    fit = cast(
+        "StrengthFit",
+        fit_model(
+            family=ModelFamily.ME,
+            constraint=Constraint.STRENGTH,
+            strength_out=strengths,
+            strength_in=strengths,
+            self_loops=False,
+        ),
     )
     assert fit.converged, fit.status
     q = _pair_q(fit)
@@ -84,13 +90,16 @@ def test_b_pair_mean_matches_m_q_over_1_plus_q() -> None:
     """B: documented E[t] = M q / (1 + q) matches the binomial mean."""
     layers = 10
     strengths = _constant_strength(398.0)  # q = 0.25 with M=10
-    fit = fit_model(
-        family=ModelFamily.B,
-        constraint=Constraint.STRENGTH,
-        strength_out=strengths,
-        strength_in=strengths,
-        self_loops=False,
-        layers=layers,
+    fit = cast(
+        "StrengthFit",
+        fit_model(
+            family=ModelFamily.B,
+            constraint=Constraint.STRENGTH,
+            strength_out=strengths,
+            strength_in=strengths,
+            self_loops=False,
+            layers=layers,
+        ),
     )
     assert fit.converged, fit.status
     q = _pair_q(fit)
@@ -105,13 +114,16 @@ def test_w_pair_mean_matches_m_q_over_1_minus_q() -> None:
     """W: documented E[t] = M q / (1 - q) matches the negative-binomial mean."""
     layers = 1
     strengths = _constant_strength(398.0)  # q = 398/(398+N-1) = 2/3
-    fit = fit_model(
-        family=ModelFamily.W,
-        constraint=Constraint.STRENGTH,
-        strength_out=strengths,
-        strength_in=strengths,
-        self_loops=False,
-        layers=layers,
+    fit = cast(
+        "StrengthFit",
+        fit_model(
+            family=ModelFamily.W,
+            constraint=Constraint.STRENGTH,
+            strength_out=strengths,
+            strength_in=strengths,
+            self_loops=False,
+            layers=layers,
+        ),
     )
     assert fit.converged, fit.status
     q = _pair_q(fit)
@@ -125,13 +137,16 @@ def test_w_pair_mean_matches_m_q_over_1_minus_q() -> None:
 def test_b_m1_invariant_strength_equals_degree() -> None:
     """B(M=1) is Bernoulli: t in {0,1}, so sampled s equals k per node."""
     strengths = _constant_strength(50.0)
-    fit = fit_model(
-        family=ModelFamily.B,
-        constraint=Constraint.STRENGTH,
-        strength_out=strengths,
-        strength_in=strengths,
-        self_loops=False,
-        layers=1,
+    fit = cast(
+        "StrengthFit",
+        fit_model(
+            family=ModelFamily.B,
+            constraint=Constraint.STRENGTH,
+            strength_out=strengths,
+            strength_in=strengths,
+            self_loops=False,
+            layers=1,
+        ),
     )
     assert fit.converged, fit.status
     sample = sample_model(
@@ -141,7 +156,7 @@ def test_b_m1_invariant_strength_equals_degree() -> None:
         fit=fit,
         seed=1,
     )
-    assert int(sample.occ_num.max()) == 1, "B(M=1) occupations must be 0/1"
+    assert int(np.max(sample.occ_num)) == 1, "B(M=1) occupations must be 0/1"
     strengths_out = np.bincount(sample.source, weights=sample.occ_num)
     strengths_in = np.bincount(sample.target, weights=sample.occ_num)
     degrees_out = np.bincount(sample.source, minlength=N)
@@ -161,13 +176,16 @@ def test_zero_inflated_strength_edges_formulas() -> None:
     n = 30
     strengths = rng.integers(1, 8, size=n).astype(np.float64)
     target_edges = int(strengths.sum()) // 2  # feasible: 0 < E <= total strength
-    fit = fit_model(
-        family=ModelFamily.ME,
-        constraint=Constraint.STRENGTH_EDGES,
-        strength_out=strengths,
-        strength_in=strengths,
-        target_edges=target_edges,
-        self_loops=False,
+    fit = cast(
+        "StrengthEdgesFit",
+        fit_model(
+            family=ModelFamily.ME,
+            constraint=Constraint.STRENGTH_EDGES,
+            strength_out=strengths,
+            strength_in=strengths,
+            target_edges=target_edges,
+            self_loops=False,
+        ),
     )
     assert fit.converged, fit.status
     lam = float(fit.lam)
@@ -215,10 +233,8 @@ def test_zero_inflated_strength_edges_formulas() -> None:
     assert math.isclose(conditional_documented, conditional_filter, rel_tol=1e-9)
 
 
-def _dense_witness_edges(n: int, strengths: np.ndarray) -> object:
+def _dense_witness_edges(n: int, strengths: np.ndarray) -> EdgeTable:
     """Small occupied-pair table for the zero-inflated cross-check."""
-    from menobis.data.frames import EdgeTable
-
     rng = np.random.default_rng(11)
     sources: list[int] = []
     targets: list[int] = []
@@ -246,12 +262,15 @@ def _dense_witness_edges(n: int, strengths: np.ndarray) -> object:
 def test_me_mean_formula_holds_for_varied_q(q: float) -> None:
     """ME pair mean equals q for arbitrary fitted fugacities."""
     strengths = _constant_strength(q * (N - 1))
-    fit = fit_model(
-        family=ModelFamily.ME,
-        constraint=Constraint.STRENGTH,
-        strength_out=strengths,
-        strength_in=strengths,
-        self_loops=False,
+    fit = cast(
+        "StrengthFit",
+        fit_model(
+            family=ModelFamily.ME,
+            constraint=Constraint.STRENGTH,
+            strength_out=strengths,
+            strength_in=strengths,
+            self_loops=False,
+        ),
     )
     assert fit.converged, fit.status
     fitted_q = _pair_q(fit)
