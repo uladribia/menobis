@@ -213,6 +213,29 @@ pub(crate) fn validate_degree_target(
 
     // ---- 5. B capacity (§10.5) ----
     if let crate::model::family::OccupationFamily::B { layers } = residual.family {
+        // B M=1 (Bernoulli) invariant — ensemble-independent early
+        // rejection: every pair takes values in {0, 1}, so each node's
+        // strength must equal its degree for any realizable target.  It
+        // is a model fact (not a solver property) and must be checked
+        // before any constructor/solver logic activates.  The generic
+        // M*k bound below would already imply it, but the explicit check
+        // gives a clear early error.
+        if layers == 1 {
+            for i in 0..n {
+                if residual.strength_out[i] != degree.out[i] as OccNum {
+                    return err(format!(
+                        "node {i}: B M=1 (Bernoulli) forces strength_out == degree_out, got {} != {}",
+                        residual.strength_out[i], degree.out[i]
+                    ));
+                }
+                if residual.strength_in[i] != degree.in_[i] as OccNum {
+                    return err(format!(
+                        "node {i}: B M=1 (Bernoulli) forces strength_in == degree_in, got {} != {}",
+                        residual.strength_in[i], degree.in_[i]
+                    ));
+                }
+            }
+        }
         let m = layers as u64;
         for i in 0..n {
             if (residual.strength_out[i] as u128) > m as u128 * degree.out[i] as u128 {

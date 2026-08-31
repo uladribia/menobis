@@ -40,6 +40,21 @@ pub enum FixedStrengthError {
         /// `Σ (s_out − k_out) = Σ (s_in − k_in)`.
         residual_total: OccNum,
     },
+    /// The extras-first exact-(s,k) constructor exhausted its retry
+    /// budgets (plan §35).  Retry exhaustion is **not** mathematical
+    /// infeasibility (§21, §27) — a larger budget or different
+    /// randomization may succeed.
+    ExactSkExtrasFirstExhausted {
+        /// Slot-aware extras transport attempts consumed.
+        extras_attempts: usize,
+        /// Extras attempts that stranded positive mass (slot/domain
+        /// limits) plus extras tables discarded for completion failure.
+        extras_failures: usize,
+        /// Binary completion failures across all kept extras tables.
+        completion_failures: usize,
+        /// `Σ (s_out − k_out) = Σ (s_in − k_in)`.
+        residual_total: OccNum,
+    },
     /// Edge-count repair exhausted its restart budget without reaching the
     /// exact edge target (§13.3).
     EdgeRepairExhausted {
@@ -93,6 +108,19 @@ impl fmt::Display for FixedStrengthError {
                     f,
                     "direct exact-(s,k) initialization exhausted after {support_attempts} support attempts: \
                      best flow {best_flow} of residual total {residual_total} (target not proven infeasible)"
+                )
+            }
+            Self::ExactSkExtrasFirstExhausted {
+                extras_attempts,
+                extras_failures,
+                completion_failures,
+                residual_total,
+            } => {
+                write!(
+                    f,
+                    "extras-first exact-(s,k) initialization exhausted after {extras_attempts} extras attempts \
+                     ({extras_failures} extras/completion failures, {completion_failures} completion failures) of \
+                     residual total {residual_total} (target not proven infeasible)"
                 )
             }
             Self::EdgeRepairExhausted {
