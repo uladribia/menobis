@@ -55,12 +55,12 @@ uv run python scripts/docs/generate_capabilities.py --check
 cargo bench -p menobis-core        # criterion benchmarks
 ```
 
-## Canonical synthetic fixture
+## Synthetic witness fixture
 
 End-to-end tests and benchmarks use
-`menobis.utilities.synthetic.generate_pa_geographic_network`. The fixture
-creates networks outside the MENoBiS null family, supplying realistic
-constraints for fit/sample/filter workflows.
+`menobis.utilities.synthetic.generate_pa_geographic_network`. The witness
+fixture creates networks outside the MENoBiS null family, supplying
+realistic constraints for fit/sample/filter workflows.
 
 ## Test fixture regimes
 

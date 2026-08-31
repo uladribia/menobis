@@ -1,4 +1,4 @@
-"""Canonical synthetic networks for MENoBiS tests and benchmarks.
+"""Standard synthetic witness networks for MENoBiS tests and benchmarks.
 
 The generator intentionally does *not* draw from an MENoBiS null model. It builds a
 heterogeneous directed binary support with preferential attachment, assigns
