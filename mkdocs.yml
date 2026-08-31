@@ -59,6 +59,7 @@ nav:
 
 exclude_docs: |
   /development/agent-specifications/
+  /_generated/
 
 plugins:
   - search
@@ -75,6 +76,9 @@ markdown_extensions:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.snippets:
+      check_paths: true
+      base_path: docs
   - pymdownx.arithmatex:
       generic: true
   - attr_list
