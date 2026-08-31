@@ -1,15 +1,19 @@
 ---
-description: First MENoBiS workflow with feasible non-binary constraints.
+description: Get started with MENoBiS — install from source, generate an observed network, fit, sample, and inspect one statistic.
 ---
 
 # Getting started
 
 ## TL;DR
 
-Use sparse edge tables with non-negative integer occupations. Derive constraints
-from an observed network, fit a null model, then filter or sample from it.
+MENoBiS fits maximum-entropy null models for directed non-binary networks:
+you derive structural constraints from an observed network, fit a model,
+sample null networks, and compare.
 
-## Install for development
+## Install from source
+
+MENoBiS is not distributed on PyPI yet; install from source (a Rust
+toolchain is required):
 
 ```bash
 git clone https://github.com/uladribia/menobis.git
@@ -18,105 +22,129 @@ uv sync
 uv run maturin develop --release -m crates/menobis-python/Cargo.toml
 ```
 
-## Input edge table
+Then check the CLI version:
 
-MENoBiS reads directed edge lists with columns:
+```bash
+uv run menobis --version
+```
 
-| Column | Meaning |
-|---|---|
-| `source` | non-negative integer origin node id |
-| `target` | non-negative integer destination node id |
-| `occ_num` | non-negative integer occupation; zero rows are ignored |
+## 1. Generate a small observed network
 
-Supported formats: CSV, TSV, Parquet, Arrow IPC, GraphML, Matrix Market, Pajek.
-
-!!! warning "Use feasible constraints"
-    User-facing examples should derive constraints from a real or synthetic
-    network. Avoid arbitrary strength vectors unless feasibility is proven.
-
-## First Python workflow
+Use the built-in synthetic generator (preferential-attachment geometry with
+positive integer occupations):
 
 ```python
-from menobis.analysis import directed_strengths
-from menobis.filtering import filter_model
-from menobis.models import Constraint, Ensemble, ModelFamily, fit_model, sample_model
 from menobis.utilities.synthetic import generate_pa_geographic_network
 
-network = generate_pa_geographic_network(
-    node_count=30,
-    average_degree=6.0,
-    events_per_edge=8.0,
-    seed=7,
-    self_loops=False,
-)
-edges = network.edges
-strengths = directed_strengths(edges)
+network = generate_pa_geographic_network(30, average_degree=6.0, seed=7)
+```
 
-# Grand-canonical fit (default) — soft constraints matched in expectation
+## 2. Inspect the EdgeTable
+
+```python
+edges = network.edges
+print(edges.num_edges)      # occupied pairs E
+print(edges.total_events)   # total occupation T
+print(edges.source[:5])     # source column
+print(edges.target[:5])     # target column
+print(edges.occ_num[:5])    # occupation column
+```
+
+This confirms the canonical schema `source target occ_num`.
+
+## 3. Derive constraints from the observed network
+
+```python
+from menobis.utilities.synthetic import derive_synthetic_constraints
+
+c = derive_synthetic_constraints(network)
+strength_out = c.strength_out
+strength_in = c.strength_in
+```
+
+Constraints derived from a real network are feasible by construction — the
+way to build honest examples (see [Constraints](../science/constraints.md)).
+
+## 4. Fit a grand-canonical ME strength model
+
+```python
+from menobis.models import Constraint, ModelFamily, fit_model
+
 fit = fit_model(
     family=ModelFamily.ME,
     constraint=Constraint.STRENGTH,
-    strength_out=strengths.out,
-    strength_in=strengths.incoming,
-    self_loops=False,
+    strength_out=strength_out,
+    strength_in=strength_in,
 )
+```
 
-sample = sample_model(
-    family=ModelFamily.ME,
-    constraint=Constraint.STRENGTH,
-    fit=fit,
-    seed=42,
-)
+## 5. Check convergence
 
-# Microcanonical — exact constraints, no fitting step
-mc_sample = sample_model(
+```python
+if not fit.converged:
+    raise RuntimeError(fit.status)
+```
+
+Never sample or filter from an unconverged fit.
+
+## 6. Sample 10 null networks
+
+```python
+from menobis.models import Ensemble
+from menobis.routing import sample_model
+
+samples = [
+    sample_model(
+        ensemble=Ensemble.GRAND_CANONICAL,
+        family=ModelFamily.ME,
+        constraint=Constraint.STRENGTH,
+        fit=fit,
+        seed=r,
+    )
+    for r in range(10)
+]
+```
+
+Each sample is a sparse `EdgeTable` with the same schema as the observed
+network; different seeds give different draws.
+
+## 7. Compute one high-level statistic
+
+```python
+from menobis.analysis import compute_all_stats
+
+observed_stat = compute_all_stats(edges).y2_out.mean()
+ensemble_stat = [compute_all_stats(s).y2_out.mean() for s in samples]
+print("observed mean Y2:", observed_stat)
+print("ensemble mean Y2:", sum(ensemble_stat) / len(ensemble_stat))
+```
+
+See [Ensemble statistics](guide/ensemble-statistics.md) for the metric
+definitions.
+
+## 8. One microcanonical sample
+
+Microcanonical sampling fixes the requested constraints exactly and needs
+no fit. Here, fixed strengths from the same observed network:
+
+```python
+single = sample_model(
     ensemble=Ensemble.MICROCANONICAL,
     family=ModelFamily.ME,
-    constraint=Constraint.EDGES_EVENTS,
-    node_count=30,
-    target_edges=200,
-    total_events=600,
-    seed=42,
-)
-
-filtered = filter_model(
-    edges,
-    family=ModelFamily.ME,
     constraint=Constraint.STRENGTH,
-    fit=fit,
-    alpha=0.05,
+    strength_out=c.strength_out.astype("uint64"),
+    strength_in=c.strength_in.astype("uint64"),
+    seed=1,
 )
 ```
 
-## First CLI workflow
+Every microcanonical draw reproduces the strengths exactly. See
+[Microcanonical sampling](guide/microcanonical.md) for all routes.
 
-The installed `menobis` CLI currently exposes `fit`, `generate`, and `filter`.
-For real-data smoke testing, use the repository script below: it downloads a
-prepared dataset, fits selected nulls, optionally samples, and estimates filter
-false-positive rates.
+## Where next?
 
-```bash
-uv run python scripts/fetch_data.py download openflights
-uv run python scripts/evaluate_real_data.py openflights \
-  --families me,b --constraints strength --sample --filter-samples 3
-```
-
-You can also run individual commands:
-
-```bash
-uv run menobis fit strength-poisson data/openflights.csv --json
-uv run menobis generate strength-poisson data/openflights.csv \
-  --seed 42 --output sample.csv
-uv run menobis filter strength-poisson data/openflights.csv \
-  --output-prefix filtered/
-```
-
-## Next steps
-
-- Use [Filter a network](tutorials/filter-network.md) for edge significance.
-- Use [Sample ensemble magnitudes](tutorials/sample-ensemble-magnitudes.md) for
-  null distributions of network-level statistics.
-- Use [Choose a null model](concepts/choose-null-model.md) before changing
-  family, ensemble, or constraints.
-- Use [Microcanonical sampling](concepts/microcanonical.md) for exact-constraint
-  generation.
+- [Choose a model](guide/choose-model.md) — the decision order;
+- [Supported models](guide/supported-models.md) — the generated capability
+  matrix;
+- [Fit and sample](guide/fit-and-sample.md) — the API workflow;
+- [Filter node pairs](guide/filter-network.md) — significance filtering.
