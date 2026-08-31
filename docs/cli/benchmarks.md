@@ -63,5 +63,5 @@ strength-cost), `--no-memory`.
 
 All commands write an array of `BenchmarkRow` objects to the output JSON file.
 Each row carries dimension fields (N, family, constraint, regime...) plus
-stage-specific metrics. See the [Benchmark interpretation]
-(../development/benchmarking.md) page for field semantics.
+stage-specific metrics. See the [Benchmarks](../performance/benchmarks.md)
+page for field semantics and the provenance metadata schema.

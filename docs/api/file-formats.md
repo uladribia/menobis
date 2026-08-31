@@ -7,25 +7,30 @@ description: MENoBiS file schemas and supported input/output formats.
 ## TL;DR
 
 The canonical network file is a sparse directed edge table with integer
-occupations. Zero occupations are dropped and negative or fractional values are
-rejected.
+occupations under the column schema `source target occ_num`. Zero
+occupations are dropped; negative or fractional values are rejected at the
+boundary.
 
-## Edge table schema
+## Canonical edge-table schema
 
 | Column | Type | Rule |
 |---|---|---|
-| `source` | integer | non-negative node id |
-| `target` | integer | non-negative node id |
-| `weight` | integer | non-negative occupation; zero rows are ignored |
+| `source` | non-negative integer | source node id |
+| `target` | non-negative integer | target node id |
+| `occ_num` | non-negative integer | occupation number; zero rows are ignored |
 
-Example CSV:
+Canonical CSV:
 
 ```csv
-source,target,weight
+source,target,occ_num
 0,1,12
 0,2,3
 2,1,7
 ```
+
+Readers may accept `weight` as an **input alias** where the current I/O code
+explicitly supports it; **writers always emit `occ_num`**. `weight` is never
+presented as the canonical writer schema.
 
 ## Supported edge formats
 
@@ -55,12 +60,18 @@ column at the CLI boundary.
 ## Python I/O
 
 ```python
-from menobis.data.io import read_edges, write_edges
+from menobis.data import read_edges, write_edges
 
 edges = read_edges("network.csv")
 write_edges(edges, "network.parquet")
 ```
 
+Round-trip guarantee: writing then reading back preserves `source`,
+`target`, and positive `occ_num` entries.
+
 !!! note "CLI scope"
-    The installed CLI currently exposes `fit`, `generate`, and `filter`.
-    Use the Python I/O functions for format conversion.
+    The Python API is the authoritative full model interface; CLI command
+    strings expose a convenience subset and may retain command names that
+    do not mirror the model ontology exactly (see
+    [CLI overview](../cli/fit.md)). Use the Python I/O functions for format
+    conversion.

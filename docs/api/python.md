@@ -1,39 +1,57 @@
 ---
-description: Stable public Python API for MENoBiS.
+description: Concise reference for the public MENoBiS Python API — selectors, entry points, result types, and analysis helpers.
 ---
 
 # Python API
 
 ## TL;DR
 
-Use the unified public entry points first: `fit_model`, `sample_model`, and
-`filter_model`. They route by ensemble, family, and constraint.
+The unified public entry points are `fit_model`, `sample_model`,
+`sample_model_detailed`, and `filter_model`, all routed by `ensemble`,
+`family`, and `constraint`. Supported combinations are the generated
+[Supported models](../guide/supported-models.md) matrix.
 
 ## Main imports
 
 ```python
-from menobis.models import Constraint, Ensemble, ModelFamily, fit_model, sample_model
 from menobis.filtering import filter_model
-from menobis.data.io import read_edges, write_edges
+from menobis.models import Constraint, Ensemble, ModelFamily, fit_model, sample_model
+from menobis.routing import sample_model_detailed
+from menobis.data import read_edges, write_edges
 ```
 
-## Model selectors
+## Selectors / enums
 
 | Selector | Values |
 |---|---|
 | `ModelFamily` | `ME`, `B`, `W` |
 | `Ensemble` | `GRAND_CANONICAL`, `CANONICAL`, `MICROCANONICAL` |
-| `Constraint` | `STRENGTH`, `STRENGTH_COST`, `STRENGTH_EDGES`, `STRENGTH_DEGREE`, `DEGREE_EVENTS` |
+| `Constraint` | `STRENGTH`, `STRENGTH_COST`, `STRENGTH_EDGES`, `STRENGTH_DEGREE`, `DEGREE_EVENTS`, `EDGES_EVENTS` |
+| `Verb` | `FIT`, `SAMPLE`, `FILTER` |
 
-## Core functions
+## Top-level entry points
 
 | Function | Purpose |
 |---|---|
-| `fit_model(...)` | solve model parameters from constraints |
-| `sample_model(...)` | sample a sparse `EdgeTable` from a fit or ME stubs |
-| `filter_model(edges, ...)` | classify edges against an independent null |
+| `route_model(verb, ensemble=..., family=..., constraint=..., **kwargs)` | shared router (all verbs) |
+| `fit_model(ensemble=..., family=..., constraint=..., ...)` | solve model parameters from constraints |
+| `sample_model(ensemble=..., family=..., constraint=..., fit=..., ...)` | sample one `EdgeTable` |
+| `sample_model_detailed(ensemble=..., family=..., constraint=..., fit=..., ...)` | sample plus `SamplingResult` metadata |
+| `filter_model(edges, family=..., constraint=..., fit=..., ...)` | classify observed edges against the null |
 
-## Minimal fit/sample/filter
+Key keywords shared across verbs:
+
+- selectors: `ensemble`, `family`, `constraint`;
+- constraints: `strength_out`, `strength_in`, `degree_out`, `degree_in`,
+  `total_events`, `target_edges`, `node_count`, `target_cost` (plus
+  `coord_x`, `coord_y` for cost);
+- fixed pairs: `known_source`, `known_target`, `known_occnum`
+  (see [Fixed / known pairs](../guide/fixed-pairs.md));
+- common: `layers` (B/W), `self_loops`, `seed`;
+- MCMC: `burn_in_sweeps`, `sweeps_per_sample`;
+- filtering: `alpha`, `tail`, `correction`, `detect_absent`.
+
+## Fit
 
 ```python
 fit = fit_model(
@@ -43,175 +61,78 @@ fit = fit_model(
     strength_in=strength_in,
     self_loops=False,
 )
+if not fit.converged:
+    raise RuntimeError(fit.status)
+```
 
+Fit results are typed (`StrengthFit`, `StrengthCostFit`, `StrengthEdgesFit`,
+`StrengthDegreeFit`, `DegreeEventsFit`, `EdgesEventsFit`,
+`PartialFitResult`); each exposes `converged`, `status`, `self_loops`, and
+family-specific multipliers.
+
+## Sample
+
+```python
 sample = sample_model(
+    ensemble=Ensemble.GRAND_CANONICAL,
     family=ModelFamily.ME,
     constraint=Constraint.STRENGTH,
     fit=fit,
     seed=42,
 )
+```
 
+`sample_model` returns an `EdgeTable`. For the generation method and
+exactness, use `sample_model_detailed` — it returns a `SamplingResult`:
+
+```python
+result = sample_model_detailed(
+    ensemble=Ensemble.GRAND_CANONICAL,
+    family=ModelFamily.ME,
+    constraint=Constraint.STRENGTH,
+    fit=fit,
+    seed=42,
+)
+edges = result.edges            # EdgeTable
+diagnostics = result.diagnostics
+print(diagnostics.exactness)    # generation exactness category
+```
+
+`SamplingResult` fields: `edges`, `ensemble`, `family`, `constraint`,
+`method`, `exactness`, `seed`, `diagnostics`. For the microcanonical
+strength+cost route, `diagnostics` also carries `gamma`, `expected_cost`,
+`observed_cost`, `cost_residual`, and `converged`.
+
+## Filter
+
+```python
 result = filter_model(
     edges,
     family=ModelFamily.ME,
     constraint=Constraint.STRENGTH,
     fit=fit,
+    correction="fdr",
 )
+significant = result.upper.edges
 ```
 
-## Microcanonical sampling
+See [Filter node pairs](../guide/filter-network.md) for tails, corrections,
+and absent-edge options.
 
-Microcanonical cases require no fitting step (constraints are hard or matched
-in expectation). Validated at **N=1000** across all families and regimes
-(see [Microcanonical concept doc](../concepts/microcanonical.md)). ME, B, and W
-families are supported where applicable.
-
-### Fixed (E,T) — EDGES_EVENTS
-
-Exact `E` occupied pairs and `T` total events, no fitting step:
-
-```python
-net = sample_model(
-    ensemble=Ensemble.MICROCANONICAL,
-    family=ModelFamily.B,
-    constraint=Constraint.EDGES_EVENTS,
-    node_count=100,
-    target_edges=500,   # exact E
-    total_events=1500,  # exact T
-    layers=4,           # B/W only
-    self_loops=False,
-    seed=42,
-)
-# net has exactly 500 occupied pairs summing to 1500 events
-```
-
-Fixed pairs are frozen via `known_source`, `known_target`, `known_occnum`;
-their contribution is subtracted from `E`/`T`, the residual is sampled, and
-they are merged back. See
-[Microcanonical sampling](../concepts/microcanonical.md).
-
-### Fixed strengths + exact edge count — STRENGTH_EDGES
-
-Exact out/in strengths **and** an exact number of occupied pairs
-`target_edges` (`E`), via exact stationary MCMC (local 4-cycles +
-censored excursion bridge):
-
-```python
-net = sample_model(
-    ensemble=Ensemble.MICROCANONICAL,
-    family=ModelFamily.W,
-    constraint=Constraint.STRENGTH_EDGES,
-    strength_out=strength_out,  # exact out-strength sequence
-    strength_in=strength_in,    # exact in-strength sequence
-    target_edges=1200,          # exact occupied-pair count E
-    layers=3,                   # B/W only
-    self_loops=False,           # False forbids diagonal pairs
-    seed=42,
-)
-```
-
-`target_edges` is the number of pairs with `occ_num > 0`, not the number
-of events; it must satisfy the feasibility bounds (`E ≤ T`, `E ≤`
-admissible pairs, family capacity).  Fixed pairs work as above (positive
-fixed pairs count toward `target_edges`; zero-occupation fixed pairs stay
-frozen).  Exactness is `EXACT_STATIONARY_MCMC` — the kernel law is exact;
-burn-in remains an MCMC concern.  See
-[Fixed strengths + exact edge count](../concepts/fixed-strength-edges.md)
-for the stationary-target argument.
-
-### Fixed strengths + exact degrees — STRENGTH_DEGREE
-
-Exact out/in strengths **and** exact out/in binary degrees via
-combinatorial extras-first initialization (no MCMC, no fit) followed by
-the exact capped first-return degree trace:
-
-```python
-net = sample_model(
-    ensemble=Ensemble.MICROCANONICAL,
-    family=ModelFamily.ME,
-    constraint=Constraint.STRENGTH_DEGREE,
-    strength_out=strength_out,  # exact out-strength sequence
-    strength_in=strength_in,    # exact in-strength sequence
-    degree_out=degree_out,      # exact out-degree sequence
-    degree_in=degree_in,        # exact in-degree sequence
-    self_loops=False,
-    seed=42,
-)
-```
-
-`degree_out`/`degree_in` are the exact binary (`0/1`-per-pair) degree
-sequences; strengths must dominate degrees per node (`s ≥ k`) and satisfy
-family capacity (`B M=1` forces `s == k`, rejected early).  Fixed pairs
-work as above (positive fixed pairs subtract from strengths, degrees, and
-the domain; merged back after sampling).  Exactness is
-`EXACT_STATIONARY_MCMC` — initialization is exact and combinatorial;
-the trace kernel law is oracle-validated; burn-in remains an MCMC
-concern.  See
-[Fixed strengths + exact degrees](../concepts/fixed-strength-degree.md)
-for the initialization/kernel argument.
-
-### Fixed (k,T) — DEGREE_EVENTS
-
-Exact out-degree, in-degree, and total events via MCMC:
-
-```python
-from menobis.models.spec import Ensemble, Constraint
-net = sample_model(
-    ensemble=Ensemble.MICROCANONICAL,
-    family=ModelFamily.B,
-    constraint=Constraint.DEGREE_EVENTS,
-    degree_out=degree_out, degree_in=degree_in,
-    total_events=5000, layers=4, seed=42,
-)
-```
-
-### Fixed strengths — STRENGTH
-
-Exact strength sequences via compressed constructor + repair + occupied-cell MCMC:
-
-```python
-net = sample_model(
-    ensemble=Ensemble.MICROCANONICAL,
-    family=ModelFamily.W,
-    constraint=Constraint.STRENGTH,
-    strength_out=strength_out, strength_in=strength_in,
-    layers=2, seed=42,
-)
-```
-
-### Fixed strengths + expected cost — STRENGTH_COST
-
-Strengths are exact; total cost is matched in expectation by fitting the
-cost multiplier `gamma` via stochastic bisection. Returns the sampled
-network plus gamma diagnostics:
-
-```python
-from menobis.routing import sample_model_detailed
-result = sample_model_detailed(
-    ensemble=Ensemble.MICROCANONICAL,
-    family=ModelFamily.ME,
-    constraint=Constraint.STRENGTH_COST,
-    strength_out=strength_out, strength_in=strength_in,
-    coord_x=coord_x, coord_y=coord_y,
-    target_cost=observed_cost, seed=42,
-)
-# result.edges, result.diagnostics.gamma, result.diagnostics.converged
-```
-they are merged back. See
-[Microcanonical fixed-(E,T) sampling](../concepts/microcanonical.md).
-
-## Common data/result types
+## Result types
 
 | Type | Module | Meaning |
 |---|---|---|
-| `EdgeTable` | `menobis.data.frames` | sparse `source`, `target`, `occ_num` arrays |
-| `ProbabilityTable` | `menobis.data.frames` | sparse custom probabilities/rates |
+| `EdgeTable` | `menobis.data` | sparse `source`, `target`, `occ_num` arrays |
+| `ProbabilityTable` | `menobis.data` | sparse custom probabilities/rates |
 | `FitResult` | `menobis.models` | base fit protocol with diagnostics |
 | `StrengthFit` | `menobis.models` | strength multipliers `x`, `y` |
 | `StrengthCostFit` | `menobis.models` | `x`, `y`, and `gamma` |
-| `StrengthEdgesFit` | `menobis.models` | `x`, `y`, and global edge multiplier |
-| `StrengthDegreeFit` | `menobis.models` | strength and degree multipliers |
-| `DegreeEventsFit` | `menobis.models` | degree occupation plus positive-occupation intensity |
+| `StrengthEdgesFit` | `menobis.models` | `x`, `y`, and support multiplier |
+| `StrengthDegreeFit` | `menobis.models` | strength/degree multipliers |
+| `DegreeEventsFit` | `menobis.models` | degree multipliers, `q`, occupation intensity |
+| `EdgesEventsFit` | `menobis.models` | global `q`, `occupation`, `positive_mean` |
+| `SamplingResult` | `menobis.models` | sampled edges + metadata |
 | `FilterResult` | `menobis.filtering` | upper/lower/compatible/absent classifications |
 
 ## Analysis helpers
@@ -222,12 +143,15 @@ they are merged back. See
 | `directed_degrees(edges)` | out/in binary degrees |
 | `compute_all_stats(edges)` | strengths, degrees, Y2, nearest-neighbour stats |
 | `occupation_distribution(edges)` | occupation-count histogram |
-| `clustering_coefficient(edges)` | binary clustering |
-| `occupation_clustering_coefficient(edges)` | occupation-weighted clustering helper |
+| `clustering_coefficient(edges)` | binary-support clustering |
+| `occupation_clustering_coefficient(edges)` | occupation-based clustering |
+| `ensemble_average(...)` / `ensemble_scalar_average(...)` | ensemble aggregation helpers |
+
+Definitions and formulas: [Ensemble statistics](../guide/ensemble-statistics.md).
 
 ## Synthetic fixtures
 
-Use these in examples and tests to avoid infeasible arbitrary constraints:
+Use these in examples and tests so constraints are feasible by construction:
 
 ```python
 from menobis.utilities.synthetic import (
@@ -235,3 +159,11 @@ from menobis.utilities.synthetic import (
     generate_pa_geographic_network,
 )
 ```
+
+## Guarantees
+
+The signatures in this page are exercised by `tests/test_docs_examples.py`
+and `tests/test_public_docs_contract.py`; if a documentation example
+changes, its smoke test changes in the same commit. Supported route
+combinations come from the capability registry, never from prose
+([Supported models](../guide/supported-models.md)).

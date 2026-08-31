@@ -9,6 +9,10 @@ description: Filter observed edges against MENoBiS null models.
 Use `menobis filter` to classify observed edges as upper-significant,
 lower-significant, or compatible with an independent MENoBiS null model.
 
+> The Python API is the authoritative full model interface. CLI commands
+> expose a convenience subset for the most common grand-canonical routes and
+> may retain command names that do not mirror the model ontology exactly.
+
 ## Commands
 
 | Command | Null model | Input |

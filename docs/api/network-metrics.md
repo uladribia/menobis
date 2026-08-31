@@ -18,8 +18,8 @@ convert an `EdgeTable` at the boundary of your application.
 | `directed_degrees(edges)` | Rust via Python | out/in binary degrees |
 | `compute_all_stats(edges)` | Rust via Python | strengths, degrees, Y2, nearest-neighbour stats |
 | `occupation_distribution(edges)` | Rust via Python | occupation-count histogram |
-| `clustering_coefficient(edges)` | Rust via Python | binary clustering |
-| `occupation_clustering_coefficient(edges)` | Rust via Python | occupation-weighted clustering helper |
+| `clustering_coefficient(edges)` | Rust via Python | binary-support clustering |
+| `occupation_clustering_coefficient(edges)` | Rust via Python | occupation-based clustering |
 
 ```python
 from menobis.analysis import compute_all_stats
@@ -42,14 +42,14 @@ python -m pip install networkx
 ```python
 import networkx as nx
 
-from menobis.data.io import read_edges
+from menobis.data import read_edges
 
 edges = read_edges("edges.csv")
 graph = nx.DiGraph()
 graph.add_weighted_edges_from(
     zip(edges.source.tolist(), edges.target.tolist(), edges.occ_num.tolist())
 )
-centrality = nx.pagerank(graph, weight="weight")
+centrality = nx.pagerank(graph, weight="occ_num")
 ```
 
 ## Optional rustworkx recipe

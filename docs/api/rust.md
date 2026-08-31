@@ -20,6 +20,7 @@ and filtering. Python should reach these through PyO3 wrappers only.
 | `filter` | Observed and absent-edge p-value sinks |
 | `graph`, `stats`, `clustering` | Rust-native graph statistics |
 | `cost` / support helpers | Cost and distance utilities used by fitting/provider code |
+| `model` | Family/problem/sampling-plan ontology used by the unified router |
 
 ## Key types
 
@@ -35,11 +36,14 @@ and filtering. Python should reach these through PyO3 wrappers only.
 ## Microcanonical generation modules
 
 `generation::microcanonical` dispatches exact-constraint sampling by
-constraint type (`route.rs`):
+constraint type (`route.rs`); see
+[Microcanonical algorithms](../development/microcanonical-algorithms.md):
 
 ```text
 generation/microcanonical/
-├── occupation_mcmc/   fixed-strength compressed constructor, repair, occupied-cell MCMC, gamma fit
+├── occupation_mcmc/   fixed-strength routes: compressed state, 4-cycle chain,
+│                      fixed-(s,E) local kernel + bridge, fixed-(s,k) degree trace
+│                      and extras-first constructor, cost chain + gamma fit
 ├── conditional/       fixed-total pair-Gibbs chain (shared by E,T and k,T)
 ├── binary/            binary support sampling (degree-events)
 ├── support/           uniform support sampling (edges-events)
@@ -82,4 +86,4 @@ solver is conforming.
   metric as supported core functionality.
 
 See [Network Metrics](network-metrics.md) for optional graph-library extension
-recipes and [TODOs](../development/todos.md) for current gaps.
+recipes and [Architecture](../development/architecture.md) for the current module map.

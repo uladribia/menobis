@@ -1,27 +1,32 @@
 ---
-description: Generate sampled MENoBiS networks from fitted constraints.
+description: menobis generate — sample networks from fitted constraints or directly from microcanonical constraints.
 ---
 
 # `menobis generate`
 
 ## TL;DR
 
-Use `menobis generate` to fit constraints from inputs and emit one
-seeded synthetic edge table. Data goes to stdout unless `--output` is set.
+Use `menobis generate` to emit one seeded synthetic `EdgeTable`. Most
+commands fit constraints from the input network first; the microcanonical
+command samples directly from derived constraints. Data goes to stdout
+unless `--output` is set.
+
+> The Python API is the authoritative full model interface. CLI commands
+> expose a convenience subset for the most common routes and may retain
+> command names that do not mirror the model ontology exactly.
 
 ## Commands
 
-| Command | Model | Case | Required extra args |
-|---------|-------|------|---------------------|
-| `strength-poisson` | Strength Poisson | — | — |
-| `strength-multinomial` | Strength multinomial | — | `--total-events` |
-| `strength-poisson-multinomial` | Strength Poisson-multinomial | — | — |
-| `custom-poisson` | Custom Poisson | 1 | `--total-events`, `--ensemble` |
-| `strength-cost-poisson` | Strength-cost Poisson | 2 | `--coordinates` |
-| `strength-edges-poisson` | Strength-edges Poisson (zero-inflated) | 3 | optional `--target-edges` |
-| `strength-degree-poisson` | Strength-degree Poisson (zero-inflated) | 4 | — |
-| `degree-events-poisson` | Degree-events Poisson (zero-inflated) | 5 | `--total-events` |
-| `strength-degree-mcmc` | Fixed-strength-degree, microcanonical ME — exact `(s,k)`, extras-first constructor + degree-fiber trace | — | optional `--burn-in-sweeps`, `--sweeps-per-sample` |
+| Command | Ensemble | Family | Constraint | Notes |
+|---|---|---|---|---|
+| `strength-poisson` | grand-canonical | ME | strength | default route |
+| `strength-multinomial` | canonical | ME | strength | fixed total \(T\), needs `--total-events` |
+| `strength-edges-poisson` | grand-canonical | ME | strength-edges | optional `--target-edges` |
+| `strength-degree-poisson` | grand-canonical | ME | strength-degree | |
+| `degree-events-poisson` | grand-canonical | ME | degree-events | needs `--total-events` |
+| `strength-cost-poisson` | grand-canonical | ME | strength-cost | needs `--coordinates` |
+| `custom-poisson` | grand-canonical | ME | custom rates | needs `--total-events`, `--ensemble` |
+| `strength-degree-mcmc` | microcanonical | ME | strength-degree | exact \((s,k)\); extras-first constructor + degree-fiber trace; no fit |
 
 ## Examples
 
@@ -45,13 +50,18 @@ menobis generate strength-degree-mcmc edges.csv --seed 99 --no-self-loops
 | `--quiet` | Suppress progress |
 | `--seed`, `-s` | Random seed |
 | `--self-loops/--no-self-loops` | Diagonal handling |
-| `--total-events` | Total $T$ (multinomial, custom, degree-events) |
+| `--total-events` | Total \(T\) (multinomial, custom, degree-events) |
 | `--ensemble` | `poisson` or `multinomial` (custom only) |
-| `--target-edges` | Target $E$ (strength-edges) |
+| `--target-edges` | Target \(E\) (strength-edges) |
 | `--coordinates` | Projected XY coordinate CSV (strength-cost) |
+| `--burn-in-sweeps`, `--sweeps-per-sample` | MCMC settings (`strength-degree-mcmc`) |
 
-!!! note "Microcanonical sampling"
-    The CLI does not expose microcanonical sampling directly. Use the
-    Python API (`sample_model` with `ensemble=Ensemble.MICROCANONICAL`)
-    for exact-constraint generation. See
-    [Microcanonical sampling](../concepts/microcanonical.md).
+## Microcanonical sampling
+
+The CLI exposes the fixed-strength-degree microcanonical route
+(`strength-degree-mcmc`), which samples directly from derived constraints
+with no fitting step. Use the Python API
+(`sample_model` with `ensemble=Ensemble.MICROCANONICAL`) for the complete
+supported family × ensemble × constraint matrix — see
+[Supported models](../guide/supported-models.md) and
+[Microcanonical sampling](../guide/microcanonical.md).
