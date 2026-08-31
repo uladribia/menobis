@@ -38,21 +38,33 @@ pub fn greedy_directed_initialize(
     self_loops: bool,
     admissible_pairs: Option<&[(u64, u64)]>,
 ) -> Result<DegreeSupportState, FixedKTError> {
+    let is_admissible = |s: u64, t: u64| {
+        admissible_pairs
+            .map(|ap| ap.contains(&(s, t)))
+            .unwrap_or(true)
+    };
     // Try deterministic first, then fall back to randomized attempts.
-    if let Ok(state) = try_construct(out_degrees, in_degrees, self_loops, None, admissible_pairs) {
+    if let Ok(state) = try_construct(
+        out_degrees,
+        in_degrees,
+        self_loops,
+        None::<&mut rand::rngs::StdRng>,
+        is_admissible,
+    ) {
         return Ok(state);
     }
 
-    // Randomized retries with different seeds
+    // Randomized retries with different seeds.
     let mut rng = rand::rngs::StdRng::seed_from_u64(42);
     for attempt in 0..MAX_RETRIES {
         let seed = rng.random::<u64>();
+        let mut attempt_rng = rand::rngs::StdRng::seed_from_u64(seed);
         if let Ok(state) = try_construct(
             out_degrees,
             in_degrees,
             self_loops,
-            Some(seed),
-            admissible_pairs,
+            Some(&mut attempt_rng),
+            is_admissible,
         ) {
             return Ok(state);
         }
@@ -69,24 +81,54 @@ pub fn greedy_directed_initialize(
     ))
 }
 
-/// Internal construction attempt.
+/// Build one feasible directed support graph from a caller-supplied
+/// admissibility predicate and **caller RNG** (Gate B, §16).
 ///
-/// If `rng_seed` is `None`, uses deterministic tie-breaking (by node index).
-/// If `rng_seed` is `Some(seed)`, shuffles tied candidates randomly.
-fn try_construct(
+/// Unlike [`greedy_directed_initialize`], there is no deterministic
+/// first pass: tie-breaking is randomized from the very first attempt
+/// and consumes the caller's `rng`, so repeated calls with the same
+/// seed reproduce the same support and different seeds produce
+/// different supports.  The (fixed-(s,k)) caller passes
+/// `|src, tgt| residual.domain.is_admissible(src, tgt)`.
+pub fn greedy_directed_initialize_with_admissibility<F>(
     out_degrees: &[u32],
     in_degrees: &[u32],
     self_loops: bool,
-    rng_seed: Option<u64>,
-    admissible_pairs: Option<&[(u64, u64)]>,
-) -> Result<DegreeSupportState, FixedKTError> {
+    rng: &mut impl Rng,
+    is_admissible: F,
+) -> Result<DegreeSupportState, FixedKTError>
+where
+    F: Fn(u64, u64) -> bool,
+{
+    try_construct(
+        out_degrees,
+        in_degrees,
+        self_loops,
+        Some(rng),
+        is_admissible,
+    )
+}
+
+/// Internal construction attempt.
+///
+/// If `rng` is `None`, uses deterministic tie-breaking (by node index).
+/// If `rng` is `Some(rng)`, shuffles tied candidates randomly.
+fn try_construct<F>(
+    out_degrees: &[u32],
+    in_degrees: &[u32],
+    self_loops: bool,
+    mut rng: Option<&mut impl Rng>,
+    is_admissible: F,
+) -> Result<DegreeSupportState, FixedKTError>
+where
+    F: Fn(u64, u64) -> bool,
+{
     let n = out_degrees.len();
     let mut out_rem: Vec<u32> = out_degrees.to_vec();
     let mut in_rem: Vec<u32> = in_degrees.to_vec();
     let mut edge_set: HashSet<(u64, u64)> = HashSet::new();
     let mut edges: Vec<(u64, u64)> =
         Vec::with_capacity(out_degrees.iter().map(|&d| d as usize).sum());
-    let mut rng = rng_seed.map(rand::rngs::StdRng::seed_from_u64);
 
     // Active nodes with residual out-degree > 0
     let mut active: Vec<usize> = (0..n).filter(|&i| out_rem[i] > 0).collect();
@@ -107,9 +149,7 @@ fn try_construct(
                 in_rem[v] > 0
                     && (self_loops || u != v)
                     && !edge_set.contains(&(u as u64, v as u64))
-                    && admissible_pairs
-                        .map(|ap| ap.contains(&(u as u64, v as u64)))
-                        .unwrap_or(true)
+                    && is_admissible(u as u64, v as u64)
             })
             .map(|v| (in_rem[v], v))
             .collect();
@@ -124,7 +164,7 @@ fn try_construct(
         // Sort candidates by in-degree descending
         candidates.sort_by_key(|c| std::cmp::Reverse(c.0));
 
-        if let Some(ref mut rng) = rng {
+        if let Some(rng) = rng.as_mut() {
             // Randomize among equal in-degrees (Fisher-Yates shuffle within ties)
             let mut i = 0;
             while i < candidates.len() {
@@ -243,5 +283,83 @@ mod tests {
         let a = greedy_directed_initialize(&out, &inp, false, None).unwrap();
         let b = greedy_directed_initialize(&out, &inp, false, None).unwrap();
         assert_eq!(a.edges, b.edges);
+    }
+}
+
+#[cfg(test)]
+mod with_admissibility_tests {
+    use super::*;
+    use rand::rngs::StdRng;
+    use rand::SeedableRng;
+
+    /// Randomized-from-first-attempt with a caller RNG: same seed must
+    /// reproduce the same support; a different seed may differ (§16, §34).
+    #[test]
+    fn same_seed_reproduces_randomized_support() {
+        // out=(2,2,0), in=(1,1,2), self-loops allowed: row 0 must pick
+        // among two equal in-degree targets (tie), so seeds can explore
+        // different supports.
+        let out = vec![2u32, 2, 0];
+        let inp = vec![1u32, 1, 2];
+        let run = |seed: u64| -> Vec<(u64, u64)> {
+            let mut rng = StdRng::seed_from_u64(seed);
+            let s = greedy_directed_initialize_with_admissibility(
+                &out,
+                &inp,
+                true,
+                &mut rng,
+                |_, _| true,
+            )
+            .unwrap();
+            let mut edges = s.edges.clone();
+            edges.sort_unstable();
+            edges
+        };
+        assert_eq!(run(7), run(7), "same seed must reproduce the support");
+        // Tie-breaking is randomized from the first attempt: across seeds
+        // more than one support must be reachable.
+        let distinct = [
+            run(1),
+            run(2),
+            run(3),
+            run(4),
+            run(5),
+            run(6),
+            run(7),
+            run(8),
+        ]
+        .iter()
+        .collect::<HashSet<_>>()
+        .len();
+        assert!(distinct > 1, "expected more than one support across seeds");
+    }
+
+    /// An admissibility predicate excluding one coordinate must keep it
+    /// out of the constructed support.
+    #[test]
+    fn admissibility_predicate_excludes_pairs() {
+        let out = vec![1u32, 1, 1];
+        let inp = vec![1u32, 1, 1];
+        let mut rng = StdRng::seed_from_u64(3);
+        for _ in 0..20 {
+            let state = greedy_directed_initialize_with_admissibility(
+                &out,
+                &inp,
+                true,
+                &mut rng,
+                |s, t| (s, t) != (0, 1),
+            )
+            .unwrap();
+            assert!(
+                !state.contains(&(0, 1)),
+                "excluded pair (0,1) must never be constructed"
+            );
+            assert_eq!(state.out_degree_sequence(), out);
+            assert_eq!(
+                state.in_degree(0),
+                1,
+                "node 0 must still receive in-degree 1 from another row"
+            );
+        }
     }
 }
