@@ -737,4 +737,171 @@ mod tests {
             other => panic!("expected ExactSkInitializationExhausted, got {other:?}"),
         }
     }
+
+    // -----------------------------------------------------------------
+    // Phase 6: tiny ME/B/W + fixed-pair initializer cases (§25, §37)
+    // -----------------------------------------------------------------
+
+    fn full_to_residual(
+        family: OccupationFamily,
+        so: Vec<OccNum>,
+        si: Vec<OccNum>,
+        sl: bool,
+        fixed: Vec<(u64, u64, OccNum)>,
+    ) -> (
+        ResidualStrengthProblem,
+        crate::generation::microcanonical::occupation_mcmc::fixed_degrees::ResidualDegreeTarget,
+    ) {
+        let n = so.len();
+        let problem =
+            crate::generation::microcanonical::occupation_mcmc::problem::FixedStrengthProblem::new(
+                family,
+                so,
+                si,
+                PairDomain::Complete {
+                    node_count: n,
+                    self_loops: sl,
+                },
+                fixed.clone(),
+            )
+            .unwrap();
+        let residual = problem.into_residual().unwrap();
+        use crate::generation::microcanonical::occupation_mcmc::fixed_degrees::residualize_degree_target;
+        (
+            residual,
+            residualize_degree_target(&[2u32, 2, 2], &[2u32, 2, 2], &fixed)
+                .map_err(|e| panic!("{e}"))
+                .unwrap(),
+        )
+    }
+
+    #[test]
+    fn full_init_b_capacity_enforced() {
+        // B M=3: occupations must stay ≤ 3 (extras ≤ M-1 = 2).
+        // N=2 self-loops allowed, s=[3,3]/[3,3], k=(2,2)/(2,2).
+        let problem = residual_problem(
+            OccupationFamily::B { layers: 3 },
+            vec![3, 3],
+            vec![3, 3],
+            true,
+        );
+        let degree = degree_target(vec![2, 2], vec![2, 2]);
+        let mut rng = StdRng::seed_from_u64(4);
+        let (state, _diag) = initialize_exact_sk(
+            &problem,
+            &degree.out,
+            &degree.in_,
+            &mut rng,
+            &ExactSkInitConfig::default(),
+        )
+        .unwrap();
+        for (_, o) in state.iter_occupied() {
+            assert!(o <= 3, "B capacity violated: occ={o}");
+        }
+        validate_exact_sk_state(&state, &problem, &degree).unwrap();
+    }
+
+    #[test]
+    fn full_init_w_family_exact() {
+        // W M=2, N=3: no capacity cap, exact strengths/degrees.
+        // s = k + r with r=(2,1,0), c=(1,2,0), feasible on a support
+        // that routes row 1 into column Y (capacity 2).
+        let so = vec![4u64, 2, 1];
+        let si = vec![2u64, 4, 1];
+        let problem = residual_problem(OccupationFamily::W { layers: 2 }, so, si, true);
+        let degree = degree_target(vec![2, 1, 1], vec![1, 2, 1]);
+        for seed in 1..=10u64 {
+            let mut rng = StdRng::seed_from_u64(seed);
+            let (state, _diag) = initialize_exact_sk(
+                &problem,
+                &degree.out,
+                &degree.in_,
+                &mut rng,
+                &ExactSkInitConfig::default(),
+            )
+            .unwrap_or_else(|e| panic!("seed {seed}: {e}"));
+            validate_exact_sk_state(&state, &problem, &degree).unwrap();
+        }
+    }
+
+    #[test]
+    fn one_support_incompatible_another_compatible() {
+        // §14/§37: the same degree sequence k_out=(1,2,0), k_in=(1,1,1)
+        // admits two supports; one is strength-incompatible with
+        // r=(0,3,0), c=(2,1,0), the other compatible — an incompatible
+        // support is NOT global infeasibility (§14).
+        let support_bad = vec![(0u64, 0u64), (1, 1), (1, 2)]; // A->X, B->Y, B->Z
+        let support_good = vec![(0u64, 2u64), (1, 0), (1, 1)]; // A->Z, B->X, B->Y
+        let r = vec![0u64, 3, 0];
+        let c = vec![2u64, 1, 0];
+        assert!(
+            allocate_residual_flow(&support_bad, &r, &c, 1000).is_none(),
+            "B has no column with enough residual on the bad support"
+        );
+        let (extras, flow) = allocate_residual_flow(&support_good, &r, &c, 1000).unwrap();
+        assert_eq!(flow, 3, "B->X=2, B->Y=1");
+        assert_eq!(extras, vec![0, 2, 1]);
+    }
+
+    #[test]
+    fn positive_fixed_pair_via_residualization() {
+        // §25/§37.6: fixed (0,1,1) on s=[3,3,3], k=(2,2,2)/(2,2,2) ->
+        // residual s=[2,3,3]/[3,2,3], residual k=(1,2,2)/(2,1,2); the
+        // residual initializer must never reoccupy (0,1).
+        let (residual, degree) = full_to_residual(
+            OccupationFamily::ME,
+            vec![3, 3, 3],
+            vec![3, 3, 3],
+            true,
+            vec![(0, 1, 1)],
+        );
+        let mut rng = StdRng::seed_from_u64(8);
+        let (state, _diag) = initialize_exact_sk(
+            &residual,
+            &degree.out,
+            &degree.in_,
+            &mut rng,
+            &ExactSkInitConfig::default(),
+        )
+        .unwrap();
+        validate_exact_sk_state(&state, &residual, &degree).unwrap();
+        assert!(
+            !state.iter_occupied().any(|((s, t), _)| s == 0 && t == 1),
+            "fixed positive pair must be excluded from the residual support"
+        );
+        assert_eq!(state.occupied_count(), 5, "residual E = 6 - 1 fixed pair");
+    }
+
+    #[test]
+    fn zero_fixed_pair_keeps_coordinate_forbidden() {
+        // §25/§37.7: fixed (0,1,0) subtracts nothing from strengths or
+        // degrees but keeps the coordinate forbidden.
+        let (residual, degree) = full_to_residual(
+            OccupationFamily::ME,
+            vec![3, 3, 3],
+            vec![3, 3, 3],
+            true,
+            vec![(0, 1, 0)],
+        );
+        let mut rng = StdRng::seed_from_u64(13);
+        let (state, _diag) = initialize_exact_sk(
+            &residual,
+            &degree.out,
+            &degree.in_,
+            &mut rng,
+            &ExactSkInitConfig::default(),
+        )
+        .unwrap();
+        validate_exact_sk_state(&state, &residual, &degree).unwrap();
+        assert_eq!(
+            state.occupied_count(),
+            6,
+            "zero fixed pair keeps residual E"
+        );
+        assert_eq!(state.out_strengths, vec![3, 3, 3]);
+        assert!(
+            !state.iter_occupied().any(|((s, t), _)| s == 0 && t == 1),
+            "zero fixed pair coordinate must stay forbidden"
+        );
+    }
 }
