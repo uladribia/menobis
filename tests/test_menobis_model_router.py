@@ -304,6 +304,44 @@ def test_microcanonical_strength_edges_now_supported() -> None:
     assert len(res.edges) == 2
 
 
+# ---- Partial fit: frozen-pair layer-capacity feasibility ----
+
+
+def test_partial_fit_b_rejects_frozen_occupation_above_layers() -> None:
+    """Frozen pairs with occupation > M lie outside the Binomial(M) support.
+
+    API contract test: hand-picked strengths are fine here because the test
+    targets the feasibility guard, not constraint recovery.
+    """
+    with pytest.raises(ValueError, match="exceeds layer capacity"):
+        fit_model(
+            family=ModelFamily.B,
+            constraint=Constraint.STRENGTH,
+            strength_out=S_OUT,
+            strength_in=S_IN,
+            layers=2,
+            known_source=np.array([0], dtype=np.uint64),
+            known_target=np.array([1], dtype=np.uint64),
+            known_occnum=np.array([3], dtype=np.uint64),
+        )
+
+
+@pytest.mark.parametrize("family", [ModelFamily.ME, ModelFamily.W])
+def test_partial_fit_unbounded_families_accept_frozen_occupation_above_layers(
+    family: ModelFamily,
+) -> None:
+    """Poisson (ME) and negative binomial (W) have unbounded pair support."""
+    fit_model(
+        family=family,
+        constraint=Constraint.STRENGTH,
+        strength_out=S_OUT,
+        strength_in=S_IN,
+        known_source=np.array([0], dtype=np.uint64),
+        known_target=np.array([1], dtype=np.uint64),
+        known_occnum=np.array([3], dtype=np.uint64),
+    )
+
+
 def test_fit_model_rejects_invalid_enum_value() -> None:
     """Constructing a ModelFamily from an invalid string raises ValueError."""
     with pytest.raises(ValueError):
