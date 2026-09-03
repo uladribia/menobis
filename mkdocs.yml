@@ -29,6 +29,10 @@ nav:
       - Fixed / known pairs: guide/fixed-pairs.md
       - Microcanonical sampling: guide/microcanonical.md
 
+  - Examples:
+      - Main use cases: examples/main-use-cases.ipynb
+      - Micro vs grand-canonical in practice: examples/grand-vs-micro-practical.ipynb
+
   - Scientific foundations:
       - Notation: science/notation.md
       - Event families ME, B, W: science/event-families.md

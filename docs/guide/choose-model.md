@@ -108,7 +108,8 @@ Constraints interact with the statistics you compare:
   not automatically fix it;
 - support metrics (\(E\), degree, binary clustering, support motifs) react
   strongly to support constraints — see
-  [Ensemble equivalence](../science/ensemble-equivalence.md).
+  [Ensemble equivalence](../science/ensemble-equivalence.md) and the
+  [GC-vs-micro practical comparison](../examples/grand-vs-micro-practical.ipynb).
 
 ## Step 5 — Check computational feasibility
 

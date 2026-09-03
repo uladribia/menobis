@@ -19,7 +19,10 @@ network fluctuates around them. A microcanonical null makes the constrained
 quantities **identical in every realization** — a different null
 hypothesis, not a "better" one. Choose between them by the scientific
 question (see [Choose a model](choose-model.md) and
-[Ensembles](../science/ensembles.md)).
+[Ensembles](../science/ensembles.md)). For a finite-size, sparse-regime
+comparison of both ensembles in practice — runtime, constraint recovery, and
+higher-order observables — see the
+[GC-vs-micro practical comparison](../examples/grand-vs-micro-practical.ipynb).
 
 ## Shared philosophy
 

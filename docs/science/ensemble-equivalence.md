@@ -58,9 +58,59 @@ conditioned statistics**, in an appropriate asymptotic regime. They do not
 "vanish" in any unconditional sense.
 
 The right way to study the question is empirical, at finite \(N\), with the
-planned GC-vs-MC comparison notebook as the evidence source
-([Benchmarks](../performance/benchmarks.md) and dedicated notebook
-`docs/examples/grand-vs-micro-practical.ipynb`).
+GC-vs-micro practical comparison notebook
+([Practical microcanonical vs grand-canonical comparison](../examples/grand-vs-micro-practical.ipynb))
+as the evidence source (see also [Benchmarks](../performance/benchmarks.md)).
+
+## Finite-size hard-vs-soft comparison in practice
+
+The theoretical discussion above studies
+
+\[
+N \text{ fixed},\qquad T\to\infty.
+\]
+
+The practical comparison notebook
+([Practical microcanonical vs grand-canonical comparison](../examples/grand-vs-micro-practical.ipynb))
+studies instead
+
+\[
+N\in\{100,500,2000\},\qquad
+\langle k\rangle\approx 8,\qquad
+T/E\approx 8.
+\]
+
+> The notebook is not a numerical test of the fixed-\\(N\\), large-\\(T\\)
+theorem. It is a finite-size comparison of the current hard and soft MENoBiS
+models under a sparse scaling regime.
+
+In that setting:
+
+\[
+\text{same target constraints}
+\not\Rightarrow
+\text{same finite-size probability measure}
+\not\Rightarrow
+\text{same higher-order observables}.
+\]
+
+Micro constraints are exact where documented; GC constraints are matched in
+expectation; nonlinear observables (degree when not fixed, \\(Y_2\\),
+\\(k_{NN}\\), \\(s_{NN}\\), realized cost) need not agree.
+
+Abbreviated per-constraint semantics, per ensemble:
+
+| Constraint | Grand-canonical | Microcanonical |
+|---|---|---|
+| `STRENGTH` | strengths in expectation | strengths exact |
+| `STRENGTH_COST` | strengths, cost in expectation | strengths exact; cost in expectation (gamma fit) |
+| `STRENGTH_EDGES` | strengths, E in expectation | strengths, E exact |
+| `STRENGTH_DEGREE` | strengths, degree in expectation | strengths, degree exact |
+| `DEGREE_EVENTS` | degrees, T in expectation | degrees, T exact |
+| `EDGES_EVENTS` | E, T in expectation | E, T exact |
+
+See the notebook for the finite-size empirical comparison, timing, and the
+MCMC budget caveats.
 
 ## Support observables
 
