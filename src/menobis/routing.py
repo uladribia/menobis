@@ -1490,6 +1490,16 @@ def _fit_partial(
         _fit_partial_strength_poisson,
     )
 
+    # Frozen pairs must lie inside the family support: Binomial(M) caps the
+    # per-pair occupation at M layers, while Poisson (ME) and negative
+    # binomial (W) have unbounded pair support and need no check.
+    if (
+        family is ModelFamily.B
+        and (np.asarray(known_occnum, dtype=np.uint64) > layers).any()
+    ):
+        msg = f"B fixed occupation exceeds layer capacity M={layers}"
+        raise ValueError(msg)
+
     if strength_out is None or strength_in is None:
         msg = "partial fitting requires strength_out and strength_in"
         raise ValueError(msg)
