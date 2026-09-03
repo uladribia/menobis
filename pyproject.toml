@@ -101,7 +101,7 @@ convention = "google"
 minversion = "8.0"
 addopts = "--verbose"
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 
 [tool.ty.src]
 include = ["src/menobis", "tests"]
