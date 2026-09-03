@@ -1,0 +1,2241 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Max Entropy NOn Binary Suite for null modeling">
+      
+      
+      
+        <link rel="canonical" href="https://uladribia.github.io/menobis/decisions/microcanonical-fixed-sk-trace-mobility/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Decision — Fixed-(s,k) Trace Mobility from Exact N=1000 Witnesses (Gate A) - MENoBiS</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#decision-fixed-sk-trace-mobility-from-exact-n1000-witnesses-gate-a" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="MENoBiS" class="md-header__button md-logo" aria-label="MENoBiS" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            MENoBiS
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Decision — Fixed-(s,k) Trace Mobility from Exact N=1000 Witnesses (Gate A)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/uladribia/menobis" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="MENoBiS" class="md-nav__button md-logo" aria-label="MENoBiS" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    MENoBiS
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/uladribia/menobis" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../.." class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Start
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_1" id="__nav_1_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Start
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/choose-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Choose a model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/supported-models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Supported models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/fit-and-sample/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fit and sample
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/ensemble-statistics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ensemble statistics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/filter-network/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Filter node pairs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/spatial-costs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Spatial costs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/fixed-pairs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fixed / known pairs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/microcanonical/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Microcanonical sampling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scientific foundations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Scientific foundations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../science/notation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Notation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../science/event-families/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Event families ME, B, W
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../science/constraints/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Constraints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../science/ensembles/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ensembles
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../science/ensemble-equivalence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ensemble equivalence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../science/filtering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Filtering statistics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../science/references/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    References and thesis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance and validation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Performance and validation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../performance/scaling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Practical scaling
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../performance/benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../performance/mcmc-diagnostics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCMC diagnostics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../performance/validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/python/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/file-formats/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    File formats
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/network-metrics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Network metrics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/filtering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Filtering API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/rust/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rust API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_6" id="__nav_5_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/fit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/generate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Generate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/filter/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Filter
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Contributing
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/extending-thesis-cases/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extending MENoBiS
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/microcanonical-algorithms/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Microcanonical algorithms
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/responsibilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Responsibilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/release-process/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release process
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-verdict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Verdict
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-evidence-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Evidence summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-what-the-numbers-say" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. What the numbers say
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-answers-to-the-38-report-questions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Answers to the §38 report questions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-consequence-for-gate-b-direct-constructor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Consequence for Gate B (direct constructor)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-exactness-regressions-unchanged" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Exactness / regressions (unchanged)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-commits-on-this-branch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Commits on this branch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-remaining-risks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Remaining risks
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="decision-fixed-sk-trace-mobility-from-exact-n1000-witnesses-gate-a">Decision — Fixed-(s,k) Trace Mobility from Exact N=1000 Witnesses (Gate A)</h1>
+<p><strong>Status:</strong> complete — decision recorded, awaiting user review before Gate B
+<strong>Branch:</strong> <code>fix/fixed-sk-direct-init-trace-gate</code>
+<strong>Base:</strong> <code>feature/microcanonical-fixed-strength-degree</code>
+<strong>Recovery plan:</strong> <code>../development/agent-specifications/archive/fixed_sk/MENoBiS_fixed_sk_recovery_direct_init_trace_gate.md</code> (Part A, §5–§12)
+<strong>Orca/diagnostics:</strong> <code>menobis-test-oracles/tests/fixed_strength_degree_trace_gate.rs</code></p>
+<h2 id="1-verdict">1. Verdict</h2>
+<div class="highlight"><pre><span></span><code>TRACE_FROM_EXACT_STATE_VIABLE = true
+</code></pre></div>
+<p>with one documented qualification: the stationary trace kernel is
+practically mobile at N=1000 <strong>when the exact start state contains a
+non-trivial fraction of occupation-1 edges</strong> (as every realistic
+PA-geographic state does).  It is <strong>not</strong> mobile from contrived
+uniform-corner witnesses with <em>no</em> occupation-1 edges (all-occupation
+<code>c ≥ 3</code> patterns, all-level B): there <code>K_E</code> has no E-preserving local
+moves and the trace is dead.  This is a <strong>start-state pathology</strong>, not a
+kernel defect (the exact Q/R oracle stays green), but it constrains
+Gate B: the direct constructor must not hand the trace a zero-occupation-1
+corner.</p>
+<h2 id="2-evidence-summary">2. Evidence summary</h2>
+<p>Witnesses: Rust port of the PA geographic generator (test-oracles
+<code>pa_geographic.rs</code>; port of <code>src/menobis/utilities/synthetic.py</code>) —
+N=1000, homogeneous-ish node set, <strong>heterogeneous</strong>
+preferential-attachment support (mean degree 8, E=8000, no self-loops),
+plan-mandated occupation patterns.  <code>λ = 1.0</code>, cap = 16, 100,000
+top-level trace attempts, <code>--release</code>, seed: support 42 / trace 7.</p>
+<table>
+<thead>
+<tr>
+<th>family</th>
+<th>pattern</th>
+<th style="text-align: right;">T/E</th>
+<th style="text-align: right;">frac occ=1</th>
+<th style="text-align: right;">diff rate</th>
+<th style="text-align: right;">support rate</th>
+<th style="text-align: right;">timeouts</th>
+<th style="text-align: right;">aux/diff</th>
+<th style="text-align: right;">wall</th>
+<th>class</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ME</td>
+<td>A1 all-1</td>
+<td style="text-align: right;">1.0</td>
+<td style="text-align: right;">1.000</td>
+<td style="text-align: right;">9.05e-1</td>
+<td style="text-align: right;">9.05e-1</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">1.1</td>
+<td style="text-align: right;">65.9 s</td>
+<td>GREEN</td>
+</tr>
+<tr>
+<td>ME</td>
+<td>A2 balanced 1/2</td>
+<td style="text-align: right;">1.5</td>
+<td style="text-align: right;">0.500</td>
+<td style="text-align: right;">2.25e-1</td>
+<td style="text-align: right;">2.25e-1</td>
+<td style="text-align: right;">701</td>
+<td style="text-align: right;">4.9</td>
+<td style="text-align: right;">58.8 s</td>
+<td>GREEN</td>
+</tr>
+<tr>
+<td>ME</td>
+<td>realistic PA-geo</td>
+<td style="text-align: right;">8.0</td>
+<td style="text-align: right;">0.179</td>
+<td style="text-align: right;">3.03e-2</td>
+<td style="text-align: right;">3.00e-2</td>
+<td style="text-align: right;">222</td>
+<td style="text-align: right;">34.1</td>
+<td style="text-align: right;">56.2 s</td>
+<td>GREEN</td>
+</tr>
+<tr>
+<td>W M=1</td>
+<td>realistic PA-geo</td>
+<td style="text-align: right;">8.0</td>
+<td style="text-align: right;">0.179</td>
+<td style="text-align: right;">3.10e-2</td>
+<td style="text-align: right;">3.05e-2</td>
+<td style="text-align: right;">334</td>
+<td style="text-align: right;">33.9</td>
+<td style="text-align: right;">55.6 s</td>
+<td>GREEN</td>
+</tr>
+<tr>
+<td>ME</td>
+<td>A3 all-2</td>
+<td style="text-align: right;">2.0</td>
+<td style="text-align: right;">0.000</td>
+<td style="text-align: right;">3.30e-4</td>
+<td style="text-align: right;">4.0e-5</td>
+<td style="text-align: right;">14</td>
+<td style="text-align: right;">3037</td>
+<td style="text-align: right;">48.7 s</td>
+<td>YELLOW</td>
+</tr>
+<tr>
+<td>W M=1</td>
+<td>all-2</td>
+<td style="text-align: right;">2.0</td>
+<td style="text-align: right;">0.000</td>
+<td style="text-align: right;">6.90e-4</td>
+<td style="text-align: right;">5.0e-5</td>
+<td style="text-align: right;">46</td>
+<td style="text-align: right;">—</td>
+<td style="text-align: right;">49.9 s</td>
+<td>YELLOW</td>
+</tr>
+<tr>
+<td>ME</td>
+<td>A4 all-3</td>
+<td style="text-align: right;">3.0</td>
+<td style="text-align: right;">0.000</td>
+<td style="text-align: right;">4.00e-4</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">2500</td>
+<td style="text-align: right;">22.5 s</td>
+<td>RED (support=0)</td>
+</tr>
+<tr>
+<td>ME</td>
+<td>A5 all-5</td>
+<td style="text-align: right;">5.0</td>
+<td style="text-align: right;">0.000</td>
+<td style="text-align: right;">3.80e-4</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">2632</td>
+<td style="text-align: right;">22.4 s</td>
+<td>RED (support=0)</td>
+</tr>
+<tr>
+<td>ME</td>
+<td>A6 all-10</td>
+<td style="text-align: right;">10.0</td>
+<td style="text-align: right;">0.000</td>
+<td style="text-align: right;">5.20e-4</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">1923</td>
+<td style="text-align: right;">22.4 s</td>
+<td>RED (support=0)</td>
+</tr>
+<tr>
+<td>W M=1</td>
+<td>all-5</td>
+<td style="text-align: right;">5.0</td>
+<td style="text-align: right;">0.000</td>
+<td style="text-align: right;">6.60e-4</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">1515</td>
+<td style="text-align: right;">22.8 s</td>
+<td>RED (support=0)</td>
+</tr>
+<tr>
+<td>B M=5</td>
+<td>all-1</td>
+<td style="text-align: right;">1.0</td>
+<td style="text-align: right;">1.000</td>
+<td style="text-align: right;">9.05e-1</td>
+<td style="text-align: right;">9.05e-1</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">1.1</td>
+<td style="text-align: right;">66.6 s</td>
+<td>GREEN</td>
+</tr>
+<tr>
+<td>B M=5</td>
+<td>all-2</td>
+<td style="text-align: right;">2.0</td>
+<td style="text-align: right;">0.000</td>
+<td style="text-align: right;">1.40e-4</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">7143</td>
+<td style="text-align: right;">46.0 s</td>
+<td>RED</td>
+</tr>
+<tr>
+<td>B M=5</td>
+<td>all-3</td>
+<td style="text-align: right;">3.0</td>
+<td style="text-align: right;">0.000</td>
+<td style="text-align: right;">1.30e-4</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">7692</td>
+<td style="text-align: right;">22.4 s</td>
+<td>RED</td>
+</tr>
+<tr>
+<td>B M=5</td>
+<td>all-5 (at capacity)</td>
+<td style="text-align: right;">5.0</td>
+<td style="text-align: right;">0.000</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">∞</td>
+<td style="text-align: right;">22.4 s</td>
+<td>RED</td>
+</tr>
+</tbody>
+</table>
+<p>Full counter detail for the key ME cases (100k attempts):</p>
+<div class="highlight"><pre><span></span><code>A1: step1=100000 departures=0 successful=0 diff=90546 support=90546 timeouts=0
+    aux=100000 accepts=100000 rejects=0 max_exc=0            aux/trace=1.00
+A2: step1=99299  departures=0 successful=0 diff=22460 support=22457 timeouts=701
+    aux=110515 accepts=109191 rejects=1324 max_exc=3         aux/trace=1.11
+A3: step1=99986  departures=0 successful=0 diff=33    support=4     timeouts=14
+    aux=100210 accepts=100183 rejects=27 max_exc=1           aux/trace=1.00
+A4: step1=100000 departures=0 successful=0 diff=40    support=0     timeouts=0
+    aux=100000 accepts=100000 rejects=0 max_exc=0            aux/trace=1.00
+A5: step1=100000 departures=0 successful=0 diff=38    support=0     timeouts=0
+    aux=100000 accepts=100000 rejects=0 max_exc=0            aux/trace=1.00
+A6: step1=100000 departures=0 successful=0 diff=52    support=0     timeouts=0
+    aux=100000 accepts=100000 rejects=0 max_exc=0            aux/trace=1.00
+ME realistic: step1=99778 departures=0 successful=0 diff=3031 support=2999 timeouts=222
+    aux=103330 accepts=102925 rejects=405 max_exc=2          aux/trace=1.03
+</code></pre></div>
+<h2 id="3-what-the-numbers-say">3. What the numbers say</h2>
+<ol>
+<li><strong>The trace is mobile when occupation-1 edges exist.</strong>  The realistic
+   PA-geographic ME/W cases (T/E=8, frac occ=1 ≈ 0.18) return a different
+   exact <code>(s,k)</code> state in ~3% of top-level attempts and a support-changed
+   state in ~3%, at 34 <code>K_E</code> steps per effective return — far inside the
+   §9 GREEN bands (<code>≥ 1e-2</code>, <code>aux/diff ≤ 100_000</code>).  99.8% of traces
+   return at step 1 (the kernel is essentially in-fiber: <code>K_E</code> endpoints
+   stay on the degree fiber), so <code>burin</code> sweeps of E=8000 proposals give
+   ≈ 235 support changes per sweep.</li>
+<li><strong>All-1 fibers are trivially mobile</strong> (90.5% different/support returns,
+   zero timeouts) for every family: every 4-cycle is a pure support
+   shuffle with no occupation change.</li>
+<li><strong>Support mobility collapses as occupation-1 edges vanish.</strong>  From an
+   all-<code>c</code> corner (<code>c ≥ 2</code>) every single-unit 4-cycle transfer keeps the
+   source cells occupied (<code>c → c−1 &gt; 0</code>) while occupying two empty
+   diagonals, so the occupied count grows <code>m → m + 2</code> and the exact-E
+   local kernel vetoes it (<code>HeldEdgeVeto</code>).  E-preserving local moves
+   require <strong>two occupation-1 source cells</strong>; none exist in an all-<code>c</code>
+   corner.  The residual ~4e-4 different-state rate (and the rare support
+   change) comes entirely from the 5%-probability auxiliary bridge.</li>
+<li><strong>Tuning does not help.</strong>  The §10 grid on the A3 (all-2, YELLOW)
+   case — (λ, cap) ∈ {(1,16),(0.5,16),(2,16),(1,32),(0.5,32),(1,64)} at
+   50k attempts — produced <strong>identical</strong> rates (3.60e-4 diff, 0 support,
+   same timeouts) on every configuration.  The absorption is structural
+   (no E-preserving proposals), not an acceptance/temperature artefact.</li>
+<li><strong>B is the worst case.</strong>  B M=5 at capacity (all-5) has literally zero
+   different-state returns in 100k attempts (no valid move at all); the
+   all-2/all-3 fibers are ~1.4e-4 diff, zero support movement.</li>
+<li><strong>max_excursion_distance</strong> is small everywhere (&lt; 5): the trace almost
+   never wanders deep off the fiber before returning (or timing out at
+   short depth).  The counter was found unwired on the feature branch and
+   is now correctly aggregated (§8 record field).</li>
+</ol>
+<h2 id="4-answers-to-the-38-report-questions">4. Answers to the §38 report questions</h2>
+<ol>
+<li><em>How often does the trace return to a different exact state?</em>
+   Realistic: ~3% per attempt (ME/W).  All-1: 90.5% (trivial).  All-<code>c</code>
+   corners <code>c ≥ 2</code>: ~0.04% (bridge-mediated only).</li>
+<li><em>How often does the endpoint support change?</em>  ~3% realistic; 90.5%
+   all-1; ≈ 0 in all-<code>c</code> corners (A3: 4/100k; A4–A6, B: 0/100k).</li>
+<li><em>How many <code>K_E</code> calls per effective return?</em>  34 (realistic), 1.1
+   (all-1), ~2e3–3e3 (corners, for the rare bridge returns).</li>
+<li><em>Dependence on T/E?</em>  Monotone in <code>frac(occ=1)</code>: 90.5% (T/E=1) →
+   22.5% (1.5) → ~3% (realistic 8, occ-1 fraction 0.18) → ~0.03–0.04%
+   (T/E ≥ 2 uniform).</li>
+<li><em>λ/cap effect?</em>  None measurable (§3.4) — structural absorption.</li>
+<li><em>Loss attribution?</em>  No self-loop losses (all-1/A1); no departures
+   beyond the fiber in any case (<code>successful_returns = departures = 0</code>);
+   losses are (a) step-1 self-loop returns for the corners (the chain
+   proposes only in-fiber vetoed moves) and (b) 0.2–0.7% timeouts at
+   shallow depth.</li>
+<li><em>Does support mobility collapse when occupation-1 edges are rare?</em>
+   <strong>Yes — sharply.</strong>  At <code>frac(occ=1) ≈ 0</code> support-changed returns drop
+   to 0/100k while different-state returns fall to ~1e-4.  The
+   construction implication is mandatory (§5).</li>
+</ol>
+<h2 id="5-consequence-for-gate-b-direct-constructor">5. Consequence for Gate B (direct constructor)</h2>
+<p>The direct constructor builds <code>t_ij = A_ij · (1 + y_ij)</code> with residual
+extras <code>y</code>.  Gate A shows the trace burn-in is only useful if the
+constructed start has occupation-1 edges.  Therefore Gate B must:</p>
+<ul>
+<li>allocate residual extras heterogeneously so that a non-trivial fraction
+  of support edges keep <code>y = 0</code> (occupation 1) — the realistic PA-geo
+  allocation reaches <code>~0.18</code>; even 0.5 (balanced 1/2) gives 22% mobility;</li>
+<li>treat <code>frac(occ=1) = 0</code> starts as construction failures for the <em>burn-in
+  path</em> (or add a preliminary mixing step), rather than assuming the
+  trace will mix them;</li>
+<li>note that all-1 starts (T/E = 1) are the most mobile possible (90.5%),
+  so low T/E is not a concern.</li>
+</ul>
+<h2 id="6-exactness-regressions-unchanged">6. Exactness / regressions (unchanged)</h2>
+<table>
+<thead>
+<tr>
+<th>gate</th>
+<th>result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>exact Q/R trace-matrix oracle (<code>fixed_strength_degree_enumeration</code>)</td>
+<td>✅ green</td>
+</tr>
+<tr>
+<td>fixed-(s,E) enumeration oracle</td>
+<td>✅ green</td>
+</tr>
+<tr>
+<td><code>cargo test --workspace</code> (fast)</td>
+<td>✅ 457 tests, 0 failures</td>
+</tr>
+<tr>
+<td>clippy <code>-D warnings</code> / fmt <code>--check</code></td>
+<td>✅ clean</td>
+</tr>
+</tbody>
+</table>
+<h2 id="7-commits-on-this-branch">7. Commits on this branch</h2>
+<table>
+<thead>
+<tr>
+<th>commit</th>
+<th>content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>87620ea</code></td>
+<td><code>benchmark_fixed_sk_trace_from_exact_table</code> diagnostic + witness validation + unit tests</td>
+</tr>
+<tr>
+<td><code>c3dac63</code></td>
+<td><code>DegreeTraceCounters.support_changed_returns</code> (support-topology metric)</td>
+</tr>
+<tr>
+<td><code>94d2b65</code></td>
+<td>PA-geographic generator + N=1000 mobility grid + <code>max_excursion_distance</code> wiring</td>
+</tr>
+</tbody>
+</table>
+<h2 id="8-remaining-risks">8. Remaining risks</h2>
+<ul>
+<li><strong>Constructor risk:</strong> a greedy/flow start with <code>frac(occ=1) ≈ 0</code> would
+  be dead for the trace (§5).  Mitigation: heterogeneous allocation +
+  constructor diagnostic reporting <code>frac(occ=1)</code>.</li>
+<li><strong>Trace mixing risk:</strong> even realistic mobility (~3% per step, 34 K_E
+  per support change) needs burn-in sweeps; no claim of rapid mixing at
+  N=1000 (§30 wording applies).</li>
+<li><strong>Large-N runtime:</strong> 100k attempts ≈ 60 s (release) at N=1000/E=8000;
+  a full sample at N=1000 with burn-in+thinning is comfortably within
+  reach; N=5000 not assessed.</li>
+<li><strong>Unproven global mixing/connectivity</strong> on the N=1000 fiber: the exact
+  oracle covers tiny fibers only.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.indexes", "navigation.top", "search.highlight", "search.suggest", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+        <script src="https://unpkg.com/mermaid@10/dist/mermaid.min.js"></script>
+      
+    
+  </body>
+</html>
